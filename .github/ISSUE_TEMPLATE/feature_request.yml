@@ -1,0 +1,93 @@
+name: Feature Request
+description: Suggest a new feature or capability for Skyrict
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you're trying to solve. Feature requests are evaluated
+        based on alignment with the architecture, impact scope, and contributor interest.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What pain point does this solve? Why is it needed?
+      placeholder: "I'm always frustrated when ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like. Be specific about behavior, API changes, or UI changes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any workarounds or alternative approaches you've considered.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Impact Scope
+      description: How broadly does this change affect the system?
+      options:
+        - Single service (e.g. finance, inventory)
+        - Cross-domain (affects 2+ services)
+        - Platform-wide (architecture, infrastructure, or core patterns)
+        - Frontend only
+        - Documentation only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain
+      description: Which part of Skyrict does this relate to?
+      options:
+        - Finance
+        - Inventory / Supply Chain
+        - Procurement
+        - Sales / CRM
+        - Manufacturing
+        - HR
+        - Intelligence Engine
+        - AI Agents
+        - Analytics
+        - Infrastructure / DevOps
+        - Frontend
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to submit a PR implementing this feature.
+          required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Links to related issues, ADRs, external references, or screenshots.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and discussions to ensure this is not already proposed.
+          required: true

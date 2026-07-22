@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/skyrict/skyrict/discussions
+    about: Use GitHub Discussions for architecture questions, design debates, and implementation guidance.
+  - name: Security Vulnerability
+    url: https://github.com/skyrict/skyrict/blob/main/SECURITY.md
+    about: Do not open a public issue. Follow the responsible disclosure process in SECURITY.md.

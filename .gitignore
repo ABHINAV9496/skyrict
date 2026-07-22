@@ -1,1 +1,231 @@
+# ===========================================
+# Skyrict .gitignore
+# Python / FastAPI / Microservices / AI-ML
+# ===========================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+*.whl
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Distribution / packaging
+dist/
+build/
+eggs/
+*.tar.gz
+*.zip
+wheels/
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-install-log.txt
+
+# ---------- Testing ----------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.tox/
+.nox/
+
+# ---------- Linting / Formatting ----------
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# ---------- IDEs / Editors ----------
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+tags
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Emacs
+\#*\#
+.#*
+*.elc
+
+# ---------- Environment / Secrets ----------
 .env
+.env.*
+!.env.example
+!.env.test
+!.env.sample
+
+# Secrets — never commit
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+secrets.yml
+secrets.yaml
+credentials.json
+service-account*.json
+
+# ---------- Docker ----------
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# ---------- Node.js / Frontend ----------
+node_modules/
+.next/
+.nuxt/
+.output/
+out/
+.turbo/
+.pnp.*
+.yarn/
+
+# Build artifacts
+web/app/.next/
+web/app/out/
+web/app/build/
+web/app/dist/
+web/embedded/dist/
+*.tsbuildinfo
+
+# ---------- AI / ML ----------
+# Model files
+*.pt
+*.pth
+*.onnx
+*.pb
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+mlruns/
+mlartifacts/
+wandb/
+lightning_logs/
+
+# Training outputs
+checkpoints/
+outputs/
+logs/
+*.ckpt
+
+# ---------- Infrastructure ----------
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Kubernetes
+kubeconfig
+kubeconfig.*
+!kubeconfig.example
+
+# ---------- Data / Cache ----------
+# Local databases
+*.db
+*.sqlite3
+*.sqlite
+
+# Redis dumps
+dump.rdb
+appendonly.aof
+
+# Kafka
+*.log
+*.index
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.bak.*
+
+# ---------- OS ----------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.directory
+
+# ---------- Documentation ----------
+site/
+docs/_build/
+*.log
+
+# ---------- Misc ----------
+*.bak
+*.orig
+*.rej
+core
+core.*
+nohup.out
+*.pid
+*.seed
+*.pid.lock

@@ -1,0 +1,77 @@
+# =============================================
+# Skyrict CODEOWNERS
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# =============================================
+
+# ---------- Global ----------
+# Default owners for everything
+*                               @skyrict/core
+
+# ---------- Infrastructure / DevOps ----------
+docker-compose*.yml             @skyrict/platform
+Dockerfile*                     @skyrict/platform
+.github/                        @skyrict/platform
+Makefile                        @skyrict/platform
+pyproject.toml                  @skyrict/platform
+*.toml                          @skyrict/platform
+
+# ---------- Core Platform ----------
+services/identity/              @skyrict/platform
+services/gateway/               @skyrict/platform
+infrastructure/events/          @skyrict/platform
+infrastructure/scheduler/       @skyrict/platform
+infrastructure/observability/   @skyrict/platform
+
+# ---------- Finance ----------
+services/finance/               @skyrict/finance
+services/finance/**             @skyrict/finance
+
+# ---------- Inventory & Supply Chain ----------
+services/inventory/             @skyrict/supply-chain
+services/inventory/**           @skyrict/supply-chain
+services/procurement/           @skyrict/supply-chain
+services/procurement/**         @skyrict/supply-chain
+
+# ---------- Sales & CRM ----------
+services/sales/                 @skyrict/sales
+services/sales/**               @skyrict/sales
+
+# ---------- Manufacturing ----------
+services/manufacturing/         @skyrict/manufacturing
+services/manufacturing/**       @skyrict/manufacturing
+
+# ---------- HR ----------
+services/hr/                    @skyrict/hr
+services/hr/**                  @skyrict/hr
+
+# ---------- Intelligence Engine ----------
+services/intelligence/          @skyrict/intelligence
+services/intelligence/**        @skyrict/intelligence
+
+# ---------- AI / Agents ----------
+services/agents/                @skyrict/ai
+services/agents/**              @skyrict/ai
+ai/                             @skyrict/ai
+ai/**                           @skyrict/ai
+
+# ---------- Analytics ----------
+services/analytics/             @skyrict/analytics
+services/analytics/**           @skyrict/analytics
+
+# ---------- Frontend ----------
+web/                            @skyrict/frontend
+web/**                          @skyrict/frontend
+
+# ---------- Data Layer ----------
+data/                           @skyrict/platform
+data/schemas/                   @skyrict/platform
+data/migrations/                @skyrict/platform
+
+# ---------- Documentation ----------
+docs/                           @skyrict/docs
+*.md                            @skyrict/docs
+
+# ---------- Security ----------
+SECURITY.md                     @skyrict/security
+*.pem                           @skyrict/security
+*.key                           @skyrict/security

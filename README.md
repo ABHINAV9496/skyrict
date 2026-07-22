@@ -311,9 +311,11 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Do **not** open a pub
 
 ---
 
-## License
+## License & Trademarks
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
 
 ---
 

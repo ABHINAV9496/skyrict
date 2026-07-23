@@ -229,3 +229,7 @@ nohup.out
 *.pid
 *.seed
 *.pid.lock
+
+
+# ------- private docs ----------
+docs/handbook

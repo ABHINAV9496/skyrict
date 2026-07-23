@@ -21,6 +21,13 @@ python -m skyrict seed
 python -m skyrict serve --dev
 ```
 
+Install git hooks after cloning (runs lint/format/commit checks on every commit):
+
+```bash
+./scripts/setup-hooks.sh        # Unix/macOS
+.\scripts\setup-hooks.ps1       # Windows
+```
+
 Run the full test suite before opening a PR:
 
 ```bash

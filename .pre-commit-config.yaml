@@ -1,0 +1,51 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos:
+  # ---------- General file checks ----------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  # ---------- Python: Ruff linter ----------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+        types_or: [python, pyi, jupyter]
+
+  # ---------- Python: Ruff formatter ----------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff-format
+        types_or: [python, pyi, jupyter]
+
+  # ---------- Python: Mypy ----------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [pydantic, pydantic-settings]
+        args: ["--config-file=pyproject.toml"]
+        pass_filenames: false
+        entry: mypy src/
+
+  # ---------- Commit message format ----------
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.4.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

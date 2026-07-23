@@ -234,6 +234,11 @@ cp .env.example .env
 ## Development
 
 ```bash
+# Install git hooks (run once after clone)
+./scripts/setup-hooks.sh        # Unix/macOS
+.\scripts\setup-hooks.ps1       # Windows
+
+# Common tasks
 make setup          # Install deps, create DB, run migrations
 make dev            # Start all services in dev mode
 make test           # Run full test suite
@@ -242,6 +247,30 @@ make lint           # Ruff linting + type checking
 make migrate        # Run pending migrations
 make seed           # Load reference data
 make benchmark      # Performance benchmarks
+```
+
+### Git Hooks
+
+Pre-commit hooks run automatically on every `git commit`:
+
+- **Ruff linter** — catches lint errors
+- **Ruff formatter** — auto-formats code
+- **Trailing whitespace / EOF fixes** — cleans whitespace
+- **YAML / JSON / TOML validation** — validates config files
+- **Large file check** — blocks files > 500KB
+- **Direct push block** — prevents commits directly to `main`
+- **Commit message lint** — enforces [Conventional Commits](https://www.conventionalcommits.org/) format
+
+To run all hooks manually:
+
+```bash
+pre-commit run --all-files
+```
+
+To bypass (use sparingly):
+
+```bash
+git commit --no-verify -m "chore: emergency fix"
 ```
 
 ### Testing
@@ -255,6 +284,10 @@ pytest tests/ -k "finance"   # Domain-specific
 ```
 
 Test coverage target: 80%+ on business logic, 60%+ overall.
+
+### Branch Protection
+
+See [docs/setup/branch-protection.md](docs/setup/branch-protection.md) for required GitHub repository settings to enforce PR-only workflow, required reviews, and CI checks.
 
 ---
 
@@ -320,7 +353,13 @@ Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
 ---
 
 <p align="center">
-  <a href="https://github.com/skyrict/skyrict/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/skyrict/skyrict?style=social"/></a>
-  <a href="https://github.com/skyrict/skyrict/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/skyrict/skyrict?style=social"/></a>
-  <a href="https://github.com/skyrict/skyrict/issues"><img alt="Issues" src="https://img.shields.io/github/issues/skyrict/skyrict"/></a>
+  <a href="https://github.com/nkswalih/skyrict/stargazers">
+    <img alt="Stars" src="https://img.shields.io/github/stars/nkswalih/skyrict?style=social"/>
+  </a>
+  <a href="https://github.com/nkswalih/skyrict/network/members">
+    <img alt="Forks" src="https://img.shields.io/github/forks/nkswalih/skyrict?style=social"/>
+  </a>
+  <a href="https://github.com/nkswalih/skyrict/issues">
+    <img alt="Issues" src="https://img.shields.io/github/issues/nkswalih/skyrict"/>
+  </a>
 </p>

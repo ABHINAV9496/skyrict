@@ -18,6 +18,12 @@ repos:
       - id: no-commit-to-branch
         args: ["--branch", "main"]
 
+  # ---------- Secret scanning: gitleaks ----------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
   # ---------- Python: Ruff linter ----------
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
@@ -33,7 +39,7 @@ repos:
       - id: ruff-format
         types_or: [python, pyi, jupyter]
 
-  # ---------- Python: Mypy ----------
+  # ---------- Python: Mypy (per-service) ----------
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.14.1
     hooks:
@@ -41,7 +47,29 @@ repos:
         additional_dependencies: [pydantic, pydantic-settings]
         args: ["--config-file=pyproject.toml"]
         pass_filenames: false
-        entry: mypy src/
+        entry: mypy services/identity/src/ libs/skyrict-common/src/
+
+  # ---------- Node.js / TypeScript: pnpm lint + format ----------
+  - repo: local
+    hooks:
+      - id: pnpm-lint
+        name: pnpm lint (eslint)
+        entry: bash -c 'if [ -f pnpm-lock.yaml ]; then pnpm run lint; fi'
+        language: system
+        files: \.(ts|tsx|js|jsx)$
+        pass_filenames: false
+      - id: pnpm-format
+        name: pnpm format (prettier)
+        entry: bash -c 'if [ -f pnpm-lock.yaml ]; then pnpm run format; fi'
+        language: system
+        files: \.(ts|tsx|js|jsx|css|json|md)$
+        pass_filenames: false
+      - id: pnpm-typecheck
+        name: pnpm typecheck
+        entry: bash -c 'if [ -f pnpm-lock.yaml ]; then pnpm run typecheck; fi'
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
 
   # ---------- Commit message format ----------
   - repo: https://github.com/commitizen-tools/commitizen

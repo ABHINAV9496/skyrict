@@ -59,16 +59,6 @@ dependencies = [
     "skyrict-events",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0,<9",
-    "pytest-asyncio>=0.24,<1",
-    "pytest-cov>=6.0,<7",
-    "httpx",
-    "factory-boy>=3.3,<4",
-    "testcontainers[postgres]>=4.0,<5",
-]
-
 [project.scripts]
 {name} = "{name}.cli:app"
 
@@ -108,3 +98,47 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "raise NotImplementedError",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # Ruff-specific rules
+]
+ignore = [
+    "E501",   # line length (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["skyrict", "{name}", "skyrict_common", "skyrict_testing", "skyrict_events"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false

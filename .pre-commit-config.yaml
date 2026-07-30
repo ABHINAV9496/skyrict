@@ -24,6 +24,22 @@ repos:
     hooks:
       - id: gitleaks
 
+  # ---------- Python: isort (import sorting) ----------
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black", "--line-length", "100"]
+        types_or: [python, pyi]
+
+  # ---------- Python: Black (code formatter) ----------
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 24.10.0
+    hooks:
+      - id: black
+        args: ["--line-length", "100", "--target-version", "py312"]
+        types_or: [python, pyi]
+
   # ---------- Python: Ruff linter ----------
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
@@ -39,6 +55,14 @@ repos:
       - id: ruff-format
         types_or: [python, pyi, jupyter]
 
+  # ---------- Python: Flake8 (basic style lint) ----------
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        args: ["--config=.flake8"]
+        types_or: [python, pyi]
+
   # ---------- Python: Mypy (per-service) ----------
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.14.1
@@ -47,7 +71,7 @@ repos:
         additional_dependencies: [pydantic, pydantic-settings]
         args: ["--config-file=pyproject.toml"]
         pass_filenames: false
-        entry: mypy services/identity/src/ libs/skyrict-common/src/
+        entry: mypy services/identity/src/ libs/skyrict-common/src/ libs/skyrict-events/src/ libs/skyrict-testing/src/
 
   # ---------- Node.js / TypeScript: pnpm lint + format ----------
   - repo: local

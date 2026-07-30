@@ -13,14 +13,19 @@ authors = [
 members = ["services/*", "libs/*"]
 exclude = ["services/_template"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0,<9",
     "pytest-asyncio>=0.24,<1",
     "pytest-cov>=6.0,<7",
     "ruff>=0.8,<1",
     "mypy>=1.13,<2",
     "pre-commit>=4.0,<5",
+    "flake8>=7.0,<8",
+    "black>=24.0,<25",
+    "isort>=6.0,<7",
+    "bandit>=1.7,<2",
+    "testcontainers[postgres]>=4.0,<5",
 ]
 
 # ---------- Ruff (root-level defaults) ----------
@@ -54,6 +59,22 @@ known-first-party = ["skyrict", "identity", "skyrict_common", "skyrict_testing",
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+
+# ---------- Black (local formatting, CI uses ruff format) ----------
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+# ---------- isort (local import sorting, CI uses ruff I rule) ----------
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["skyrict", "identity", "skyrict_common", "skyrict_testing", "skyrict_events"]
+
+# ---------- Bandit (security scanner for CI) ----------
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", ".git", ".venvs", "**/__pycache__"]
+skips = ["B101", "B311", "B403", "B404", "B603"]
 
 # ---------- Mypy (root-level defaults) ----------
 [tool.mypy]

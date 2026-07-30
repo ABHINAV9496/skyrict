@@ -46,9 +46,19 @@ lint: ## Run ruff check + ruff format check + mypy
 	uv run ruff format --check services/ libs/
 	uv run mypy services/identity/src/
 
-format: ## Auto-format code
+lint-full: ## Full lint: ruff + flake8 + mypy + bandit
+	uv run ruff check services/ libs/
+	uv run flake8 services/ libs/
+	uv run mypy services/identity/src/
+	uv run bandit -r services/ libs/
+
+format: ## Auto-format code (ruff)
 	uv run ruff check --fix services/ libs/
 	uv run ruff format services/ libs/
+
+format-legacy: ## Auto-format using isort + black
+	uv run isort services/ libs/
+	uv run black services/ libs/
 
 # ---------- Database ----------
 

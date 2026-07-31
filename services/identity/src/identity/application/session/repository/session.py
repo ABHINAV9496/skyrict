@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select, update
 
 from identity.application.session.models.session import SessionModel
-from identity.repositories.base import BaseRepository
+from identity.db.repository import BaseRepository
 
 if TYPE_CHECKING:
     import uuid

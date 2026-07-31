@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from skyrict_common.exceptions import PasskeyError
 
@@ -18,7 +18,7 @@ class PasskeyService:
     def __init__(self, user_repo: UserRepository) -> None:
         self.user_repo = user_repo
 
-    async def start_registration(self, user_id: uuid.UUID) -> dict:
+    async def start_registration(self, user_id: uuid.UUID) -> dict[str, Any]:
         """Initiate passkey registration — return challenge options."""
         # TODO: Implement WebAuthn registration ceremony
         # Return PublicKeyCredentialCreationOptions
@@ -28,12 +28,14 @@ class PasskeyService:
             "user": {"id": str(user_id)},
         }
 
-    async def complete_registration(self, user_id: uuid.UUID, credential: dict) -> dict:
+    async def complete_registration(
+        self, user_id: uuid.UUID, credential: dict[str, Any]
+    ) -> dict[str, Any]:
         """Complete passkey registration after browser ceremony."""
         # TODO: Verify attestation, store credential
         raise PasskeyError("Passkey registration not yet implemented")
 
-    async def start_authentication(self, email: str) -> dict:
+    async def start_authentication(self, email: str) -> dict[str, Any]:
         """Initiate passkey authentication — return challenge options."""
         # TODO: Implement WebAuthn authentication ceremony
         return {
@@ -41,7 +43,7 @@ class PasskeyService:
             "timeout": 60000,
         }
 
-    async def complete_authentication(self, credential: dict) -> dict:
+    async def complete_authentication(self, credential: dict[str, Any]) -> dict[str, Any]:
         """Complete passkey authentication after browser ceremony."""
         # TODO: Verify assertion, return user info
         raise PasskeyError("Passkey authentication not yet implemented")

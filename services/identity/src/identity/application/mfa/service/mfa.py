@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from identity.core.security import verify_password
 from skyrict_common.exceptions import MFAVerificationError, UserNotFoundError
@@ -20,7 +20,7 @@ class MFAService:
     def __init__(self, user_repo: UserRepository) -> None:
         self.user_repo = user_repo
 
-    async def setup_totp(self, user_id: uuid.UUID) -> dict:
+    async def setup_totp(self, user_id: uuid.UUID) -> dict[str, Any]:
         """Generate a TOTP secret and provisioning URI for a user.
 
         Returns:

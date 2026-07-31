@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request
 
 from identity.api.deps import get_authn_service, get_current_user, get_token_service
@@ -77,7 +79,7 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(
     body: LogoutRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     token_svc: TokenService = Depends(get_token_service),
 ) -> ResponseEnvelope[None]:
     """Revoke the current session."""
@@ -90,7 +92,7 @@ async def logout(
 async def introspect_token(
     body: TokenRefreshRequest,
     token_svc: TokenService = Depends(get_token_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Introspect a token — return its claims if active."""
     result = await token_svc.introspect(body.refresh_token)
     return ResponseEnvelope(data=result)

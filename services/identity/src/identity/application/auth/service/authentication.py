@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from identity.core.security import hash_password, verify_password
 from skyrict_common.exceptions import (
@@ -37,7 +37,7 @@ class AuthenticationService:
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Authenticate a user and return token pair.
 
         Raises:
@@ -85,7 +85,7 @@ class AuthenticationService:
         *,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Register a new user.
 
         Raises:

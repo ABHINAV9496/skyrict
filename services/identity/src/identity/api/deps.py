@@ -5,7 +5,8 @@ Every route that touches the database or requires auth goes through these deps.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -43,7 +44,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Extract and verify JWT from Authorization header, return user claims.
 
     Uses security.verify_jwt() — the ONE AND ONLY decode path.
@@ -70,13 +71,13 @@ async def get_current_user(
     }
 
 
-def require_permission(permission: str):
+def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]]]:
     """Dependency factory — returns a dependency that checks a specific permission."""
 
     async def _check(
-        current_user: dict = Depends(get_current_user),
+        current_user: dict[str, Any] = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-    ) -> dict:
+    ) -> dict[str, Any]:
         authz = AuthorizationService(UserRepository(db))
         await authz.require_permission(
             user_id=current_user["user_id"],

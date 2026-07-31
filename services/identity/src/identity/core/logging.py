@@ -34,7 +34,7 @@ def configure_identity_logging(
             structlog.contextvars.merge_contextvars,
             _inject_tenant_id,
             _inject_request_id,
-            *structlog.get_config()["processors"],  # type: ignore[arg-type]
+            *structlog.get_config()["processors"],
         ],
     )
 
@@ -42,8 +42,8 @@ def configure_identity_logging(
 def _inject_tenant_id(
     logger: structlog.types.WrappedLogger,
     method_name: str,
-    event_dict: dict,
-) -> dict:
+    event_dict: structlog.types.EventDict,
+) -> structlog.types.EventDict:
     """Auto-inject tenant_id from TenantContext if not already present."""
     from identity.core.tenant_context import TenantContext
 
@@ -57,8 +57,8 @@ def _inject_tenant_id(
 def _inject_request_id(
     logger: structlog.types.WrappedLogger,
     method_name: str,
-    event_dict: dict,
-) -> dict:
+    event_dict: structlog.types.EventDict,
+) -> structlog.types.EventDict:
     """Auto-inject request_id from structlog contextvars if not already present."""
     # structlog.contextvars.merge_contextvars already handles this,
     # but we ensure it's always present for downstream consumers.

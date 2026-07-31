@@ -13,11 +13,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
+from identity.application.audit.models.audit_log import AuditLogModel  # noqa: F401
+from identity.application.auth.models.user import UserModel  # noqa: F401
+from identity.application.role.models.role import RoleModel, TenantRoleModel  # noqa: F401
+from identity.application.session.models.session import SessionModel  # noqa: F401
+from identity.application.tenant.models.tenant import TenantModel  # noqa: F401
 from identity.core.config import settings
-
-# Import all models so Alembic can detect them
-from identity.models import audit_log, role, session, tenant, user  # noqa: F401
-from identity.models.base import Base
+from identity.db.base import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

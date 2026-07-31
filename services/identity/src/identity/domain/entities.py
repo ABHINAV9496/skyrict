@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -79,7 +79,7 @@ class AuditLog:
     action: str = ""
     resource_type: str = ""
     resource_id: str | None = None
-    details: dict | None = None
+    details: dict[str, Any] | None = None
     ip_address: str | None = None
     user_agent: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

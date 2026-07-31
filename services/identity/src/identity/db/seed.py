@@ -11,12 +11,12 @@ import uuid
 
 import structlog
 
+from identity.application.auth.models.user import UserModel
+from identity.application.role.models.role import RoleModel
+from identity.application.tenant.models.tenant import TenantModel
 from identity.core.config import settings
 from identity.core.security import hash_password
 from identity.db.session import async_session_factory
-from identity.models.role import RoleModel
-from identity.models.tenant import TenantModel
-from identity.models.user import UserModel
 
 logger = structlog.get_logger("identity.seed")
 
@@ -33,7 +33,7 @@ DEFAULT_ROLES = [
 
 async def seed_default_tenant() -> None:
     """Create the default tenant if it doesn't exist."""
-    from identity.repositories.tenant_repository import TenantRepository
+    from identity.application.tenant.repository.tenant import TenantRepository
 
     async with async_session_factory() as session:
         repo = TenantRepository(session)
@@ -56,11 +56,10 @@ async def seed_default_tenant() -> None:
 
 async def seed_default_roles() -> None:
     """Create default RBAC roles for the default tenant."""
-    from identity.repositories.base import BaseRepository
+    from identity.db.repository import BaseRepository
 
     async with async_session_factory() as session:
-        repo = BaseRepository[RoleModel](session)
-        repo.model = RoleModel
+        repo = BaseRepository[RoleModel](session, model=RoleModel)
 
         existing = await repo.list(
             filters=[RoleModel.tenant_id == uuid.UUID(settings.DEFAULT_TENANT_ID)]
@@ -83,7 +82,7 @@ async def seed_default_roles() -> None:
 
 async def seed_admin_user() -> None:
     """Create a default admin user for development/staging."""
-    from identity.repositories.user_repository import UserRepository
+    from identity.application.auth.repository.user import UserRepository
 
     async with async_session_factory() as session:
         repo = UserRepository(session)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -15,9 +16,9 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 @router.get("")
 async def list_sessions(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     session_svc: SessionService = Depends(get_session_service),
-) -> ResponseEnvelope[list[dict]]:
+) -> ResponseEnvelope[list[dict[str, Any]]]:
     """List all active sessions for the current user."""
     import uuid
 
@@ -39,7 +40,7 @@ async def list_sessions(
 @router.delete("/{session_id}")
 async def revoke_session(
     session_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     session_svc: SessionService = Depends(get_session_service),
 ) -> ResponseEnvelope[None]:
     """Revoke a specific session."""
@@ -49,7 +50,7 @@ async def revoke_session(
 
 @router.delete("")
 async def revoke_all_sessions(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     session_svc: SessionService = Depends(get_session_service),
 ) -> ResponseEnvelope[None]:
     """Revoke all sessions for the current user (force logout everywhere)."""

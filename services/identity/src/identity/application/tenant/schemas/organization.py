@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -21,7 +22,7 @@ class OrganizationUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=256)
     plan: str | None = None
-    settings: dict | None = None
+    settings: dict[str, Any] | None = None
 
 
 class OrganizationResponse(BaseModel):
@@ -32,7 +33,7 @@ class OrganizationResponse(BaseModel):
     slug: str
     plan: str
     is_active: bool
-    settings: dict = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

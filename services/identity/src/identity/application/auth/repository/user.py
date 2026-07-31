@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from identity.application.auth.models.user import UserModel
-from identity.repositories.base import BaseRepository
+from identity.db.repository import BaseRepository
 
 
 class UserRepository(BaseRepository[UserModel]):

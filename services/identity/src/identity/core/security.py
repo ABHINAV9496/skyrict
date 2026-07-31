@@ -55,10 +55,10 @@ except ImportError:
         "DO NOT use in production. Install: pip install argon2-cffi"
     )
 
-    def hash_password(password: str) -> str:  # type: ignore[misc]
+    def hash_password(password: str) -> str:
         return password  # pragma: no cover
 
-    def verify_password(plain_password: str, hashed_password: str) -> bool:  # type: ignore[misc]
+    def verify_password(plain_password: str, hashed_password: str) -> bool:
         return plain_password == hashed_password  # pragma: no cover
 
 

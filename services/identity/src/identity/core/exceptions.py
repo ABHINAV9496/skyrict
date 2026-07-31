@@ -6,8 +6,9 @@ following https://www.rfc-editor.org/rfc/rfc7807 (Problem Details for HTTP APIs)
 
 from __future__ import annotations
 
-import logging
+from typing import Any
 
+import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -28,7 +29,24 @@ from skyrict_common.exceptions import (
     ValidationError,
 )
 
-logger = logging.getLogger("identity.exceptions")
+__all__ = [
+    "AuthenticationError",
+    "AuthorizationError",
+    "MFARequiredError",
+    "RateLimitExceededError",
+    "SkyrictError",
+    "TenantContextMissingError",
+    "TenantDisabledError",
+    "TenantNotFoundError",
+    "TokenExpiredError",
+    "TokenInvalidError",
+    "UserAlreadyExistsError",
+    "UserDisabledError",
+    "UserNotFoundError",
+    "ValidationError",
+]
+
+logger = structlog.get_logger("identity.exceptions")
 
 # Mapping from exception type to HTTP status code and problem type URI
 _STATUS_MAP: dict[type, tuple[int, str]] = {
@@ -55,7 +73,7 @@ async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResp
     )
 
     # RFC 7807 required fields
-    body: dict = {
+    body: dict[str, Any] = {
         "type": problem_type,
         "status": status_code,
         "title": exc.__class__.__name__,

@@ -37,7 +37,10 @@ _private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     )
 )
 
-os.environ.setdefault("IDENTITY_DATABASE_URL", "sqlite+aiosqlite:///./test.db")
+os.environ.setdefault(
+    "IDENTITY_DATABASE_URL",
+    "postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity",
+)
 os.environ.setdefault("IDENTITY_REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("IDENTITY_JWT_PRIVATE_KEY_PATH", str(_KEY_DIR / "private.pem"))
 os.environ.setdefault("IDENTITY_JWT_PUBLIC_KEY_PATH", str(_KEY_DIR / "public.pem"))

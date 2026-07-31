@@ -153,7 +153,7 @@ class Settings(BaseSettings):
             ("JWT_PUBLIC_KEY_PATH", "JWT_PUBLIC_KEY_PATH"),
         ]:
             path: Path = getattr(self, path_attr)
-            if "tests/fixtures" in str(path):
+            if "tests/fixtures" in path.as_posix():
                 errors.append(
                     f"Refusing to start: {label} points at a public test "
                     f"fixture ({path}). Production and staging must use a "

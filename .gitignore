@@ -92,10 +92,11 @@ secrets.yaml
 credentials.json
 service-account*.json
 
-# RSA keys — gitignore ALL *.pem EXCEPT test/dev fixtures
+# RSA keys — NEVER commit key material; tests generate ephemeral keys
 *.pem
-!services/*/tests/fixtures/rsa/*.pem
-!libs/*/tests/fixtures/rsa/*.pem
+
+# Local dev-only files
+.dev/
 
 # ---------- Docker ----------
 docker-compose.override.yml

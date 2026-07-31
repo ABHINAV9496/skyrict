@@ -26,8 +26,8 @@ jobs:
         run: uv run ruff check services/ libs/
       - name: Ruff format check
         run: uv run ruff format --check services/ libs/
-      # - name: Mypy typecheck
-      #   run: uv run mypy services/ libs/
+      - name: Mypy typecheck
+        run: uv run mypy services/ libs/
       - name: Bandit security scan
         run: uv run bandit -r services/ libs/ -c pyproject.toml
 

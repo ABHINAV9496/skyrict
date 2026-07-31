@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.application.audit.models.audit_log import AuditLogModel
-from identity.repositories.base import BaseRepository
+from identity.db.repository import BaseRepository
 
 
 class AuditRepository(BaseRepository[AuditLogModel]):
@@ -17,12 +18,12 @@ class AuditRepository(BaseRepository[AuditLogModel]):
     async def log(
         self,
         *,
-        tenant_id,
-        user_id=None,
+        tenant_id: str,
+        user_id: str | None = None,
         action: str,
         resource_type: str,
         resource_id: str | None = None,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> AuditLogModel:
@@ -40,7 +41,7 @@ class AuditRepository(BaseRepository[AuditLogModel]):
         return await self.create(entry)
 
     async def get_by_user(
-        self, user_id, *, offset: int = 0, limit: int = 50
+        self, user_id: str, *, offset: int = 0, limit: int = 50
     ) -> list[AuditLogModel]:
         """Get audit entries for a specific user."""
         stmt = (

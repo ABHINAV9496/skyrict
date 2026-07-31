@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import asyncio
 from logging.config import fileConfig
+from typing import TYPE_CHECKING
 
 from alembic import context
 from sqlalchemy import pool
-from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from identity.core.config import settings
-from identity.models.base import Base
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
 
-# Import all models so Alembic can detect them
-from identity.models import user, tenant, role, session, audit_log  # noqa: F401
+from identity.application.audit.models.audit_log import AuditLogModel  # noqa: F401
+from identity.application.auth.models.user import UserModel  # noqa: F401
+from identity.application.role.models.role import RoleModel, TenantRoleModel  # noqa: F401
+from identity.application.session.models.session import SessionModel  # noqa: F401
+from identity.application.tenant.models.tenant import TenantModel  # noqa: F401
+from identity.core.config import settings
+from identity.db.base import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

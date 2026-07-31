@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from identity.domain.value_objects import PasswordPolicy, RiskScore, TokenPair
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_mfa_service
@@ -13,9 +15,9 @@ router = APIRouter(prefix="/mfa", tags=["mfa"])
 
 @router.post("/setup")
 async def setup_mfa(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     mfa_svc: MFAService = Depends(get_mfa_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Initiate MFA setup — returns TOTP secret and backup codes."""
     import uuid
 
@@ -26,9 +28,9 @@ async def setup_mfa(
 @router.post("/verify")
 async def verify_mfa(
     code: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     mfa_svc: MFAService = Depends(get_mfa_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Verify a TOTP code during setup or login."""
     import uuid
 
@@ -40,7 +42,7 @@ async def verify_mfa(
 async def enable_mfa(
     secret: str,
     code: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     mfa_svc: MFAService = Depends(get_mfa_service),
 ) -> ResponseEnvelope[None]:
     """Enable MFA after verifying the initial TOTP code."""
@@ -53,7 +55,7 @@ async def enable_mfa(
 @router.post("/disable")
 async def disable_mfa(
     password: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     mfa_svc: MFAService = Depends(get_mfa_service),
 ) -> ResponseEnvelope[None]:
     """Disable MFA after password confirmation."""

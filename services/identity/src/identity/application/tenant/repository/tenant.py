@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.application.tenant.models.tenant import TenantModel
-from identity.repositories.base import BaseRepository
+from identity.db.repository import BaseRepository
 
 
 class TenantRepository(BaseRepository[TenantModel]):

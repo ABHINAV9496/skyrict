@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
-from fastapi import Depends, Request
+from fastapi import Request
 
 from identity.core.exceptions import TenantContextMissingError
 
@@ -60,6 +60,7 @@ class TenantContext:
 # FastAPI dependency
 # ---------------------------------------------------------------------------
 
+
 def get_current_tenant(request: Request) -> str:
     """FastAPI dependency that returns the current tenant ID.
 
@@ -74,7 +75,6 @@ def get_current_tenant(request: Request) -> str:
     tenant_id = TenantContext.get()
     if not tenant_id:
         raise TenantContextMissingError(
-            "Tenant context is not set. "
-            "Ensure TenantContextMiddleware runs before route handlers."
+            "Tenant context is not set. Ensure TenantContextMiddleware runs before route handlers."
         )
     return tenant_id

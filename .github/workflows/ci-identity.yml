@@ -2,14 +2,14 @@ name: CI — Identity Service
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "services/identity/**"
       - "libs/skyrict-common/**"
       - "pyproject.toml"
       - "uv.lock"
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "services/identity/**"
       - "libs/skyrict-common/**"
@@ -36,7 +36,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --all-packages
 
       - name: Ruff check
         run: uv run ruff check services/ libs/
@@ -62,7 +62,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --all-packages
 
       - name: Run unit tests
         run: uv run pytest services/identity/tests/unit/ -v --tb=short
@@ -83,5 +83,5 @@ jobs:
 
       - name: Install and verify
         run: |
-          uv sync
+          uv sync --all-packages
           uv run python -c "import identity; print(identity.__version__)"

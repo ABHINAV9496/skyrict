@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING, Any
 
 from identity.core.security import create_access_token, create_refresh_token, verify_jwt
 from identity.domain.value_objects import TokenPair
-from identity.application.session.repository.session import SessionRepository
 from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
+
+if TYPE_CHECKING:
+    from identity.application.session.repository.session import SessionRepository
 
 
 class TokenService:
@@ -57,7 +60,7 @@ class TokenService:
 
         await self.session_repo.revoke_all_for_user(uuid.UUID(payload["sub"]))
 
-    async def introspect(self, token: str) -> dict:
+    async def introspect(self, token: str) -> dict[str, Any]:
         """Introspect a token — return its claims if valid."""
         try:
             payload = verify_jwt(token)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_tenant_repo
@@ -14,7 +16,7 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 @router.get("/me", response_model=ResponseEnvelope[TenantResponse])
 async def get_my_organization(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
 ) -> ResponseEnvelope[TenantResponse]:
     """Get the current user's organization."""
@@ -28,7 +30,7 @@ async def get_my_organization(
 @router.post("", response_model=ResponseEnvelope[TenantResponse])
 async def create_organization(
     body: TenantCreateRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
 ) -> ResponseEnvelope[TenantResponse]:
     """Create a new organization."""
@@ -36,8 +38,11 @@ async def create_organization(
 
     if await tenant_repo.slug_exists(body.slug):
         from skyrict_common.exceptions import ValidationError
+
         raise ValidationError(f"Slug '{body.slug}' is already taken")
 
     tenant = TenantModel(name=body.name, slug=body.slug)
     await tenant_repo.create(tenant)
-    return ResponseEnvelope(data=TenantResponse.model_validate(tenant), message="Organization created")
+    return ResponseEnvelope(
+        data=TenantResponse.model_validate(tenant), message="Organization created"
+    )

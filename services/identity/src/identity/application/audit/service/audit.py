@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from identity.application.audit.repository.audit import AuditRepository
+from typing import TYPE_CHECKING, Any
+
 from identity.core.tenant_context import TenantContext
+
+if TYPE_CHECKING:
+    from identity.application.audit.models.audit_log import AuditLogModel
+    from identity.application.audit.repository.audit import AuditRepository
 
 
 class AuditService:
@@ -18,8 +23,8 @@ class AuditService:
         action: str,
         resource_type: str,
         resource_id: str | None = None,
-        user_id=None,
-        details: dict | None = None,
+        user_id: str | None = None,
+        details: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> None:
@@ -39,6 +44,8 @@ class AuditService:
             user_agent=user_agent,
         )
 
-    async def get_user_audit_log(self, user_id, *, offset: int = 0, limit: int = 50):
+    async def get_user_audit_log(
+        self, user_id: str, *, offset: int = 0, limit: int = 50
+    ) -> list[AuditLogModel]:
         """Retrieve audit entries for a user."""
         return await self.audit_repo.get_by_user(user_id, offset=offset, limit=limit)

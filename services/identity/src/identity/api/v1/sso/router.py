@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_sso_service
@@ -16,7 +18,7 @@ async def start_oidc(
     provider: str,
     redirect_uri: str,
     sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Start OIDC SSO flow — returns authorization URL."""
     result = await sso_svc.start_oidc_flow(provider, redirect_uri)
     return ResponseEnvelope(data=result)
@@ -27,7 +29,7 @@ async def oidc_callback(
     code: str,
     state: str,
     sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Handle OIDC callback — exchange code for tokens, return session."""
     result = await sso_svc.handle_oidc_callback(code, state)
     return ResponseEnvelope(data=result, message="SSO login successful")
@@ -37,7 +39,7 @@ async def oidc_callback(
 async def start_saml(
     provider: str,
     sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Start SAML SSO flow."""
     result = await sso_svc.start_saml_flow(provider)
     return ResponseEnvelope(data=result)
@@ -47,7 +49,7 @@ async def start_saml(
 async def saml_callback(
     saml_response: str,
     sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Handle SAML callback."""
     result = await sso_svc.handle_saml_callback(saml_response)
     return ResponseEnvelope(data=result, message="SAML SSO login successful")

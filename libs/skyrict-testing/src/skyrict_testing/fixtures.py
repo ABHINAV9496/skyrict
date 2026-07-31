@@ -58,6 +58,6 @@ def rsa_public_key(rsa_keypair: dict[str, str]) -> str:
 
 
 @pytest.fixture
-def anyio_backend():
+def anyio_backend() -> str:
     """Use asyncio backend for pytest-asyncio."""
     return "asyncio"

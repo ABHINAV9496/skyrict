@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import enum
 import sys
-from pathlib import Path
+from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Environment(str, enum.Enum):
+class Environment(enum.StrEnum):
     """Deployment environments — exactly four, no ad-hoc values."""
 
     DEV = "dev"
@@ -47,9 +47,7 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
     # --- Database (CRITICAL — no default) ---
-    DATABASE_URL: str = Field(
-        ..., description="async PostgreSQL connection string — REQUIRED"
-    )
+    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
 
     # --- Redis (CRITICAL — no default) ---
     REDIS_URL: str = Field(..., description="Redis connection — REQUIRED")
@@ -106,7 +104,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
 
     @model_validator(mode="after")
-    def load_rsa_keys(self) -> "Settings":
+    def load_rsa_keys(self) -> Settings:
         """Load RSA key files and fail immediately if missing or unreadable."""
         errors: list[str] = []
 
@@ -123,9 +121,7 @@ class Settings(BaseSettings):
                 try:
                     content = path.read_text(encoding="utf-8")
                     if "PRIVATE KEY" not in content and "PUBLIC KEY" not in content:
-                        errors.append(
-                            f"{label}: file does not appear to contain a PEM key"
-                        )
+                        errors.append(f"{label}: file does not appear to contain a PEM key")
                     else:
                         setattr(self, dest_attr, content)
                 except OSError as exc:
@@ -142,7 +138,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def production_safety(self) -> "Settings":
+    def production_safety(self) -> Settings:
         """Fail-fast guards that apply ONLY in staging and production.
 
         Runs after load_rsa_keys so all fields are populated.
@@ -186,11 +182,10 @@ class Settings(BaseSettings):
 
         if errors:
             raise RuntimeError(
-                "Production safety check failed:\n"
-                + "\n".join(f"  - {e}" for e in errors)
+                "Production safety check failed:\n" + "\n".join(f"  - {e}" for e in errors)
             )
 
         return self
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # pydantic-settings populates from env

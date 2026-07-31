@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_passkey_service
@@ -13,9 +15,9 @@ router = APIRouter(prefix="/passkeys", tags=["passkeys"])
 
 @router.post("/register/start")
 async def start_passkey_registration(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Start passkey registration — returns WebAuthn creation options."""
     import uuid
 
@@ -25,10 +27,10 @@ async def start_passkey_registration(
 
 @router.post("/register/complete")
 async def complete_passkey_registration(
-    credential: dict,
-    current_user: dict = Depends(get_current_user),
+    credential: dict[str, Any],
+    current_user: dict[str, Any] = Depends(get_current_user),
     passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Complete passkey registration after browser ceremony."""
     import uuid
 
@@ -40,7 +42,7 @@ async def complete_passkey_registration(
 async def start_passkey_authentication(
     email: str,
     passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Start passkey authentication — returns WebAuthn request options."""
     options = await passkey_svc.start_authentication(email)
     return ResponseEnvelope(data=options)
@@ -48,9 +50,9 @@ async def start_passkey_authentication(
 
 @router.post("/authenticate/complete")
 async def complete_passkey_authentication(
-    credential: dict,
+    credential: dict[str, Any],
     passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict]:
+) -> ResponseEnvelope[dict[str, Any]]:
     """Complete passkey authentication after browser ceremony."""
     result = await passkey_svc.complete_authentication(credential)
     return ResponseEnvelope(data=result, message="Passkey authentication successful")

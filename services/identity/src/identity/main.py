@@ -33,7 +33,7 @@ def create_app() -> FastAPI:
 
     # --- Global exception handlers ---
     app.add_exception_handler(SkyrictError, skyrict_error_handler)  # type: ignore[arg-type]
-    app.add_exception_handler(Exception, unhandled_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, unhandled_error_handler)
 
     # --- Middleware (order matters: last added = first executed) ---
     # Execution order: CORSMiddleware → TenantContextMiddleware → RequestIdMiddleware

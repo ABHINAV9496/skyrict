@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from identity.core.security import hash_password, verify_password
-from identity.domain.entities import User
-from identity.application.tenant.repository.tenant import TenantRepository
-from identity.application.auth.repository.user import UserRepository
-from identity.application.auth.schemas import LoginRequest, RegisterRequest
-from identity.application.audit.service.audit import AuditService
-from identity.application.auth.service.token import TokenService
 from skyrict_common.exceptions import (
     InvalidPasswordError,
     UserAlreadyExistsError,
     UserDisabledError,
     UserNotFoundError,
 )
+
+if TYPE_CHECKING:
+    from identity.application.audit.service.audit import AuditService
+    from identity.application.auth.repository.user import UserRepository
+    from identity.application.auth.schemas import LoginRequest, RegisterRequest
+    from identity.application.auth.service.token import TokenService
+    from identity.application.tenant.repository.tenant import TenantRepository
 
 
 class AuthenticationService:
@@ -36,7 +37,7 @@ class AuthenticationService:
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Authenticate a user and return token pair.
 
         Raises:
@@ -79,8 +80,12 @@ class AuthenticationService:
         }
 
     async def register(
-        self, request: RegisterRequest, *, ip_address: str | None = None, user_agent: str | None = None
-    ) -> dict:
+        self,
+        request: RegisterRequest,
+        *,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
         """Register a new user.
 
         Raises:

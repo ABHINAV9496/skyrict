@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import JWTError, jws, jwt
+from jose import JWTError, jwt
 
 from identity.core.config import settings
 from identity.core.exceptions import TokenExpiredError, TokenInvalidError
@@ -24,14 +24,14 @@ _ALLOWED_ALGORITHMS = {"RS256"}
 # ---------------------------------------------------------------------------
 try:
     from argon2 import PasswordHasher
-    from argon2.exceptions import VerifyMismatchError, VerificationError
+    from argon2.exceptions import VerificationError, VerifyMismatchError
 
     _ph = PasswordHasher(
-        time_cost=3,        # number of iterations
+        time_cost=3,  # number of iterations
         memory_cost=65536,  # 64 MB
-        parallelism=4,      # threads
-        hash_len=32,        # output length
-        salt_len=16,        # salt length
+        parallelism=4,  # threads
+        hash_len=32,  # output length
+        salt_len=16,  # salt length
     )
 
     def hash_password(password: str) -> str:
@@ -49,15 +49,16 @@ except ImportError:
     # Fallback for dev/test if argon2-cffi not installed — still functional
     # but logs a warning so it is never mistaken for production readiness.
     import logging
+
     logging.warning(
         "argon2-cffi not installed — falling back to plaintext comparison. "
         "DO NOT use in production. Install: pip install argon2-cffi"
     )
 
-    def hash_password(password: str) -> str:  # type: ignore[misc]
+    def hash_password(password: str) -> str:
         return password  # pragma: no cover
 
-    def verify_password(plain_password: str, hashed_password: str) -> bool:  # type: ignore[misc]
+    def verify_password(plain_password: str, hashed_password: str) -> bool:
         return plain_password == hashed_password  # pragma: no cover
 
 
@@ -140,9 +141,7 @@ def verify_jwt(token: str) -> dict[str, Any]:
         unverified_header = jwt.get_unverified_header(token)
         alg = unverified_header.get("alg", "")
         if alg not in _ALLOWED_ALGORITHMS:
-            raise TokenInvalidError(
-                f"Token algorithm '{alg}' is not allowed. Expected RS256."
-            )
+            raise TokenInvalidError(f"Token algorithm '{alg}' is not allowed. Expected RS256.")
 
         # Decode with public key, explicit algorithm whitelist, and claim validation
         payload = jwt.decode(

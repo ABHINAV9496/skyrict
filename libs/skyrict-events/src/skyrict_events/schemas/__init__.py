@@ -8,8 +8,6 @@ Each event model:
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from skyrict_events.base import BaseEvent
 
 

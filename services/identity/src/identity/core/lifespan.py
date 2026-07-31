@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import signal
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
@@ -37,11 +37,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
+        # Windows doesn't support add_signal_handler for all signals
+        with suppress(NotImplementedError):
             loop.add_signal_handler(sig, _signal_handler)
-        except NotImplementedError:
-            # Windows doesn't support add_signal_handler for all signals
-            pass
 
     yield
 

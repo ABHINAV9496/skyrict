@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
-from identity.application.auth.repository.user import UserRepository
 from skyrict_common.exceptions import AuthorizationError
+
+if TYPE_CHECKING:
+    import uuid
+
+    from identity.application.auth.repository.user import UserRepository
 
 
 class AuthorizationService:
@@ -14,7 +18,9 @@ class AuthorizationService:
     def __init__(self, user_repo: UserRepository) -> None:
         self.user_repo = user_repo
 
-    async def check_permission(self, user_id: uuid.UUID, permission: str, *, tenant_id: str) -> bool:
+    async def check_permission(
+        self, user_id: uuid.UUID, permission: str, *, tenant_id: str
+    ) -> bool:
         """Check if a user has a specific permission within their tenant.
 
         Returns True if authorized, raises AuthorizationError if not.
@@ -30,6 +36,8 @@ class AuthorizationService:
         # For now, all active users are authorized
         return True
 
-    async def require_permission(self, user_id: uuid.UUID, permission: str, *, tenant_id: str) -> None:
+    async def require_permission(
+        self, user_id: uuid.UUID, permission: str, *, tenant_id: str
+    ) -> None:
         """Like check_permission but always raises on failure."""
         await self.check_permission(user_id, permission, tenant_id=tenant_id)

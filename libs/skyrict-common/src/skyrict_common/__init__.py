@@ -34,10 +34,8 @@ from skyrict_common.schemas import (
 __all__ = [
     "AuthenticationError",
     "AuthorizationError",
-    "configure_logging",
     "ErrorDetail",
     "ErrorResponse",
-    "get_logger",
     "InvalidPasswordError",
     "ListResponse",
     "MFARequiredError",
@@ -59,6 +57,8 @@ __all__ = [
     "UserDisabledError",
     "UserNotFoundError",
     "ValidationError",
+    "configure_logging",
+    "get_logger",
 ]
 
 __version__ = "0.1.0"

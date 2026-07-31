@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 env:
   PYTHON_VERSION: "3.12"
@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: latest
-      - run: uv sync --group dev
+      - run: uv sync --all-packages --group dev
       - name: Ruff lint
         run: uv run ruff check services/ libs/
       - name: Ruff format check
@@ -50,6 +50,6 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: latest
-      - run: uv sync --group dev
+      - run: uv sync --all-packages --group dev
       - name: Run tests
         run: uv run pytest ${{ matrix.package }}/tests/ -v --tb=short

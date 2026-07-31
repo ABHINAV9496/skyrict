@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from identity.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):

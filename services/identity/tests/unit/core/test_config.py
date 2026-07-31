@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from pydantic import ValidationError
 
 from identity.core.config import Environment, Settings
 
@@ -171,6 +172,41 @@ class TestProductionSafety:
             )
         )
         assert "https://app.skyrict.io" in s.CORS_ORIGINS
+
+
+class TestMissingRequiredVars:
+    """Omitting any required variable must fail fast and name the variable.
+
+    The Definition of Done requires the missing-variable case in addition to
+    the three production-safety validator cases.
+    """
+
+    REQUIRED_FIELDS = (
+        "DATABASE_URL",
+        "REDIS_URL",
+        "JWT_PRIVATE_KEY_PATH",
+        "JWT_PUBLIC_KEY_PATH",
+        "JWKS_ISSUER",
+        "JWKS_AUDIENCE",
+    )
+
+    @pytest.mark.parametrize("field", REQUIRED_FIELDS)
+    def test_missing_field_names_variable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+    ):
+        monkeypatch.delenv(f"IDENTITY_{field}", raising=False)
+        kwargs = _make_valid_settings(tmp_path)
+        kwargs.pop(field)
+        with pytest.raises(ValidationError) as excinfo:
+            Settings(_env_file=None, **kwargs)
+        assert field in str(excinfo.value)
+
+    @pytest.mark.parametrize("field", REQUIRED_FIELDS)
+    def test_missing_env_var_names_variable(self, monkeypatch: pytest.MonkeyPatch, field: str):
+        monkeypatch.delenv(f"IDENTITY_{field}", raising=False)
+        with pytest.raises(ValidationError) as excinfo:
+            Settings(_env_file=None)
+        assert field in str(excinfo.value)
 
 
 class TestEnvironmentEnum:

@@ -2,13 +2,13 @@ name: CI — Web App
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "apps/web/**"
       - "packages/**"
       - "pnpm-lock.yaml"
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "apps/web/**"
       - "packages/**"

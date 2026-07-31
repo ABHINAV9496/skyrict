@@ -2,14 +2,14 @@ name: CI — Identity Service
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "services/identity/**"
       - "libs/skyrict-common/**"
       - "pyproject.toml"
       - "uv.lock"
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "services/identity/**"
       - "libs/skyrict-common/**"

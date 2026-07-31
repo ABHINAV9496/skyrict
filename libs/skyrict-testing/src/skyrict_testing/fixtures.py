@@ -6,52 +6,56 @@ Usage in service conftest.py:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 # ---------------------------------------------------------------------------
 # RSA key fixtures (for RS256 JWT testing)
+#
+# Keys are generated fresh in memory for every test session — no key material
+# is ever stored in or committed to the repository.
 # ---------------------------------------------------------------------------
 
-# Look for RSA keys relative to the caller's working directory (project root),
-# falling back to a location relative to this file for backward compat.
-_FIXTURES_DIR = Path(__file__).parent
 
+@pytest.fixture(scope="session")
+def rsa_keypair() -> dict[str, str]:
+    """Generate a fresh RSA-2048 key pair in memory for this test session.
 
-def _resolve_rsa_path(filename: str) -> Path | None:
-    """Resolve an RSA key file path, checking project-relative then package-relative."""
-    candidates = [
-        Path.cwd() / "tests" / "fixtures" / "rsa" / filename,
-        _FIXTURES_DIR / "fixtures" / "rsa" / filename,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    Returns {"private_key": str, "public_key": str} PEM-encoded keys.
+    """
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return {
+        "private_key": private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode(),
+        "public_key": private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode(),
+    }
 
 
 @pytest.fixture(scope="session")
-def rsa_private_key() -> str:
-    """Load the RSA private key from tests/fixtures/rsa/."""
-    key_path = _resolve_rsa_path("private.pem")
-    if key_path is None:
-        pytest.skip("RSA test keys not found — generate with: python -m skyrict_testing.generate_keys")
-    return key_path.read_text()
+def rsa_private_key(rsa_keypair: dict[str, str]) -> str:
+    """Fresh RSA private key (PEM string) generated for this test session."""
+    return rsa_keypair["private_key"]
 
 
 @pytest.fixture(scope="session")
-def rsa_public_key() -> str:
-    """Load the RSA public key from tests/fixtures/rsa/."""
-    key_path = _resolve_rsa_path("public.pem")
-    if key_path is None:
-        pytest.skip("RSA test keys not found")
-    return key_path.read_text()
+def rsa_public_key(rsa_keypair: dict[str, str]) -> str:
+    """Fresh RSA public key (PEM string) generated for this test session."""
+    return rsa_keypair["public_key"]
 
 
 # ---------------------------------------------------------------------------
 # Backend fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def anyio_backend():

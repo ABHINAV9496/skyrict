@@ -1,11 +1,14 @@
-"""CLI to generate RSA key pairs for RS256 JWT testing.
+"""CLI to generate RSA key pairs for RS256 JWT development.
 
 Usage:
     python -m skyrict_testing.generate_keys
 
 Output (relative to CWD):
-    tests/fixtures/rsa/private.pem
-    tests/fixtures/rsa/public.pem
+    .dev/keys/private.pem
+    .dev/keys/public.pem
+
+Keys are written to the gitignored .dev/ directory for local development only.
+Tests generate ephemeral keys automatically and never commit key material.
 """
 
 from __future__ import annotations
@@ -17,14 +20,16 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 
-def generate_rsa_keypair(*, key_size: int = 2048, output_dir: Path | None = None) -> tuple[Path, Path]:
+def generate_rsa_keypair(
+    *, key_size: int = 2048, output_dir: Path | None = None
+) -> tuple[Path, Path]:
     """Generate an RSA key pair and write to disk.
 
     Returns (private_key_path, public_key_path).
     """
     key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
 
-    out = output_dir or Path("tests/fixtures/rsa")
+    out = output_dir or Path(".dev/keys")
     out.mkdir(parents=True, exist_ok=True)
 
     private_path = out / "private.pem"
@@ -50,7 +55,9 @@ def generate_rsa_keypair(*, key_size: int = 2048, output_dir: Path | None = None
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate RSA key pair for RS256 JWT testing")
     parser.add_argument("--key-size", type=int, default=2048, help="RSA key size (default: 2048)")
-    parser.add_argument("--output-dir", type=str, default=None, help="Output directory (default: tests/fixtures/rsa)")
+    parser.add_argument(
+        "--output-dir", type=str, default=None, help="Output directory (default: .dev/keys)"
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir) if args.output_dir else None

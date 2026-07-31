@@ -26,6 +26,7 @@ dev = [
     "isort>=6.0,<7",
     "bandit>=1.7,<2",
     "testcontainers[postgres]>=4.0,<5",
+    "types-python-jose>=3.3,<4",
 ]
 
 # ---------- Ruff (root-level defaults) ----------
@@ -112,12 +113,19 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
-exclude = ['services/_template/']
+exclude = ['services/_template/', '(^|/)tests/']
 
 [[tool.mypy.overrides]]
-module = ["tests.*"]
-disallow_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = ["alembic.*"]
+# Third-party packages without type stubs — treat as Any.
+module = ["typer", "kafka"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# factory_boy ships py.typed but is only partially typed — treat as Any.
+module = ["factory"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# Factories subclass factory_boy's Any-typed Factory base class.
+module = ["skyrict_testing.factories"]
+disallow_subclassing_any = false

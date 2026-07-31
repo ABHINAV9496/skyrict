@@ -143,6 +143,11 @@ make dev
 ## Development
 
 ```bash
+# Install git hooks (run once after clone)
+./scripts/setup-hooks.sh        # Unix/macOS
+.\scripts\setup-hooks.ps1       # Windows
+
+# Common tasks
 make setup          # Install deps, create DB, run migrations
 make dev            # Start identity service in dev mode
 make dev-web        # Start Next.js dev server
@@ -169,6 +174,10 @@ make help           # Show all available targets
 ```
 
 Pre-commit hooks: Ruff lint, Ruff format, mypy, YAML/JSON/TOML validation, large file check, direct push block, conventional commit lint.
+
+### Branch Protection
+
+See [docs/setup/branch-protection.md](docs/setup/branch-protection.md) for required GitHub repository settings to enforce PR-only workflow, required reviews, and CI checks.
 
 ---
 
@@ -222,3 +231,17 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Do **not** open a pub
 Apache License 2.0. See [LICENSE](LICENSE).
 
 Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
+
+---
+
+<p align="center">
+  <a href="https://github.com/nkswalih/skyrict/stargazers">
+    <img alt="Stars" src="https://img.shields.io/github/stars/nkswalih/skyrict?style=social"/>
+  </a>
+  <a href="https://github.com/nkswalih/skyrict/network/members">
+    <img alt="Forks" src="https://img.shields.io/github/forks/nkswalih/skyrict?style=social"/>
+  </a>
+  <a href="https://github.com/nkswalih/skyrict/issues">
+    <img alt="Issues" src="https://img.shields.io/github/issues/nkswalih/skyrict"/>
+  </a>
+</p>

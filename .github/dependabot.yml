@@ -1,10 +1,19 @@
 # Dependabot — automated dependency updates
 # Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+#
+# Design notes (read before editing):
+# - Python is a single uv workspace (one root uv.lock) -> ONE pip entry at "/", not one per package.
+# - JS is a single pnpm workspace (one root pnpm-lock.yaml) -> ONE npm entry at "/", not one per app.
+# - Duplicate per-directory entries against a shared lockfile cause duplicate/near-duplicate PRs.
+# - Minor/patch bumps are grouped into a single weekly PR per ecosystem to avoid PR flooding.
+# - Major version bumps are intentionally left OUT of the group (update-types only matches
+#   minor/patch), so a breaking change always gets its own PR and real review — never silently
+#   bundled in with routine patch bumps.
 
 version: 2
 
 updates:
-  # ---------- Python (uv) — root workspace ----------
+  # ---------- Python (uv workspace — single root lockfile) ----------
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -12,82 +21,19 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Kolkata"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "python"
-    reviewers:
-      - "skyrict/platform"
-    groups:
-      dev-dependencies:
-        dependency-type: "development"
-        update-types:
-          - "minor"
-          - "patch"
-      production-dependencies:
-        dependency-type: "production"
-        update-types:
-          - "patch"
-
-  # ---------- Python — identity service ----------
-  - package-ecosystem: "pip"
-    directory: "/services/identity"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Kolkata"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "python"
-      - "identity"
-    reviewers:
-      - "skyrict/platform"
-
-  # ---------- Python — skyrict-common ----------
-  - package-ecosystem: "pip"
-    directory: "/libs/skyrict-common"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Kolkata"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "python"
-      - "libs"
-    reviewers:
-      - "skyrict/platform"
-
-  # ---------- npm — web app ----------
-  - package-ecosystem: "npm"
-    directory: "/apps/web"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Kolkata"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "javascript"
-      - "frontend"
-    reviewers:
-      - "skyrict/frontend"
     groups:
-      dev-dependencies:
-        dependency-type: "development"
+      python-dependencies:
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
-      production-dependencies:
-        dependency-type: "production"
-        update-types:
-          - "patch"
 
-  # ---------- npm — root workspace ----------
+  # ---------- npm (pnpm workspace — single root lockfile) ----------
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -99,8 +45,13 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
-    reviewers:
-      - "skyrict/platform"
+    groups:
+      js-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # ---------- Docker ----------
   - package-ecosystem: "docker"
@@ -110,24 +61,20 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Kolkata"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "docker"
-    reviewers:
-      - "skyrict/platform"
 
   # ---------- GitHub Actions ----------
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
       time: "09:00"
       timezone: "Asia/Kolkata"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "ci"
-    reviewers:
-      - "skyrict/platform"

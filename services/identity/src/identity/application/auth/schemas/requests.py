@@ -31,4 +31,6 @@ class TokenRefreshRequest(BaseModel):
 class LogoutRequest(BaseModel):
     """POST /auth/logout"""
 
-    refresh_token: str | None = Field(default=None, description="Specific token to revoke; if omitted, revoke all")
+    refresh_token: str | None = Field(
+        default=None, description="Specific token to revoke; if omitted, revoke all"
+    )

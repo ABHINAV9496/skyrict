@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from identity.application.session.models.session import SessionModel
-from identity.application.session.repository.session import SessionRepository
 from skyrict_common.exceptions import SessionNotFoundError
+
+if TYPE_CHECKING:
+    import uuid
+
+    from identity.application.session.repository.session import SessionRepository
 
 
 class SessionService:

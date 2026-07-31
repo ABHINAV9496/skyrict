@@ -36,8 +36,11 @@ async def create_organization(
 
     if await tenant_repo.slug_exists(body.slug):
         from skyrict_common.exceptions import ValidationError
+
         raise ValidationError(f"Slug '{body.slug}' is already taken")
 
     tenant = TenantModel(name=body.name, slug=body.slug)
     await tenant_repo.create(tenant)
-    return ResponseEnvelope(data=TenantResponse.model_validate(tenant), message="Organization created")
+    return ResponseEnvelope(
+        data=TenantResponse.model_validate(tenant), message="Organization created"
+    )

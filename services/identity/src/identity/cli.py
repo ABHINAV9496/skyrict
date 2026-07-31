@@ -29,7 +29,6 @@ def serve(
 @app.command()
 def migrate(head: str = typer.Option("head", help="Alembic target revision")) -> None:
     """Run database migrations."""
-    import asyncio
     import subprocess
 
     subprocess.run(

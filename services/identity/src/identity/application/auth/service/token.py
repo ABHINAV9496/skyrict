@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from identity.core.security import create_access_token, create_refresh_token, verify_jwt
 from identity.domain.value_objects import TokenPair
-from identity.application.session.repository.session import SessionRepository
 from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
+
+if TYPE_CHECKING:
+    from identity.application.session.repository.session import SessionRepository
 
 
 class TokenService:

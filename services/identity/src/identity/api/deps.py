@@ -5,14 +5,12 @@ Every route that touches the database or requires auth goes through these deps.
 
 from __future__ import annotations
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.core.security import verify_jwt
-from identity.core.tenant_context import TenantContext
 from identity.application.audit.repository.audit import AuditRepository
 from identity.application.audit.service.audit import AuditService
 from identity.application.auth.repository.user import UserRepository
@@ -25,8 +23,10 @@ from identity.application.session.repository.session import SessionRepository
 from identity.application.session.service.session import SessionService
 from identity.application.sso.service.sso import SSOService
 from identity.application.tenant.repository.tenant import TenantRepository
-from skyrict_common.exceptions import AuthenticationError
+from identity.core.security import verify_jwt
+from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
+from skyrict_common.exceptions import AuthenticationError
 
 security = HTTPBearer(auto_error=False)
 
@@ -90,6 +90,7 @@ def require_permission(permission: str):
 
 # --- Repository/Service deps ---
 
+
 def get_user_repo(db: AsyncSession = Depends(get_db)) -> UserRepository:
     return UserRepository(db)
 
@@ -127,7 +128,9 @@ def get_mfa_service(user_repo: UserRepository = Depends(get_user_repo)) -> MFASe
     return MFAService(user_repo)
 
 
-def get_session_service(session_repo: SessionRepository = Depends(get_session_repo)) -> SessionService:
+def get_session_service(
+    session_repo: SessionRepository = Depends(get_session_repo),
+) -> SessionService:
     return SessionService(session_repo)
 
 

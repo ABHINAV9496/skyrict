@@ -22,7 +22,10 @@ logger = structlog.get_logger("identity.seed")
 
 DEFAULT_ROLES = [
     {"name": "owner", "permissions": ["*"]},
-    {"name": "admin", "permissions": ["users:read", "users:write", "settings:read", "settings:write"]},
+    {
+        "name": "admin",
+        "permissions": ["users:read", "users:write", "settings:read", "settings:write"],
+    },
     {"name": "member", "permissions": ["users:read"]},
     {"name": "viewer", "permissions": ["users:read"]},
 ]

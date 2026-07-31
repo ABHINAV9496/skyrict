@@ -11,7 +11,7 @@ from identity.core.security import (
     verify_jwt,
     verify_password,
 )
-from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
+from skyrict_common.exceptions import TokenInvalidError
 
 
 class TestPasswordHashing:
@@ -77,12 +77,16 @@ class TestJWT:
         import base64
         import json
 
-        header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-        ).rstrip(b"=").decode()
-        payload_part = base64.urlsafe_b64encode(
-            json.dumps({"sub": "user-123", "exp": 9999999999}).encode()
-        ).rstrip(b"=").decode()
+        header = (
+            base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+            .rstrip(b"=")
+            .decode()
+        )
+        payload_part = (
+            base64.urlsafe_b64encode(json.dumps({"sub": "user-123", "exp": 9999999999}).encode())
+            .rstrip(b"=")
+            .decode()
+        )
         fake_token = f"{header}.{payload_part}.fake-sig"
 
         with pytest.raises(TokenInvalidError):

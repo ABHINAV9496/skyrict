@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from identity.application.auth.repository.user import UserRepository
+from typing import TYPE_CHECKING
+
 from skyrict_common.exceptions import SkyrictError
+
+if TYPE_CHECKING:
+    from identity.application.auth.repository.user import UserRepository
 
 
 class SSOService:

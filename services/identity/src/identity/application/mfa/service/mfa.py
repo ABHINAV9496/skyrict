@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import secrets
-import uuid
+from typing import TYPE_CHECKING
 
 from identity.core.security import verify_password
-from identity.application.auth.repository.user import UserRepository
 from skyrict_common.exceptions import MFAVerificationError, UserNotFoundError
+
+if TYPE_CHECKING:
+    import uuid
+
+    from identity.application.auth.repository.user import UserRepository
 
 
 class MFAService:
@@ -81,6 +85,7 @@ class MFAService:
 
         if not verify_password(password, user.hashed_password):
             from skyrict_common.exceptions import InvalidPasswordError
+
             raise InvalidPasswordError()
 
         user.mfa_enabled = False

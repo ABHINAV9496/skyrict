@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
-from identity.application.auth.repository.user import UserRepository
 from skyrict_common.exceptions import PasskeyError
+
+if TYPE_CHECKING:
+    import uuid
+
+    from identity.application.auth.repository.user import UserRepository
 
 
 class PasskeyService:

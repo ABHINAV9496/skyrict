@@ -19,11 +19,11 @@ from typing import Any
 import structlog
 from pydantic import BaseModel, Field
 
-
 logger = structlog.get_logger("skyrict_events")
 
 
 # ---------- Event Schema ----------
+
 
 class BaseEvent(BaseModel):
     """Base envelope for all Kafka events in Skyrict.
@@ -74,12 +74,13 @@ class BaseEvent(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_json(cls, data: str) -> "BaseEvent":
+    def from_json(cls, data: str) -> BaseEvent:
         """Deserialize from JSON. Subclasses should override with their specific type."""
         return cls.model_validate_json(data)
 
 
 # ---------- Producer ----------
+
 
 class BaseProducer(ABC):
     """Abstract base class for Kafka producers.
@@ -160,6 +161,7 @@ class BaseProducer(ABC):
 
 # ---------- Consumer ----------
 
+
 class BaseConsumer(ABC):
     """Abstract base class for Kafka consumers.
 
@@ -221,7 +223,7 @@ class BaseConsumer(ABC):
         while self._running:
             try:
                 records = self._consumer.poll(timeout_ms=1000)
-                for topic_partition, messages in records.items():
+                for _, messages in records.items():
                     for message in messages:
                         try:
                             self.handle(message.topic, message.value)

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from identity.application.audit.repository.audit import AuditRepository
+from typing import TYPE_CHECKING
+
 from identity.core.tenant_context import TenantContext
+
+if TYPE_CHECKING:
+    from identity.application.audit.repository.audit import AuditRepository
 
 
 class AuditService:

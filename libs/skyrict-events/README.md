@@ -13,20 +13,26 @@ dependencies = ["skyrict-events"]
 ```python
 from skyrict_events.base import BaseEvent, BaseProducer, BaseConsumer
 
+
 # Define an event
 class UserCreated(BaseEvent):
     event_type: str = "identity.user.created"
     user_id: str
     email: str
 
+
 # Publish
 producer = BaseProducer(brokers="localhost:9092")
 producer.connect()
-producer.publish("identity.user.created", UserCreated(
-    tenant_id="tenant-123",
-    user_id="user-456",
-    email="alice@example.com",
-))
+producer.publish(
+    "identity.user.created",
+    UserCreated(
+        tenant_id="tenant-123",
+        user_id="user-456",
+        email="alice@example.com",
+    ),
+)
+
 
 # Consume
 class UserCreatedConsumer(BaseConsumer):

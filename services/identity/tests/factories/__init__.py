@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 
 import factory
 
-from identity.models.user import UserModel
-from identity.models.tenant import TenantModel
-from identity.models.session import SessionModel
 from identity.core.security import hash_password
+from identity.models.session import SessionModel
+from identity.models.tenant import TenantModel
+from identity.models.user import UserModel
 
 
 class UserFactory(factory.Factory):

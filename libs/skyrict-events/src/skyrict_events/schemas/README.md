@@ -16,8 +16,10 @@ Add Pydantic event models in this directory.
 # schemas/user_created.py
 from skyrict_events.base import BaseEvent
 
+
 class UserCreated(BaseEvent):
     """Emitted when a new user is registered."""
+
     event_type: str = "identity.user.created"
     user_id: str
     email: str

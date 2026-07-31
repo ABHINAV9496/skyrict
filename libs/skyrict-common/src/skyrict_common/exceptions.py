@@ -21,6 +21,7 @@ class SkyrictError(Exception):
 
 # ---------- Auth ----------
 
+
 class AuthenticationError(SkyrictError):
     message = "Authentication failed"
     code = "AUTHENTICATION_ERROR"
@@ -58,6 +59,7 @@ class PasskeyError(AuthenticationError):
 
 # ---------- User ----------
 
+
 class UserNotFoundError(SkyrictError):
     message = "User not found"
     code = "USER_NOT_FOUND"
@@ -80,6 +82,7 @@ class InvalidPasswordError(AuthenticationError):
 
 # ---------- Tenant / Organization ----------
 
+
 class TenantNotFoundError(SkyrictError):
     message = "Organization not found"
     code = "TENANT_NOT_FOUND"
@@ -97,6 +100,7 @@ class TenantContextMissingError(SkyrictError):
 
 # ---------- Session ----------
 
+
 class SessionNotFoundError(SkyrictError):
     message = "Session not found"
     code = "SESSION_NOT_FOUND"
@@ -109,12 +113,14 @@ class SessionExpiredError(SkyrictError):
 
 # ---------- Validation ----------
 
+
 class ValidationError(SkyrictError):
     message = "Validation failed"
     code = "VALIDATION_ERROR"
 
 
 # ---------- Rate Limiting ----------
+
 
 class RateLimitExceededError(SkyrictError):
     message = "Rate limit exceeded"

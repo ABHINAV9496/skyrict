@@ -7,7 +7,6 @@ following https://www.rfc-editor.org/rfc/rfc7807 (Problem Details for HTTP APIs)
 from __future__ import annotations
 
 import logging
-import traceback
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

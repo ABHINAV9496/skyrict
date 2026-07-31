@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.application.audit.models.audit_log import AuditLogModel
 from identity.repositories.base import BaseRepository

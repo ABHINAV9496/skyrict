@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.application.session.models.session import SessionModel
 from identity.repositories.base import BaseRepository
+
+if TYPE_CHECKING:
+    import uuid
 
 
 class SessionRepository(BaseRepository[SessionModel]):

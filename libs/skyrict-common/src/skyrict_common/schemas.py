@@ -5,11 +5,7 @@ Every API response from Skyrict services uses these schemas for consistency.
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
-
 from pydantic import BaseModel, Field
-
-T = TypeVar("T")
 
 
 class PaginationMeta(BaseModel):
@@ -26,7 +22,7 @@ class PaginationMeta(BaseModel):
         return cls(total=total, page=page, page_size=page_size, total_pages=total_pages)
 
 
-class ResponseEnvelope(BaseModel, Generic[T]):
+class ResponseEnvelope[T](BaseModel):
     """Standard success response wrapper.
 
     Usage:
@@ -36,13 +32,17 @@ class ResponseEnvelope(BaseModel, Generic[T]):
     success: bool = Field(default=True, description="Whether the request succeeded")
     data: T | None = Field(default=None, description="Response payload")
     message: str | None = Field(default=None, description="Human-readable message")
-    meta: PaginationMeta | None = Field(default=None, description="Pagination metadata (list endpoints only)")
+    meta: PaginationMeta | None = Field(
+        default=None, description="Pagination metadata (list endpoints only)"
+    )
 
 
 class ErrorDetail(BaseModel):
     """Single error detail."""
 
-    field: str | None = Field(default=None, description="Field that caused the error, if applicable")
+    field: str | None = Field(
+        default=None, description="Field that caused the error, if applicable"
+    )
     message: str = Field(..., description="Error message")
     code: str = Field(..., description="Machine-readable error code")
 
@@ -59,7 +59,7 @@ class ErrorResponse(BaseModel):
     request_id: str | None = Field(default=None, description="Request ID for tracing")
 
 
-class ListResponse(BaseModel, Generic[T]):
+class ListResponse[T](BaseModel):
     """Standard list response with pagination.
 
     Usage:

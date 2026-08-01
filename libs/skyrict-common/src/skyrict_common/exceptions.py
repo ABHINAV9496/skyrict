@@ -32,6 +32,11 @@ class AuthorizationError(SkyrictError):
     code = "AUTHORIZATION_ERROR"
 
 
+class PermissionDeniedError(AuthorizationError):
+    message = "You do not have permission to access this resource"
+    code = "PERMISSION_DENIED"
+
+
 class TokenExpiredError(AuthenticationError):
     message = "Token has expired"
     code = "TOKEN_EXPIRED"
@@ -60,12 +65,22 @@ class PasskeyError(AuthenticationError):
 # ---------- User ----------
 
 
-class UserNotFoundError(SkyrictError):
+class NotFoundError(SkyrictError):
+    message = "Resource not found"
+    code = "NOT_FOUND"
+
+
+class ConflictError(SkyrictError):
+    message = "The request conflicts with the current state of the resource"
+    code = "CONFLICT"
+
+
+class UserNotFoundError(NotFoundError):
     message = "User not found"
     code = "USER_NOT_FOUND"
 
 
-class UserAlreadyExistsError(SkyrictError):
+class UserAlreadyExistsError(ConflictError):
     message = "A user with this email already exists"
     code = "USER_ALREADY_EXISTS"
 
@@ -83,7 +98,7 @@ class InvalidPasswordError(AuthenticationError):
 # ---------- Tenant / Organization ----------
 
 
-class TenantNotFoundError(SkyrictError):
+class TenantNotFoundError(NotFoundError):
     message = "Organization not found"
     code = "TENANT_NOT_FOUND"
 
@@ -101,7 +116,7 @@ class TenantContextMissingError(SkyrictError):
 # ---------- Session ----------
 
 
-class SessionNotFoundError(SkyrictError):
+class SessionNotFoundError(NotFoundError):
     message = "Session not found"
     code = "SESSION_NOT_FOUND"
 

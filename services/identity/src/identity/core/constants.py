@@ -42,9 +42,9 @@ PROBLEM_INTERNAL_ERROR = f"{PROBLEM_BASE_URL}/internal-error"
 # ---------------------------------------------------------------------------
 # Default values
 # ---------------------------------------------------------------------------
-DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 15
 DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS = 7
-DEFAULT_TOKEN_EXPIRE_SECONDS = 1800
+DEFAULT_TOKEN_EXPIRE_SECONDS = 900
 DEFAULT_PAGE_SIZE = 20
 DEFAULT_RATE_LIMIT_LOGIN = 5
 DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 300

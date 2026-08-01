@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from identity.core.config import settings
 from identity.core.security import create_access_token, create_refresh_token, verify_jwt
 from identity.domain.value_objects import TokenPair
 from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
@@ -27,6 +28,7 @@ class TokenService:
         return TokenPair(
             access_token=access_token,
             refresh_token=refresh_token,
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
     async def refresh_tokens(self, refresh_token: str) -> TokenPair:

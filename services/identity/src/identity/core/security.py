@@ -7,8 +7,10 @@ Single verification path: verify_jwt().
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict, cast
 
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 from jose import JWTError, jwt
 
 from identity.core.config import settings
@@ -19,47 +21,57 @@ from identity.core.exceptions import TokenExpiredError, TokenInvalidError
 _ALLOWED_ALGORITHMS = {"RS256"}
 
 
+class TokenClaims(TypedDict):
+    """Verified JWT claims returned by :func:`verify_jwt`.
+
+    ``iat``/``nbf``/``exp`` are POSIX timestamps (epoch seconds).
+    ``type`` is ``"access"`` or ``"refresh"``.
+    """
+
+    sub: str
+    tenant_id: str
+    iss: str
+    aud: str
+    iat: int
+    exp: int
+    nbf: int
+    type: str
+
+
 # ---------------------------------------------------------------------------
 # Password hashing — Argon2id (OWASP recommended)
+#
+# argon2-cffi is a hard dependency (see pyproject.toml). If it is missing the
+# import fails at startup — there is deliberately NO fallback that silently
+# weakens hashing (e.g. plaintext comparison).
 # ---------------------------------------------------------------------------
-try:
-    from argon2 import PasswordHasher
-    from argon2.exceptions import VerificationError, VerifyMismatchError
+_ph = PasswordHasher(
+    time_cost=3,  # number of iterations
+    memory_cost=65536,  # 64 MB
+    parallelism=4,  # threads
+    hash_len=32,  # output length
+    salt_len=16,  # salt length
+)
 
-    _ph = PasswordHasher(
-        time_cost=3,  # number of iterations
-        memory_cost=65536,  # 64 MB
-        parallelism=4,  # threads
-        hash_len=32,  # output length
-        salt_len=16,  # salt length
-    )
 
-    def hash_password(password: str) -> str:
-        """Hash a plaintext password with Argon2id."""
-        return _ph.hash(password)
+def hash_password(password: str) -> str:
+    """Hash a plaintext password with Argon2id.
 
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a plaintext password against its Argon2id hash."""
-        try:
-            return _ph.verify(hashed_password, plain_password)
-        except (VerifyMismatchError, VerificationError):
-            return False
+    Uses a random salt per call — hashes for the same password always differ.
+    """
+    return _ph.hash(password)
 
-except ImportError:
-    # Fallback for dev/test if argon2-cffi not installed — still functional
-    # but logs a warning so it is never mistaken for production readiness.
-    import logging
 
-    logging.warning(
-        "argon2-cffi not installed — falling back to plaintext comparison. "
-        "DO NOT use in production. Install: pip install argon2-cffi"
-    )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plaintext password against its Argon2id hash.
 
-    def hash_password(password: str) -> str:
-        return password  # pragma: no cover
-
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        return plain_password == hashed_password  # pragma: no cover
+    Returns False (never raises) for wrong passwords and malformed hashes so
+    callers don't need to know about Argon2 exception types.
+    """
+    try:
+        return _ph.verify(hashed_password, plain_password)
+    except (InvalidHashError, VerificationError):
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +130,7 @@ def create_refresh_token(
     return jwt.encode(payload, settings.jwt_private_key, algorithm="RS256")
 
 
-def verify_jwt(token: str) -> dict[str, Any]:
+def verify_jwt(token: str) -> TokenClaims:
     """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
 
     Security guarantees:
@@ -128,7 +140,7 @@ def verify_jwt(token: str) -> dict[str, Any]:
       - Expiry (exp) and not-before (nbf) are checked
 
     Returns:
-        The decoded payload dict.
+        The verified claims as a :class:`TokenClaims`.
 
     Raises:
         TokenExpiredError: If the token has expired.
@@ -151,13 +163,20 @@ def verify_jwt(token: str) -> dict[str, Any]:
             issuer=settings.JWKS_ISSUER,
             audience=settings.JWKS_AUDIENCE,
             options={
-                "require": ["exp", "iss", "aud", "sub", "iat"],
+                # python-jose uses one require_* flag per claim (not a "require"
+                # list). Enforce every claim our contract needs so tokens that
+                # omit exp/iat/sub/iss/aud are rejected, not silently accepted.
+                "require_aud": True,
+                "require_iat": True,
+                "require_exp": True,
+                "require_iss": True,
+                "require_sub": True,
             },
         )
-        return payload
+        return cast("TokenClaims", payload)
 
     except JWTError as exc:
         exc_str = str(exc).lower()
-        if "exp" in exc_str or "expired" in exc_str:
+        if "expired" in exc_str:
             raise TokenExpiredError() from exc
         raise TokenInvalidError(str(exc)) from exc

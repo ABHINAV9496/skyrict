@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     JWKS_AUDIENCE: str = Field(
         ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
     )
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="access token TTL")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
 
     # --- CORS ---

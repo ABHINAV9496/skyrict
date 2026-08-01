@@ -49,7 +49,7 @@ class TestTokenPair:
     def test_default_values(self):
         pair = TokenPair(access_token="a", refresh_token="b")
         assert pair.token_type == "Bearer"
-        assert pair.expires_in == 1800
+        assert pair.expires_in == 900
 
 
 class TestRiskScore:

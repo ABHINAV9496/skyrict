@@ -22,7 +22,7 @@ class TokenPair:
     access_token: str
     refresh_token: str
     token_type: str = "Bearer"
-    expires_in: int = 1800  # seconds
+    expires_in: int = 900  # seconds
 
     @property
     def authorization_header(self) -> str:

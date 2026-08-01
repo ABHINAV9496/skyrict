@@ -13,5 +13,5 @@ class AuthResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "Bearer"
-    expires_in: int = Field(default=1800, description="Access token TTL in seconds")
+    expires_in: int = Field(default=900, description="Access token TTL in seconds")
     user: UserResponse | None = None

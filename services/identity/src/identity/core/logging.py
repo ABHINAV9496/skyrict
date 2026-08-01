@@ -26,14 +26,12 @@ def configure_identity_logging(
     configure_logging(log_level=log_level, json_output=json_output)
 
     # Ensure our contextvars are in the processor chain
-    # (skyrict_common already includes merge_contextvars, but we add
-    # explicit processors for tenant_id and request_id to guarantee
-    # they appear in every log line).
+    # (skyrict_common already includes merge_contextvars, which pulls
+    # request_id and tenant_id bound by the middleware into every entry).
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
             _inject_tenant_id,
-            _inject_request_id,
             *structlog.get_config()["processors"],
         ],
     )
@@ -51,15 +49,4 @@ def _inject_tenant_id(
         tenant_id = TenantContext.get_optional()
         if tenant_id:
             event_dict["tenant_id"] = tenant_id
-    return event_dict
-
-
-def _inject_request_id(
-    logger: structlog.types.WrappedLogger,
-    method_name: str,
-    event_dict: structlog.types.EventDict,
-) -> structlog.types.EventDict:
-    """Auto-inject request_id from structlog contextvars if not already present."""
-    # structlog.contextvars.merge_contextvars already handles this,
-    # but we ensure it's always present for downstream consumers.
     return event_dict

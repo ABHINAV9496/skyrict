@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from identity.api.v1.router import api_router
 from identity.core.config import Environment, settings
 from identity.core.constants import SERVICE_NAME, SERVICE_VERSION
 from identity.core.exceptions import (
     SkyrictError,
+    http_exception_handler,
+    request_validation_error_handler,
     skyrict_error_handler,
     unhandled_error_handler,
 )
@@ -33,6 +37,8 @@ def create_app() -> FastAPI:
 
     # --- Global exception handlers ---
     app.add_exception_handler(SkyrictError, skyrict_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_error_handler)
 
     # --- Middleware (order matters: last added = first executed) ---

@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `libs/skyrict-events` — shared Kafka event schemas and producer/consumer base classes
 - `services/_template` — copy-to-bootstrap scaffold for new services
 - Next.js 15 web app skeleton (auth routes, dashboard routes)
-- Docker Compose for local dev (PostgreSQL 16, Redis 7, Kafka 3.x KRaft)
+- Docker Compose for local dev (PostgreSQL 16, Redis 7; Kafka optional/commented-out until in scope)
 - CI/CD workflows: ci-identity, ci-web, codeql, cd-staging, cd-production
 - Dependabot for pip, npm, Docker, and GitHub Actions auto-updates
 - CODEOWNERS with team-based review routing
@@ -34,3 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile with 20+ dev targets
 - Pre-commit hooks (Ruff, mypy, commitlint, file checks)
 - `.tool-versions` for pinned Python/Node versions
+- Identity service: RFC 7807 (problem+json) error responses with correct HTTP status mapping for all domain exceptions
+- Identity service: structured JSON logging with full tracebacks and request_id/tenant_id context injection
+- `libs/skyrict-common` — `NotFoundError`, `PermissionDeniedError`, `ConflictError` domain exceptions
+- Root README: CI status badge and "Roadmap & Scope" section
+
+### Changed
+
+- Root README: correction pass — repository structure diagram matches the current tree, architecture labeled as target roadmap, GitHub URL made consistent
+- Local dev infrastructure: Kafka commented out (deferred) until 3+ services need decoupled async events

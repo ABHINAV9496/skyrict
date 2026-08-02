@@ -326,10 +326,7 @@ Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
 ## Contributors
 
 <p align="center">
-  <a href="https://github.com/nkswalih">
-    <img src="https://github.com/nkswalih.png?size=80" width="80" height="80" alt="nkswalih" title="nkswalih — Owner"/>
-  </a>
-  <a href="https://github.com/apps/dependabot">
-    <img src="https://avatars.githubusercontent.com/u/49699333?v=4" width="80" height="80" alt="dependabot[bot]" title="dependabot[bot] — Automated dependency updates"/>
+  <a href="https://github.com/nkswalih/skyrict/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=nkswalih/skyrict" alt="Contributors" title="All contributors"/>
   </a>
 </p>

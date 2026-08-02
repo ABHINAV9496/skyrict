@@ -42,7 +42,9 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_error_handler)
 
     # --- Middleware (order matters: last added = first executed) ---
-    # Execution order: CORSMiddleware → TenantContextMiddleware → RequestIdMiddleware
+    # Execution order: RequestIdMiddleware → TenantContextMiddleware → CORSMiddleware.
+    # RequestId must run first so request_id is bound before tenant resolution
+    # logs, and so stale contextvars from the previous request are cleared.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

@@ -144,8 +144,10 @@ staging DNS required.
 
 `docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`)
 that routes `*.localhost` subdomains to the identity service and derives
-`X-Tenant-Slug` from the subdomain. No `/etc/hosts` edits are needed: modern
-OSes resolve `*.localhost` to `127.0.0.1` automatically.
+`X-Tenant-Slug` from the subdomain. No `/etc/hosts` edits are needed on
+most machines: modern OSes resolve `*.localhost` to `127.0.0.1` automatically.
+If yours doesn't, add the sample tenants to your hosts file instead
+(`127.0.0.1 acme.localhost globex.localhost`).
 
 ```bash
 # Boot the full stack (Postgres, Redis, identity service, nginx)

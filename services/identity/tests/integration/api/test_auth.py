@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from asyncpg.exceptions import PostgresError
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+
+# Every non-skipped request must route through a tenant (X-Tenant-Slug in dev);
+# the autouse ``integration_db`` fixture skips the suite when Postgres is down.
+_HEADERS = {"X-Tenant-Slug": "acme"}
 
 
 @pytest.mark.integration
@@ -28,35 +32,39 @@ class TestAuthEndpoints:
         assert data["status"] == "ready"
 
     async def test_login_missing_fields(self, client: AsyncClient):
-        response = await client.post("/api/v1/auth/login", json={})
+        response = await client.post("/api/v1/auth/login", headers=_HEADERS, json={})
         assert response.status_code == 422  # Validation error
 
     async def test_register_missing_fields(self, client: AsyncClient):
-        response = await client.post("/api/v1/auth/register", json={})
+        response = await client.post("/api/v1/auth/register", headers=_HEADERS, json={})
         assert response.status_code == 422
 
     async def test_register_and_login(self, client: AsyncClient):
-        # Registering requires a reachable Postgres. Skip when the database is
-        # unavailable (local dev, CI) so the suite stays green there too.
-        try:
-            register_response = await client.post(
-                "/api/v1/auth/register",
-                json={
-                    "email": "newuser@test.com",
-                    "password": "TestPassword123!",
-                    "full_name": "Test User",
-                },
-            )
-        except (OSError, PostgresError) as exc:
-            pytest.skip(f"database unavailable: {exc}")
+        email = f"auth-flow-{uuid.uuid4().hex[:8]}@test.com"
+        register_response = await client.post(
+            "/api/v1/auth/register",
+            headers=_HEADERS,
+            json={
+                "email": email,
+                "password": "TestPassword123!",
+                "full_name": "Test User",
+            },
+        )
+        assert register_response.status_code == 200
 
-        # 200 success, 409 already-registered, 422 validation error
-        assert register_response.status_code in (200, 409, 422)
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            headers=_HEADERS,
+            json={"email": email, "password": "TestPassword123!"},
+        )
+        assert login_response.status_code == 200
+        assert login_response.json()["data"]["access_token"]
 
     async def test_get_profile_unauthorized(self, client: AsyncClient):
-        response = await client.get("/api/v1/users/me")
+        # Tenant resolves (acme) but there is no token -> route dependency 401.
+        response = await client.get("/api/v1/users/me", headers=_HEADERS)
         assert response.status_code == 401  # No auth token
 
     async def test_list_sessions_unauthorized(self, client: AsyncClient):
-        response = await client.get("/api/v1/sessions")
+        response = await client.get("/api/v1/sessions", headers=_HEADERS)
         assert response.status_code == 401

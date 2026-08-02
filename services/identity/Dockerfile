@@ -30,9 +30,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy workspace root files
 COPY pyproject.toml uv.lock ./
 
-# Copy service + lib pyproject.toml files (for dependency resolution)
+# Copy service + lib pyproject.toml files (for dependency resolution).
+# READMEs too: hatchling requires the `readme` file declared in each
+# pyproject.toml to be present when building the workspace members.
 COPY services/identity/pyproject.toml services/identity/
+COPY services/identity/README.md services/identity/
 COPY libs/skyrict-common/pyproject.toml libs/skyrict-common/
+COPY libs/skyrict-common/README.md libs/skyrict-common/
 
 # Install production deps only
 RUN uv sync --frozen --no-dev --directory services/identity

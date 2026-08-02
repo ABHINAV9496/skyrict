@@ -12,9 +12,10 @@ services:
     ports:
       - "6379:6379"
 
-  kafka:
-    ports:
-      - "9092:9092"
+  # Kafka deferred — see docker-compose.yml
+  # kafka:
+  #   ports:
+  #     - "9092:9092"
 
   # ---------- Identity Service (dev target — live reload) ----------
   identity:
@@ -32,19 +33,52 @@ services:
       DEBUG: "true"
       LOG_LEVEL: DEBUG
       LOG_JSON: "false"
+      # Inside the compose network the DB/Redis hostnames are the service
+      # names, not localhost. These override the host-oriented defaults in
+      # services/identity/.env.
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@postgres:5432/skyrict_identity
+      IDENTITY_REDIS_URL: redis://redis:6379/0
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      # JWT RSA keys (generate with `uv run python -m skyrict_testing.generate_keys`).
+      # The dev CMD runs from /app/services/identity, so the relative key
+      # paths in services/identity/.env resolve to /app/services/identity/.dev/keys.
+      - ../../.dev/keys:/app/services/identity/.dev/keys:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
       timeout: 5s
       start_period: 15s
+      retries: 3
+
+  # ---------- Nginx (local multi-tenant routing) ----------
+  # Routes *.localhost subdomains (and a path-based fallback) to the identity
+  # service, injecting X-Tenant-Slug so tenant resolution behaves identically
+  # to production. See infra/nginx/dev.conf.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: skyrict-nginx
+    ports:
+      # Override the host port if 80 is in use: set NGINX_PORT=8080 in your .env
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ../../infra/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      identity:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1 (not localhost): nginx listens on IPv4 only, and busybox
+      # wget resolves localhost to ::1 first and does not fall back.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
       retries: 3
 
   # ---------- pgAdmin (optional — dev only) ----------

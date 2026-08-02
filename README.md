@@ -3,6 +3,7 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License"/>
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome"/>
+  <a href="https://github.com/nkswalih/skyrict/actions/workflows/ci-identity.yml"><img src="https://github.com/nkswalih/skyrict/actions/workflows/ci-identity.yml/badge.svg" alt="CI - Identity Service"/></a>
 </p>
 
 <br/>
@@ -25,7 +26,9 @@ Skyrict is an open-source, AI-native platform that merges business operations (E
 ```
 skyrict/
 ├── apps/                    # Deployable frontend clients
-│   └── web/                 # Next.js 15 / React 19 / TypeScript
+│   ├── web/                 # Next.js 15 / React 19 / TypeScript
+│   ├── mobile/              # Mobile app scaffold
+│   └── desktop/             # Desktop app scaffold
 │
 ├── packages/                # Shared TypeScript packages
 │   ├── api-client/          # Generated from OpenAPI schemas
@@ -34,10 +37,13 @@ skyrict/
 │   └── auth/                # Token storage, refresh logic
 │
 ├── services/                # Deployable Python microservices
-│   └── identity/            # AuthN, AuthZ, MFA, Sessions, Audit
+│   ├── identity/            # AuthN, AuthZ, MFA, Sessions, Audit
+│   └── _template/           # Scaffold copied for every new service, keeps structure consistent
 │
 ├── libs/                    # Shared Python packages
-│   └── skyrict-common/      # Exceptions, logging, pagination, schemas
+│   ├── skyrict-common/      # Exceptions, logging, pagination, schemas
+│   ├── skyrict-events/      # Kafka event schemas, producer/consumer base classes
+│   └── skyrict-testing/     # Test fixtures, factories, JWT key generation
 │
 ├── infra/                   # Infrastructure as Code
 │   ├── docker/              # Docker Compose for local dev
@@ -46,7 +52,12 @@ skyrict/
 │
 ├── docs/
 │   ├── architecture/adr/    # Architecture Decision Records
-│   └── handbook/            # Product & engineering handbooks
+│   └── handbooks/           # Product & engineering handbooks
+│
+├── .github/                 # GitHub governance & CI
+│   ├── workflows/           # CI/CD workflows
+│   ├── CODEOWNERS           # Team-based review routing
+│   └── dependabot.yml       # Automated dependency updates
 │
 ├── pyproject.toml           # uv workspace root
 ├── package.json             # pnpm workspace root
@@ -86,7 +97,7 @@ Why this layering: `api → services → repositories → models`. Business logi
 | Frontend tooling | pnpm + Turborepo |
 | OLTP | PostgreSQL 16 + Row-Level Security |
 | Cache | Redis 7 |
-| Event bus | Kafka 3.x (KRaft mode) |
+| Event bus | Kafka 3.x (KRaft mode) — deferred until 3+ services need async events |
 | CI/CD | GitHub Actions (path-filtered) |
 | Containers | Docker |
 
@@ -103,21 +114,70 @@ Why this layering: `api → services → repositories → models`. Business logi
 ## Quick Start
 
 ```bash
-git clone https://github.com/skyrict/skyrict.git
+git clone https://github.com/nkswalih/skyrict.git
 cd skyrict
 
 # 1. Install all dependencies
 make setup
 
-# 2. Start dev servers (infra + identity service)
+# 2. Configure the local environment
+cp services/identity/.env.example services/identity/.env
+uv run python -m skyrict_testing.generate_keys  # JWT RS256 keys -> .dev/keys/ (gitignored)
+
+# 3. Start dev servers (infra + identity service)
 make dev
 
-# 3. In another terminal, start the frontend
+# 4. In another terminal, start the frontend
 make dev-web
 ```
 
 - API docs: `http://localhost:8000/docs`
 - Frontend: `http://localhost:3000`
+
+### Local Multi-Tenant Routing
+
+The identity service is multi-tenant: in production each tenant reaches it via
+its own subdomain (`https://acme.skyrict.com/...`), and the ingress injects an
+`X-Tenant-Slug` header before forwarding. The dev stack mirrors that contract
+so tenant resolution behaves identically locally and in production — no
+staging DNS required.
+
+`docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`)
+that routes `*.localhost` subdomains to the identity service and derives
+`X-Tenant-Slug` from the subdomain. No `/etc/hosts` edits are needed on
+most machines: modern OSes resolve `*.localhost` to `127.0.0.1` automatically.
+If yours doesn't, add the sample tenants to your hosts file instead
+(`127.0.0.1 acme.localhost globex.localhost`).
+
+```bash
+# Boot the full stack (Postgres, Redis, identity service, nginx)
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml up -d
+
+# Hit two different fake tenant subdomains
+curl -s http://acme.localhost/api/v1/health
+curl -s http://globex.localhost/api/v1/health
+# Both reach the identity service; the first carries X-Tenant-Slug: acme,
+# the second X-Tenant-Slug: globex. Watch per-subdomain traffic with:
+docker logs -f skyrict-nginx
+```
+
+**Path-based fallback** — for environments without wildcard DNS, prefix the
+path with the tenant slug. Nginx strips the prefix and injects the header:
+
+```bash
+# http://localhost/acme/login          -> /api/v1/auth/login  + X-Tenant-Slug: acme
+# http://localhost/acme/api/v1/health  -> /api/v1/health      + X-Tenant-Slug: acme
+curl -s http://localhost/acme/api/v1/health
+```
+
+**Port 80 already in use?** Set a different host port — e.g. add
+`NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
+use `http://acme.localhost:8080/docs`.
+
+> Note: the app resolves the tenant from the verified JWT `tenant_id` claim
+> today; the `X-Tenant-Slug` header is injected by the proxy for the
+> slug-based tenant resolution that runs identically in production. See the
+> [identity service README](services/identity/README.md) for details.
 
 ### Manual Setup
 
@@ -128,8 +188,9 @@ uv sync
 # Frontend deps
 cd apps/web && pnpm install
 
-# Boot infrastructure (Postgres, Redis, Kafka)
+# Boot infrastructure (Postgres, Redis)
 docker compose -f infra/docker/docker-compose.yml up -d
+# Kafka is intentionally deferred — see "Roadmap & Scope" below.
 
 # Run migrations
 make migrate
@@ -183,13 +244,21 @@ See [docs/setup/branch-protection.md](docs/setup/branch-protection.md) for requi
 
 ## Architecture
 
-### Domain Decomposition
+### Target Architecture (Roadmap)
+
+Not all of these exist yet — this is the intended end state. Today only `identity` is in active development.
 
 ```
 services/
-├── identity/          # Auth, JWT, OAuth2, RBAC, multi-tenancy
-├── core/              # ERP domain (finance, inventory, procurement)
-├── intelligence/      # Signal collection, NLP, scoring, knowledge graph
+├── identity/          # Auth, JWT, OAuth2, RBAC, multi-tenancy   (in active development)
+├── core/              # ERP domain (finance, inventory, procurement)   (planned)
+└── intelligence/      # Signal collection, NLP, scoring, knowledge graph   (planned)
+```
+
+Future (aspirational — not yet explicitly scoped):
+
+```
+services/
 ├── agents/            # LLM orchestration, tool registry, guardrails
 └── analytics/         # OLAP queries, materialized views
 ```
@@ -211,6 +280,12 @@ Examples:
 ### Multi-Tenancy
 
 Row-Level Security (RLS) on PostgreSQL. Every query is scoped to the current tenant via `SET app.current_tenant_id`. Tenant context flows through a `ContextVar`, not function parameters.
+
+---
+
+## Roadmap & Scope
+
+Skyrict is deliberately MVP-first: ship a small, secure, well-tested core before expanding scope. The following are intentionally deferred until a concrete need justifies them: SSO (SAML/OIDC), OPA policy engine, HashiCorp Vault, Kafka event bus (once 3+ services need decoupled async events), SCIM provisioning, and adaptive risk scoring.
 
 ---
 
@@ -243,5 +318,18 @@ Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
   </a>
   <a href="https://github.com/nkswalih/skyrict/issues">
     <img alt="Issues" src="https://img.shields.io/github/issues/nkswalih/skyrict"/>
+  </a>
+</p>
+
+---
+
+## Contributors
+
+<p align="center">
+  <a href="https://github.com/nkswalih">
+    <img src="https://github.com/nkswalih.png?size=80" width="80" height="80" alt="nkswalih" title="nkswalih — Owner"/>
+  </a>
+  <a href="https://github.com/apps/dependabot">
+    <img src="https://avatars.githubusercontent.com/u/49699333?v=4" width="80" height="80" alt="dependabot[bot]" title="dependabot[bot] — Automated dependency updates"/>
   </a>
 </p>

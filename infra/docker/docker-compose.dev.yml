@@ -12,9 +12,10 @@ services:
     ports:
       - "6379:6379"
 
-  kafka:
-    ports:
-      - "9092:9092"
+  # Kafka deferred — see docker-compose.yml
+  # kafka:
+  #   ports:
+  #     - "9092:9092"
 
   # ---------- Identity Service (dev target — live reload) ----------
   identity:

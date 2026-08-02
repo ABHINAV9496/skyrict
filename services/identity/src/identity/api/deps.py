@@ -24,6 +24,7 @@ from identity.application.session.repository.session import SessionRepository
 from identity.application.session.service.session import SessionService
 from identity.application.sso.service.sso import SSOService
 from identity.application.tenant.repository.tenant import TenantRepository
+from identity.core.middleware import cross_check_jwt_tenant
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
@@ -48,8 +49,15 @@ async def get_current_user(
     """Extract and verify JWT from Authorization header, return user claims.
 
     Uses security.verify_jwt() — the ONE AND ONLY decode path.
+    The tenant is consumed from TenantContext (resolved once by the middleware)
+    and the JWT-vs-routed cross-check is enforced again here as defense in
+    depth, so a token can never be used against a different tenant even if a
+    route is reached without going through the middleware.
+
     Raises:
         AuthenticationError: If no token, token is invalid, or token is expired.
+        TenantContextMissingError: If the middleware hasn't resolved a tenant.
+        TenantMismatchError: If the token's tenant claim differs from the routed tenant.
     """
     if credentials is None:
         raise AuthenticationError("Missing Authorization header")
@@ -59,14 +67,14 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise AuthenticationError("Invalid token type")
 
-    # Ensure tenant context is set from the token
-    tenant_id = payload.get("tenant_id")
-    if tenant_id:
-        TenantContext.set(tenant_id)
+    # Single source of truth: the routed tenant was resolved by the middleware.
+    routed_tenant_id = TenantContext.get()
+    cross_check_jwt_tenant(payload.get("tenant_id"), routed_tenant_id)
+    TenantContext.set_user_id(payload["sub"])
 
     return {
         "user_id": payload["sub"],
-        "tenant_id": tenant_id,
+        "tenant_id": routed_tenant_id,
         "token_payload": payload,
     }
 

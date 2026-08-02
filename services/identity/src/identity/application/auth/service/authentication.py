@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from identity.core.security import hash_password, verify_password
+from identity.core.tenant_context import TenantContext
 from skyrict_common.exceptions import (
     InvalidPasswordError,
     UserAlreadyExistsError,
@@ -55,12 +56,15 @@ class AuthenticationService:
         if not verify_password(request.password, user.hashed_password):
             raise InvalidPasswordError()
 
-        # Resolve tenant
-        tenant_id = user.id  # Default — in production, resolve from tenant_slug
+        # The tenant is resolved ONCE by the middleware (Host subdomain in
+        # production, X-Tenant-Slug in dev) and consumed from TenantContext —
+        # tokens are bound to the routed tenant so the JWT-vs-routed
+        # cross-check passes on every subsequent request.
+        tenant_id = TenantContext.get()
 
         tokens = await self.token_service.create_token_pair(
             user_id=str(user.id),
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
         )
 
         await self.audit_service.log(
@@ -108,7 +112,7 @@ class AuthenticationService:
 
         tokens = await self.token_service.create_token_pair(
             user_id=str(user_model.id),
-            tenant_id=str(user_model.id),
+            tenant_id=TenantContext.get(),
         )
 
         await self.audit_service.log(

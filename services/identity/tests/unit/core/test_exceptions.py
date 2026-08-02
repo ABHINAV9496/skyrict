@@ -11,10 +11,14 @@ module-level identity.main app is never mutated. Verifies:
 
 from __future__ import annotations
 
+import uuid
+from types import SimpleNamespace
+
 import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
 
+from identity.application.tenant.repository.tenant import TenantRepository
 from identity.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 from identity.main import create_app
 from skyrict_common.exceptions import MFAVerificationError, SessionNotFoundError
@@ -28,7 +32,16 @@ class TeamNotFoundError(NotFoundError):
 
 
 @pytest.fixture
-def test_app() -> FastAPI:
+def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
+    # Handler tests exercise RFC 7807 mapping, not tenant resolution. Stub the
+    # middleware's tenant lookup so these tests run without a database.
+    fake_tenant = SimpleNamespace(id=uuid.uuid4(), is_active=True)
+
+    async def _fake_get_by_slug(self, slug: str) -> SimpleNamespace:
+        return fake_tenant
+
+    monkeypatch.setattr(TenantRepository, "get_by_slug", _fake_get_by_slug)
+
     router = APIRouter(prefix="/test")
 
     @router.get("/boom/not-found")
@@ -71,7 +84,11 @@ def test_app() -> FastAPI:
 @pytest.fixture
 async def http_client(test_app: FastAPI) -> httpx.AsyncClient:
     transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    # In the test environment the middleware resolves tenants from X-Tenant-Slug;
+    # the lookup is stubbed by the test_app fixture.
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test", headers={"X-Tenant-Slug": "default"}
+    ) as client:
         yield client
 
 

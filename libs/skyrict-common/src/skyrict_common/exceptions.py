@@ -113,6 +113,11 @@ class TenantContextMissingError(SkyrictError):
     code = "TENANT_CONTEXT_MISSING"
 
 
+class TenantMismatchError(AuthenticationError):
+    message = "Token tenant does not match the routed tenant"
+    code = "TENANT_MISMATCH"
+
+
 # ---------- Session ----------
 
 

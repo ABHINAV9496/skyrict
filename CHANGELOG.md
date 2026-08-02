@@ -39,8 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `libs/skyrict-common` — `NotFoundError`, `PermissionDeniedError`, `ConflictError` domain exceptions
 - Root README: CI status badge and "Roadmap & Scope" section
 - Local multi-tenant routing: nginx dev proxy routes `*.localhost` subdomains (and a path-based fallback) to the identity service with `X-Tenant-Slug` injected, for parity with production tenant subdomain routing
+- Identity service: strict tenant resolution in middleware — tenant slug from `Host` subdomain in staging/production (`IDENTITY_BASE_DOMAIN` required, fail-fast) or `X-Tenant-Slug` header in dev/test; unknown/disabled/unresolvable tenants return RFC 7807 404/403/400
+- Identity service: `TenantContext` carries `tenant_id`, `user_id`, `roles`, and `permissions` for every request
+- Identity service: JWT `tenant_id` claim cross-checked against the routed tenant on every authenticated request (mismatch → 401 `application/problem+json`)
+- Identity service: login/register issue tokens bound to the routed tenant
+- Identity service: DB-backed integration suite proving tenant isolation (same-tenant 200, cross-tenant 401, tenant resolution, context lifecycle, token binding)
+- `libs/skyrict-common` — `TenantMismatchError` for tenant cross-check failures
 
 ### Changed
 
 - Root README: correction pass — repository structure diagram matches the current tree, architecture labeled as target roadmap, GitHub URL made consistent
 - Local dev infrastructure: Kafka commented out (deferred) until 3+ services need decoupled async events
+
+### Fixed
+
+- Identity service: registration/login never committed — every write (user rows, audit logs, session revocation) was rolled back on session close, silently dropping new users; `get_db` now commits on success
+- Identity service: cross-module ORM relationships failed to configure at runtime (`KeyError` on first DB query); all models are now registered through `identity/db/models.py`
+- Identity service: `RoleModel.tenant_id` was missing a `ForeignKey` — the tenant→roles relationship was undeclarable and the schema incomplete

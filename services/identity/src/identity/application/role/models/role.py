@@ -16,7 +16,12 @@ class RoleModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "roles"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     permissions: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
 

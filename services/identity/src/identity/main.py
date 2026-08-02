@@ -7,6 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+# Import every ORM model so SQLAlchemy can configure cross-module relationships
+# before the first query (see identity/db/models.py).
+import identity.db.models  # noqa: F401
 from identity.api.v1.router import api_router
 from identity.core.config import Environment, settings
 from identity.core.constants import SERVICE_NAME, SERVICE_VERSION
@@ -42,7 +45,9 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_error_handler)
 
     # --- Middleware (order matters: last added = first executed) ---
-    # Execution order: CORSMiddleware → TenantContextMiddleware → RequestIdMiddleware
+    # Execution order: RequestIdMiddleware → TenantContextMiddleware → CORSMiddleware.
+    # RequestId must run first so request_id is bound before tenant resolution
+    # logs, and so stale contextvars from the previous request are cleared.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

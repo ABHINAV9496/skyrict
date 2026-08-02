@@ -1,9 +1,10 @@
 """Unit tests for identity/core/config.py — production safety guards.
 
-Covers all three staging/production fail-fast checks:
+Covers all four staging/production fail-fast checks:
   1. JWT key paths pointing at committed test fixtures
   2. DEBUG=true
   3. CORS_ORIGINS contains '*'
+  4. BASE_DOMAIN missing (tenant subdomain resolution)
 """
 
 from __future__ import annotations
@@ -47,15 +48,23 @@ def _write_keypair(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _make_valid_settings(tmp_path: Path, **overrides) -> dict:
-    """Return a dict of Settings kwargs that pass load_rsa_keys (valid PEM files)."""
+    """Return a dict of Settings kwargs that pass load_rsa_keys (valid PEM files).
+
+    ``_env_file=None`` keeps these tests hermetic: a developer's local
+    ``.env`` (e.g. ``IDENTITY_DEBUG=true`` in dev) must never leak into the
+    production-safety assertions, regardless of the working directory pytest
+    is invoked from.
+    """
     private_path, public_path = _write_keypair(tmp_path)
     return {
+        "_env_file": None,
         "DATABASE_URL": "postgresql+asyncpg://x@localhost/db",
         "REDIS_URL": "redis://localhost:6379/0",
         "JWT_PRIVATE_KEY_PATH": private_path,
         "JWT_PUBLIC_KEY_PATH": public_path,
         "JWKS_ISSUER": "https://auth.skyrict.io",
         "JWKS_AUDIENCE": "api.skyrict.io",
+        "BASE_DOMAIN": "skyrict.com",
         **overrides,
     }
 
@@ -173,6 +182,38 @@ class TestProductionSafety:
         )
         assert "https://app.skyrict.io" in s.CORS_ORIGINS
 
+    # --- Check 4: BASE_DOMAIN required (tenant subdomain resolution) ---
+
+    def test_raises_production_missing_base_domain(self, tmp_path: Path):
+        with pytest.raises(RuntimeError, match="BASE_DOMAIN is required"):
+            Settings(
+                **_make_valid_settings(
+                    tmp_path,
+                    ENVIRONMENT=Environment.PRODUCTION,
+                    BASE_DOMAIN="",
+                )
+            )
+
+    def test_raises_staging_blank_base_domain(self, tmp_path: Path):
+        with pytest.raises(RuntimeError, match="BASE_DOMAIN is required"):
+            Settings(
+                **_make_valid_settings(
+                    tmp_path,
+                    ENVIRONMENT=Environment.STAGING,
+                    BASE_DOMAIN=" ",
+                )
+            )
+
+    def test_passes_production_base_domain(self, tmp_path: Path):
+        s = Settings(
+            **_make_valid_settings(
+                tmp_path,
+                ENVIRONMENT=Environment.PRODUCTION,
+                BASE_DOMAIN="skyrict.com",
+            )
+        )
+        assert s.BASE_DOMAIN == "skyrict.com"
+
 
 class TestMissingRequiredVars:
     """Omitting any required variable must fail fast and name the variable.
@@ -198,7 +239,7 @@ class TestMissingRequiredVars:
         kwargs = _make_valid_settings(tmp_path)
         kwargs.pop(field)
         with pytest.raises(ValidationError) as excinfo:
-            Settings(_env_file=None, **kwargs)
+            Settings(**kwargs)  # _env_file=None already in _make_valid_settings
         assert field in str(excinfo.value)
 
     @pytest.mark.parametrize("field", REQUIRED_FIELDS)

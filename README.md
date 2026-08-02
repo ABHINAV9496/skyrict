@@ -174,9 +174,14 @@ curl -s http://localhost/acme/api/v1/health
 `NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
 use `http://acme.localhost:8080/docs`.
 
-> Note: the app resolves the tenant from the verified JWT `tenant_id` claim
-> today; the `X-Tenant-Slug` header is injected by the proxy for the
-> slug-based tenant resolution that runs identically in production. See the
+> The service resolves the tenant **once per request in middleware**: in
+> staging/production from the `Host` subdomain (first label of
+> `IDENTITY_BASE_DOMAIN`, e.g. `acme.skyrict.com` → `acme`), and in dev/test
+> from the `X-Tenant-Slug` header that nginx injects — there is no bypass path
+> in any environment. The resolved tenant is stored in `TenantContext` and
+> cross-checked against the JWT `tenant_id` claim on every authenticated
+> request; a mismatch is rejected with 401 (RFC 7807
+> `application/problem+json`). See the
 > [identity service README](services/identity/README.md) for details.
 
 ### Manual Setup
@@ -326,10 +331,7 @@ Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
 ## Contributors
 
 <p align="center">
-  <a href="https://github.com/nkswalih">
-    <img src="https://github.com/nkswalih.png?size=80" width="80" height="80" alt="nkswalih" title="nkswalih — Owner"/>
-  </a>
-  <a href="https://github.com/apps/dependabot">
-    <img src="https://avatars.githubusercontent.com/u/49699333?v=4" width="80" height="80" alt="dependabot[bot]" title="dependabot[bot] — Automated dependency updates"/>
+  <a href="https://github.com/nkswalih/skyrict/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=nkswalih/skyrict" alt="Contributors" title="All contributors"/>
   </a>
 </p>

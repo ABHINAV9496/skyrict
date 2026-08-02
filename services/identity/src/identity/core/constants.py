@@ -37,6 +37,7 @@ PROBLEM_RATE_LIMIT_EXCEEDED = f"{PROBLEM_BASE_URL}/rate-limit-exceeded"
 PROBLEM_TENANT_DISABLED = f"{PROBLEM_BASE_URL}/tenant-disabled"
 PROBLEM_USER_DISABLED = f"{PROBLEM_BASE_URL}/user-disabled"
 PROBLEM_TENANT_CONTEXT_MISSING = f"{PROBLEM_BASE_URL}/tenant-context-missing"
+PROBLEM_TENANT_MISMATCH = f"{PROBLEM_BASE_URL}/tenant-mismatch"
 PROBLEM_INTERNAL_ERROR = f"{PROBLEM_BASE_URL}/internal-error"
 
 # ---------------------------------------------------------------------------
@@ -51,5 +52,11 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 300
 
 # ---------------------------------------------------------------------------
 # Skip-auth paths (middleware bypass)
+#
+# These are the REAL mounted paths (the api_router is mounted under /api/v1).
+# Everything else — including /api/v1/auth/login and /api/v1/auth/register —
+# requires tenant resolution so the tenant is known before route execution.
 # ---------------------------------------------------------------------------
-SKIP_AUTH_PATHS = frozenset({"/health", "/ready", "/docs", "/openapi.json", "/redoc"})
+SKIP_AUTH_PATHS = frozenset(
+    {f"{API_V1_PREFIX}/health", f"{API_V1_PREFIX}/ready", "/docs", "/openapi.json", "/redoc"}
+)

@@ -4,6 +4,7 @@ from skyrict_common.exceptions import (
     AuthenticationError,
     AuthorizationError,
     SkyrictError,
+    TenantMismatchError,
     UserNotFoundError,
 )
 
@@ -35,6 +36,16 @@ class TestAuthorizationError:
         err = AuthorizationError()
         assert err.message == "You do not have permission to perform this action"
         assert err.code == "AUTHORIZATION_ERROR"
+
+
+class TestTenantMismatchError:
+    def test_defaults(self):
+        err = TenantMismatchError()
+        assert err.message == "Token tenant does not match the routed tenant"
+        assert err.code == "TENANT_MISMATCH"
+
+    def test_is_authentication_error(self):
+        assert issubclass(TenantMismatchError, AuthenticationError)
 
 
 class TestInheritance:

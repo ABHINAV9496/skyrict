@@ -83,6 +83,15 @@ class Settings(BaseSettings):
         default="00000000-0000-0000-0000-000000000001",
         description="default tenant ID for single-tenant or bootstrap",
     )
+    BASE_DOMAIN: str = Field(
+        default="",
+        description=(
+            "production tenant base domain, e.g. 'skyrict.com' — the first "
+            "label of a Host like acme.skyrict.com is the tenant slug. Required "
+            "in staging/production; ignored in dev/test which resolve tenants "
+            "from the X-Tenant-Slug header injected by nginx."
+        ),
+    )
 
     # --- Password policy ---
     PASSWORD_MIN_LENGTH: int = Field(default=8, description="minimum password length")
@@ -146,6 +155,7 @@ class Settings(BaseSettings):
           1. JWT key paths must not point at committed test fixtures.
           2. DEBUG must be False.
           3. CORS_ORIGINS must not contain wildcard '*'.
+          4. BASE_DOMAIN must be set (tenant subdomain resolution).
         """
         if self.ENVIRONMENT not in (Environment.STAGING, Environment.PRODUCTION):
             return self
@@ -178,6 +188,14 @@ class Settings(BaseSettings):
             errors.append(
                 "Refusing to start: CORS_ORIGINS contains '*' which is not "
                 "allowed in staging/production. List explicit origins instead."
+            )
+
+        # Check 4: BASE_DOMAIN required for Host-subdomain tenant resolution
+        if not self.BASE_DOMAIN.strip():
+            errors.append(
+                "IDENTITY_BASE_DOMAIN is required in staging/production so "
+                "tenant subdomains (e.g. acme.skyrict.com) can be resolved "
+                "from the Host header."
             )
 
         if errors:

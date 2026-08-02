@@ -1,9 +1,10 @@
 """Unit tests for identity/core/config.py — production safety guards.
 
-Covers all three staging/production fail-fast checks:
+Covers all four staging/production fail-fast checks:
   1. JWT key paths pointing at committed test fixtures
   2. DEBUG=true
   3. CORS_ORIGINS contains '*'
+  4. BASE_DOMAIN missing (tenant subdomain resolution)
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ def _make_valid_settings(tmp_path: Path, **overrides) -> dict:
         "JWT_PUBLIC_KEY_PATH": public_path,
         "JWKS_ISSUER": "https://auth.skyrict.io",
         "JWKS_AUDIENCE": "api.skyrict.io",
+        "BASE_DOMAIN": "skyrict.com",
         **overrides,
     }
 
@@ -172,6 +174,38 @@ class TestProductionSafety:
             )
         )
         assert "https://app.skyrict.io" in s.CORS_ORIGINS
+
+    # --- Check 4: BASE_DOMAIN required (tenant subdomain resolution) ---
+
+    def test_raises_production_missing_base_domain(self, tmp_path: Path):
+        with pytest.raises(RuntimeError, match="BASE_DOMAIN is required"):
+            Settings(
+                **_make_valid_settings(
+                    tmp_path,
+                    ENVIRONMENT=Environment.PRODUCTION,
+                    BASE_DOMAIN="",
+                )
+            )
+
+    def test_raises_staging_blank_base_domain(self, tmp_path: Path):
+        with pytest.raises(RuntimeError, match="BASE_DOMAIN is required"):
+            Settings(
+                **_make_valid_settings(
+                    tmp_path,
+                    ENVIRONMENT=Environment.STAGING,
+                    BASE_DOMAIN=" ",
+                )
+            )
+
+    def test_passes_production_base_domain(self, tmp_path: Path):
+        s = Settings(
+            **_make_valid_settings(
+                tmp_path,
+                ENVIRONMENT=Environment.PRODUCTION,
+                BASE_DOMAIN="skyrict.com",
+            )
+        )
+        assert s.BASE_DOMAIN == "skyrict.com"
 
 
 class TestMissingRequiredVars:

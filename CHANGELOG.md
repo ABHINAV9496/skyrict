@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Identity service: structured JSON logging with full tracebacks and request_id/tenant_id context injection
 - `libs/skyrict-common` — `NotFoundError`, `PermissionDeniedError`, `ConflictError` domain exceptions
 - Root README: CI status badge and "Roadmap & Scope" section
+- Local multi-tenant routing: nginx dev proxy routes `*.localhost` subdomains (and a path-based fallback) to the identity service with `X-Tenant-Slug` injected, for parity with production tenant subdomain routing
 
 ### Changed
 

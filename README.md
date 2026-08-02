@@ -121,7 +121,7 @@ cd skyrict
 make setup
 
 # 2. Configure the local environment
-cp services/identity/.env.example .env
+cp services/identity/.env.example services/identity/.env
 uv run python -m skyrict_testing.generate_keys  # JWT RS256 keys -> .dev/keys/ (gitignored)
 
 # 3. Start dev servers (infra + identity service)
@@ -133,7 +133,49 @@ make dev-web
 
 - API docs: `http://localhost:8000/docs`
 - Frontend: `http://localhost:3000`
-- Multi-tenant dev: the tenant is resolved from the verified JWT `tenant_id` claim, with an `X-Tenant-ID` header fallback for service-to-service calls. See the [identity service README](services/identity/README.md) for details.
+
+### Local Multi-Tenant Routing
+
+The identity service is multi-tenant: in production each tenant reaches it via
+its own subdomain (`https://acme.skyrict.com/...`), and the ingress injects an
+`X-Tenant-Slug` header before forwarding. The dev stack mirrors that contract
+so tenant resolution behaves identically locally and in production — no
+staging DNS required.
+
+`docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`)
+that routes `*.localhost` subdomains to the identity service and derives
+`X-Tenant-Slug` from the subdomain. No `/etc/hosts` edits are needed: modern
+OSes resolve `*.localhost` to `127.0.0.1` automatically.
+
+```bash
+# Boot the full stack (Postgres, Redis, identity service, nginx)
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml up -d
+
+# Hit two different fake tenant subdomains
+curl -s http://acme.localhost/api/v1/health
+curl -s http://globex.localhost/api/v1/health
+# Both reach the identity service; the first carries X-Tenant-Slug: acme,
+# the second X-Tenant-Slug: globex. Watch per-subdomain traffic with:
+docker logs -f skyrict-nginx
+```
+
+**Path-based fallback** — for environments without wildcard DNS, prefix the
+path with the tenant slug. Nginx strips the prefix and injects the header:
+
+```bash
+# http://localhost/acme/login          -> /api/v1/auth/login  + X-Tenant-Slug: acme
+# http://localhost/acme/api/v1/health  -> /api/v1/health      + X-Tenant-Slug: acme
+curl -s http://localhost/acme/api/v1/health
+```
+
+**Port 80 already in use?** Set a different host port — e.g. add
+`NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
+use `http://acme.localhost:8080/docs`.
+
+> Note: the app resolves the tenant from the verified JWT `tenant_id` claim
+> today; the `X-Tenant-Slug` header is injected by the proxy for the
+> slug-based tenant resolution that runs identically in production. See the
+> [identity service README](services/identity/README.md) for details.
 
 ### Manual Setup
 

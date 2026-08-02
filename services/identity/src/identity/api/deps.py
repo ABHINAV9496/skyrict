@@ -34,10 +34,16 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an async database session, auto-closed after request."""
+    """Yield an async database session; commit on success, roll back on error.
+
+    Without the commit, every write made by a route handler (user registration,
+    audit logs, session revocation) is rolled back when the session closes —
+    registration was returning tokens for a user that never persisted.
+    """
     async with async_session_factory() as session:
         try:
             yield session
+            await session.commit()
         finally:
             await session.close()
 

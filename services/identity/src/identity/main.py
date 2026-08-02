@@ -7,6 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+# Import every ORM model so SQLAlchemy can configure cross-module relationships
+# before the first query (see identity/db/models.py).
+import identity.db.models  # noqa: F401
 from identity.api.v1.router import api_router
 from identity.core.config import Environment, settings
 from identity.core.constants import SERVICE_NAME, SERVICE_VERSION

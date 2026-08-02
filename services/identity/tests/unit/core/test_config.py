@@ -48,9 +48,16 @@ def _write_keypair(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _make_valid_settings(tmp_path: Path, **overrides) -> dict:
-    """Return a dict of Settings kwargs that pass load_rsa_keys (valid PEM files)."""
+    """Return a dict of Settings kwargs that pass load_rsa_keys (valid PEM files).
+
+    ``_env_file=None`` keeps these tests hermetic: a developer's local
+    ``.env`` (e.g. ``IDENTITY_DEBUG=true`` in dev) must never leak into the
+    production-safety assertions, regardless of the working directory pytest
+    is invoked from.
+    """
     private_path, public_path = _write_keypair(tmp_path)
     return {
+        "_env_file": None,
         "DATABASE_URL": "postgresql+asyncpg://x@localhost/db",
         "REDIS_URL": "redis://localhost:6379/0",
         "JWT_PRIVATE_KEY_PATH": private_path,
@@ -232,7 +239,7 @@ class TestMissingRequiredVars:
         kwargs = _make_valid_settings(tmp_path)
         kwargs.pop(field)
         with pytest.raises(ValidationError) as excinfo:
-            Settings(_env_file=None, **kwargs)
+            Settings(**kwargs)  # _env_file=None already in _make_valid_settings
         assert field in str(excinfo.value)
 
     @pytest.mark.parametrize("field", REQUIRED_FIELDS)

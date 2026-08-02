@@ -45,14 +45,12 @@ def _make_request(headers: dict[str, str]) -> Request:
 class TestResolveTenantSlugFromHost:
     def test_simple_subdomain(self):
         assert (
-            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain="skyrict.com")
-            == "acme"
+            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain="skyrict.com") == "acme"
         )
 
     def test_uppercase_host_normalized(self):
         assert (
-            resolve_tenant_slug_from_host("ACME.Skyrict.COM", base_domain="skyrict.com")
-            == "acme"
+            resolve_tenant_slug_from_host("ACME.Skyrict.COM", base_domain="skyrict.com") == "acme"
         )
 
     def test_host_with_port(self):
@@ -63,17 +61,14 @@ class TestResolveTenantSlugFromHost:
 
     def test_base_domain_with_leading_dot(self):
         assert (
-            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain=".skyrict.com")
-            == "acme"
+            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain=".skyrict.com") == "acme"
         )
 
     def test_apex_is_not_a_tenant(self):
         assert resolve_tenant_slug_from_host("skyrict.com", base_domain="skyrict.com") is None
 
     def test_wrong_domain_suffix(self):
-        assert (
-            resolve_tenant_slug_from_host("acme.evil.com", base_domain="skyrict.com") is None
-        )
+        assert resolve_tenant_slug_from_host("acme.evil.com", base_domain="skyrict.com") is None
 
     def test_suffix_lookalike_rejected(self):
         # A host ending in .evil.com must never resolve through skyrict.com.
@@ -83,9 +78,7 @@ class TestResolveTenantSlugFromHost:
         )
 
     def test_multi_label_subdomain_uses_first_label(self):
-        assert (
-            resolve_tenant_slug_from_host("a.b.skyrict.com", base_domain="skyrict.com") == "a"
-        )
+        assert resolve_tenant_slug_from_host("a.b.skyrict.com", base_domain="skyrict.com") == "a"
 
     def test_invalid_slug_characters_rejected(self):
         assert (
@@ -117,9 +110,7 @@ class TestDeriveTenantSlug:
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
         assert derive_tenant_slug(_make_request({"X-Tenant-Slug": "Bad Slug!"})) is None
 
-    def test_production_uses_host_ignores_spoofed_header(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_production_uses_host_ignores_spoofed_header(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.PRODUCTION)
         monkeypatch.setattr(settings, "BASE_DOMAIN", "skyrict.com")
         request = _make_request({"X-Tenant-Slug": "evil", "Host": "acme.skyrict.com"})

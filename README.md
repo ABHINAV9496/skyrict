@@ -174,9 +174,14 @@ curl -s http://localhost/acme/api/v1/health
 `NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
 use `http://acme.localhost:8080/docs`.
 
-> Note: the app resolves the tenant from the verified JWT `tenant_id` claim
-> today; the `X-Tenant-Slug` header is injected by the proxy for the
-> slug-based tenant resolution that runs identically in production. See the
+> The service resolves the tenant **once per request in middleware**: in
+> staging/production from the `Host` subdomain (first label of
+> `IDENTITY_BASE_DOMAIN`, e.g. `acme.skyrict.com` → `acme`), and in dev/test
+> from the `X-Tenant-Slug` header that nginx injects — there is no bypass path
+> in any environment. The resolved tenant is stored in `TenantContext` and
+> cross-checked against the JWT `tenant_id` claim on every authenticated
+> request; a mismatch is rejected with 401 (RFC 7807
+> `application/problem+json`). See the
 > [identity service README](services/identity/README.md) for details.
 
 ### Manual Setup

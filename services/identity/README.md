@@ -38,10 +38,14 @@ uv run --directory services/identity identity serve --reload
 
 ## Local Multi-Tenant Testing
 
-Tenant resolution in production is subdomain-driven: `acme.skyrict.com`
-reaches the service with an `X-Tenant-Slug: acme` header injected by the
-ingress. The dev stack reproduces that contract locally with nginx — the
-application receives the same header either way.
+Tenant resolution is strict and happens **once per request** in middleware.
+In staging/production the tenant slug is derived from the `Host` subdomain
+(`acme.skyrict.com` → `acme`) and `IDENTITY_BASE_DOMAIN` is required
+(fail-fast if missing). In dev/test the slug comes from the `X-Tenant-Slug`
+header that nginx injects — there is no bypass path in any environment. The
+resolved tenant is stored in `TenantContext`, and every authenticated request
+cross-checks it against the JWT `tenant_id` claim (mismatch → 401
+`application/problem+json`). Unknown tenants → 404, disabled tenants → 403.
 
 ```bash
 # Boot the full stack (Postgres, Redis, identity service, nginx)
@@ -66,7 +70,7 @@ service). If port 80 is in use, set `NGINX_PORT=8080` in `infra/docker/.env`
 # Unit tests (no DB needed)
 uv run pytest services/identity/tests/unit/ -v
 
-# Integration tests (requires Docker)
+# Integration tests (requires a reachable Postgres; skipped when unavailable)
 uv run pytest services/identity/tests/integration/ -v
 ```
 

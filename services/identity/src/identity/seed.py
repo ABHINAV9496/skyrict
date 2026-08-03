@@ -12,6 +12,7 @@ import uuid
 import structlog
 
 from identity.core.config import settings
+from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
 from identity.core.security import hash_password
 from identity.db.session import async_session_factory
 from identity.domain.entities import Tenant, User
@@ -20,13 +21,8 @@ from identity.models.role import RoleModel
 logger = structlog.get_logger("identity.seed")
 
 DEFAULT_ROLES = [
-    {"name": "owner", "permissions": ["*"]},
-    {
-        "name": "admin",
-        "permissions": ["users:read", "users:write", "settings:read", "settings:write"],
-    },
-    {"name": "member", "permissions": ["users:read"]},
-    {"name": "viewer", "permissions": ["users:read"]},
+    {"name": name, "permissions": list(permissions)}
+    for name, permissions in SYSTEM_ROLE_DEFINITIONS
 ]
 
 

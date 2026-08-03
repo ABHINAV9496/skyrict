@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from identity.application.session.models.session import SessionModel
+from identity.models.session import SessionModel
 from skyrict_common.exceptions import SessionNotFoundError
 
 if TYPE_CHECKING:
@@ -28,16 +28,22 @@ class SessionService:
         refresh_token_hash: str,
         user_agent: str | None = None,
         ip_address: str | None = None,
+        device_info: dict[str, Any] | None = None,
+        location: str | None = None,
     ) -> SessionModel:
         """Create a new session record."""
+        now = datetime.now(UTC)
         session = SessionModel(
             user_id=user_id,
             tenant_id=tenant_id,
             refresh_token_hash=refresh_token_hash,
             user_agent=user_agent,
             ip_address=ip_address,
+            device_info=device_info,
+            location=location,
             is_active=True,
-            expires_at=datetime.now(UTC) + timedelta(days=7),
+            expires_at=now + timedelta(days=7),
+            last_active_at=now,
         )
         return await self.session_repo.create(session)
 

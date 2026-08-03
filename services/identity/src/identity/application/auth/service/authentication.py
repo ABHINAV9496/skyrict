@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from identity.core.security import hash_password, verify_password
 from identity.core.tenant_context import TenantContext
+from identity.models.user import UserModel
 from skyrict_common.exceptions import (
     InvalidPasswordError,
     UserAlreadyExistsError,
@@ -46,21 +47,22 @@ class AuthenticationService:
             InvalidPasswordError: If the password is wrong.
             UserDisabledError: If the user account is disabled.
         """
-        user = await self.user_repo.get_by_email(request.email)
+        # The tenant is resolved ONCE by the middleware (Host subdomain in
+        # production, X-Tenant-Slug in dev) and consumed from TenantContext —
+        # tokens are bound to the routed tenant so the JWT-vs-routed
+        # cross-check passes on every subsequent request.
+        tenant_id = TenantContext.get()
+
+        # Emails are unique per tenant, so lookups are tenant-scoped.
+        user = await self.user_repo.get_by_email(tenant_id, request.email)
         if not user:
             raise UserNotFoundError()
 
         if not user.is_active:
             raise UserDisabledError()
 
-        if not verify_password(request.password, user.hashed_password):
+        if not verify_password(request.password, user.password_hash):
             raise InvalidPasswordError()
-
-        # The tenant is resolved ONCE by the middleware (Host subdomain in
-        # production, X-Tenant-Slug in dev) and consumed from TenantContext —
-        # tokens are bound to the routed tenant so the JWT-vs-routed
-        # cross-check passes on every subsequent request.
-        tenant_id = TenantContext.get()
 
         tokens = await self.token_service.create_token_pair(
             user_id=str(user.id),
@@ -69,8 +71,8 @@ class AuthenticationService:
 
         await self.audit_service.log(
             action="auth.login.success",
-            resource_type="user",
-            resource_id=str(user.id),
+            target=f"user:{user.id}",
+            user_id=str(user.id),
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -95,15 +97,18 @@ class AuthenticationService:
         Raises:
             UserAlreadyExistsError: If the email is already taken.
         """
-        if await self.user_repo.email_exists(request.email):
+        tenant_id = TenantContext.get()
+
+        if await self.user_repo.email_exists(tenant_id, request.email):
             raise UserAlreadyExistsError()
 
         hashed = hash_password(request.password)
 
         user_model = await self.user_repo.create(
-            __import__("identity.application.auth.models.user", fromlist=["UserModel"]).UserModel(
+            UserModel(
+                tenant_id=tenant_id,
                 email=request.email,
-                hashed_password=hashed,
+                password_hash=hashed,
                 full_name=request.full_name,
                 is_active=True,
                 is_verified=False,
@@ -112,13 +117,13 @@ class AuthenticationService:
 
         tokens = await self.token_service.create_token_pair(
             user_id=str(user_model.id),
-            tenant_id=TenantContext.get(),
+            tenant_id=tenant_id,
         )
 
         await self.audit_service.log(
             action="auth.register.success",
-            resource_type="user",
-            resource_id=str(user_model.id),
+            target=f"user:{user_model.id}",
+            user_id=str(user_model.id),
             ip_address=ip_address,
             user_agent=user_agent,
         )

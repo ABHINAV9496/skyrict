@@ -83,7 +83,7 @@ class MFAService:
         if not user:
             raise UserNotFoundError()
 
-        if not verify_password(password, user.hashed_password):
+        if not verify_password(password, user.password_hash):
             from skyrict_common.exceptions import InvalidPasswordError
 
             raise InvalidPasswordError()

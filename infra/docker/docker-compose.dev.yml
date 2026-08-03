@@ -21,8 +21,7 @@ services:
   identity:
     build:
       context: ../..
-      dockerfile: services/identity/Dockerfile
-      target: dev
+      dockerfile: services/identity/Dockerfile.dev
     container_name: skyrict-identity
     ports:
       - "8000:8000"

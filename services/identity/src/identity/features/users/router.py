@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.features.dependencies import get_current_user, get_user_repo
+from identity.api.deps import get_current_user, get_user_repo
 from identity.features.users.repository import UserRepository
 from identity.features.users.schemas import ChangePasswordRequest, UserResponse, UserUpdateRequest
 from skyrict_common.exceptions import UserNotFoundError

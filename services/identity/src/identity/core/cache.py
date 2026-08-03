@@ -13,13 +13,13 @@ cache with the same interface instead.
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING
 
-T = TypeVar("T")
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
-class TTLCache(Generic[T]):
+class TTLCache[T]:
     """In-memory cache keyed by string with per-key absolute expiry."""
 
     def __init__(self, *, default_ttl_seconds: float = 300.0) -> None:

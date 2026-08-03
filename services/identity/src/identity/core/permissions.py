@@ -30,10 +30,10 @@ CATALOG: tuple[str, ...] = (
 )
 
 __all__ = [
-    "WILDCARD",
-    "USERS_READ",
-    "USERS_WRITE",
+    "CATALOG",
     "SETTINGS_READ",
     "SETTINGS_WRITE",
-    "CATALOG",
+    "USERS_READ",
+    "USERS_WRITE",
+    "WILDCARD",
 ]

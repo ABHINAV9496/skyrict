@@ -27,6 +27,7 @@ dev = [
     "bandit>=1.7,<2",
     "testcontainers[postgres]>=4.0,<5",
     "types-python-jose>=3.3,<4",
+    "import-linter>=2.0,<3",
 ]
 
 # ---------- Ruff (root-level defaults) ----------
@@ -63,10 +64,8 @@ extend-immutable-calls = [
 # FastAPI signature introspection), so they must stay importable at runtime.
 [tool.ruff.lint.per-file-ignores]
 "services/identity/src/identity/api/**" = ["TC001", "TC002", "TC003"]
+"services/identity/src/identity/features/**" = ["TC001", "TC002", "TC003"]
 "services/identity/src/identity/**/models/**" = ["TC001", "TC002", "TC003"]
-"services/identity/src/identity/**/schemas/**" = ["TC001", "TC002", "TC003"]
-"services/identity/src/identity/core/middleware.py" = ["TC001", "TC002", "TC003"]
-"services/identity/src/identity/core/lifespan.py" = ["TC001", "TC002", "TC003"]
 "services/identity/src/identity/core/exceptions.py" = ["TC001", "TC002", "TC003"]
 "services/identity/src/identity/core/tenant_context.py" = ["TC001", "TC002", "TC003"]
 
@@ -103,6 +102,49 @@ skips = [
     "B603",
     "B607",  # "uv" binary invoked via PATH in CLI migrate/seed commands
 ]
+
+# ---------- Import Linter (enforced architecture) ----------
+[tool.importlinter]
+root_package = "identity"
+include_external_packages = false
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Feature packages are independent"
+type = "independence"
+modules = [
+    "identity.features.auth",
+    "identity.features.users",
+    "identity.features.organizations",
+    "identity.features.sessions",
+    "identity.features.mfa",
+    "identity.features.passkeys",
+    "identity.features.sso",
+    "identity.features.roles",
+    "identity.features.audit",
+]
+# Legitimate exceptions, ignored so the contract protects real coupling:
+# 1. Every feature router consumes the api composition root (get_current_user,
+#    get_db, service factories). api.deps is the sole wiring point; features
+#    never import one another's services directly.
+# 2. The auth feature embeds the user profile in its response schema — a pure
+#    pydantic model cross-reference (data contract), not a behavioral coupling.
+ignore_imports = [
+    "identity.features.**.router -> identity.api.deps",
+    "identity.features.auth.schemas -> identity.features.users.schemas",
+]
+
+[[tool.importlinter.contracts]]
+name = "Foundations never depend on features or api"
+type = "forbidden"
+source_modules = [
+    "identity.core",
+    "identity.db",
+    "identity.models",
+    "identity.domain",
+    "identity.events",
+]
+forbidden_modules = ["identity.features", "identity.api"]
 
 # ---------- Mypy (root-level defaults) ----------
 [tool.mypy]

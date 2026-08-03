@@ -7,7 +7,7 @@ identity ORM model relies on (UUID primary key, created/updated timestamps).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime  # noqa: TC003  # resolved at runtime by SQLAlchemy
+from datetime import datetime  # resolved at runtime by SQLAlchemy
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID

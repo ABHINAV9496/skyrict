@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.features.dependencies import get_current_user, get_passkey_service
+from identity.api.deps import get_current_user, get_passkey_service
 from identity.features.passkeys.service import PasskeyService
 from skyrict_common.schemas import ResponseEnvelope
 

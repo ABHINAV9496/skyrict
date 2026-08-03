@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from identity.api.deps import get_authn_service, get_current_user, get_token_service
 from identity.features.auth.schemas import (
     AuthResponse,
     LoginRequest,
@@ -14,7 +15,6 @@ from identity.features.auth.schemas import (
     TokenRefreshRequest,
 )
 from identity.features.auth.service import AuthenticationService, TokenService
-from identity.features.dependencies import get_authn_service, get_current_user, get_token_service
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/auth", tags=["auth"])

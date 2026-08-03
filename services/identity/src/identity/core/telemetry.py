@@ -9,10 +9,12 @@ for point-in-time counters.
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = structlog.get_logger("identity.telemetry")
 

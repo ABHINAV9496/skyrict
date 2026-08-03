@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 from identity.core.config import settings
-from identity.models.base import Base
 from identity.models import (  # noqa: F401  # registers every ORM model
     AuditLogModel,
     PermissionModel,
@@ -24,6 +23,7 @@ from identity.models import (  # noqa: F401  # registers every ORM model
     UserModel,
     UserRoleModel,
 )
+from identity.models.base import Base
 
 config = context.config
 # Escape "%" so configparser interpolation does not choke on URL-encoded

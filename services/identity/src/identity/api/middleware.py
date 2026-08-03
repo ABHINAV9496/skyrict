@@ -22,7 +22,6 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from identity.features.organizations.repository import TenantRepository
 from identity.core.config import Environment, settings
 from identity.core.constants import SKIP_AUTH_PATHS
 from identity.core.exceptions import (
@@ -38,6 +37,7 @@ from identity.core.exceptions import (
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
+from identity.features.organizations.repository import TenantRepository
 
 logger = structlog.get_logger("identity.middleware")
 

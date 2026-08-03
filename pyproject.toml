@@ -146,6 +146,36 @@ source_modules = [
 ]
 forbidden_modules = ["identity.features", "identity.api"]
 
+[[tool.importlinter.contracts]]
+name = "Only repositories touch the database layer"
+type = "forbidden"
+source_modules = ["identity.features"]
+forbidden_modules = ["identity.models", "identity.db"]
+# Repositories are the ORM gateway: services/routers/schemas must never import
+# SQLAlchemy models or the db layer directly. Persistence stays in repository.py.
+# Direct-import only: the sanctioned api.deps composition-root chain is not a
+# feature->db coupling, so indirect chains through it are not flagged.
+allow_indirect_imports = true
+ignore_imports = [
+    "identity.features.**.repository -> identity.models.**",
+    "identity.features.**.repository -> identity.db.**",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure"
+type = "forbidden"
+source_modules = ["identity.domain"]
+forbidden_modules = ["identity.models", "identity.db", "identity.features", "identity.api"]
+
+[[tool.importlinter.contracts]]
+name = "API never touches ORM models"
+type = "forbidden"
+source_modules = ["identity.api"]
+forbidden_modules = ["identity.models"]
+# Direct-import only: api.deps legitimately wires repositories (which touch
+# models) as the composition root, so indirect chains are not flagged.
+allow_indirect_imports = true
+
 # ---------- Mypy (root-level defaults) ----------
 [tool.mypy]
 python_version = "3.12"

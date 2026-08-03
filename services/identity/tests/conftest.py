@@ -79,13 +79,19 @@ def anyio_backend():
 async def client():
     """Async HTTP client against the FastAPI app (ASGI transport).
 
-    Skips integration tests when the identity application cannot be built
-    (e.g. while the models/repositories refactor is in flight), instead of
-    failing the whole suite.
+    Runs the REAL application lifespan (startup dependency verification +
+    graceful shutdown) so integration tests exercise the lifecycle SKY-11
+    implements. Skips the test when the identity application cannot be built
+    OR when startup verification fails (database or Redis unreachable) —
+    mirroring how the ``migrated_schema`` fixture skips when Postgres is
+    down. CI runs against the provisioned compose stack (postgres + redis),
+    where startup succeeds.
     """
     try:
         from httpx import ASGITransport, AsyncClient
 
+        from identity.api.lifespan import lifespan
+        from identity.core.exceptions import StartupError
         from identity.main import app
     except (ImportError, ModuleNotFoundError) as exc:
         pytest.skip(f"identity application unavailable: {exc}")
@@ -94,5 +100,11 @@ async def client():
     # always re-raises after emitting its 500 (errors.py), so tests must be
     # able to inspect the sanitized response (e.g. orphan-rollback checks).
     transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-        yield http_client
+    try:
+        async with (
+            lifespan(app),
+            AsyncClient(transport=transport, base_url="http://test") as http_client,
+        ):
+            yield http_client
+    except StartupError as exc:
+        pytest.skip(f"startup dependency verification failed: {exc}")

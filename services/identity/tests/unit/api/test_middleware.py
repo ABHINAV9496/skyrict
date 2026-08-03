@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 from identity.core.config import Environment, settings
 from identity.core.exceptions import TenantMismatchError
-from identity.core.middleware import (
+from identity.api.middleware import (
     cross_check_jwt_tenant,
     derive_tenant_slug,
     is_tenant_required_path,

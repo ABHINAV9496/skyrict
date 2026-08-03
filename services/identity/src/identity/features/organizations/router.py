@@ -6,9 +6,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_current_user, get_tenant_repo
-from identity.application.tenant.repository.tenant import TenantRepository
-from identity.application.tenant.schemas import TenantCreateRequest, TenantResponse
+from identity.features.dependencies import get_current_user, get_tenant_repo
+from identity.features.organizations.repository import TenantRepository
+from identity.features.organizations.schemas import TenantCreateRequest, TenantResponse
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])

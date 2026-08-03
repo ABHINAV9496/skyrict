@@ -12,22 +12,21 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.application.audit.repository.audit import AuditRepository
-from identity.application.audit.service.audit import AuditService
-from identity.application.auth.repository.user import UserRepository
-from identity.application.auth.service.authentication import AuthenticationService
-from identity.application.auth.service.token import TokenService
-from identity.application.mfa.service.mfa import MFAService
-from identity.application.passkey.service.passkey import PasskeyService
-from identity.application.permissions.service.authorization import AuthorizationService
-from identity.application.session.repository.session import SessionRepository
-from identity.application.session.service.session import SessionService
-from identity.application.sso.service.sso import SSOService
-from identity.application.tenant.repository.tenant import TenantRepository
-from identity.core.middleware import cross_check_jwt_tenant
+from identity.api.middleware import cross_check_jwt_tenant
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
+from identity.features.audit.repository import AuditRepository
+from identity.features.audit.service import AuditService
+from identity.features.auth.service import AuthenticationService, TokenService
+from identity.features.mfa.service import MFAService
+from identity.features.organizations.repository import TenantRepository
+from identity.features.passkeys.service import PasskeyService
+from identity.features.roles.service import AuthorizationService
+from identity.features.sessions.repository import SessionRepository
+from identity.features.sessions.service import SessionService
+from identity.features.sso.service import SSOService
+from identity.features.users.repository import UserRepository
 from skyrict_common.exceptions import AuthenticationError
 
 security = HTTPBearer(auto_error=False)

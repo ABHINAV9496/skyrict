@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from identity.core.tenant_context import TenantContext
 
 if TYPE_CHECKING:
-    from identity.application.audit.repository.audit import AuditRepository
+    from identity.features.audit.repository import AuditRepository
     from identity.models.audit_log import AuditLogModel
 
 

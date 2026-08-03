@@ -18,8 +18,8 @@ import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
 
-from identity.application.tenant.repository.tenant import TenantRepository
 from identity.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from identity.features.organizations.repository import TenantRepository
 from identity.main import create_app
 from skyrict_common.exceptions import MFAVerificationError, SessionNotFoundError
 

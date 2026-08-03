@@ -9,7 +9,7 @@ from skyrict_common.exceptions import AuthorizationError
 if TYPE_CHECKING:
     import uuid
 
-    from identity.application.auth.repository.user import UserRepository
+    from identity.features.users.repository import UserRepository
 
 
 class AuthorizationService:

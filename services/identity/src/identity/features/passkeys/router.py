@@ -6,8 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_current_user, get_passkey_service
-from identity.application.passkey.service.passkey import PasskeyService
+from identity.features.dependencies import get_current_user, get_passkey_service
+from identity.features.passkeys.service import PasskeyService
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/passkeys", tags=["passkeys"])

@@ -6,8 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_current_user, get_mfa_service
-from identity.application.mfa.service.mfa import MFAService
+from identity.features.dependencies import get_current_user, get_mfa_service
+from identity.features.mfa.service import MFAService
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/mfa", tags=["mfa"])

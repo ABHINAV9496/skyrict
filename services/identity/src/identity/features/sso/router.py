@@ -6,8 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_sso_service
-from identity.application.sso.service.sso import SSOService
+from identity.features.dependencies import get_sso_service
+from identity.features.sso.service import SSOService
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/sso", tags=["sso"])

@@ -1,7 +1,7 @@
 """Database seeding — bootstrap default tenants, roles, and admin users.
 
 Usage:
-    python -m identity.db.seed
+    python -m identity.seed
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ DEFAULT_ROLES = [
 
 async def seed_default_tenant() -> None:
     """Create the default tenant if it doesn't exist."""
-    from identity.application.tenant.repository.tenant import TenantRepository
+    from identity.features.organizations.repository import TenantRepository
 
     async with async_session_factory() as session:
         repo = TenantRepository(session)
@@ -83,7 +83,7 @@ async def seed_default_roles() -> None:
 
 async def seed_admin_user() -> None:
     """Create a default admin user for development/staging."""
-    from identity.application.auth.repository.user import UserRepository
+    from identity.features.users.repository import UserRepository
 
     default_tenant_id = uuid.UUID(settings.DEFAULT_TENANT_ID)
 

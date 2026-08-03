@@ -11,7 +11,7 @@ from skyrict_common.exceptions import SessionNotFoundError
 if TYPE_CHECKING:
     import uuid
 
-    from identity.application.session.repository.session import SessionRepository
+    from identity.features.sessions.repository import SessionRepository
 
 
 class SessionService:

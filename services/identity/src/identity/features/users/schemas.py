@@ -1,6 +1,9 @@
-"""User request schemas."""
+"""User schemas — requests and responses."""
 
 from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -17,3 +20,27 @@ class ChangePasswordRequest(BaseModel):
 
     current_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class UserResponse(BaseModel):
+    """User data returned in API responses."""
+
+    id: UUID
+    email: str
+    full_name: str
+    is_active: bool
+    is_verified: bool
+    mfa_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserListResponse(BaseModel):
+    """Paginated user list."""
+
+    items: list[UserResponse]
+    total: int
+    page: int
+    page_size: int

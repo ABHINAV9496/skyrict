@@ -22,7 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from identity.application.tenant.repository.tenant import TenantRepository
+from identity.features.organizations.repository import TenantRepository
 from identity.core.config import Environment, settings
 from identity.core.constants import SKIP_AUTH_PATHS
 from identity.core.exceptions import (

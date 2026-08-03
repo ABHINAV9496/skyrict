@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from identity.db.base import Base, UUIDPrimaryKeyMixin
+from identity.models.base import Base, UUIDPrimaryKeyMixin
 
 
 class PermissionModel(UUIDPrimaryKeyMixin, Base):

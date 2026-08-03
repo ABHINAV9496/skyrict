@@ -1,8 +1,10 @@
-"""Authentication request schemas."""
+"""Authentication schemas — requests, responses, and token payloads."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, EmailStr, Field
+
+from identity.features.users.schemas import UserResponse
 
 
 class LoginRequest(BaseModel):
@@ -34,3 +36,34 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = Field(
         default=None, description="Specific token to revoke; if omitted, revoke all"
     )
+
+
+class TokenPayloadSchema(BaseModel):
+    """Decoded JWT payload."""
+
+    sub: str
+    tenant_id: str
+    type: str  # "access" or "refresh"
+    exp: int
+    iat: int
+
+
+class TokenIntrospectionResponse(BaseModel):
+    """POST /auth/introspect — token introspection."""
+
+    active: bool
+    sub: str | None = None
+    tenant_id: str | None = None
+    type: str | None = None
+    exp: int | None = None
+    scope: str | None = None
+
+
+class AuthResponse(BaseModel):
+    """Response after successful login/register/refresh."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "Bearer"
+    expires_in: int = Field(default=900, description="Access token TTL in seconds")
+    user: UserResponse | None = None

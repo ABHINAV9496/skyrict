@@ -7,8 +7,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_current_user, get_session_service
-from identity.application.session.service.session import SessionService
+from identity.features.dependencies import get_current_user, get_session_service
+from identity.features.sessions.service import SessionService
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])

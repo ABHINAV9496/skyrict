@@ -10,7 +10,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, true
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from identity.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class SessionModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):

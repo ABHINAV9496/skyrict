@@ -29,7 +29,6 @@ class ScopeType(Enum):
 class User:
     """User entity."""
 
-    id: UUID
     tenant_id: UUID
     email: str
     password_hash: str
@@ -40,26 +39,26 @@ class User:
     mfa_secret: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
 
 
 @dataclass
 class Tenant:
     """Tenant (organization) entity."""
 
-    id: UUID
     name: str
     slug: str
     is_active: bool = True
     plan_tier: str = "free"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
 
 
 @dataclass
 class Session:
     """User session entity."""
 
-    id: UUID
     user_id: UUID
     tenant_id: UUID
     refresh_token_hash: str
@@ -72,6 +71,7 @@ class Session:
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_active_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     revoked_at: datetime | None = None
+    id: UUID | None = None
 
 
 @dataclass
@@ -112,7 +112,6 @@ class UserRole:
 class AuditLog:
     """Audit log entry entity — hash-chained, append-only."""
 
-    id: UUID
     tenant_id: UUID
     action: str
     target: str
@@ -123,3 +122,4 @@ class AuditLog:
     hash: str = ""
     prev_hash: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None

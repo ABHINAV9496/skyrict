@@ -1,1 +1,0 @@
-"""Sessions endpoint package."""

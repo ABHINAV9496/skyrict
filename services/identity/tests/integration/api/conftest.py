@@ -27,7 +27,8 @@ from sqlalchemy import delete, select, text
 # Import the model registry so SQLAlchemy can configure cross-module
 # relationships (same set the app and alembic use).
 from identity.core.tenant_context import TenantContext
-from identity.db.models import (  # noqa: F401  # register every ORM model
+from identity.db.session import async_session_factory, engine
+from identity.models import (  # noqa: F401  # register every ORM model
     AuditLogModel,
     PermissionModel,
     RoleModel,
@@ -36,7 +37,6 @@ from identity.db.models import (  # noqa: F401  # register every ORM model
     UserModel,
     UserRoleModel,
 )
-from identity.db.session import async_session_factory, engine
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

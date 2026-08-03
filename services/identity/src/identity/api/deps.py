@@ -1,34 +1,38 @@
 """FastAPI dependency injection — get_db, get_current_user, require_permission.
 
+The api layer is the sole composition point: feature services and repositories
+are wired together here and nowhere else. Feature imports stay inside the
+factory functions (call sites) so importing this module never pulls the whole
+feature tree at load time, and no feature ever imports another feature.
+
 Every route that touches the database or requires auth goes through these deps.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.application.audit.repository.audit import AuditRepository
-from identity.application.audit.service.audit import AuditService
-from identity.application.auth.repository.user import UserRepository
-from identity.application.auth.service.authentication import AuthenticationService
-from identity.application.auth.service.token import TokenService
-from identity.application.mfa.service.mfa import MFAService
-from identity.application.passkey.service.passkey import PasskeyService
-from identity.application.permissions.service.authorization import AuthorizationService
-from identity.application.session.repository.session import SessionRepository
-from identity.application.session.service.session import SessionService
-from identity.application.sso.service.sso import SSOService
-from identity.application.tenant.repository.tenant import TenantRepository
-from identity.core.middleware import cross_check_jwt_tenant
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
+from identity.features.audit.repository import AuditRepository
+from identity.features.auth.security import cross_check_jwt_tenant
+from identity.features.organizations.repository import TenantRepository
+from identity.features.sessions.repository import SessionRepository
+from identity.features.users.repository import UserRepository
 from skyrict_common.exceptions import AuthenticationError
+
+if TYPE_CHECKING:
+    from identity.features.audit.service import AuditService
+    from identity.features.auth.service import AuthenticationService, TokenService
+    from identity.features.organizations.service import TenantService
+    from identity.features.sessions.service import SessionService
+    from identity.features.users.service import UserService
 
 security = HTTPBearer(auto_error=False)
 
@@ -90,11 +94,14 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
 
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
+        user_repo: UserRepository = Depends(get_user_repo),
     ) -> dict[str, Any]:
-        authz = AuthorizationService(UserRepository(db))
-        await authz.require_permission(
-            user_id=current_user["user_id"],
+        from identity.features.roles.service import AuthorizationService
+
+        user = await user_repo.get_by_id(current_user["user_id"])
+        authz = AuthorizationService()
+        authz.require_permission(
+            user_is_active=user is not None and user.is_active,
             permission=permission,
             tenant_id=current_user["tenant_id"],
         )
@@ -103,7 +110,7 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
     return _check
 
 
-# --- Repository/Service deps ---
+# --- Repository deps ---
 
 
 def get_user_repo(db: AsyncSession = Depends(get_db)) -> UserRepository:
@@ -122,11 +129,18 @@ def get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditRepository:
     return AuditRepository(db)
 
 
+# --- Service deps (feature services imported at call sites) ---
+
+
 def get_token_service(session_repo: SessionRepository = Depends(get_session_repo)) -> TokenService:
+    from identity.features.auth.service import TokenService
+
     return TokenService(session_repo)
 
 
 def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:
+    from identity.features.audit.service import AuditService
+
     return AuditService(audit_repo)
 
 
@@ -136,22 +150,26 @@ def get_authn_service(
     token_service: TokenService = Depends(get_token_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationService:
+    from identity.features.auth.service import AuthenticationService
+
     return AuthenticationService(user_repo, tenant_repo, token_service, audit_service)
 
 
-def get_mfa_service(user_repo: UserRepository = Depends(get_user_repo)) -> MFAService:
-    return MFAService(user_repo)
+def get_user_service(user_repo: UserRepository = Depends(get_user_repo)) -> UserService:
+    from identity.features.users.service import UserService
+
+    return UserService(user_repo)
+
+
+def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo)) -> TenantService:
+    from identity.features.organizations.service import TenantService
+
+    return TenantService(tenant_repo)
 
 
 def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repo),
 ) -> SessionService:
+    from identity.features.sessions.service import SessionService
+
     return SessionService(session_repo)
-
-
-def get_passkey_service(user_repo: UserRepository = Depends(get_user_repo)) -> PasskeyService:
-    return PasskeyService(user_repo)
-
-
-def get_sso_service(user_repo: UserRepository = Depends(get_user_repo)) -> SSOService:
-    return SSOService(user_repo)

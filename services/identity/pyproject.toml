@@ -26,6 +26,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "httpx>=0.27,<1",
     "skyrict-common",
+    "skyrict-events",
     "structlog>=24.0,<25",
     "email-validator>=2.3.0",
     "aiosqlite>=0.22.1",
@@ -37,6 +38,7 @@ identity = "identity.cli:app"
 
 [tool.uv.sources]
 skyrict-common = { workspace = true }
+skyrict-events = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/identity"]

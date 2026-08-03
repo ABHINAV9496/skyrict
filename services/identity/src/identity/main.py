@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import every ORM model so SQLAlchemy can configure cross-module relationships
-# before the first query (see identity/db/models.py).
-import identity.db.models  # noqa: F401
+# before the first query (see identity/models/__init__.py).
+import identity.models  # noqa: F401
+from identity.api.lifespan import lifespan
+from identity.api.middleware import RequestIdMiddleware, TenantContextMiddleware
 from identity.api.v1.router import api_router
 from identity.core.config import Environment, settings
 from identity.core.constants import SERVICE_NAME, SERVICE_VERSION
@@ -20,8 +22,6 @@ from identity.core.exceptions import (
     skyrict_error_handler,
     unhandled_error_handler,
 )
-from identity.core.lifespan import lifespan
-from identity.core.middleware import RequestIdMiddleware, TenantContextMiddleware
 
 
 def create_app() -> FastAPI:

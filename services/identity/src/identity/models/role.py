@@ -8,7 +8,7 @@ from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, false, tex
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from identity.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class RoleModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):

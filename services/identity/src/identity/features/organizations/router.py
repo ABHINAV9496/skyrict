@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_tenant_service
+from identity.core.tenant_context import get_current_tenant
 from identity.features.organizations.schemas import TenantCreateRequest, TenantResponse
 from identity.features.organizations.service import TenantService
 from skyrict_common.schemas import ResponseEnvelope
@@ -18,11 +19,10 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
 async def get_my_organization(
     current_user: dict[str, Any] = Depends(get_current_user),
     tenant_svc: TenantService = Depends(get_tenant_service),
+    tenant_id: str = Depends(get_current_tenant),
 ) -> ResponseEnvelope[TenantResponse]:
     """Get the current user's organization."""
-    from identity.core.tenant_context import TenantContext
-
-    tenant = await tenant_svc.get_organization(TenantContext.get())
+    tenant = await tenant_svc.get_organization(tenant_id)
     return ResponseEnvelope(data=TenantResponse.model_validate(tenant))
 
 

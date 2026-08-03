@@ -20,9 +20,7 @@ async def list_sessions(
     session_svc: SessionService = Depends(get_session_service),
 ) -> ResponseEnvelope[list[dict[str, Any]]]:
     """List all active sessions for the current user."""
-    import uuid
-
-    sessions = await session_svc.list_user_sessions(uuid.UUID(current_user["user_id"]))
+    sessions = await session_svc.list_user_sessions(current_user["user_id"])
     return ResponseEnvelope(
         data=[
             {
@@ -54,7 +52,5 @@ async def revoke_all_sessions(
     session_svc: SessionService = Depends(get_session_service),
 ) -> ResponseEnvelope[None]:
     """Revoke all sessions for the current user (force logout everywhere)."""
-    import uuid
-
-    await session_svc.revoke_all_sessions(uuid.UUID(current_user["user_id"]))
+    await session_svc.revoke_all_sessions(current_user["user_id"])
     return ResponseEnvelope(message="All sessions revoked")

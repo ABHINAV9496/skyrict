@@ -94,11 +94,11 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
 
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
+        user_repo: UserRepository = Depends(get_user_repo),
     ) -> dict[str, Any]:
         from identity.features.roles.service import AuthorizationService
 
-        user = await UserRepository(db).get_by_id(current_user["user_id"])
+        user = await user_repo.get_by_id(current_user["user_id"])
         authz = AuthorizationService()
         authz.require_permission(
             user_is_active=user is not None and user.is_active,

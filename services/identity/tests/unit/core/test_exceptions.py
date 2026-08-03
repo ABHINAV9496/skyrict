@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -35,9 +36,19 @@ class TeamNotFoundError(NotFoundError):
 @pytest.fixture
 def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     # Handler tests exercise RFC 7807 mapping, not tenant resolution. Stub the
-    # middleware's tenant lookup (a direct TenantModel query) so these tests
-    # run without a database.
-    fake_tenant = SimpleNamespace(id=uuid.uuid4(), is_active=True)
+    # middleware's tenant lookup (TenantRepository.get_by_slug) so these tests
+    # run without a database. The fake model must expose every field the
+    # repository's ORM->entity mapper reads.
+    now = datetime.now(UTC)
+    fake_tenant = SimpleNamespace(
+        id=uuid.uuid4(),
+        name="Default Org",
+        slug="default",
+        is_active=True,
+        plan_tier="free",
+        created_at=now,
+        updated_at=now,
+    )
 
     class _FakeResult:
         def __init__(self, tenant: object) -> None:

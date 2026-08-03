@@ -18,7 +18,6 @@ import re
 import uuid
 
 import structlog
-from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -38,7 +37,7 @@ from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
 from identity.features.auth.security import cross_check_jwt_tenant
-from identity.models.tenant import TenantModel
+from identity.features.organizations.repository import TenantRepository
 
 logger = structlog.get_logger("identity.middleware")
 
@@ -157,8 +156,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         # --- 3. Verify the tenant exists and is active ---
         async with async_session_factory() as session:
-            stmt = select(TenantModel).where(TenantModel.slug == slug)
-            tenant = (await session.execute(stmt)).scalar_one_or_none()
+            tenant = await TenantRepository(session).get_by_slug(slug)
             if tenant is None:
                 raise TenantNotFoundError(f"No tenant found for slug '{slug}'")
             if not tenant.is_active:

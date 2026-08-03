@@ -1,8 +1,5 @@
-export default function HomePage() {
-  return (
-    <main>
-      <h1>Skyrict</h1>
-      <p>AI-native business operations platform</p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+
+export default function Home() {
+  redirect("/marketing");
 }

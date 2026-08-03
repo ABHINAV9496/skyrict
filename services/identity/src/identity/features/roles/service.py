@@ -1,13 +1,22 @@
-"""Authorization service — permission checks, RBAC enforcement.
+"""Role management service — custom role CRUD business rules.
 
-Pure and stateless: callers resolve the subject's active state (and, later,
-their roles) and pass it in, so the roles feature never depends on another
-feature's repository.
+``AuthorizationService`` stays pure and stateless (permission checks).
+``RoleManagementService`` owns role-creation rules and persists through the
+``RoleRepositoryPort``.
 """
 
 from __future__ import annotations
 
-from skyrict_common.exceptions import AuthorizationError
+import uuid
+from typing import TYPE_CHECKING
+
+from identity.core.constants import SYSTEM_ROLE_NAMES
+from identity.domain.entities import Role
+from skyrict_common.exceptions import AuthorizationError, ValidationError
+
+if TYPE_CHECKING:
+    from identity.features.roles.ports import RoleRepositoryPort
+    from identity.features.roles.schemas import RoleCreateRequest
 
 
 class AuthorizationService:
@@ -28,3 +37,34 @@ class AuthorizationService:
         self.check_permission(
             user_is_active=user_is_active, permission=permission, tenant_id=tenant_id
         )
+
+
+class RoleManagementService:
+    """Encapsulates custom-role creation and listing business rules."""
+
+    def __init__(self, role_repo: RoleRepositoryPort) -> None:
+        self.role_repo = role_repo
+
+    async def create_custom_role(self, tenant_id: str | uuid.UUID, body: RoleCreateRequest) -> Role:
+        """Create a custom role, rejecting reserved system names and duplicates."""
+        if body.name in SYSTEM_ROLE_NAMES:
+            raise ValidationError(f"'{body.name}' is a reserved system role")
+
+        existing = await self.role_repo.get_by_name(tenant_id, body.name)
+        if existing is not None:
+            raise ValidationError(f"Role '{body.name}' already exists")
+
+        return await self.role_repo.create(
+            Role(
+                tenant_id=uuid.UUID(str(tenant_id)),
+                name=body.name,
+                permissions=body.permissions,
+                is_system_role=False,
+            )
+        )
+
+    async def list_roles(
+        self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
+    ) -> list[Role]:
+        """List all roles (system + custom) for a tenant."""
+        return await self.role_repo.list_by_tenant(tenant_id, offset=offset, limit=limit)

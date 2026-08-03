@@ -103,6 +103,21 @@ class Settings(BaseSettings):
     # --- Rate limiting ---
     RATE_LIMIT_LOGIN: int = Field(default=5, description="max login attempts per window")
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=300, description="rate limit window")
+    RATE_LIMIT_REGISTER: int = Field(
+        default=5, description="max self-service registrations per IP per window"
+    )
+    RATE_LIMIT_REGISTER_WINDOW_SECONDS: int = Field(
+        default=3600, description="register rate limit window (seconds)"
+    )
+
+    # --- Email verification ---
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60, description="email verification token TTL (minutes)"
+    )
+    EMAIL_VERIFICATION_BASE_URL: str = Field(
+        default="",
+        description="base URL for verification links, e.g. https://app.skyrict.io/verify-email",
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_private_key: str = ""

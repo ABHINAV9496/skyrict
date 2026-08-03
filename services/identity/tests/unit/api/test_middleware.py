@@ -157,8 +157,11 @@ class TestIsTenantRequiredPath:
     def test_login_requires_tenant(self):
         assert is_tenant_required_path("/api/v1/auth/login") is True
 
-    def test_register_requires_tenant(self):
-        assert is_tenant_required_path("/api/v1/auth/register") is True
+    def test_register_skipped(self):
+        assert is_tenant_required_path("/api/v1/auth/register") is False
+
+    def test_verify_email_skipped(self):
+        assert is_tenant_required_path("/api/v1/auth/verify-email") is False
 
     def test_users_me_requires_tenant(self):
         assert is_tenant_required_path("/api/v1/users/me") is True

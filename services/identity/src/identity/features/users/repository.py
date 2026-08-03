@@ -102,6 +102,7 @@ class UserRepository(SqlRepository):
         if email is not None:
             model.email = email
         await self.session.flush()
+        await self.session.refresh(model)
         return _from_orm(model)
 
     async def update_password_hash(self, user_id: str | uuid.UUID, password_hash: str) -> User:
@@ -111,6 +112,17 @@ class UserRepository(SqlRepository):
             raise UserNotFoundError("User not found")
         model.password_hash = password_hash
         await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def mark_verified(self, user_id: str | uuid.UUID) -> User:
+        """Mark the user's email as verified (idempotent) and flush."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        model.is_verified = True
+        await self.session.flush()
+        await self.session.refresh(model)
         return _from_orm(model)
 
     async def list_active(

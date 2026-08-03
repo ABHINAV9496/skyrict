@@ -42,6 +42,7 @@ os.environ.setdefault(
     "postgresql+asyncpg://skyrict:Skyrict%4011419@localhost:5432/skyrict_identity",
 )
 os.environ.setdefault("IDENTITY_REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("IDENTITY_RATE_LIMIT_REGISTER", "10000")
 os.environ.setdefault("IDENTITY_JWT_PRIVATE_KEY_PATH", str(_KEY_DIR / "private.pem"))
 os.environ.setdefault("IDENTITY_JWT_PUBLIC_KEY_PATH", str(_KEY_DIR / "public.pem"))
 os.environ.setdefault("IDENTITY_JWKS_ISSUER", "https://auth.test.skyrict.io")
@@ -89,6 +90,9 @@ async def client():
     except (ImportError, ModuleNotFoundError) as exc:
         pytest.skip(f"identity application unavailable: {exc}")
 
-    transport = ASGITransport(app=app)
+    # Do not re-raise server exceptions into the test: ServerErrorMiddleware
+    # always re-raises after emitting its 500 (errors.py), so tests must be
+    # able to inspect the sanitized response (e.g. orphan-rollback checks).
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client

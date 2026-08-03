@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 
 import factory
 
-from identity.application.auth.models.user import UserModel
-from identity.application.session.models.session import SessionModel
-from identity.application.tenant.models.tenant import TenantModel
 from identity.core.security import hash_password
+from identity.models.session import SessionModel
+from identity.models.tenant import TenantModel
+from identity.models.user import UserModel
 
 
 class UserFactory(factory.Factory):
@@ -20,8 +20,9 @@ class UserFactory(factory.Factory):
         model = UserModel
 
     id = factory.LazyFunction(uuid.uuid4)
+    tenant_id = factory.LazyFunction(uuid.uuid4)
     email = factory.Sequence(lambda n: f"user{n}@test.com")
-    hashed_password = factory.LazyFunction(lambda: hash_password("TestPassword123!"))
+    password_hash = factory.LazyFunction(lambda: hash_password("TestPassword123!"))
     full_name = factory.Faker("name")
     is_active = True
     is_verified = False
@@ -41,7 +42,7 @@ class TenantFactory(factory.Factory):
     name = factory.Sequence(lambda n: f"Test Org {n}")
     slug = factory.Sequence(lambda n: f"test-org-{n}")
     is_active = True
-    plan = "free"
+    plan_tier = "free"
     created_at = factory.LazyFunction(lambda: datetime.now(UTC))
     updated_at = factory.LazyFunction(lambda: datetime.now(UTC))
 
@@ -56,8 +57,13 @@ class SessionFactory(factory.Factory):
     user_id = factory.LazyFunction(uuid.uuid4)
     tenant_id = factory.LazyFunction(uuid.uuid4)
     refresh_token_hash = factory.LazyFunction(lambda: hash_password("refresh-token"))
+    device_info = None
     user_agent = "TestAgent/1.0"
     ip_address = "127.0.0.1"
+    location = None
     is_active = True
+    last_active_at = factory.LazyFunction(lambda: datetime.now(UTC))
+    revoked_at = None
+    expires_at = factory.LazyFunction(lambda: datetime.now(UTC))
     created_at = factory.LazyFunction(lambda: datetime.now(UTC))
     updated_at = factory.LazyFunction(lambda: datetime.now(UTC))

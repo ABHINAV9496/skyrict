@@ -17,11 +17,11 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.api.middleware import cross_check_jwt_tenant
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
 from identity.features.audit.repository import AuditRepository
+from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.organizations.repository import TenantRepository
 from identity.features.sessions.repository import SessionRepository
 from identity.features.users.repository import UserRepository
@@ -30,10 +30,9 @@ from skyrict_common.exceptions import AuthenticationError
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.service import AuthenticationService, TokenService
-    from identity.features.mfa.service import MFAService
-    from identity.features.passkeys.service import PasskeyService
+    from identity.features.organizations.service import TenantService
     from identity.features.sessions.service import SessionService
-    from identity.features.sso.service import SSOService
+    from identity.features.users.service import UserService
 
 security = HTTPBearer(auto_error=False)
 
@@ -99,9 +98,10 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
     ) -> dict[str, Any]:
         from identity.features.roles.service import AuthorizationService
 
-        authz = AuthorizationService(UserRepository(db))
-        await authz.require_permission(
-            user_id=current_user["user_id"],
+        user = await UserRepository(db).get_by_id(current_user["user_id"])
+        authz = AuthorizationService()
+        authz.require_permission(
+            user_is_active=user is not None and user.is_active,
             permission=permission,
             tenant_id=current_user["tenant_id"],
         )
@@ -155,10 +155,16 @@ def get_authn_service(
     return AuthenticationService(user_repo, tenant_repo, token_service, audit_service)
 
 
-def get_mfa_service(user_repo: UserRepository = Depends(get_user_repo)) -> MFAService:
-    from identity.features.mfa.service import MFAService
+def get_user_service(user_repo: UserRepository = Depends(get_user_repo)) -> UserService:
+    from identity.features.users.service import UserService
 
-    return MFAService(user_repo)
+    return UserService(user_repo)
+
+
+def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo)) -> TenantService:
+    from identity.features.organizations.service import TenantService
+
+    return TenantService(tenant_repo)
 
 
 def get_session_service(
@@ -167,15 +173,3 @@ def get_session_service(
     from identity.features.sessions.service import SessionService
 
     return SessionService(session_repo)
-
-
-def get_passkey_service(user_repo: UserRepository = Depends(get_user_repo)) -> PasskeyService:
-    from identity.features.passkeys.service import PasskeyService
-
-    return PasskeyService(user_repo)
-
-
-def get_sso_service(user_repo: UserRepository = Depends(get_user_repo)) -> SSOService:
-    from identity.features.sso.service import SSOService
-
-    return SSOService(user_repo)

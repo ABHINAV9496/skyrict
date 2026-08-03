@@ -1,10 +1,8 @@
-"""Passkey (WebAuthn) service — registration and authentication."""
+"""Passkey (WebAuthn) service — registration and authentication. Not yet implemented."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-
-from skyrict_common.exceptions import PasskeyError
 
 if TYPE_CHECKING:
     import uuid
@@ -13,37 +11,29 @@ if TYPE_CHECKING:
 
 
 class PasskeyService:
-    """Handles WebAuthn/FIDO2 passkey operations."""
+    """Handles WebAuthn/FIDO2 passkey operations.
+
+    The interface is stable but every operation raises NotImplementedError
+    rather than returning placeholder challenges.
+    """
 
     def __init__(self, user_repo: UserRepository) -> None:
         self.user_repo = user_repo
 
     async def start_registration(self, user_id: uuid.UUID) -> dict[str, Any]:
         """Initiate passkey registration — return challenge options."""
-        # TODO: Implement WebAuthn registration ceremony
-        # Return PublicKeyCredentialCreationOptions
-        return {
-            "challenge": "placeholder-challenge",
-            "rp": {"name": "Skyrict", "id": "skyrict.dev"},
-            "user": {"id": str(user_id)},
-        }
+        raise NotImplementedError("Passkey registration is not yet implemented")
 
     async def complete_registration(
         self, user_id: uuid.UUID, credential: dict[str, Any]
     ) -> dict[str, Any]:
         """Complete passkey registration after browser ceremony."""
-        # TODO: Verify attestation, store credential
-        raise PasskeyError("Passkey registration not yet implemented")
+        raise NotImplementedError("Passkey registration is not yet implemented")
 
     async def start_authentication(self, email: str) -> dict[str, Any]:
         """Initiate passkey authentication — return challenge options."""
-        # TODO: Implement WebAuthn authentication ceremony
-        return {
-            "challenge": "placeholder-challenge",
-            "timeout": 60000,
-        }
+        raise NotImplementedError("Passkey authentication is not yet implemented")
 
     async def complete_authentication(self, credential: dict[str, Any]) -> dict[str, Any]:
         """Complete passkey authentication after browser ceremony."""
-        # TODO: Verify assertion, return user info
-        raise PasskeyError("Passkey authentication not yet implemented")
+        raise NotImplementedError("Passkey authentication is not yet implemented")

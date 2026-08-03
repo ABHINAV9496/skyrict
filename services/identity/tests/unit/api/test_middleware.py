@@ -1,9 +1,10 @@
-"""Unit tests for tenant resolution and cross-check logic in core/middleware.py.
+"""Unit tests for tenant resolution and cross-check logic in the api middleware.
 
 Covers the pure functions (no DB): Host-subdomain derivation, environment-
 dependent slug derivation (Host vs X-Tenant-Slug), the JWT-vs-routed tenant
-cross-check, and the skip-path policy. Middleware wiring against a real
-database is exercised by tests/integration/api/test_tenant_isolation.py.
+cross-check (in features/auth/security.py), and the skip-path policy.
+Middleware wiring against a real database is exercised by
+tests/integration/api/test_tenant_isolation.py.
 """
 
 from __future__ import annotations
@@ -12,13 +13,13 @@ import pytest
 from starlette.requests import Request
 
 from identity.api.middleware import (
-    cross_check_jwt_tenant,
     derive_tenant_slug,
     is_tenant_required_path,
     resolve_tenant_slug_from_host,
 )
 from identity.core.config import Environment, settings
 from identity.core.exceptions import TenantMismatchError
+from identity.features.auth.security import cross_check_jwt_tenant
 
 
 def _make_request(headers: dict[str, str]) -> Request:

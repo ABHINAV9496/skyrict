@@ -1,58 +1,31 @@
-"""Passkey (WebAuthn) endpoints."""
+"""Passkey (WebAuthn) endpoints — not yet implemented (explicit 501)."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter, Depends
-
-from identity.api.deps import get_current_user, get_passkey_service
-from identity.features.passkeys.service import PasskeyService
-from skyrict_common.schemas import ResponseEnvelope
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/passkeys", tags=["passkeys"])
 
 
 @router.post("/register/start")
-async def start_passkey_registration(
-    current_user: dict[str, Any] = Depends(get_current_user),
-    passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def start_passkey_registration() -> None:
     """Start passkey registration — returns WebAuthn creation options."""
-    import uuid
-
-    options = await passkey_svc.start_registration(uuid.UUID(current_user["user_id"]))
-    return ResponseEnvelope(data=options)
+    raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")
 
 
 @router.post("/register/complete")
-async def complete_passkey_registration(
-    credential: dict[str, Any],
-    current_user: dict[str, Any] = Depends(get_current_user),
-    passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def complete_passkey_registration(credential: dict[str, object]) -> None:
     """Complete passkey registration after browser ceremony."""
-    import uuid
-
-    result = await passkey_svc.complete_registration(uuid.UUID(current_user["user_id"]), credential)
-    return ResponseEnvelope(data=result, message="Passkey registered")
+    raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")
 
 
 @router.post("/authenticate/start")
-async def start_passkey_authentication(
-    email: str,
-    passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def start_passkey_authentication(email: str) -> None:
     """Start passkey authentication — returns WebAuthn request options."""
-    options = await passkey_svc.start_authentication(email)
-    return ResponseEnvelope(data=options)
+    raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")
 
 
 @router.post("/authenticate/complete")
-async def complete_passkey_authentication(
-    credential: dict[str, Any],
-    passkey_svc: PasskeyService = Depends(get_passkey_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def complete_passkey_authentication(credential: dict[str, object]) -> None:
     """Complete passkey authentication after browser ceremony."""
-    result = await passkey_svc.complete_authentication(credential)
-    return ResponseEnvelope(data=result, message="Passkey authentication successful")
+    raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")

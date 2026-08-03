@@ -12,14 +12,15 @@ module-level identity.main app is never mutated. Verifies:
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
 
+import identity.api.middleware as middleware_module
 from identity.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
-from identity.features.organizations.repository import TenantRepository
 from identity.main import create_app
 from skyrict_common.exceptions import MFAVerificationError, SessionNotFoundError
 
@@ -34,13 +35,26 @@ class TeamNotFoundError(NotFoundError):
 @pytest.fixture
 def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     # Handler tests exercise RFC 7807 mapping, not tenant resolution. Stub the
-    # middleware's tenant lookup so these tests run without a database.
+    # middleware's tenant lookup (a direct TenantModel query) so these tests
+    # run without a database.
     fake_tenant = SimpleNamespace(id=uuid.uuid4(), is_active=True)
 
-    async def _fake_get_by_slug(self, slug: str) -> SimpleNamespace:
-        return fake_tenant
+    class _FakeResult:
+        def __init__(self, tenant: object) -> None:
+            self._tenant = tenant
 
-    monkeypatch.setattr(TenantRepository, "get_by_slug", _fake_get_by_slug)
+        def scalar_one_or_none(self) -> object:
+            return self._tenant
+
+    class _FakeSession:
+        async def execute(self, stmt: object) -> _FakeResult:
+            return _FakeResult(fake_tenant)
+
+    @asynccontextmanager
+    async def _noop_db_session():
+        yield _FakeSession()
+
+    monkeypatch.setattr(middleware_module, "async_session_factory", _noop_db_session)
 
     router = APIRouter(prefix="/test")
 

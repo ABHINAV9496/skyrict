@@ -6,10 +6,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from identity.api.deps import get_current_user, get_user_repo
-from identity.features.users.repository import UserRepository
+from identity.api.deps import get_current_user, get_user_service
 from identity.features.users.schemas import ChangePasswordRequest, UserResponse, UserUpdateRequest
-from skyrict_common.exceptions import UserNotFoundError
+from identity.features.users.service import UserService
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -18,12 +17,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=ResponseEnvelope[UserResponse])
 async def get_my_profile(
     current_user: dict[str, Any] = Depends(get_current_user),
-    user_repo: UserRepository = Depends(get_user_repo),
+    user_svc: UserService = Depends(get_user_service),
 ) -> ResponseEnvelope[UserResponse]:
     """Get the current user's profile."""
-    user = await user_repo.get_by_id(current_user["user_id"])
-    if user is None:
-        raise UserNotFoundError()
+    user = await user_svc.get_profile(current_user["user_id"])
     return ResponseEnvelope(data=UserResponse.model_validate(user))
 
 
@@ -31,17 +28,10 @@ async def get_my_profile(
 async def update_my_profile(
     body: UserUpdateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
-    user_repo: UserRepository = Depends(get_user_repo),
+    user_svc: UserService = Depends(get_user_service),
 ) -> ResponseEnvelope[UserResponse]:
     """Update the current user's profile."""
-    user = await user_repo.get_by_id(current_user["user_id"])
-    if user is None:
-        raise UserNotFoundError()
-    if body.full_name is not None:
-        user.full_name = body.full_name
-    if body.email is not None:
-        user.email = body.email
-    await user_repo.commit()
+    user = await user_svc.update_profile(current_user["user_id"], body)
     return ResponseEnvelope(data=UserResponse.model_validate(user), message="Profile updated")
 
 
@@ -49,19 +39,10 @@ async def update_my_profile(
 async def change_password(
     body: ChangePasswordRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
-    user_repo: UserRepository = Depends(get_user_repo),
+    user_svc: UserService = Depends(get_user_service),
 ) -> ResponseEnvelope[None]:
     """Change the current user's password."""
-    from identity.core.security import hash_password, verify_password
-
-    user = await user_repo.get_by_id(current_user["user_id"])
-    if user is None:
-        raise UserNotFoundError()
-    if not verify_password(body.current_password, user.password_hash):
-        from skyrict_common.exceptions import InvalidPasswordError
-
-        raise InvalidPasswordError("Current password is incorrect")
-
-    user.password_hash = hash_password(body.new_password)
-    await user_repo.commit()
+    await user_svc.change_password(
+        current_user["user_id"], body.current_password, body.new_password
+    )
     return ResponseEnvelope(message="Password changed successfully")

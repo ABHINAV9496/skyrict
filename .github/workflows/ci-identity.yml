@@ -47,6 +47,9 @@ jobs:
       - name: Mypy
         run: uv run mypy services/identity/src/
 
+      - name: Import Linter
+        run: uv run lint-imports
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest

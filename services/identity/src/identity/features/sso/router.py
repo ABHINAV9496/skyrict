@@ -1,55 +1,31 @@
-"""SSO endpoints — SAML/OIDC identity provider callbacks."""
+"""SSO endpoints — SAML/OIDC identity provider callbacks, not yet implemented."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter, Depends
-
-from identity.api.deps import get_sso_service
-from identity.features.sso.service import SSOService
-from skyrict_common.schemas import ResponseEnvelope
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/sso", tags=["sso"])
 
 
 @router.post("/oidc/start")
-async def start_oidc(
-    provider: str,
-    redirect_uri: str,
-    sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def start_oidc(provider: str, redirect_uri: str) -> None:
     """Start OIDC SSO flow — returns authorization URL."""
-    result = await sso_svc.start_oidc_flow(provider, redirect_uri)
-    return ResponseEnvelope(data=result)
+    raise HTTPException(status_code=501, detail="SSO is not yet implemented")
 
 
 @router.post("/oidc/callback")
-async def oidc_callback(
-    code: str,
-    state: str,
-    sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def oidc_callback(code: str, state: str) -> None:
     """Handle OIDC callback — exchange code for tokens, return session."""
-    result = await sso_svc.handle_oidc_callback(code, state)
-    return ResponseEnvelope(data=result, message="SSO login successful")
+    raise HTTPException(status_code=501, detail="SSO is not yet implemented")
 
 
 @router.post("/saml/start")
-async def start_saml(
-    provider: str,
-    sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def start_saml(provider: str) -> None:
     """Start SAML SSO flow."""
-    result = await sso_svc.start_saml_flow(provider)
-    return ResponseEnvelope(data=result)
+    raise HTTPException(status_code=501, detail="SSO is not yet implemented")
 
 
 @router.post("/saml/callback")
-async def saml_callback(
-    saml_response: str,
-    sso_svc: SSOService = Depends(get_sso_service),
-) -> ResponseEnvelope[dict[str, Any]]:
+async def saml_callback(saml_response: str) -> None:
     """Handle SAML callback."""
-    result = await sso_svc.handle_saml_callback(saml_response)
-    return ResponseEnvelope(data=result, message="SAML SSO login successful")
+    raise HTTPException(status_code=501, detail="SSO is not yet implemented")

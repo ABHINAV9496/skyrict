@@ -20,20 +20,36 @@ The product handbook describes AuthN, AuthZ, Token, User, Session, and Audit as 
 
 ## Decision
 
-Build **one `identity` service** with six internal module layers:
+Build **one `identity` service** using a feature-first layout — each domain owns its router, schemas, service, and repository:
 
 ```
 services/identity/src/identity/
-├── services/
-│   ├── authn_service.py    # Authentication
-│   ├── authz_service.py    # Authorization
-│   ├── token_service.py    # JWT management
-│   ├── mfa_service.py      # Multi-factor auth
-│   ├── session_service.py  # Session tracking
-│   └── audit_service.py    # Audit logging
+├── api/          # HTTP boundary: app factory, middleware, DI composition root (deps.py)
+├── core/         # shared primitives: config, security, exceptions, tenant context
+├── db/           # async engine/session + generic repository
+├── models/       # SQLAlchemy ORM models
+├── domain/       # value objects
+├── events/       # skyrict-events producers/consumers/handlers
+└── features/
+    ├── auth/           # Authentication + JWT lifecycle
+    ├── users/          # User profiles
+    ├── organizations/  # Tenants
+    ├── sessions/       # Session tracking
+    ├── roles/          # RBAC / authorization
+    ├── audit/          # Audit logging
+    ├── mfa/            # Multi-factor auth (not yet implemented — 501)
+    ├── passkeys/       # WebAuthn (not yet implemented — 501)
+    └── sso/            # SAML/OIDC (not yet implemented — 501)
 ```
 
 Split into real microservices **only if** we hit a concrete scaling reason (e.g., audit logging throughput exceeds identity service capacity).
+
+## Architecture enforcement
+
+The boundaries are enforced in CI with import-linter (root `pyproject.toml`):
+
+- **Feature independence**: the nine `identity.features.*` packages never import one another, even indirectly. The `api/deps.py` composition root is the sole cross-feature wiring point, and the mfa/passkeys/sso features respond with explicit 501s until implemented.
+- **Foundations**: `core`, `db`, `models`, `domain`, `events` never depend on `features` or `api`.
 
 ## Consequences
 

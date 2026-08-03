@@ -18,6 +18,7 @@ import re
 import uuid
 
 import structlog
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -28,7 +29,6 @@ from identity.core.exceptions import (
     SkyrictError,
     TenantContextMissingError,
     TenantDisabledError,
-    TenantMismatchError,
     TenantNotFoundError,
     TokenExpiredError,
     TokenInvalidError,
@@ -37,7 +37,8 @@ from identity.core.exceptions import (
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
-from identity.features.organizations.repository import TenantRepository
+from identity.features.auth.security import cross_check_jwt_tenant
+from identity.models.tenant import TenantModel
 
 logger = structlog.get_logger("identity.middleware")
 
@@ -101,18 +102,6 @@ def derive_tenant_slug(request: Request) -> str | None:
     return slug
 
 
-def cross_check_jwt_tenant(jwt_tenant_id: str | None, routed_tenant_id: str) -> None:
-    """Reject when a verified JWT's tenant claim differs from the routed tenant.
-
-    Raises TenantMismatchError (401); processing stops. A missing JWT claim is
-    treated as a mismatch (a valid token must always carry its tenant).
-    """
-    if jwt_tenant_id is None or jwt_tenant_id != routed_tenant_id:
-        raise TenantMismatchError(
-            "Token tenant does not match the tenant resolved from the request routing."
-        )
-
-
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Attach a unique request ID to every request/response for tracing."""
 
@@ -168,7 +157,8 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         # --- 3. Verify the tenant exists and is active ---
         async with async_session_factory() as session:
-            tenant = await TenantRepository(session).get_by_slug(slug)
+            stmt = select(TenantModel).where(TenantModel.slug == slug)
+            tenant = (await session.execute(stmt)).scalar_one_or_none()
             if tenant is None:
                 raise TenantNotFoundError(f"No tenant found for slug '{slug}'")
             if not tenant.is_active:

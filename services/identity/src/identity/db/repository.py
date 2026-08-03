@@ -1,7 +1,11 @@
-"""Generic async repository base class.
+"""SQLAlchemy repository bases.
 
-Domain repositories inherit from :class:`BaseRepository` for the shared CRUD
-operations; domain-specific queries live in the subclasses.
+- :class:`SqlRepository`: thin base for feature repository adapters. Holds the
+  request session; concrete repositories own their persistence methods and
+  map ORM models to/from domain entities. The request-scoped commit lives in
+  the ``get_db`` dependency; ``commit`` here is for bootstrap scripts only.
+- :class:`BaseRepository`: generic CRUD over a single ORM model, used by
+  bootstrap tooling (e.g. role seeding) where no feature repository exists.
 """
 
 from __future__ import annotations
@@ -14,6 +18,22 @@ from identity.models.base import Base
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class SqlRepository:
+    """Minimal SQLAlchemy-backed repository base.
+
+    Feature repositories subclass this for the shared session wiring. They
+    expose persistence methods that accept and return domain entities, so
+    SQLAlchemy never leaks above the repository layer.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def commit(self) -> None:
+        """Commit the current transaction (bootstrap scripts only)."""
+        await self.session.commit()
 
 
 class BaseRepository[M: Base]:

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import uuid
 
-    from identity.features.users.repository import UserRepository
+    from identity.features.users.ports import UserRepositoryPort
 
 
 class PasskeyService:
@@ -17,7 +17,7 @@ class PasskeyService:
     rather than returning placeholder challenges.
     """
 
-    def __init__(self, user_repo: UserRepository) -> None:
+    def __init__(self, user_repo: UserRepositoryPort) -> None:
         self.user_repo = user_repo
 
     async def start_registration(self, user_id: uuid.UUID) -> dict[str, Any]:

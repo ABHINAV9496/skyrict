@@ -1,4 +1,8 @@
-"""Audit service — log all security-relevant actions."""
+"""Audit service — log all security-relevant actions.
+
+Owns the business rules (tenant-context gating). All persistence goes through
+the ``AuditRepositoryPort``; no ORM models or sessions are touched here.
+"""
 
 from __future__ import annotations
 
@@ -7,14 +11,14 @@ from typing import TYPE_CHECKING, Any
 from identity.core.tenant_context import TenantContext
 
 if TYPE_CHECKING:
-    from identity.features.audit.repository import AuditRepository
-    from identity.models.audit_log import AuditLogModel
+    from identity.domain.entities import AuditLog
+    from identity.features.audit.ports import AuditRepositoryPort
 
 
 class AuditService:
     """Logs security-relevant actions for compliance and debugging."""
 
-    def __init__(self, audit_repo: AuditRepository) -> None:
+    def __init__(self, audit_repo: AuditRepositoryPort) -> None:
         self.audit_repo = audit_repo
 
     async def log(
@@ -48,6 +52,6 @@ class AuditService:
 
     async def get_user_audit_log(
         self, user_id: str, *, offset: int = 0, limit: int = 50
-    ) -> list[AuditLogModel]:
+    ) -> list[AuditLog]:
         """Retrieve audit entries for a user."""
         return await self.audit_repo.get_by_user(user_id, offset=offset, limit=limit)

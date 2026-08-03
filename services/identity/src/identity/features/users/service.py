@@ -1,4 +1,9 @@
-"""User service — profile and credential management."""
+"""User service — profile and credential management.
+
+Owns the business rules (password verification, not-found handling). All
+persistence goes through the ``UserRepositoryPort``; no ORM models or sessions
+are touched here.
+"""
 
 from __future__ import annotations
 
@@ -10,33 +15,31 @@ from skyrict_common.exceptions import InvalidPasswordError, UserNotFoundError
 if TYPE_CHECKING:
     import uuid
 
-    from identity.features.users.repository import UserRepository
+    from identity.domain.entities import User
+    from identity.features.users.ports import UserRepositoryPort
     from identity.features.users.schemas import UserUpdateRequest
-    from identity.models.user import UserModel
 
 
 class UserService:
     """Encapsulates user profile and password-change business rules."""
 
-    def __init__(self, user_repo: UserRepository) -> None:
+    def __init__(self, user_repo: UserRepositoryPort) -> None:
         self.user_repo = user_repo
 
-    async def get_profile(self, user_id: str | uuid.UUID) -> UserModel:
+    async def get_profile(self, user_id: str | uuid.UUID) -> User:
         """Fetch a user profile, raising UserNotFoundError when absent."""
         user = await self.user_repo.get_by_id(user_id)
         if user is None:
             raise UserNotFoundError()
         return user
 
-    async def update_profile(self, user_id: str | uuid.UUID, body: UserUpdateRequest) -> UserModel:
+    async def update_profile(self, user_id: str | uuid.UUID, body: UserUpdateRequest) -> User:
         """Apply the provided profile changes and persist them."""
-        user = await self.get_profile(user_id)
-        if body.full_name is not None:
-            user.full_name = body.full_name
-        if body.email is not None:
-            user.email = body.email
-        await self.user_repo.commit()
-        return user
+        return await self.user_repo.update_profile(
+            user_id,
+            full_name=body.full_name,
+            email=body.email,
+        )
 
     async def change_password(
         self, user_id: str | uuid.UUID, current_password: str, new_password: str
@@ -45,5 +48,4 @@ class UserService:
         user = await self.get_profile(user_id)
         if not verify_password(current_password, user.password_hash):
             raise InvalidPasswordError("Current password is incorrect")
-        user.password_hash = hash_password(new_password)
-        await self.user_repo.commit()
+        await self.user_repo.update_password_hash(user_id, hash_password(new_password))

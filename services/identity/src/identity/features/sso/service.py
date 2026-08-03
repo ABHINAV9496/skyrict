@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from identity.features.users.repository import UserRepository
+    from identity.features.users.ports import UserRepositoryPort
 
 
 class SSOService:
@@ -15,7 +15,7 @@ class SSOService:
     rather than returning placeholder authorization URLs.
     """
 
-    def __init__(self, user_repo: UserRepository) -> None:
+    def __init__(self, user_repo: UserRepositoryPort) -> None:
         self.user_repo = user_repo
 
     async def start_oidc_flow(self, provider: str, redirect_uri: str) -> dict[str, Any]:

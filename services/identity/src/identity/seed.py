@@ -14,9 +14,8 @@ import structlog
 from identity.core.config import settings
 from identity.core.security import hash_password
 from identity.db.session import async_session_factory
+from identity.domain.entities import Tenant, User
 from identity.models.role import RoleModel
-from identity.models.tenant import TenantModel
-from identity.models.user import UserModel
 
 logger = structlog.get_logger("identity.seed")
 
@@ -42,12 +41,12 @@ async def seed_default_tenant() -> None:
             logger.info("seed.tenant.exists", slug="default")
             return
 
-        tenant = TenantModel(
-            id=uuid.UUID(settings.DEFAULT_TENANT_ID),
+        tenant = Tenant(
             name="Default Organization",
             slug="default",
             is_active=True,
             plan_tier="free",
+            id=uuid.UUID(settings.DEFAULT_TENANT_ID),
         )
         await repo.create(tenant)
         await repo.commit()
@@ -94,7 +93,7 @@ async def seed_admin_user() -> None:
             logger.info("seed.admin.exists")
             return
 
-        user = UserModel(
+        user = User(
             tenant_id=default_tenant_id,
             email="admin@skyrict.io",
             password_hash=hash_password("Admin123!"),

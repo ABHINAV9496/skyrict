@@ -19,8 +19,8 @@ from identity.core.security import (
     verify_password,
 )
 from identity.core.tenant_context import TenantContext
+from identity.domain.entities import User
 from identity.domain.value_objects import TokenPair
-from identity.models.user import UserModel
 from skyrict_common.exceptions import (
     InvalidPasswordError,
     TokenExpiredError,
@@ -33,9 +33,9 @@ from skyrict_common.exceptions import (
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.schemas import LoginRequest, RegisterRequest
-    from identity.features.organizations.repository import TenantRepository
-    from identity.features.sessions.repository import SessionRepository
-    from identity.features.users.repository import UserRepository
+    from identity.features.organizations.ports import TenantRepositoryPort
+    from identity.features.sessions.ports import SessionRepositoryPort
+    from identity.features.users.ports import UserRepositoryPort
 
 
 class AuthenticationService:
@@ -43,8 +43,8 @@ class AuthenticationService:
 
     def __init__(
         self,
-        user_repo: UserRepository,
-        tenant_repo: TenantRepository,
+        user_repo: UserRepositoryPort,
+        tenant_repo: TenantRepositoryPort,
         token_service: TokenService,
         audit_service: AuditService,
     ) -> None:
@@ -120,9 +120,9 @@ class AuthenticationService:
 
         hashed = hash_password(request.password)
 
-        user_model = await self.user_repo.create(
-            UserModel(
-                tenant_id=tenant_id,
+        user = await self.user_repo.create(
+            User(
+                tenant_id=uuid.UUID(tenant_id),
                 email=request.email,
                 password_hash=hashed,
                 full_name=request.full_name,
@@ -132,14 +132,14 @@ class AuthenticationService:
         )
 
         tokens = await self.token_service.create_token_pair(
-            user_id=str(user_model.id),
+            user_id=str(user.id),
             tenant_id=tenant_id,
         )
 
         await self.audit_service.log(
             action="auth.register.success",
-            target=f"user:{user_model.id}",
-            user_id=str(user_model.id),
+            target=f"user:{user.id}",
+            user_id=str(user.id),
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -149,14 +149,14 @@ class AuthenticationService:
             "refresh_token": tokens.refresh_token,
             "token_type": tokens.token_type,
             "expires_in": tokens.expires_in,
-            "user": user_model,
+            "user": user,
         }
 
 
 class TokenService:
     """Manages JWT token lifecycle — creation, refresh, revocation."""
 
-    def __init__(self, session_repo: SessionRepository) -> None:
+    def __init__(self, session_repo: SessionRepositoryPort) -> None:
         self.session_repo = session_repo
 
     async def create_token_pair(self, *, user_id: str, tenant_id: str) -> TokenPair:

@@ -1,15 +1,7 @@
-"""Kafka event consumers — subscribe to domain events."""
+"""Kafka event consumers — subscribe to domain events.
 
-from __future__ import annotations
-
-import structlog
-
-logger = structlog.get_logger("identity.events.consumers")
-
-
-# TODO: Implement actual Kafka consumers when libs/skyrict-events is created.
-# Each consumer should:
-# 1. Subscribe to specific topics
-# 2. Deserialize the event payload
-# 3. Handle the event (update state, trigger side effects)
-# 4. Acknowledge or retry
+The identity service has no consumers yet. When wired, consumers will subclass
+``skyrict_events.BaseConsumer`` and implement ``handle()`` for each topic the
+identity domain reacts to (e.g. ``tenant.created``, ``user.deleted``). Until
+then this package is intentionally empty.
+"""

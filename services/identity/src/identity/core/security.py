@@ -130,6 +130,27 @@ def create_refresh_token(
     return jwt.encode(payload, settings.jwt_private_key, algorithm="RS256")
 
 
+def create_email_verification_token(subject: str, *, tenant_id: str) -> str:
+    """Create a short-lived RS256 token proving intent to verify an email.
+
+    Carries ``type="email_verify"`` so consumers can reject tokens minted for
+    other purposes. Verified via :func:`verify_jwt` (the ONE decode path).
+    """
+    now = datetime.now(UTC)
+    expire = now + timedelta(minutes=settings.VERIFICATION_TOKEN_EXPIRE_MINUTES)
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "tenant_id": tenant_id,
+        "iss": settings.JWKS_ISSUER,
+        "aud": settings.JWKS_AUDIENCE,
+        "iat": now,
+        "nbf": now,
+        "exp": expire,
+        "type": "email_verify",
+    }
+    return jwt.encode(payload, settings.jwt_private_key, algorithm="RS256")
+
+
 def verify_jwt(token: str) -> TokenClaims:
     """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
 

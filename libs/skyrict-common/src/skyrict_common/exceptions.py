@@ -57,6 +57,11 @@ class MFAVerificationError(AuthenticationError):
     code = "MFA_VERIFICATION_ERROR"
 
 
+class EmailNotVerifiedError(AuthenticationError):
+    message = "Email address has not been verified"
+    code = "EMAIL_NOT_VERIFIED"
+
+
 class PasskeyError(AuthenticationError):
     message = "Passkey verification failed"
     code = "PASSKEY_ERROR"

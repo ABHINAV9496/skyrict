@@ -6,13 +6,25 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
+from sqlalchemy import delete
+
+from identity.db.session import async_session_factory
+from identity.models.tenant import TenantModel
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
-# Every non-skipped request must route through a tenant (X-Tenant-Slug in dev);
-# the autouse ``integration_db`` fixture skips the suite when Postgres is down.
+# Business routes must route through a tenant (X-Tenant-Slug in dev); the
+# autouse ``integration_db`` fixture skips the suite when Postgres is down.
+# Self-service /auth/register and /auth/verify-email bypass tenant resolution.
 _HEADERS = {"X-Tenant-Slug": "acme"}
+
+
+async def _delete_tenant_by_slug(slug: str) -> None:
+    """Remove a tenant provisioned by a test (cascades to users/roles/grants)."""
+    async with async_session_factory() as session:
+        await session.execute(delete(TenantModel).where(TenantModel.slug == slug))
+        await session.commit()
 
 
 @pytest.mark.integration
@@ -36,29 +48,51 @@ class TestAuthEndpoints:
         assert response.status_code == 422  # Validation error
 
     async def test_register_missing_fields(self, client: AsyncClient):
-        response = await client.post("/api/v1/auth/register", headers=_HEADERS, json={})
+        response = await client.post("/api/v1/auth/register", json={})
         assert response.status_code == 422
 
-    async def test_register_and_login(self, client: AsyncClient):
+    async def test_register_verify_and_login(self, client: AsyncClient):
         email = f"auth-flow-{uuid.uuid4().hex[:8]}@test.com"
+        org = f"Auth Flow {uuid.uuid4().hex[:8]}"
         register_response = await client.post(
             "/api/v1/auth/register",
-            headers=_HEADERS,
             json={
                 "email": email,
                 "password": "TestPassword123!",
                 "full_name": "Test User",
+                "organization_name": org,
             },
         )
         assert register_response.status_code == 200
+        data = register_response.json()["data"]
+        assert data["verification_pending"] is True
+        assert data["verification_token"]
+        slug = data["tenant_slug"]
 
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            headers=_HEADERS,
-            json={"email": email, "password": "TestPassword123!"},
-        )
-        assert login_response.status_code == 200
-        assert login_response.json()["data"]["access_token"]
+        try:
+            # Unverified accounts are blocked at login (403 email-not-verified).
+            blocked = await client.post(
+                "/api/v1/auth/login",
+                headers={"X-Tenant-Slug": slug},
+                json={"email": email, "password": "TestPassword123!"},
+            )
+            assert blocked.status_code == 403
+            assert blocked.json()["type"].endswith("/email-not-verified")
+
+            verify_response = await client.post(
+                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
+            )
+            assert verify_response.status_code == 200
+
+            login_response = await client.post(
+                "/api/v1/auth/login",
+                headers={"X-Tenant-Slug": slug},
+                json={"email": email, "password": "TestPassword123!"},
+            )
+            assert login_response.status_code == 200
+            assert login_response.json()["data"]["access_token"]
+        finally:
+            await _delete_tenant_by_slug(slug)
 
     async def test_get_profile_unauthorized(self, client: AsyncClient):
         # Tenant resolves (acme) but there is no token -> route dependency 401.

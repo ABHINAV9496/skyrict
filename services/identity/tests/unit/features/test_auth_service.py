@@ -6,15 +6,22 @@ import uuid
 
 import pytest
 
-from identity.core.security import hash_password
+from identity.core.config import settings
+from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
+from identity.core.security import (
+    create_access_token,
+    create_email_verification_token,
+    hash_password,
+)
 from identity.core.tenant_context import TenantContext
-from identity.domain.entities import User
+from identity.domain.entities import Role, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.schemas import LoginRequest, RegisterRequest
 from identity.features.auth.service import AuthenticationService
 from skyrict_common.exceptions import (
+    EmailNotVerifiedError,
     InvalidPasswordError,
-    UserAlreadyExistsError,
+    TokenInvalidError,
     UserDisabledError,
     UserNotFoundError,
 )
@@ -44,7 +51,8 @@ class FakeUserRepo:
         return await self.get_by_email(tenant_id, email) is not None
 
     async def create(self, user: User) -> User:
-        user.id = uuid.uuid4()
+        if user.id is None:
+            user.id = uuid.uuid4()
         self.users[user.id] = user
         self.created.append(user)
         return user
@@ -71,6 +79,93 @@ class FakeUserRepo:
             raise UserNotFoundError()
         user.password_hash = password_hash
         return user
+
+    async def mark_verified(self, user_id: str | uuid.UUID) -> User:
+        user = await self.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError()
+        user.is_verified = True
+        return user
+
+
+class FakeTenantRepo:
+    """In-memory TenantRepositoryPort double."""
+
+    def __init__(self, tenants: list[Tenant] | None = None) -> None:
+        self.tenants: dict[uuid.UUID, Tenant] = {}
+        for tenant in tenants or []:
+            if tenant.id is None:
+                tenant.id = uuid.uuid4()
+            self.tenants[tenant.id] = tenant
+        self.created: list[Tenant] = []
+
+    async def get_by_id(self, tenant_id: str | uuid.UUID) -> Tenant | None:
+        return self.tenants.get(uuid.UUID(str(tenant_id)))
+
+    async def get_by_slug(self, slug: str) -> Tenant | None:
+        for tenant in self.tenants.values():
+            if tenant.slug == slug:
+                return tenant
+        return None
+
+    async def slug_exists(self, slug: str) -> bool:
+        return await self.get_by_slug(slug) is not None
+
+    async def create(self, tenant: Tenant) -> Tenant:
+        if tenant.id is None:
+            tenant.id = uuid.uuid4()
+        self.tenants[tenant.id] = tenant
+        self.created.append(tenant)
+        return tenant
+
+
+class FakeRoleRepo:
+    """In-memory RoleRepositoryPort double."""
+
+    def __init__(self, roles_for_user: dict[uuid.UUID, list[str]] | None = None) -> None:
+        self.roles_by_user: dict[uuid.UUID, list[str]] = dict(roles_for_user or {})
+        self.created: list[Role] = []
+        self.grants: list[tuple[str, str, str, str]] = []
+
+    async def create(self, role: Role) -> Role:
+        if role.id is None:
+            role.id = uuid.uuid4()
+        self.created.append(role)
+        return role
+
+    async def get_by_id(self, role_id: str | uuid.UUID) -> Role | None:
+        for role in self.created:
+            if role.id is not None and str(role.id) == str(role_id):
+                return role
+        return None
+
+    async def get_by_name(self, tenant_id: str | uuid.UUID, name: str) -> Role | None:
+        for role in self.created:
+            if role.name == name and str(role.tenant_id) == str(tenant_id):
+                return role
+        return None
+
+    async def list_by_tenant(
+        self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
+    ) -> list[Role]:
+        roles = [role for role in self.created if str(role.tenant_id) == str(tenant_id)]
+        return roles[offset : offset + limit]
+
+    async def grant_to_user(
+        self,
+        *,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+        tenant_id: str | uuid.UUID,
+        scope_id: str | uuid.UUID,
+        scope_type=...,
+    ) -> None:
+        self.grants.append((str(user_id), str(role_id), str(tenant_id), str(scope_id)))
+
+    async def get_roles_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> list[str]:
+        return self.roles_by_user.get(uuid.UUID(str(user_id)), [])
 
 
 class FakeTokenService:
@@ -99,8 +194,49 @@ class FakeAuditService:
         details: dict[str, object] | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
-        self.events.append({"action": action, "target": target, "user_id": user_id})
+        self.events.append(
+            {"action": action, "target": target, "user_id": user_id, "tenant_id": tenant_id}
+        )
+
+
+class FakeEmailService:
+    """EmailService double — records send_verification calls."""
+
+    def __init__(self) -> None:
+        self.sent: list[dict[str, str | None]] = []
+
+    async def send_verification(
+        self, *, to: str, full_name: str, token: str, base_url: str | None = None
+    ) -> None:
+        self.sent.append({"to": to, "full_name": full_name, "token": token, "base_url": base_url})
+
+
+class _Harness:
+    """Wires AuthenticationService against in-memory port doubles."""
+
+    def __init__(
+        self,
+        *,
+        users: list[User] | None = None,
+        tenants: list[Tenant] | None = None,
+        roles_for_user: dict[uuid.UUID, list[str]] | None = None,
+    ) -> None:
+        self.user_repo = FakeUserRepo(users)
+        self.tenant_repo = FakeTenantRepo(tenants)
+        self.role_repo = FakeRoleRepo(roles_for_user)
+        self.token_svc = FakeTokenService()
+        self.audit_svc = FakeAuditService()
+        self.email_svc = FakeEmailService()
+        self.service = AuthenticationService(
+            self.user_repo,
+            self.tenant_repo,
+            self.role_repo,
+            self.token_svc,
+            self.audit_svc,
+            self.email_svc,
+        )
 
 
 @pytest.fixture
@@ -111,128 +247,228 @@ def tenant_ctx() -> str:
     TenantContext.reset()
 
 
-def _make_service(
-    users: list[User] | None = None,
-) -> tuple[AuthenticationService, FakeUserRepo, FakeTokenService, FakeAuditService]:
-    user_repo = FakeUserRepo(users)
-    token_svc = FakeTokenService()
-    audit_svc = FakeAuditService()
-    service = AuthenticationService(user_repo, _NoopTenantRepo(), token_svc, audit_svc)
-    return service, user_repo, token_svc, audit_svc
-
-
-class _NoopTenantRepo:
-    """TenantRepositoryPort double — the auth flows under test never query it."""
-
-    async def get_by_id(self, tenant_id: str | uuid.UUID):
-        return None
-
-    async def get_by_slug(self, slug: str):
-        return None
-
-    async def slug_exists(self, slug: str) -> bool:
-        return False
-
-    async def create(self, tenant):
-        return tenant
-
-
 def _make_user(
     *,
+    tenant_id: uuid.UUID | None = None,
     email: str = "user@example.com",
     password: str = "Password1!",
     is_active: bool = True,
+    is_verified: bool = True,
+    mfa_enabled: bool = False,
 ) -> User:
     return User(
-        tenant_id=uuid.UUID(TenantContext.get()),
+        tenant_id=tenant_id if tenant_id is not None else uuid.UUID(TenantContext.get()),
         email=email,
         password_hash=hash_password(password),
         full_name="Test User",
         is_active=is_active,
+        is_verified=is_verified,
+        mfa_enabled=mfa_enabled,
+        id=uuid.uuid4(),
     )
 
 
 class TestLogin:
     async def test_success_returns_tokens_and_user(self, tenant_ctx: str) -> None:
         user = _make_user()
-        service, _, token_svc, audit_svc = _make_service([user])
+        harness = _Harness(users=[user])
 
-        result = await service.login(LoginRequest(email=user.email, password="Password1!"))
+        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
         assert result["access_token"] == "access-token"
         assert result["refresh_token"] == "refresh-token"
         assert result["token_type"] == "Bearer"
+        assert result["mfa_required"] is False
         assert result["user"] is user
-        assert token_svc.pairs_created == [(str(user.id), tenant_ctx)]
-        assert audit_svc.events == [
-            {"action": "auth.login.success", "target": f"user:{user.id}", "user_id": str(user.id)}
+        assert harness.token_svc.pairs_created == [(str(user.id), tenant_ctx)]
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.success",
+                "target": f"user:{user.id}",
+                "user_id": str(user.id),
+                "tenant_id": None,
+            }
         ]
 
+    async def test_unverified_user_raises(self, tenant_ctx: str) -> None:
+        user = _make_user(is_verified=False)
+        harness = _Harness(users=[user])
+
+        with pytest.raises(EmailNotVerifiedError):
+            await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
+
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == []
+
+    async def test_tenant_owner_without_mfa_requires_mfa(self, tenant_ctx: str) -> None:
+        user = _make_user()
+        harness = _Harness(users=[user], roles_for_user={user.id: ["tenant_owner"]})
+
+        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
+
+        assert result["mfa_required"] is True
+
+    async def test_tenant_owner_with_mfa_not_required(self, tenant_ctx: str) -> None:
+        user = _make_user(mfa_enabled=True)
+        harness = _Harness(users=[user], roles_for_user={user.id: ["tenant_owner"]})
+
+        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
+
+        assert result["mfa_required"] is False
+
     async def test_unknown_email_raises(self, tenant_ctx: str) -> None:
-        service, _, token_svc, audit_svc = _make_service([])
+        harness = _Harness()
 
         with pytest.raises(UserNotFoundError):
-            await service.login(LoginRequest(email="nobody@example.com", password="Password1!"))
+            await harness.service.login(
+                LoginRequest(email="nobody@example.com", password="Password1!")
+            )
 
-        assert token_svc.pairs_created == []
-        assert audit_svc.events == []
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == []
 
     async def test_disabled_user_raises(self, tenant_ctx: str) -> None:
         user = _make_user(is_active=False)
-        service, _, token_svc, audit_svc = _make_service([user])
+        harness = _Harness(users=[user])
 
         with pytest.raises(UserDisabledError):
-            await service.login(LoginRequest(email=user.email, password="Password1!"))
+            await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
-        assert token_svc.pairs_created == []
-        assert audit_svc.events == []
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == []
 
     async def test_wrong_password_raises(self, tenant_ctx: str) -> None:
         user = _make_user()
-        service, _, token_svc, audit_svc = _make_service([user])
+        harness = _Harness(users=[user])
 
         with pytest.raises(InvalidPasswordError):
-            await service.login(LoginRequest(email=user.email, password="WrongPass1!"))
+            await harness.service.login(LoginRequest(email=user.email, password="WrongPass1!"))
 
-        assert token_svc.pairs_created == []
-        assert audit_svc.events == []
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == []
 
 
 class TestRegister:
-    async def test_creates_user_and_returns_tokens(self, tenant_ctx: str) -> None:
-        service, user_repo, token_svc, audit_svc = _make_service([])
+    async def test_provisions_tenant_roles_and_owner(self) -> None:
+        harness = _Harness()
 
-        result = await service.register(
-            RegisterRequest(email="new@example.com", password="Password1!", full_name="New User")
+        result = await harness.service.register(
+            RegisterRequest(
+                email="owner@neworg.com",
+                password="Password1!",
+                full_name="New Owner",
+                organization_name="Acme Inc",
+            )
         )
 
-        assert len(user_repo.created) == 1
-        user = user_repo.created[0]
-        assert user.email == "new@example.com"
-        assert user.full_name == "New User"
+        assert len(harness.tenant_repo.created) == 1
+        tenant = harness.tenant_repo.created[0]
+        assert tenant.name == "Acme Inc"
+        assert tenant.slug == "acme-inc"
+        assert tenant.is_active is True
+
+        assert {role.name for role in harness.role_repo.created} == {
+            name for name, _ in SYSTEM_ROLE_DEFINITIONS
+        }
+        assert len(harness.role_repo.created) == len(SYSTEM_ROLE_DEFINITIONS)
+        for role in harness.role_repo.created:
+            assert role.tenant_id == tenant.id
+            assert role.is_system_role is True
+
+        assert len(harness.user_repo.created) == 1
+        user = harness.user_repo.created[0]
+        assert user.email == "owner@neworg.com"
+        assert user.full_name == "New Owner"
         assert user.is_active is True
         assert user.is_verified is False
-        assert str(user.tenant_id) == tenant_ctx
-        assert result["user"] is user
-        assert result["access_token"] == "access-token"
-        assert token_svc.pairs_created == [(str(user.id), tenant_ctx)]
-        assert audit_svc.events == [
+        assert user.tenant_id == tenant.id
+
+        owner_role = harness.role_repo.created[0]
+        assert harness.role_repo.grants == [
+            (str(user.id), str(owner_role.id), str(tenant.id), str(tenant.id))
+        ]
+
+        assert result["email"] == "owner@neworg.com"
+        assert result["user_id"] == user.id
+        assert result["tenant_id"] == tenant.id
+        assert result["tenant_slug"] == "acme-inc"
+        assert result["verification_pending"] is True
+        assert result["verification_token"] is not None
+        assert result["expires_in"] == settings.VERIFICATION_TOKEN_EXPIRE_MINUTES * 60
+
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == [
             {
                 "action": "auth.register.success",
                 "target": f"user:{user.id}",
                 "user_id": str(user.id),
+                "tenant_id": str(tenant.id),
             }
         ]
+        assert len(harness.email_svc.sent) == 1
+        assert harness.email_svc.sent[0]["to"] == "owner@neworg.com"
+        assert harness.email_svc.sent[0]["token"] == result["verification_token"]
 
-    async def test_duplicate_email_raises(self, tenant_ctx: str) -> None:
-        user = _make_user(email="taken@example.com")
-        service, user_repo, token_svc, audit_svc = _make_service([user])
+    async def test_slug_collision_is_suffixed(self) -> None:
+        existing = Tenant(name="Acme", slug="acme", id=uuid.uuid4())
+        harness = _Harness(tenants=[existing])
 
-        with pytest.raises(UserAlreadyExistsError):
-            await service.register(
-                RegisterRequest(email="taken@example.com", password="Password1!", full_name="Dup")
+        result = await harness.service.register(
+            RegisterRequest(
+                email="owner@acme.com",
+                password="Password1!",
+                full_name="Acme Owner",
+                organization_name="Acme",
             )
+        )
 
-        assert user_repo.created == []
-        assert token_svc.pairs_created == []
-        assert audit_svc.events == []
+        assert result["tenant_slug"] == "acme-2"
+
+    async def test_register_ignores_taken_email(self) -> None:
+        taken = _make_user(tenant_id=uuid.uuid4(), email="taken@example.com")
+        harness = _Harness(users=[taken])
+
+        result = await harness.service.register(
+            RegisterRequest(
+                email="taken@example.com",
+                password="Password1!",
+                full_name="Dup",
+                organization_name="Another Org",
+            )
+        )
+
+        assert result["verification_pending"] is True
+        assert len(harness.user_repo.created) == 1
+
+
+class TestVerifyEmail:
+    async def test_valid_token_marks_user_verified_and_is_idempotent(self) -> None:
+        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
+        harness = _Harness(users=[user])
+        token = create_email_verification_token(str(user.id), tenant_id=str(user.tenant_id))
+
+        await harness.service.verify_email(token)
+        assert user.is_verified is True
+
+        await harness.service.verify_email(token)
+        assert user.is_verified is True
+
+    async def test_wrong_token_type_raises(self) -> None:
+        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
+        harness = _Harness(users=[user])
+        token = create_access_token(str(user.id), tenant_id=str(user.tenant_id))
+
+        with pytest.raises(TokenInvalidError):
+            await harness.service.verify_email(token)
+
+        assert user.is_verified is False
+
+    async def test_tenant_mismatch_raises(self) -> None:
+        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
+        harness = _Harness(users=[user])
+        token = create_email_verification_token(str(user.id), tenant_id=str(uuid.uuid4()))
+
+        with pytest.raises(TokenInvalidError):
+            await harness.service.verify_email(token)
+
+        assert user.is_verified is False

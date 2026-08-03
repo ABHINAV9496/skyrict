@@ -24,10 +24,10 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete
 
-from identity.application.auth.models.user import UserModel
 from identity.core.security import create_access_token, verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
+from identity.models.user import UserModel
 
 if TYPE_CHECKING:
     from httpx import AsyncClient

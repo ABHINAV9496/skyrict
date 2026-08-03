@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from identity.application.tenant.models.tenant import TenantModel
 from identity.db.repository import BaseRepository
+from identity.models.tenant import TenantModel
 
 
 class TenantRepository(BaseRepository[TenantModel]):

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
 
-from identity.application.session.models.session import SessionModel
 from identity.db.repository import BaseRepository
+from identity.models.session import SessionModel
 
 if TYPE_CHECKING:
     import uuid
@@ -33,7 +34,7 @@ class SessionRepository(BaseRepository[SessionModel]):
         stmt = (
             update(SessionModel)
             .where(SessionModel.user_id == user_id, SessionModel.is_active == True)  # noqa: E712
-            .values(is_active=False)
+            .values(is_active=False, revoked_at=datetime.now(UTC))
         )
         await self.session.execute(stmt)
 
@@ -42,4 +43,5 @@ class SessionRepository(BaseRepository[SessionModel]):
         session = await self.get_by_id(session_id)
         if session:
             session.is_active = False
+            session.revoked_at = datetime.now(UTC)
             await self.session.flush()

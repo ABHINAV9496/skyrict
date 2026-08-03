@@ -1,7 +1,7 @@
 """ORM model registry — import every model so SQLAlchemy can configure mappers.
 
-SQLAlchemy resolves relationship targets (e.g. ``UserModel.tenant_roles`` ->
-``TenantRoleModel``) against the registry when mappers are configured. Models
+SQLAlchemy resolves relationship targets (e.g. ``UserModel.user_roles`` ->
+``UserRoleModel``) against the registry when mappers are configured. Models
 that reference each other across modules must ALL be imported before the first
 query, otherwise mapper configuration fails with "failed to locate a name".
 
@@ -17,17 +17,20 @@ would discover.
 
 from __future__ import annotations
 
-from identity.application.audit.models.audit_log import AuditLogModel
-from identity.application.auth.models.user import UserModel
-from identity.application.role.models.role import RoleModel, TenantRoleModel
-from identity.application.session.models.session import SessionModel
-from identity.application.tenant.models.tenant import TenantModel
+from identity.models.audit_log import AuditLogModel
+from identity.models.permission import PermissionModel
+from identity.models.role import RoleModel
+from identity.models.session import SessionModel
+from identity.models.tenant import TenantModel
+from identity.models.user import UserModel
+from identity.models.user_role import UserRoleModel
 
 __all__ = [
     "AuditLogModel",
+    "PermissionModel",
     "RoleModel",
     "SessionModel",
     "TenantModel",
-    "TenantRoleModel",
     "UserModel",
+    "UserRoleModel",
 ]

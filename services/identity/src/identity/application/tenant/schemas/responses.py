@@ -15,7 +15,7 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     is_active: bool
-    plan: str
+    plan_tier: str
     created_at: datetime
     updated_at: datetime
 

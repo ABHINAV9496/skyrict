@@ -57,11 +57,11 @@ async def change_password(
     user = await user_repo.get_by_id(current_user["user_id"])
     if user is None:
         raise UserNotFoundError()
-    if not verify_password(body.current_password, user.hashed_password):
+    if not verify_password(body.current_password, user.password_hash):
         from skyrict_common.exceptions import InvalidPasswordError
 
         raise InvalidPasswordError("Current password is incorrect")
 
-    user.hashed_password = hash_password(body.new_password)
+    user.password_hash = hash_password(body.new_password)
     await user_repo.commit()
     return ResponseEnvelope(message="Password changed successfully")

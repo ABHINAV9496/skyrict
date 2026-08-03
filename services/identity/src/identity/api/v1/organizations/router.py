@@ -34,7 +34,7 @@ async def create_organization(
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
 ) -> ResponseEnvelope[TenantResponse]:
     """Create a new organization."""
-    from identity.application.tenant.models.tenant import TenantModel
+    from identity.models.tenant import TenantModel
 
     if await tenant_repo.slug_exists(body.slug):
         from skyrict_common.exceptions import ValidationError

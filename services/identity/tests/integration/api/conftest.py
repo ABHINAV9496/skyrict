@@ -5,31 +5,36 @@ on every non-skipped request, so API integration tests need a reachable
 Postgres. When it is unavailable (local dev without Docker), the whole API
 integration suite is skipped — CI runs it against a provisioned database.
 
-The autouse ``integration_db`` fixture creates the schema (idempotent), seeds
-the isolation fixtures (tenants acme/globex/disabledco + user alice@acme.io),
-and removes only the rows it created.
+The session-scoped ``migrated_schema`` fixture applies ``alembic upgrade head``
+once (real migrations — RLS policies, audit triggers, permission catalog — not
+``create_all``). The autouse ``integration_db`` fixture then seeds the
+isolation fixtures (tenants acme/globex/disabledco + user alice@acme.io) and
+removes only the rows it created.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 from asyncpg.exceptions import PostgresError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 # Import the model registry so SQLAlchemy can configure cross-module
 # relationships (same set the app and alembic use).
-from identity.application.auth.models.user import UserModel
-from identity.application.tenant.models.tenant import TenantModel
 from identity.core.tenant_context import TenantContext
-from identity.db.base import Base
 from identity.db.models import (  # noqa: F401  # register every ORM model
     AuditLogModel,
+    PermissionModel,
     RoleModel,
     SessionModel,
-    TenantRoleModel,
+    TenantModel,
+    UserModel,
+    UserRoleModel,
 )
 from identity.db.session import async_session_factory, engine
 
@@ -41,16 +46,40 @@ TENANT_GLOBEX = "globex"
 TENANT_DISABLED = "disabledco"
 USER_A_EMAIL = "alice@acme.io"
 
+_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "alembic.ini"
 
-@pytest.fixture(autouse=True)
-async def integration_db() -> AsyncGenerator[dict[str, str], None]:
-    """Create the schema and seed isolation fixtures; skip without a database."""
+
+@pytest.fixture(scope="session")
+async def migrated_schema() -> None:
+    """Apply ``alembic upgrade head`` once; skip when Postgres is unreachable.
+
+    Runs alembic in a subprocess (fresh interpreter) so it can call
+    ``asyncio.run()`` without colliding with the pytest-asyncio event loop.
+    """
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("SELECT 1"))
     except (OSError, PostgresError) as exc:
         pytest.skip(f"database unavailable: {exc}")
 
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
+        cwd=_ALEMBIC_INI.parent,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"alembic upgrade failed: {result.stderr.strip() or result.stdout.strip()}")
+
+    # This fixture is session-scoped, so its engine connection lives on the
+    # pytest-asyncio *session* event loop. Drop it now: function-scoped tests
+    # run on their own loops, and a pooled connection must never cross loops.
+    await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str], None]:
+    """Seed isolation fixtures after the schema exists; clean up only its rows."""
     # Fresh context — no tenant can leak from a previous test into this one.
     TenantContext.reset()
 
@@ -72,7 +101,7 @@ async def integration_db() -> AsyncGenerator[dict[str, str], None]:
                 ids[slug] = str(existing_id)
             else:
                 row = TenantModel(
-                    id=uuid.uuid4(), name=name, slug=slug, is_active=is_active, plan="free"
+                    id=uuid.uuid4(), name=name, slug=slug, is_active=is_active, plan_tier="free"
                 )
                 session.add(row)
                 await session.flush()
@@ -83,8 +112,9 @@ async def integration_db() -> AsyncGenerator[dict[str, str], None]:
         if user_id is None:
             row = UserModel(
                 id=uuid.uuid4(),
+                tenant_id=ids[TENANT_ACME],
                 email=USER_A_EMAIL,
-                hashed_password="integration-test-hash",
+                password_hash="integration-test-hash",
                 full_name="Alice Acme",
                 is_active=True,
                 is_verified=True,

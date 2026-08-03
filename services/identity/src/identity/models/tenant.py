@@ -1,0 +1,34 @@
+"""Tenant (Organization) ORM model."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, CheckConstraint, String, true
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from identity.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """SQLAlchemy model for the tenants table."""
+
+    __tablename__ = "tenants"
+    __table_args__ = (
+        CheckConstraint(
+            "plan_tier IN ('free', 'starter', 'pro', 'enterprise')",
+            name="ck_tenants_plan_tier",
+        ),
+    )
+
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    plan_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
+
+    # Relationships
+    users = relationship("UserModel", back_populates="tenant", lazy="selectin")
+    roles = relationship("RoleModel", back_populates="tenant", lazy="selectin")
+    user_roles = relationship("UserRoleModel", back_populates="tenant", lazy="selectin")
+    sessions = relationship("SessionModel", back_populates="tenant", lazy="selectin")
+    audit_logs = relationship("AuditLogModel", back_populates="tenant", lazy="selectin")

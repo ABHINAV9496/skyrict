@@ -17,15 +17,18 @@ from identity.core.config import settings
 from identity.db.base import Base
 from identity.db.models import (  # noqa: F401  # registers every ORM model
     AuditLogModel,
+    PermissionModel,
     RoleModel,
     SessionModel,
     TenantModel,
-    TenantRoleModel,
     UserModel,
+    UserRoleModel,
 )
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Escape "%" so configparser interpolation does not choke on URL-encoded
+# credentials (e.g. "%40" in a password); get_main_option restores the "%".
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

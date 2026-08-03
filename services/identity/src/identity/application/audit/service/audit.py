@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 from identity.core.tenant_context import TenantContext
 
 if TYPE_CHECKING:
-    from identity.application.audit.models.audit_log import AuditLogModel
     from identity.application.audit.repository.audit import AuditRepository
+    from identity.models.audit_log import AuditLogModel
 
 
 class AuditService:
@@ -21,14 +21,17 @@ class AuditService:
         self,
         *,
         action: str,
-        resource_type: str,
-        resource_id: str | None = None,
+        target: str,
         user_id: str | None = None,
         details: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> None:
-        """Create an audit log entry for the current tenant."""
+        """Create an audit log entry for the current tenant.
+
+        ``target`` is a ``"<type>:<id>"`` string (e.g. ``"user:3f4..."``) so
+        the audit log stays a single source of truth for what changed.
+        """
         tenant_id = TenantContext.get_optional()
         if not tenant_id:
             return  # Skip audit if no tenant context (e.g., during startup)
@@ -37,8 +40,7 @@ class AuditService:
             tenant_id=tenant_id,
             user_id=user_id,
             action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
+            target=target,
             details=details,
             ip_address=ip_address,
             user_agent=user_agent,

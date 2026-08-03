@@ -78,12 +78,12 @@ class Session:
 class Role:
     """Role entity for RBAC."""
 
-    id: UUID
     tenant_id: UUID
     name: str
     permissions: list[str] = field(default_factory=list)
     is_system_role: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
 
 
 @dataclass

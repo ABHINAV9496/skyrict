@@ -16,15 +16,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from jose import jwt as jose_jwt
 
 from identity.core.config import settings
+from identity.core.exceptions import StartupError
 from identity.core.security import (
     create_access_token,
     create_refresh_token,
     hash_password,
     verify_jwt,
+    verify_jwt_keys_usable,
     verify_password,
 )
 from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
@@ -273,3 +275,86 @@ class TestJWTAdversarial:
         token = _sign(_valid_claims(exp=int(datetime.now(UTC).timestamp()) - 3600), rsa_private_key)
         with pytest.raises(TokenExpiredError):
             verify_jwt(token)
+
+
+# ---------------------------------------------------------------------------
+# Startup key validation — verify_jwt_keys_usable
+# ---------------------------------------------------------------------------
+def _pem_private(key) -> str:
+    """Serialize a private key object to PKCS8 PEM."""
+    return key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+
+
+def _pem_public(key) -> str:
+    """Serialize a public key object to SubjectPublicKeyInfo PEM."""
+    return (
+        key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+
+
+class TestVerifyJwtKeysUsable:
+    """Startup validation: both keys must parse as RSA >= 2048 bits."""
+
+    def test_valid_rsa_keys_pass(
+        self, monkeypatch: pytest.MonkeyPatch, rsa_private_key: str, rsa_public_key: str
+    ):
+        monkeypatch.setattr(settings, "jwt_private_key", rsa_private_key)
+        monkeypatch.setattr(settings, "jwt_public_key", rsa_public_key)
+        verify_jwt_keys_usable()  # must not raise
+
+    def test_garbage_private_key_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, rsa_public_key: str
+    ):
+        monkeypatch.setattr(settings, "jwt_private_key", "not a pem at all")
+        monkeypatch.setattr(settings, "jwt_public_key", rsa_public_key)
+        with pytest.raises(StartupError, match="private key"):
+            verify_jwt_keys_usable()
+
+    def test_garbage_public_key_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, rsa_private_key: str
+    ):
+        monkeypatch.setattr(settings, "jwt_private_key", rsa_private_key)
+        monkeypatch.setattr(settings, "jwt_public_key", "not a pem at all")
+        with pytest.raises(StartupError, match="public key"):
+            verify_jwt_keys_usable()
+
+    def test_small_rsa_private_key_rejected(self, monkeypatch: pytest.MonkeyPatch):
+        small = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+        monkeypatch.setattr(settings, "jwt_private_key", _pem_private(small))
+        monkeypatch.setattr(settings, "jwt_public_key", _pem_public(small))
+        with pytest.raises(StartupError, match="1024 bits"):
+            verify_jwt_keys_usable()
+
+    def test_small_rsa_public_key_rejected(self, monkeypatch: pytest.MonkeyPatch):
+        full = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        monkeypatch.setattr(settings, "jwt_private_key", _pem_private(full))
+        # valid private key + public key from a DIFFERENT (small) pair
+        other_small = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+        monkeypatch.setattr(settings, "jwt_public_key", _pem_public(other_small))
+        with pytest.raises(StartupError, match="1024 bits"):
+            verify_jwt_keys_usable()
+
+    def test_non_rsa_private_key_rejected(self, monkeypatch: pytest.MonkeyPatch):
+        ec_key = ec.generate_private_key(ec.SECP256R1())
+        monkeypatch.setattr(settings, "jwt_private_key", _pem_private(ec_key))
+        monkeypatch.setattr(settings, "jwt_public_key", _pem_public(ec_key))
+        with pytest.raises(StartupError, match="not an RSA key"):
+            verify_jwt_keys_usable()
+
+    def test_non_rsa_public_key_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, rsa_private_key: str
+    ):
+        ec_key = ec.generate_private_key(ec.SECP256R1())
+        monkeypatch.setattr(settings, "jwt_private_key", rsa_private_key)
+        monkeypatch.setattr(settings, "jwt_public_key", _pem_public(ec_key))
+        with pytest.raises(StartupError, match="not an RSA key"):
+            verify_jwt_keys_usable()

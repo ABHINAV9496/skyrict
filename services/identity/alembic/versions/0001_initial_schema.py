@@ -360,8 +360,11 @@ def upgrade() -> None:
         f"('{key}', '{description}')" for key, description in PERMISSION_CATALOG
     )
     op.execute(
+        # ``permission_rows`` is built solely from the compile-time literal
+        # ``PERMISSION_CATALOG`` above — no user input, so this f-string SQL
+        # is not an injection vector.
         "INSERT INTO permissions (key, description) VALUES "
-        f"{permission_rows} ON CONFLICT (key) DO NOTHING"
+        f"{permission_rows} ON CONFLICT (key) DO NOTHING"  # nosec B608
     )
 
 

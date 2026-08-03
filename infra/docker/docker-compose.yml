@@ -1,5 +1,6 @@
 # Skyrict — Local Development Infrastructure
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+name: skyrict
 
 services:
   # ---------- PostgreSQL ----------

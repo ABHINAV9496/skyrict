@@ -56,6 +56,7 @@ __all__ = [
     "SessionExpiredError",
     "SessionNotFoundError",
     "SkyrictError",
+    "StartupError",
     "TenantContextMissingError",
     "TenantDisabledError",
     "TenantMismatchError",
@@ -69,6 +70,18 @@ __all__ = [
 ]
 
 logger = structlog.get_logger("identity.exceptions")
+
+
+class StartupError(RuntimeError):
+    """A required dependency failed startup verification.
+
+    Raised from the application lifespan so the process refuses to boot
+    (fail-fast) instead of serving traffic with a dead database, an
+    unreachable Redis, or unusable JWT keys. NOT a SkyrictError — it is
+    never mapped to an HTTP response; the orchestrator sees the non-zero
+    exit and restarts the pod.
+    """
+
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 

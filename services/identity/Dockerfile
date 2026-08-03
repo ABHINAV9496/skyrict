@@ -1,14 +1,15 @@
 # =============================================================================
-# Skyrict Identity Service — Multi-stage Dockerfile
+# Skyrict Identity Service — Production Dockerfile
 #
 # Stages:
 #   base        Shared deps install (uv sync --no-dev)
-#   dev         Dev deps + live-reload CMD (default build target)
 #   production  Minimal final image, non-root, no dev deps, no tests
 #
+# Local development uses services/identity/Dockerfile.dev (live reload,
+# dev deps, tests) via docker-compose.dev.yml.
+#
 # Build:
-#   Dev:        docker build --target dev -f services/identity/Dockerfile .
-#   Production: docker build --target production -f services/identity/Dockerfile .
+#   docker build --target production -f services/identity/Dockerfile .
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -30,41 +31,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy workspace root files
 COPY pyproject.toml uv.lock ./
 
-# Copy service + lib pyproject.toml files (for dependency resolution).
-# READMEs too: hatchling requires the `readme` file declared in each
-# pyproject.toml to be present when building the workspace members.
+# Copy every workspace member pyproject.toml file (for dependency resolution).
+# The workspace glob is services/* and libs/* — uv --frozen refuses to resolve
+# if a member manifest is missing. READMEs too: hatchling requires the `readme`
+# file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
 COPY services/identity/README.md services/identity/
 COPY libs/skyrict-common/pyproject.toml libs/skyrict-common/
 COPY libs/skyrict-common/README.md libs/skyrict-common/
+COPY libs/skyrict-events/pyproject.toml libs/skyrict-events/
+COPY libs/skyrict-events/README.md libs/skyrict-events/
+COPY libs/skyrict-testing/pyproject.toml libs/skyrict-testing/
+COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 
 # Install production deps only
 RUN uv sync --frozen --no-dev --directory services/identity
-
-# ---------------------------------------------------------------------------
-# Stage: dev — adds dev dependencies, live reload
-# ---------------------------------------------------------------------------
-FROM base AS dev
-
-# Re-sync with dev dependencies (pytest, mypy, etc.)
-RUN uv sync --frozen --directory services/identity
-
-# Copy source code
-COPY services/identity/src services/identity/src
-COPY libs/skyrict-common/src libs/skyrict-common/src
-
-# Copy tests (dev only — never reaches production)
-COPY services/identity/tests services/identity/tests
-
-# Copy alembic config and migrations
-COPY services/identity/alembic services/identity/alembic
-COPY services/identity/alembic.ini services/identity/alembic.ini
-
-EXPOSE 8000
-
-CMD ["uv", "run", "--directory", "services/identity", \
-     "uvicorn", "identity.main:app", \
-     "--reload", "--host", "0.0.0.0", "--port", "8000"]
 
 # ---------------------------------------------------------------------------
 # Stage: production — minimal final image, non-root
@@ -102,7 +83,7 @@ USER skyrict
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
 
 CMD ["uvicorn", "identity.main:app", \
      "--host", "0.0.0.0", "--port", "8000", \

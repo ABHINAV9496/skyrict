@@ -7,14 +7,23 @@ Single verification path: verify_jwt().
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import JWTError, jwt
 
 from identity.core.config import settings
-from identity.core.exceptions import TokenExpiredError, TokenInvalidError
+from identity.core.exceptions import StartupError, TokenExpiredError, TokenInvalidError
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.types import (
+        PrivateKeyTypes,
+        PublicKeyTypes,
+    )
 
 # Algorithms we accept — explicitly whitelisted. Rejects "none" and any
 # header-driven algorithm switching (CVE-2015-2951 / algorithm confusion).
@@ -201,3 +210,49 @@ def verify_jwt(token: str) -> TokenClaims:
         if "expired" in exc_str:
             raise TokenExpiredError() from exc
         raise TokenInvalidError(str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# JWT key material — startup validation
+# ---------------------------------------------------------------------------
+def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) -> None:
+    """Reject RSA keys below 2048 bits (NIST / PCI-DSS baseline)."""
+    if key.key_size < 2048:
+        raise StartupError(
+            f"JWT {label} key is only {key.key_size} bits — RSA 2048 or larger required"
+        )
+
+
+def verify_jwt_keys_usable() -> None:
+    """Verify both configured JWT keys parse as RSA keys of >= 2048 bits.
+
+    Runs ONCE at application startup so a corrupt, non-RSA, or weak key fails
+    fast at boot (the lifespan raises :class:`StartupError`) instead of
+    surfacing mid-request as opaque signing/verification failures.
+
+    Raises:
+        StartupError: If either key cannot be parsed, is not RSA, or is
+            smaller than 2048 bits.
+    """
+    try:
+        private_key: PrivateKeyTypes = serialization.load_pem_private_key(
+            settings.jwt_private_key.encode("utf-8"),
+            password=None,
+        )
+    except (TypeError, UnsupportedAlgorithm, ValueError) as exc:
+        raise StartupError(f"JWT private key is not a valid PEM private key: {exc}") from exc
+
+    if not isinstance(private_key, rsa.RSAPrivateKey):
+        raise StartupError(f"JWT private key is not an RSA key (got {type(private_key).__name__})")
+    _verify_rsa_key_size(private_key, "private")
+
+    try:
+        public_key: PublicKeyTypes = serialization.load_pem_public_key(
+            settings.jwt_public_key.encode("utf-8"),
+        )
+    except (TypeError, UnsupportedAlgorithm, ValueError) as exc:
+        raise StartupError(f"JWT public key is not a valid PEM public key: {exc}") from exc
+
+    if not isinstance(public_key, rsa.RSAPublicKey):
+        raise StartupError(f"JWT public key is not an RSA key (got {type(public_key).__name__})")
+    _verify_rsa_key_size(public_key, "public")

@@ -11,12 +11,12 @@ import uuid
 
 import structlog
 
-from identity.application.auth.models.user import UserModel
-from identity.application.role.models.role import RoleModel
-from identity.application.tenant.models.tenant import TenantModel
 from identity.core.config import settings
 from identity.core.security import hash_password
 from identity.db.session import async_session_factory
+from identity.models.role import RoleModel
+from identity.models.tenant import TenantModel
+from identity.models.user import UserModel
 
 logger = structlog.get_logger("identity.seed")
 
@@ -47,7 +47,7 @@ async def seed_default_tenant() -> None:
             name="Default Organization",
             slug="default",
             is_active=True,
-            plan="free",
+            plan_tier="free",
         )
         await repo.create(tenant)
         await repo.commit()
@@ -73,6 +73,7 @@ async def seed_default_roles() -> None:
                 tenant_id=uuid.UUID(settings.DEFAULT_TENANT_ID),
                 name=role_data["name"],
                 permissions=role_data["permissions"],
+                is_system_role=True,
             )
             await repo.create(role)
 
@@ -84,16 +85,19 @@ async def seed_admin_user() -> None:
     """Create a default admin user for development/staging."""
     from identity.application.auth.repository.user import UserRepository
 
+    default_tenant_id = uuid.UUID(settings.DEFAULT_TENANT_ID)
+
     async with async_session_factory() as session:
         repo = UserRepository(session)
-        existing = await repo.get_by_email("admin@skyrict.io")
+        existing = await repo.get_by_email(default_tenant_id, "admin@skyrict.io")
         if existing:
             logger.info("seed.admin.exists")
             return
 
         user = UserModel(
+            tenant_id=default_tenant_id,
             email="admin@skyrict.io",
-            hashed_password=hash_password("Admin123!"),
+            password_hash=hash_password("Admin123!"),
             full_name="System Admin",
             is_active=True,
             is_verified=True,

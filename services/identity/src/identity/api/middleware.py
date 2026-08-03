@@ -49,8 +49,9 @@ _TENANT_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 def is_tenant_required_path(path: str) -> bool:
     """True when the path needs tenant resolution (everything except skip paths).
 
-    Health/readiness/docs are exempt; login/register and all business routes
-    require a resolved tenant so the context exists before handlers run.
+    Health/readiness/docs and the self-service auth paths (register, verify-email)
+    are exempt; login and all business routes require a resolved tenant so the
+    context exists before handlers run.
     """
     return path not in SKIP_AUTH_PATHS
 

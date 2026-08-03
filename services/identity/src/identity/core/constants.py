@@ -27,6 +27,7 @@ PROBLEM_BASE_URL = "https://api.skyrict.io/problems"
 PROBLEM_TOKEN_EXPIRED = f"{PROBLEM_BASE_URL}/token-expired"
 PROBLEM_TOKEN_INVALID = f"{PROBLEM_BASE_URL}/token-invalid"
 PROBLEM_AUTHENTICATION_ERROR = f"{PROBLEM_BASE_URL}/authentication-error"
+PROBLEM_EMAIL_NOT_VERIFIED = f"{PROBLEM_BASE_URL}/email-not-verified"
 PROBLEM_AUTHORIZATION_ERROR = f"{PROBLEM_BASE_URL}/authorization-error"
 PROBLEM_MFA_REQUIRED = f"{PROBLEM_BASE_URL}/mfa-required"
 PROBLEM_USER_NOT_FOUND = f"{PROBLEM_BASE_URL}/user-not-found"
@@ -54,9 +55,73 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 300
 # Skip-auth paths (middleware bypass)
 #
 # These are the REAL mounted paths (the api_router is mounted under /api/v1).
-# Everything else — including /api/v1/auth/login and /api/v1/auth/register —
-# requires tenant resolution so the tenant is known before route execution.
+# Everything else — including /api/v1/auth/login — requires tenant resolution
+# so the tenant is known before route execution. /auth/register and
+# /auth/verify-email are self-service (no tenant exists yet), so they bypass
+# tenant resolution.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
-    {f"{API_V1_PREFIX}/health", f"{API_V1_PREFIX}/ready", "/docs", "/openapi.json", "/redoc"}
+    {
+        f"{API_V1_PREFIX}/health",
+        f"{API_V1_PREFIX}/ready",
+        f"{API_V1_PREFIX}/auth/register",
+        f"{API_V1_PREFIX}/auth/verify-email",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+    }
 )
+
+# ---------------------------------------------------------------------------
+# Default system roles (single source of truth)
+#
+# Provisioned for every tenant at self-service registration and seeded for the
+# default tenant. Permission keys must come from the platform-fixed catalog
+# seeded by the 0001 migration (``PERMISSION_CATALOG``). Kept in core so the
+# auth feature (provisioning), the roles feature (validation), and seed tooling
+# can all import it without crossing feature boundaries.
+# ---------------------------------------------------------------------------
+SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("tenant_owner", ("*",)),
+    (
+        "organization_admin",
+        (
+            "users:read",
+            "users:write",
+            "users:delete",
+            "roles:read",
+            "roles:write",
+            "tenants:read",
+            "tenants:write",
+            "sessions:read",
+            "sessions:revoke",
+            "audit:read",
+            "mfa:manage",
+            "sso:manage",
+            "settings:read",
+            "settings:write",
+            "billing.manage",
+        ),
+    ),
+    (
+        "department_manager",
+        (
+            "users:read",
+            "roles:read",
+            "settings:read",
+            "sessions:read",
+            "erp.invoice.read",
+            "erp.purchase.approve",
+        ),
+    ),
+    (
+        "standard_user",
+        ("users:read", "settings:read", "erp.invoice.read"),
+    ),
+    (
+        "auditor",
+        ("audit:read", "sessions:read", "users:read", "roles:read"),
+    ),
+)
+
+SYSTEM_ROLE_NAMES = frozenset(name for name, _ in SYSTEM_ROLE_DEFINITIONS)

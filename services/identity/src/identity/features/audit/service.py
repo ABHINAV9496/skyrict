@@ -30,18 +30,22 @@ class AuditService:
         details: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         """Create an audit log entry for the current tenant.
 
         ``target`` is a ``"<type>:<id>"`` string (e.g. ``"user:3f4..."``) so
         the audit log stays a single source of truth for what changed.
+
+        ``tenant_id`` overrides the resolved request tenant — used by flows
+        that run without a routed tenant (self-service registration).
         """
-        tenant_id = TenantContext.get_optional()
-        if not tenant_id:
+        resolved_tenant = tenant_id or TenantContext.get_optional()
+        if not resolved_tenant:
             return  # Skip audit if no tenant context (e.g., during startup)
 
         await self.audit_repo.log(
-            tenant_id=tenant_id,
+            tenant_id=resolved_tenant,
             user_id=user_id,
             action=action,
             target=target,

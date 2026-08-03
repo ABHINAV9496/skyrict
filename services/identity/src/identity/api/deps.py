@@ -17,12 +17,16 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from identity.core.email import EmailService, LogEmailService
+from identity.core.rate_limit import RateLimiter
+from identity.core.rate_limit import limiter as default_rate_limiter
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
 from identity.features.audit.repository import AuditRepository
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.organizations.repository import TenantRepository
+from identity.features.roles.repository import RoleRepository
 from identity.features.sessions.repository import SessionRepository
 from identity.features.users.repository import UserRepository
 from skyrict_common.exceptions import AuthenticationError
@@ -31,6 +35,7 @@ if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.service import AuthenticationService, TokenService
     from identity.features.organizations.service import TenantService
+    from identity.features.roles.service import RoleManagementService
     from identity.features.sessions.service import SessionService
     from identity.features.users.service import UserService
 
@@ -129,6 +134,10 @@ def get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditRepository:
     return AuditRepository(db)
 
 
+def get_role_repo(db: AsyncSession = Depends(get_db)) -> RoleRepository:
+    return RoleRepository(db)
+
+
 # --- Service deps (feature services imported at call sites) ---
 
 
@@ -144,15 +153,40 @@ def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> 
     return AuditService(audit_repo)
 
 
+def get_email_service() -> EmailService:
+    """Email transport — log-based until a real provider is wired."""
+    return LogEmailService()
+
+
+def get_rate_limiter() -> RateLimiter:
+    """Return the process-wide rate limiter (Redis-backed, fail-open)."""
+    return default_rate_limiter
+
+
 def get_authn_service(
     user_repo: UserRepository = Depends(get_user_repo),
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
+    role_repo: RoleRepository = Depends(get_role_repo),
     token_service: TokenService = Depends(get_token_service),
     audit_service: AuditService = Depends(get_audit_service),
+    email_service: EmailService = Depends(get_email_service),
 ) -> AuthenticationService:
     from identity.features.auth.service import AuthenticationService
 
-    return AuthenticationService(user_repo, tenant_repo, token_service, audit_service)
+    return AuthenticationService(
+        user_repo,
+        tenant_repo,
+        role_repo,
+        token_service,
+        audit_service,
+        email_service,
+    )
+
+
+def get_roles_service(role_repo: RoleRepository = Depends(get_role_repo)) -> RoleManagementService:
+    from identity.features.roles.service import RoleManagementService
+
+    return RoleManagementService(role_repo)
 
 
 def get_user_service(user_repo: UserRepository = Depends(get_user_repo)) -> UserService:

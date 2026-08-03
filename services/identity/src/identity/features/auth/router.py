@@ -1,21 +1,33 @@
-"""Auth endpoints — login, register, refresh, logout."""
+"""Auth endpoints — login, self-service register, email verification, refresh, logout."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
 
-from identity.api.deps import get_authn_service, get_current_user, get_token_service
+from identity.api.deps import (
+    get_authn_service,
+    get_current_user,
+    get_rate_limiter,
+    get_token_service,
+)
+from identity.core.config import settings
 from identity.features.auth.schemas import (
     AuthResponse,
     LoginRequest,
     LogoutRequest,
     RegisterRequest,
+    RegisterResponse,
     TokenRefreshRequest,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
 )
 from identity.features.auth.service import AuthenticationService, TokenService
 from skyrict_common.schemas import ResponseEnvelope
+
+if TYPE_CHECKING:
+    from identity.core.rate_limit import RateLimiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -39,22 +51,43 @@ async def login(
     )
 
 
-@router.post("/register", response_model=ResponseEnvelope[AuthResponse])
+@router.post("/register", response_model=ResponseEnvelope[RegisterResponse])
 async def register(
     body: RegisterRequest,
     request: Request,
     authn: AuthenticationService = Depends(get_authn_service),
-) -> ResponseEnvelope[AuthResponse]:
-    """Register a new user and return tokens."""
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[RegisterResponse]:
+    """Self-service registration: atomically provision a tenant and return a
+    verification-pending response (no tokens until the email is verified)."""
+    ip_address = request.client.host if request.client else "unknown"
+    await limiter.enforce(
+        key=f"register:{ip_address}",
+        limit=settings.RATE_LIMIT_REGISTER,
+        window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW_SECONDS,
+    )
+
     result = await authn.register(
         body,
-        ip_address=request.client.host if request.client else None,
+        ip_address=ip_address,
         user_agent=request.headers.get("user-agent"),
     )
-    user = result.pop("user")
     return ResponseEnvelope(
-        data=AuthResponse(**result, user=user),
-        message="Registration successful",
+        data=RegisterResponse(**result),
+        message="Registration successful. Check your email to verify your account.",
+    )
+
+
+@router.post("/verify-email", response_model=ResponseEnvelope[VerifyEmailResponse])
+async def verify_email(
+    body: VerifyEmailRequest,
+    authn: AuthenticationService = Depends(get_authn_service),
+) -> ResponseEnvelope[VerifyEmailResponse]:
+    """Confirm an email address using the token from the registration email."""
+    await authn.verify_email(body.token)
+    return ResponseEnvelope(
+        data=VerifyEmailResponse(verified=True),
+        message="Email verified",
     )
 
 

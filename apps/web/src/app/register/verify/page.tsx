@@ -28,7 +28,7 @@ export default async function VerifyPage({
             Head back to step 1 to enter your work email.
           </p>
         </div>
-        <Link href="/onboarding/register" className="block">
+        <Link href="/register" className="block">
           <AuthButton className="w-full">Back to account details</AuthButton>
         </Link>
       </div>

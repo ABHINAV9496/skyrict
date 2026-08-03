@@ -61,11 +61,11 @@ function ResetPasswordForm({ token }: { token?: string }) {
           </p>
         </div>
         <div className="space-y-2">
-          <Link href="/auth/forgot-password" className="block">
+          <Link href="/forgot-password" className="block">
             <AuthButton className="w-full">Request a new link</AuthButton>
           </Link>
           <Link
-            href="/auth/login"
+            href="/login"
             className="block text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Back to sign in
@@ -90,11 +90,11 @@ function ResetPasswordForm({ token }: { token?: string }) {
           </p>
         </div>
         <div className="space-y-2">
-          <Link href="/auth/login" className="block">
+          <Link href="/login" className="block">
             <AuthButton className="w-full">Sign in</AuthButton>
           </Link>
           <Link
-            href="/marketing"
+            href="/"
             className="block text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Back to home

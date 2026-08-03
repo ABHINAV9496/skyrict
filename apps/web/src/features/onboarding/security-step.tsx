@@ -69,7 +69,7 @@ function SecurityStep({
       password: values.password,
     }).then(() => {
       const next = new URLSearchParams({ email, vt });
-      router.push(`/onboarding/register/plan?${next.toString()}`);
+      router.push(`/register/plan?${next.toString()}`);
     });
   }
 

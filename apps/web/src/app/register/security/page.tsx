@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { PlanStep } from "@/features/onboarding/plan-step";
+import { SecurityStep } from "@/features/onboarding/security-step";
 import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
-  title: "Choose a plan",
-  description: "Step 4 of 5 — pick the plan that fits your business.",
+  title: "Secure your account",
+  description: "Step 3 of 5 — choose a strong password.",
 };
 
-export default async function PlanPage({
+export default async function SecurityPage({
   searchParams,
 }: {
   searchParams: Promise<{ email?: string; vt?: string }>;
@@ -29,7 +29,7 @@ export default async function PlanPage({
             Your verification session is missing. Restart the flow to continue.
           </p>
         </div>
-        <Link href="/onboarding/register" className="block">
+        <Link href="/register" className="block">
           <AuthButton className="w-full">Start over</AuthButton>
         </Link>
       </div>
@@ -40,18 +40,18 @@ export default async function PlanPage({
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-          Step 4 of 5 · Plan
+          Step 3 of 5 · Security
         </p>
         <h1 className="font-display text-2xl font-semibold text-foreground">
-          Choose your plan
+          Protect your account
         </h1>
         <p className="text-sm text-muted-foreground">
-          Start free and upgrade as your business grows. You can change plans
-          anytime.
+          Use at least 12 characters with uppercase, lowercase, a number, and a
+          special character.
         </p>
       </div>
 
-      <PlanStep email={email} vt={vt} />
+      <SecurityStep email={email} vt={vt} />
     </div>
   );
 }

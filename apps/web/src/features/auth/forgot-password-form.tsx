@@ -58,7 +58,7 @@ function ForgotPasswordForm() {
           </p>
         </div>
         <div className="space-y-2">
-          <Link href="/auth/login" className="block">
+          <Link href="/login" className="block">
             <AuthButton className="w-full">Back to sign in</AuthButton>
           </Link>
         </div>
@@ -92,7 +92,7 @@ function ForgotPasswordForm() {
       </AuthButton>
       <div className="text-center">
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
           Back to sign in

@@ -28,7 +28,7 @@ export default function LoginPage() {
       <p className="text-center text-sm text-muted-foreground">
         New to Skyrict?{" "}
         <Link
-          href="/onboarding/register"
+          href="/register"
           className="font-medium text-primary underline-offset-4 hover:underline"
         >
           Create an account

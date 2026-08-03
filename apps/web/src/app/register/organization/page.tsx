@@ -32,7 +32,7 @@ export default async function OrganizationPage({
             Your onboarding session is missing. Restart the flow to continue.
           </p>
         </div>
-        <Link href="/onboarding/register" className="block">
+        <Link href="/register" className="block">
           <AuthButton className="w-full">Start over</AuthButton>
         </Link>
       </div>

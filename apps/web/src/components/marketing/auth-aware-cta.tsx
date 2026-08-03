@@ -15,7 +15,7 @@ function AuthAwareCta() {
 
   return (
     <Button size="lg" asChild>
-      <Link href={hasSession ? "/dashboard/agents" : "/onboarding/register"}>
+      <Link href={hasSession ? "/dashboard/agents" : "/register"}>
         {hasSession ? "Open your workspace" : "Create your account"}
       </Link>
     </Button>

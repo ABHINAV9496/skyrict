@@ -155,7 +155,7 @@ function OrganizationStep({
   function handleCompleteProvisioning() {
     localStorage.setItem(demoSessionKey, "true");
     const next = new URLSearchParams({ email });
-    router.push(`/auth/setup-mfa?${next.toString()}`);
+    router.push(`/setup-mfa?${next.toString()}`);
   }
 
   async function onSubmit(values: OrganizationValues) {

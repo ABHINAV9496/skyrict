@@ -94,11 +94,11 @@ function VerifyEmailForm({ token }: { token?: string }) {
           </p>
         </div>
         <div className="space-y-2">
-          <Link href="/auth/verify-email" className="block">
+          <Link href="/verify-email" className="block">
             <AuthButton className="w-full">Resend verification</AuthButton>
           </Link>
           <Link
-            href="/auth/login"
+            href="/login"
             className="block text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Back to sign in
@@ -123,7 +123,7 @@ function VerifyEmailForm({ token }: { token?: string }) {
             Skyrict.
           </p>
         </div>
-        <Link href="/auth/login" className="block">
+        <Link href="/login" className="block">
           <AuthButton className="w-full">Sign in</AuthButton>
         </Link>
       </div>
@@ -145,7 +145,7 @@ function VerifyEmailForm({ token }: { token?: string }) {
             <span className="font-medium text-foreground">{sentEmail}</span>.
           </p>
         </div>
-        <Link href="/auth/login" className="block">
+        <Link href="/login" className="block">
           <AuthButton className="w-full">Back to sign in</AuthButton>
         </Link>
       </div>
@@ -173,7 +173,7 @@ function VerifyEmailForm({ token }: { token?: string }) {
       </AuthButton>
       <div className="text-center">
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
           Back to sign in

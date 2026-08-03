@@ -91,7 +91,7 @@ function Cta() {
                     className="bg-[#87ceeb] text-[#0a2f3e] hover:bg-[#4cb6e1]"
                     asChild
                   >
-                    <Link href="/onboarding/register">Create your account</Link>
+                    <Link href="/register">Create your account</Link>
                   </Button>
                   <Button
                     variant="outline"
@@ -99,7 +99,7 @@ function Cta() {
                     className="border-[#114f68] bg-transparent text-[#f4fafd] hover:bg-[#114f68]/40 hover:text-[#f4fafd]"
                     asChild
                   >
-                    <Link href="/auth/login">Log in</Link>
+                    <Link href="/login">Log in</Link>
                   </Button>
                 </div>
               </div>

@@ -80,7 +80,7 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
       return;
     }
     const next = new URLSearchParams({ email: values.email.trim() });
-    router.push(`/onboarding/register/verify?${next.toString()}`);
+    router.push(`/register/verify?${next.toString()}`);
   }
 
   return (

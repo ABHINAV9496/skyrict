@@ -1,24 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { SecurityStep } from "@/features/onboarding/security-step";
+import { MfaSetupStep } from "@/features/onboarding/mfa-setup-step";
 import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
-  title: "Secure your account",
-  description: "Step 3 of 5 — choose a strong password.",
+  title: "Set up two-factor authentication",
+  description: "Secure your account with an authenticator app.",
 };
 
-export default async function SecurityPage({
+export default async function SetupMfaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; vt?: string }>;
+  searchParams: Promise<{ email?: string }>;
 }) {
   const params = await searchParams;
   const email = params.email?.trim();
-  const vt = params.vt?.trim();
 
-  if (!email || !vt) {
+  if (!email) {
     return (
       <div className="space-y-4 text-center">
         <div className="space-y-2">
@@ -26,10 +25,10 @@ export default async function SecurityPage({
             Session expired
           </h1>
           <p className="text-sm text-muted-foreground">
-            Your verification session is missing. Restart the flow to continue.
+            Complete onboarding to set up two-factor authentication.
           </p>
         </div>
-        <Link href="/onboarding/register" className="block">
+        <Link href="/register" className="block">
           <AuthButton className="w-full">Start over</AuthButton>
         </Link>
       </div>
@@ -40,18 +39,17 @@ export default async function SecurityPage({
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-          Step 3 of 5 · Security
+          Final step
         </p>
         <h1 className="font-display text-2xl font-semibold text-foreground">
           Protect your account
         </h1>
         <p className="text-sm text-muted-foreground">
-          Use at least 12 characters with uppercase, lowercase, a number, and a
-          special character.
+          Add an authenticator app to make sure only you can sign in.
         </p>
       </div>
 
-      <SecurityStep email={email} vt={vt} />
+      <MfaSetupStep email={email} />
     </div>
   );
 }

@@ -50,6 +50,7 @@ function CaptchaChallenge({
     <div className="space-y-3">
       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 shadow-sm">
         <div
+          suppressHydrationWarning
           aria-label={`Captcha code: ${code}`}
           className="relative flex min-h-11 flex-1 select-none items-center justify-center overflow-hidden rounded-md border border-border/70 bg-card px-3 py-2"
         >
@@ -57,6 +58,7 @@ function CaptchaChallenge({
             {code.split("").map((ch, index) => (
               <span
                 key={index}
+                suppressHydrationWarning
                 aria-hidden="true"
                 className="inline-block"
                 style={{

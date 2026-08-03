@@ -46,7 +46,7 @@ function VerifyStep({ email }: { email: string }) {
           email,
           vt: result.verificationToken,
         });
-        router.push(`/onboarding/register/security?${next.toString()}`);
+        router.push(`/register/security?${next.toString()}`);
       } else {
         setCode("");
         setError(
@@ -146,7 +146,7 @@ function VerifyStep({ email }: { email: string }) {
         <p className="text-muted-foreground">
           Wrong email?{" "}
           <Link
-            href="/onboarding/register"
+            href="/register"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             Change it
@@ -166,7 +166,7 @@ function VerifyStep({ email }: { email: string }) {
       <p className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
         <ArrowLeft aria-hidden="true" className="size-3" />
         <Link
-          href="/onboarding/register"
+          href="/register"
           className="underline-offset-4 hover:underline"
         >
           Back to account details

@@ -184,7 +184,7 @@ function PlanStep({
 
   function handleContinue() {
     const next = new URLSearchParams({ email, vt, plan: selected });
-    router.push(`/onboarding/register/organization?${next.toString()}`);
+    router.push(`/register/organization?${next.toString()}`);
   }
 
   return (

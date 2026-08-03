@@ -95,7 +95,7 @@ function LoginForm() {
             <AuthButton className="w-full">Continue to workspace</AuthButton>
           </Link>
           <Link
-            href="/marketing"
+            href="/"
             className="block text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
             Back to home
@@ -192,7 +192,7 @@ function LoginForm() {
         />
         <div className="flex justify-end pt-0.5">
           <Link
-            href="/auth/forgot-password"
+            href="/forgot-password"
             className="text-sm text-primary underline-offset-4 hover:underline"
           >
             Forgot password?

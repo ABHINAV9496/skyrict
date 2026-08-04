@@ -15,6 +15,7 @@ from identity.db.repository import SqlRepository
 from identity.domain.entities import Role, ScopeType
 from identity.models.role import RoleModel
 from identity.models.user_role import UserRoleModel
+from skyrict_common.exceptions import NotFoundError
 
 
 def _to_orm(role: Role) -> RoleModel:
@@ -117,3 +118,59 @@ class RoleRepository(SqlRepository):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def update(self, role: Role) -> Role:
+        """Persist mutations to an existing role and return the refreshed entity."""
+        if role.id is None:
+            raise NotFoundError("Role not found")
+        model = await self.session.get(RoleModel, role.id)
+        if model is None:
+            raise NotFoundError("Role not found")
+        model.name = role.name
+        model.permissions = role.permissions
+        model.is_system_role = role.is_system_role
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def delete(self, role_id: str | uuid.UUID) -> None:
+        """Delete a role by primary key (user_roles rows cascade)."""
+        model = await self.session.get(RoleModel, role_id)
+        if model is not None:
+            await self.session.delete(model)
+            await self.session.flush()
+
+    async def grant_exists(
+        self,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+        scope_type: ScopeType,
+        scope_id: str | uuid.UUID,
+    ) -> bool:
+        """Return True when the exact grant already exists (idempotency probe)."""
+        stmt = select(UserRoleModel).where(
+            UserRoleModel.user_id == user_id,
+            UserRoleModel.role_id == role_id,
+            UserRoleModel.scope_type == scope_type,
+            UserRoleModel.scope_id == scope_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def get_permissions_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> set[str]:
+        """Return the union of permission keys granted to a user in a tenant."""
+        stmt = (
+            select(RoleModel.permissions)
+            .join(UserRoleModel, UserRoleModel.role_id == RoleModel.id)
+            .where(
+                UserRoleModel.user_id == user_id,
+                UserRoleModel.tenant_id == tenant_id,
+            )
+        )
+        result = await self.session.execute(stmt)
+        permissions: set[str] = set()
+        for role_permissions in result.scalars().all():
+            permissions.update(role_permissions)
+        return permissions

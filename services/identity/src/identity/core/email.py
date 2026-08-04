@@ -21,6 +21,16 @@ class EmailService(Protocol):
         self, *, to: str, full_name: str, token: str, base_url: str | None = None
     ) -> None: ...
 
+    async def send_invitation(
+        self,
+        *,
+        to: str,
+        inviter_name: str,
+        organization_name: str,
+        token: str,
+        base_url: str | None = None,
+    ) -> None: ...
+
 
 class LogEmailService:
     """Transport that logs the verification payload (dev/test default)."""
@@ -34,5 +44,23 @@ class LogEmailService:
             to=to,
             full_name=full_name,
             verification_token=token,
+            base_url=base_url,
+        )
+
+    async def send_invitation(
+        self,
+        *,
+        to: str,
+        inviter_name: str,
+        organization_name: str,
+        token: str,
+        base_url: str | None = None,
+    ) -> None:
+        logger.info(
+            "email.invitation.sent",
+            to=to,
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            invitation_token=token,
             base_url=base_url,
         )

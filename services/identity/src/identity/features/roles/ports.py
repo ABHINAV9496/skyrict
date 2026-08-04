@@ -41,3 +41,19 @@ class RoleRepositoryPort(Protocol):
     async def get_roles_for_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
     ) -> list[str]: ...
+
+    async def update(self, role: Role) -> Role: ...
+
+    async def delete(self, role_id: str | uuid.UUID) -> None: ...
+
+    async def grant_exists(
+        self,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+        scope_type: ScopeType,
+        scope_id: str | uuid.UUID,
+    ) -> bool: ...
+
+    async def get_permissions_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> set[str]: ...

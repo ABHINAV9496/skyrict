@@ -100,13 +100,15 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
         user_repo: UserRepository = Depends(get_user_repo),
+        role_repo: RoleRepository = Depends(get_role_repo),
     ) -> dict[str, Any]:
         from identity.features.roles.service import AuthorizationService
 
         user = await user_repo.get_by_id(current_user["user_id"])
-        authz = AuthorizationService()
-        authz.require_permission(
+        authz = AuthorizationService(role_repo)
+        await authz.require_permission(
             user_is_active=user is not None and user.is_active,
+            user_id=current_user["user_id"],
             permission=permission,
             tenant_id=current_user["tenant_id"],
         )

@@ -74,7 +74,7 @@ seed: ## Load reference data
 # ---------- Build ----------
 
 build: ## Build identity service Docker image
-	docker build -t skyrict/identity:latest -f services/identity/Dockerfile services/identity/
+	docker build -t skyrict/identity:latest -f services/identity/Dockerfile .
 
 build-web: ## Build frontend
 	cd apps/web && pnpm build

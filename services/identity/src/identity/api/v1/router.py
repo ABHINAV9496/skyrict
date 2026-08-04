@@ -10,6 +10,7 @@ from identity.features.invitations.router import router as invitations_router
 from identity.features.mfa.router import router as mfa_router
 from identity.features.organizations.router import router as org_router
 from identity.features.passkeys.router import router as passkey_router
+from identity.features.roles.router import permissions_router
 from identity.features.roles.router import router as roles_router
 from identity.features.sessions.router import router as session_router
 from identity.features.sso.router import router as sso_router
@@ -21,6 +22,7 @@ api_router.include_router(auth_router)
 api_router.include_router(user_router)
 api_router.include_router(org_router)
 api_router.include_router(roles_router)
+api_router.include_router(permissions_router)
 api_router.include_router(invitations_router)
 api_router.include_router(session_router)
 api_router.include_router(mfa_router)

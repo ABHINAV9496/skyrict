@@ -231,7 +231,7 @@ class TestCustomRoles:
             created = await client.post(
                 "/api/v1/roles",
                 headers=headers,
-                json={"name": "custom_ops", "permissions": ["users:read", "audit:read"]},
+                json={"name": "custom_ops", "permission_keys": ["users:read", "audit:read"]},
             )
             assert created.status_code == 200
             created_data = created.json()["data"]
@@ -248,7 +248,7 @@ class TestCustomRoles:
             reserved = await client.post(
                 "/api/v1/roles",
                 headers=headers,
-                json={"name": "tenant_owner", "permissions": []},
+                json={"name": "tenant_owner", "permission_keys": ["users:read"]},
             )
             assert reserved.status_code == 422
         finally:

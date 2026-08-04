@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_invitation_service, require_permission
+from identity.core.permissions import INVITATIONS_SEND
 from identity.core.tenant_context import TenantContext
 from identity.features.invitations.schemas import (
     InvitationAcceptRequest,
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
-_require_invite = require_permission("admin.user.invite")
+_require_invite = require_permission(INVITATIONS_SEND)
 
 
 @router.post("", response_model=ResponseEnvelope[InvitationResponse])

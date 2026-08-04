@@ -84,7 +84,7 @@ SKIP_AUTH_PATHS = frozenset(
 # can all import it without crossing feature boundaries.
 # ---------------------------------------------------------------------------
 SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("tenant_owner", ("*", "admin.user.invite")),
+    ("tenant_owner", ("*", "invitations:send")),
     (
         "organization_admin",
         (
@@ -103,7 +103,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "settings:read",
             "settings:write",
             "billing.manage",
-            "admin.user.invite",
+            "invitations:send",
         ),
     ),
     (

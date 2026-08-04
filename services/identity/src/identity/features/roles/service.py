@@ -90,13 +90,13 @@ class RoleManagementService:
         if existing is not None:
             raise ValidationError(f"Role '{body.name}' already exists")
 
-        self._validate_permissions(body.permissions)
+        self._validate_permissions(body.permission_keys)
 
         return await self.role_repo.create(
             Role(
                 tenant_id=uuid.UUID(str(tenant_id)),
                 name=body.name,
-                permissions=body.permissions,
+                permissions=body.permission_keys,
                 is_system_role=False,
             )
         )

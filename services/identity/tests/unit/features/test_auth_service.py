@@ -14,7 +14,7 @@ from identity.core.security import (
     hash_password,
 )
 from identity.core.tenant_context import TenantContext
-from identity.domain.entities import Role, Tenant, User
+from identity.domain.entities import Role, Session, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.schemas import LoginRequest, RegisterRequest
 from identity.features.auth.service import AuthenticationService
@@ -172,10 +172,12 @@ class FakeTokenService:
     """TokenService double — returns a fixed TokenPair, records call args."""
 
     def __init__(self) -> None:
-        self.pairs_created: list[tuple[str, str]] = []
+        self.pairs_created: list[tuple[str, str, str | None]] = []
 
-    async def create_token_pair(self, *, user_id: str, tenant_id: str) -> TokenPair:
-        self.pairs_created.append((user_id, tenant_id))
+    async def create_token_pair(
+        self, *, user_id: str, tenant_id: str, session_id: str | None = None
+    ) -> TokenPair:
+        self.pairs_created.append((user_id, tenant_id, session_id))
         return TokenPair(access_token="access-token", refresh_token="refresh-token")
 
 
@@ -212,6 +214,67 @@ class FakeEmailService:
     ) -> None:
         self.sent.append({"to": to, "full_name": full_name, "token": token, "base_url": base_url})
 
+    async def send_security_alert(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        event_type: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        self.sent.append(
+            {
+                "to": to,
+                "full_name": full_name,
+                "event_type": event_type,
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+            }
+        )
+
+
+class FakeSessionService:
+    def __init__(self, prior_device: bool = True) -> None:
+        self.prior_device = prior_device
+        self.created: list[Session] = []
+        self.prior_device_checks: list[tuple[uuid.UUID, str | None, str | None]] = []
+
+    async def has_prior_device(
+        self,
+        user_id: str | uuid.UUID,
+        *,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> bool:
+        self.prior_device_checks.append((uuid.UUID(str(user_id)), user_agent, ip_address))
+        return self.prior_device
+
+    async def create_session(
+        self,
+        *,
+        user_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        refresh_token_hash: str,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+        device_info: dict[str, object] | None = None,
+        location: str | None = None,
+        session_id: uuid.UUID | None = None,
+    ) -> Session:
+        session = Session(
+            id=session_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            refresh_token_hash=refresh_token_hash,
+            user_agent=user_agent,
+            ip_address=ip_address,
+            device_info=device_info,
+            location=location,
+        )
+        self.created.append(session)
+        return session
+
 
 class _Harness:
     """Wires AuthenticationService against in-memory port doubles."""
@@ -222,6 +285,7 @@ class _Harness:
         users: list[User] | None = None,
         tenants: list[Tenant] | None = None,
         roles_for_user: dict[uuid.UUID, list[str]] | None = None,
+        prior_device: bool = True,
     ) -> None:
         self.user_repo = FakeUserRepo(users)
         self.tenant_repo = FakeTenantRepo(tenants)
@@ -229,6 +293,7 @@ class _Harness:
         self.token_svc = FakeTokenService()
         self.audit_svc = FakeAuditService()
         self.email_svc = FakeEmailService()
+        self.session_svc = FakeSessionService(prior_device=prior_device)
         self.service = AuthenticationService(
             self.user_repo,
             self.tenant_repo,
@@ -236,6 +301,7 @@ class _Harness:
             self.token_svc,
             self.audit_svc,
             self.email_svc,
+            self.session_svc,
         )
 
 
@@ -280,13 +346,40 @@ class TestLogin:
         assert result["token_type"] == "Bearer"
         assert result["mfa_required"] is False
         assert result["user"] is user
-        assert harness.token_svc.pairs_created == [(str(user.id), tenant_ctx)]
+        user_id, created_tenant, session_id = harness.token_svc.pairs_created[0]
+        assert (user_id, created_tenant) == (str(user.id), tenant_ctx)
+        assert session_id is not None
+        assert harness.session_svc.prior_device_checks == [(user.id, None, None)]
+        assert [s.id for s in harness.session_svc.created] == [uuid.UUID(session_id)]
+        assert harness.session_svc.created[0].user_id == user.id
+        assert harness.session_svc.created[0].tenant_id == uuid.UUID(tenant_ctx)
         assert harness.audit_svc.events == [
             {
                 "action": "auth.login.success",
                 "target": f"user:{user.id}",
                 "user_id": str(user.id),
                 "tenant_id": None,
+            }
+        ]
+        assert harness.email_svc.sent == []
+
+    async def test_new_device_sends_security_alert(self, tenant_ctx: str) -> None:
+        user = _make_user()
+        harness = _Harness(users=[user], prior_device=False)
+
+        await harness.service.login(
+            LoginRequest(email=user.email, password="Password1!"),
+            ip_address="203.0.113.7",
+            user_agent="Mozilla/5.0 (X11; Linux x86_64)",
+        )
+
+        assert harness.email_svc.sent == [
+            {
+                "to": user.email,
+                "full_name": "Test User",
+                "event_type": "new_device",
+                "ip_address": "203.0.113.7",
+                "user_agent": "Mozilla/5.0 (X11; Linux x86_64)",
             }
         ]
 

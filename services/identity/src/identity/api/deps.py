@@ -34,6 +34,8 @@ from skyrict_common.exceptions import AuthenticationError
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.service import AuthenticationService, TokenService
+    from identity.features.invitations.repository import InvitationRepository
+    from identity.features.invitations.service import InvitationService
     from identity.features.organizations.service import TenantService
     from identity.features.roles.service import RoleManagementService
     from identity.features.sessions.service import SessionService
@@ -207,3 +209,22 @@ def get_session_service(
     from identity.features.sessions.service import SessionService
 
     return SessionService(session_repo)
+
+
+def get_invitation_repo(
+    db: AsyncSession = Depends(get_db),
+) -> InvitationRepository:
+    from identity.features.invitations.repository import InvitationRepository
+
+    return InvitationRepository(db)
+
+
+def get_invitation_service(
+    invitation_repo: InvitationRepository = Depends(get_invitation_repo),
+    user_repo: UserRepository = Depends(get_user_repo),
+    role_repo: RoleRepository = Depends(get_role_repo),
+    email_service: EmailService = Depends(get_email_service),
+) -> InvitationService:
+    from identity.features.invitations.service import InvitationService
+
+    return InvitationService(invitation_repo, user_repo, role_repo, email_service)

@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values, or override
+# via `terraform apply -var="..."` (the CD pipeline passes wildcard_target
+# dynamically from the cluster load balancer address).
+
+aws_region       = "us-east-1"
+zone_name        = "staging.skyrict.com"
+
+# First bootstrap only: true creates the hosted zone; after the NS delegation
+# is in place at the parent domain, set this back to false.
+create_zone      = false
+
+# Resolve from the cluster once the ingress exists, e.g.
+#   kubectl get svc -n ingress-nginx ingress-nginx-controller \
+#     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+wildcard_target  = "INGRESS_LOAD_BALANCER_ADDRESS_OR_HOSTNAME"

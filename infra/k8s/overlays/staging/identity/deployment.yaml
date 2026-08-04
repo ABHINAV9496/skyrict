@@ -29,7 +29,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: identity
-          image: skyrict/identity:latest
+          image: ghcr.io/nkswalih/skyrict/identity:staging
           imagePullPolicy: Always
           ports:
             - name: http
@@ -44,6 +44,11 @@ spec:
               value: INFO
             - name: LOG_JSON
               value: "true"
+            # Tenant subdomains resolve to the first label of this domain, e.g.
+            # acme-test.staging.skyrict.com -> tenant slug "acme-test". Required
+            # by the identity service production-safety checks in staging.
+            - name: IDENTITY_BASE_DOMAIN
+              value: staging.skyrict.com
           envFrom:
             - secretRef:
                 name: identity-secrets-staging

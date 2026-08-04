@@ -1,0 +1,71 @@
+# =============================================================================
+# CI — Infrastructure
+#
+# Validates Terraform configuration and Kubernetes manifests on every PR that
+# touches infra/. No cloud credentials or cluster access are required — the
+# terraform steps init without a backend, and kubeconform validates the
+# rendered overlay against Kubernetes + CRD schemas offline.
+# =============================================================================
+
+name: CI — Infrastructure
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "infra/**"
+      - ".github/workflows/ci-infra.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "infra/**"
+      - ".github/workflows/ci-infra.yml"
+
+concurrency:
+  group: ci-infra-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: Terraform (fmt + validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Format check
+        run: terraform fmt -check -recursive infra/terraform/
+
+      - name: Validate staging environment
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Validate DNS module
+        working-directory: infra/terraform/modules/dns/route53
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  kubernetes:
+    name: Kubernetes manifests (build + schema)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render staging overlay
+        run: kubectl kustomize infra/k8s/overlays/staging > /tmp/staging-rendered.yaml
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+
+      - name: Validate rendered manifests
+        # Certificate/ClusterIssuer are cert-manager CRDs with no entry in the
+        # default kubeconform schema set; built-in kinds are still validated.
+        run: kubeconform -summary -ignore-missing-schemas /tmp/staging-rendered.yaml

@@ -26,6 +26,7 @@ PROBLEM_BASE_URL = "https://api.skyrict.io/problems"
 
 PROBLEM_TOKEN_EXPIRED = f"{PROBLEM_BASE_URL}/token-expired"
 PROBLEM_TOKEN_INVALID = f"{PROBLEM_BASE_URL}/token-invalid"
+PROBLEM_TOKEN_REUSE_DETECTED = f"{PROBLEM_BASE_URL}/token-reuse-detected"
 PROBLEM_AUTHENTICATION_ERROR = f"{PROBLEM_BASE_URL}/authentication-error"
 PROBLEM_EMAIL_NOT_VERIFIED = f"{PROBLEM_BASE_URL}/email-not-verified"
 PROBLEM_AUTHORIZATION_ERROR = f"{PROBLEM_BASE_URL}/authorization-error"

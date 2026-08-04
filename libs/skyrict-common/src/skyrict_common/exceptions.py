@@ -47,6 +47,11 @@ class TokenInvalidError(AuthenticationError):
     code = "TOKEN_INVALID"
 
 
+class TokenReuseDetectedError(AuthenticationError):
+    message = "Refresh token reuse detected"
+    code = "TOKEN_REUSE_DETECTED"
+
+
 class MFARequiredError(AuthenticationError):
     message = "Multi-factor authentication is required"
     code = "MFA_REQUIRED"

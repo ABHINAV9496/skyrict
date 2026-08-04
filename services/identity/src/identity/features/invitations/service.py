@@ -80,7 +80,6 @@ class InvitationService:
         email: str,
         password: str,
         full_name: str,
-        tenant_id: str | uuid.UUID,
     ) -> User:
         invitation = await self.invitation_repo.get_by_token(token)
         if invitation is None:
@@ -94,6 +93,8 @@ class InvitationService:
 
         if invitation.email.lower() != email.lower():
             raise InvitationEmailMismatchError("Email does not match the invitation")
+
+        tenant_id = invitation.tenant_id
 
         existing = await self.user_repo.get_by_email(tenant_id, email)
         if existing is not None:

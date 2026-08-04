@@ -226,7 +226,6 @@ class TestAcceptInvitation:
             email="invitee@test.com",
             password="SecurePass123!",
             full_name="Invitee User",
-            tenant_id=tenant_id,
         )
 
         assert user.id is not None
@@ -257,7 +256,6 @@ class TestAcceptInvitation:
                 email="expired@test.com",
                 password="SecurePass123!",
                 full_name="Expired User",
-                tenant_id=tenant_id,
             )
 
     async def test_accept_already_used_token_raises(
@@ -281,7 +279,6 @@ class TestAcceptInvitation:
                 email="used@test.com",
                 password="SecurePass123!",
                 full_name="Used User",
-                tenant_id=tenant_id,
             )
 
     async def test_accept_email_mismatch_raises(
@@ -304,7 +301,6 @@ class TestAcceptInvitation:
                 email="wrong@test.com",
                 password="SecurePass123!",
                 full_name="Wrong Email",
-                tenant_id=tenant_id,
             )
 
     async def test_accept_unknown_token_raises(
@@ -316,7 +312,6 @@ class TestAcceptInvitation:
                 email="nobody@test.com",
                 password="SecurePass123!",
                 full_name="Nobody",
-                tenant_id=tenant_id,
             )
 
     async def test_accept_existing_user_raises(
@@ -347,7 +342,6 @@ class TestAcceptInvitation:
                 email="exists@test.com",
                 password="SecurePass123!",
                 full_name="Existing User",
-                tenant_id=tenant_id,
             )
 
 

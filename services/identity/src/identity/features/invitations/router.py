@@ -52,7 +52,6 @@ async def accept_invitation(
         email=body.email,
         password=body.password,
         full_name=body.full_name,
-        tenant_id=TenantContext.get(),
     )
     return ResponseEnvelope(
         data=UserResponse.model_validate(user),

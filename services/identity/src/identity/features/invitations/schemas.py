@@ -22,6 +22,7 @@ class InvitationAcceptRequest(BaseModel):
 
 class InvitationResponse(BaseModel):
     id: UUID
+    token: str
     email: EmailStr
     expires_at: datetime
     used_at: datetime | None

@@ -66,6 +66,7 @@ SKIP_AUTH_PATHS = frozenset(
         f"{API_V1_PREFIX}/ready",
         f"{API_V1_PREFIX}/auth/register",
         f"{API_V1_PREFIX}/auth/verify-email",
+        f"{API_V1_PREFIX}/invitations/accept",
         "/docs",
         "/openapi.json",
         "/redoc",
@@ -82,7 +83,7 @@ SKIP_AUTH_PATHS = frozenset(
 # can all import it without crossing feature boundaries.
 # ---------------------------------------------------------------------------
 SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("tenant_owner", ("*",)),
+    ("tenant_owner", ("*", "admin.user.invite")),
     (
         "organization_admin",
         (
@@ -101,6 +102,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "settings:read",
             "settings:write",
             "billing.manage",
+            "admin.user.invite",
         ),
     ),
     (
@@ -125,3 +127,11 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 SYSTEM_ROLE_NAMES = frozenset(name for name, _ in SYSTEM_ROLE_DEFINITIONS)
+
+INVITATION_TOKEN_EXPIRE_DAYS = 7
+DEFAULT_INVITE_ROLE = "viewer"
+
+PROBLEM_INVITATION_NOT_FOUND = f"{PROBLEM_BASE_URL}/invitation-not-found"
+PROBLEM_INVITATION_EXPIRED = f"{PROBLEM_BASE_URL}/invitation-expired"
+PROBLEM_INVITATION_ALREADY_USED = f"{PROBLEM_BASE_URL}/invitation-already-used"
+PROBLEM_INVITATION_EMAIL_MISMATCH = f"{PROBLEM_BASE_URL}/invitation-email-mismatch"

@@ -150,3 +150,23 @@ class ValidationError(SkyrictError):
 class RateLimitExceededError(SkyrictError):
     message = "Rate limit exceeded"
     code = "RATE_LIMIT_EXCEEDED"
+
+
+class InvitationNotFoundError(NotFoundError):
+    message = "Invitation not found"
+    code = "INVITATION_NOT_FOUND"
+
+
+class InvitationExpiredError(SkyrictError):
+    message = "Invitation has expired"
+    code = "INVITATION_EXPIRED"
+
+
+class InvitationAlreadyUsedError(SkyrictError):
+    message = "Invitation has already been used"
+    code = "INVITATION_ALREADY_USED"
+
+
+class InvitationEmailMismatchError(SkyrictError):
+    message = "Email does not match the invitation"
+    code = "INVITATION_EMAIL_MISMATCH"

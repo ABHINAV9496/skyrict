@@ -109,6 +109,21 @@ class UserRole:
 
 
 @dataclass
+class Invitation:
+    """Invitation entity — single-use, expiring invite token."""
+
+    tenant_id: UUID
+    email: str
+    token: str
+    created_by_user_id: UUID
+    expires_at: datetime
+    id: UUID | None = None
+    used_at: datetime | None = None
+    used_by_user_id: UUID | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+@dataclass
 class AuditLog:
     """Audit log entry entity — hash-chained, append-only."""
 

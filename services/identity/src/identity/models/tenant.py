@@ -32,3 +32,4 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_roles = relationship("UserRoleModel", back_populates="tenant", lazy="selectin")
     sessions = relationship("SessionModel", back_populates="tenant", lazy="selectin")
     audit_logs = relationship("AuditLogModel", back_populates="tenant", lazy="selectin")
+    invitations = relationship("InvitationModel", back_populates="tenant", lazy="selectin")

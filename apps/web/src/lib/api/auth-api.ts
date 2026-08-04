@@ -132,12 +132,17 @@ export const DEMO_MFA_CODE = "123456";
 
 export interface RiskAssessment {
   requiresCaptcha: boolean;
+  requiresChallenge: boolean;
   signals: string[];
 }
 
 export async function assessRisk(): Promise<RiskAssessment> {
   await delay(350);
-  return { requiresCaptcha: false, signals: [] };
+  return {
+    requiresCaptcha: true,
+    requiresChallenge: false,
+    signals: [],
+  };
 }
 
 export async function solveCaptcha(): Promise<{ status: "ok" }> {

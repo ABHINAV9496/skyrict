@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: skyrict-staging-wildcard
+  namespace: skyrict-staging
+  labels:
+    app.kubernetes.io/name: identity
+    app.kubernetes.io/part-of: skyrict
+    environment: staging
+spec:
+  # Secret consumed by the identity Ingress TLS block.
+  secretName: skyrict-staging-wildcard-tls
+  issuerRef:
+    name: letsencrypt-dns01
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.staging.skyrict.com"
+    - "staging.skyrict.com"
+  privateKey:
+    algorithm: RSA
+    size: 2048

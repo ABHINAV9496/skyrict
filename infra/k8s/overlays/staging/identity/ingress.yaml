@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: identity
+  namespace: skyrict-staging
+  labels:
+    app.kubernetes.io/name: identity
+    app.kubernetes.io/part-of: skyrict
+    environment: staging
+  annotations:
+    # Force HTTPS for every tenant subdomain; the wildcard certificate is
+    # issued and auto-renewed by cert-manager (see cert-manager/).
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "*.staging.skyrict.com"
+        - "staging.skyrict.com"
+      secretName: skyrict-staging-wildcard-tls
+  rules:
+    - host: "*.staging.skyrict.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: identity
+                port:
+                  name: http

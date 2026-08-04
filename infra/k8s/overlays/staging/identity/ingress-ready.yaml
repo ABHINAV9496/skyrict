@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: identity-ready
+  namespace: skyrict-staging
+  labels:
+    app.kubernetes.io/name: identity
+    app.kubernetes.io/part-of: skyrict
+    environment: staging
+  annotations:
+    # External readiness check mirroring the /health route: /ready -> /api/v1/ready.
+    nginx.ingress.kubernetes.io/rewrite-target: /api/v1/ready
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "*.staging.skyrict.com"
+      http:
+        paths:
+          - path: /ready
+            pathType: Exact
+            backend:
+              service:
+                name: identity
+                port:
+                  name: http

@@ -1,0 +1,37 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns01
+  labels:
+    app.kubernetes.io/part-of: skyrict
+    environment: staging
+spec:
+  acme:
+    # Let's Encrypt production CA — issues the real, browser-trusted wildcard
+    # certificate. The DNS-01 challenge writes _acme-challenge TXT records into
+    # the staging.skyrict.com hosted zone (managed by Terraform).
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # ACME contact email is intentionally omitted (optional in cert-manager).
+    # Add ops@skyrict.com here (or via `kubectl patch` from the
+    # LETS_ENCRYPT_EMAIL GitHub secret) if you want renewal/expiry notices.
+    privateKeySecretRef:
+      name: letsencrypt-dns01-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-1
+            # Credentials are created by the CD pipeline from GitHub secrets
+            # only: kubectl create secret generic cert-manager-dns-credentials
+            # --namespace cert-manager --from-literal=access-key-id=... \
+            #   --from-literal=secret-access-key=...
+            # The secret MUST live in the cert-manager namespace for ClusterIssuers.
+            accessKeyIDSecretRef:
+              name: cert-manager-dns-credentials
+              key: access-key-id
+            secretAccessKeySecretRef:
+              name: cert-manager-dns-credentials
+              key: secret-access-key
+        # Least privilege: this issuer may only touch the staging zone.
+        selector:
+          dnsZones:
+            - "staging.skyrict.com"

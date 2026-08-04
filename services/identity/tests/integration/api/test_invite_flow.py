@@ -77,13 +77,14 @@ class TestInvitationFlow:
         assert create_resp.status_code == 200
         invite_data = create_resp.json()["data"]
         assert invite_data["email"] == invite_email
+        assert invite_data["token"]
         assert invite_data["used_at"] is None
 
         accept_resp = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
             json={
-                "token": invite_data["id"],
+                "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
                 "full_name": "Invitee User",
@@ -108,7 +109,9 @@ class TestInvitationFlow:
             json={"email": invite_email},
         )
         assert create_resp.status_code == 200
-        invite_id = create_resp.json()["data"]["id"]
+        invite_data = create_resp.json()["data"]
+        invite_id = invite_data["id"]
+        invite_token = invite_data["token"]
 
         async with async_session_factory() as session:
             model = await session.get(InvitationModel, uuid.UUID(invite_id))
@@ -120,7 +123,7 @@ class TestInvitationFlow:
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
             json={
-                "token": invite_id,
+                "token": invite_token,
                 "email": invite_email,
                 "password": "InviteePass123!",
                 "full_name": "Expired User",
@@ -148,7 +151,7 @@ class TestInvitationFlow:
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
             json={
-                "token": invite_data["id"],
+                "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
                 "full_name": "First Accept",
@@ -160,13 +163,13 @@ class TestInvitationFlow:
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
             json={
-                "token": invite_data["id"],
+                "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
                 "full_name": "Second Accept",
             },
         )
-        assert second_accept.status_code in (400, 403, 422)
+        assert second_accept.status_code in (400, 409)
 
         with contextlib.suppress(Exception):
             await _cleanup_tenant(tenant["slug"])
@@ -188,7 +191,7 @@ class TestInvitationFlow:
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
             json={
-                "token": invite_data["id"],
+                "token": invite_data["token"],
                 "email": "wrong-email@test.com",
                 "password": "InviteePass123!",
                 "full_name": "Wrong Email",

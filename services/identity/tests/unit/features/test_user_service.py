@@ -384,7 +384,9 @@ class TestCreateCustomRole:
         service = RoleManagementService(FakeRoleRepo())
 
         with pytest.raises(ValidationError, match="reserved system role"):
-            await service.create_custom_role(uuid.uuid4(), RoleCreateRequest(name="tenant_owner"))
+            await service.create_custom_role(
+                uuid.uuid4(), RoleCreateRequest(name="tenant_owner", permission_keys=["users:read"])
+            )
 
     async def test_rejects_duplicate_name(self) -> None:
         tenant_id = uuid.uuid4()
@@ -393,14 +395,16 @@ class TestCreateCustomRole:
         service = RoleManagementService(repo)
 
         with pytest.raises(ValidationError, match="already exists"):
-            await service.create_custom_role(tenant_id, RoleCreateRequest(name="ops"))
+            await service.create_custom_role(
+                tenant_id, RoleCreateRequest(name="ops", permission_keys=["users:read"])
+            )
 
     async def test_rejects_unknown_permissions(self) -> None:
         service = RoleManagementService(FakeRoleRepo())
 
         with pytest.raises(ValidationError, match="Unknown permission"):
             await service.create_custom_role(
-                uuid.uuid4(), RoleCreateRequest(name="ops", permissions=["nope:wat"])
+                uuid.uuid4(), RoleCreateRequest(name="ops", permission_keys=["nope:wat"])
             )
 
     async def test_creates_custom_role(self) -> None:
@@ -408,7 +412,7 @@ class TestCreateCustomRole:
         service = RoleManagementService(repo)
 
         role = await service.create_custom_role(
-            uuid.uuid4(), RoleCreateRequest(name="ops", permissions=["roles:read"])
+            uuid.uuid4(), RoleCreateRequest(name="ops", permission_keys=["roles:read"])
         )
 
         assert role.name == "ops"

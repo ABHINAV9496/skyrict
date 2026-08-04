@@ -6,12 +6,19 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from identity.api.deps import get_roles_service, require_permission
+from identity.core.permissions import PERMISSION_MODULES
 from identity.core.tenant_context import TenantContext
 from identity.domain.entities import ScopeType
-from identity.features.roles.schemas import RoleCreateRequest, RoleResponse
+from identity.features.roles.schemas import (
+    PermissionCatalogResponse,
+    PermissionModule,
+    PermissionResponse,
+    RoleCreateRequest,
+    RoleResponse,
+)
 from skyrict_common.schemas import ResponseEnvelope
 
 if TYPE_CHECKING:
@@ -29,7 +36,9 @@ class RoleUpdateRequest(BaseModel):
     """PATCH /roles/{id} — update a custom role's name and/or permissions."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9_-]+$")
-    permissions: list[str] | None = None
+    permission_keys: list[str] | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class RoleAssignRequest(BaseModel):
@@ -76,7 +85,7 @@ async def update_role(
         TenantContext.get(),
         role_id,
         name=body.name,
-        permissions=body.permissions,
+        permissions=body.permission_keys,
     )
     return ResponseEnvelope(data=RoleResponse.model_validate(role), message="Role updated")
 
@@ -108,3 +117,31 @@ async def assign_role(
         scope_id=body.scope_id,
     )
     return ResponseEnvelope(message="Role assigned")
+
+
+# --- Permissions catalog endpoint (public, un-gated) ---
+
+permissions_router = APIRouter(prefix="/permissions", tags=["permissions"])
+
+
+def _permission_description(module_label: str, perm_key: str) -> str:
+    """Generate human-readable description from module label and permission key."""
+    action = perm_key.split(":")[-1].replace(".", " ")
+    return f"{module_label}: {action}"
+
+
+@permissions_router.get("", response_model=ResponseEnvelope[PermissionCatalogResponse])
+async def get_permissions_catalog() -> ResponseEnvelope[PermissionCatalogResponse]:
+    """Return the full platform permission catalog grouped by module."""
+    modules: list[PermissionModule] = []
+    for module_key, module_label, perm_keys in PERMISSION_MODULES:
+        permissions = [
+            PermissionResponse(key=key, description=_permission_description(module_label, key))
+            for key in perm_keys
+        ]
+        modules.append(
+            PermissionModule(key=module_key, label=module_label, permissions=permissions)
+        )
+    return ResponseEnvelope(
+        data=PermissionCatalogResponse(modules=modules), message="Permission catalog retrieved"
+    )

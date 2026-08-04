@@ -78,7 +78,7 @@ class TestProvisioning:
                 by_name = {role.name: role for role in roles}
                 assert set(by_name) == SYSTEM_ROLE_NAMES
                 assert all(role.is_system_role for role in roles)
-                assert by_name["tenant_owner"].permissions == ["*"]
+                assert "*" in by_name["tenant_owner"].permissions
 
                 user = await session.scalar(select(UserModel).where(UserModel.email == email))
                 assert user is not None

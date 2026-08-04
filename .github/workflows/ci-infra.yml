@@ -60,13 +60,12 @@ jobs:
       - name: Render staging overlay
         run: kubectl kustomize infra/k8s/overlays/staging > /tmp/staging-rendered.yaml
 
+      - name: Install kubeconform
+        run: |
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+
       - name: Validate rendered manifests
-        uses: yannh/kubeconform/cmd/kubeconform@v0.6.7
-        with:
-          files:
-            - /tmp/staging-rendered.yaml
-          flags:
-            # Certificate/ClusterIssuer are cert-manager CRDs with no entry in
-            # the default kubeconform schema set; the built-in kinds are still
-            # validated strictly.
-            - -ignore-missing-schemas
+        # Certificate/ClusterIssuer are cert-manager CRDs with no entry in the
+        # default kubeconform schema set; built-in kinds are still validated.
+        run: kubeconform -summary -ignore-missing-schemas /tmp/staging-rendered.yaml

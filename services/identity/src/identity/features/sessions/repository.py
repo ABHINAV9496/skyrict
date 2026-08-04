@@ -99,3 +99,21 @@ class SessionRepository(SqlRepository):
         model.is_active = False
         model.revoked_at = datetime.now(UTC)
         await self.session.flush()
+
+    async def rotate(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        refresh_token_hash: str,
+        expires_at: datetime,
+    ) -> None:
+        model = await self.session.get(SessionModel, session_id)
+        if model is None:
+            return
+        model.refresh_token_hash = refresh_token_hash
+        model.expires_at = expires_at
+        model.last_active_at = datetime.now(UTC)
+        await self.session.flush()
+
+    async def commit(self) -> None:
+        await self.session.commit()

@@ -1,52 +1,226 @@
-# name: CD — Staging
+# =============================================================================
+# CD — Staging
+#
+# Deploys the identity service to the staging Kubernetes cluster and
+# provisions/reconciles the wildcard DNS + TLS:
+#
+#   1. Build & push the identity image to GHCR (staging + immutable sha tags)
+#   2. kubectl: create cluster-side secrets from GitHub secrets, apply the
+#      staging overlay (namespace, deployment, service, ingresses,
+#      cert-manager ClusterIssuer + wildcard Certificate), pin the deployed
+#      image to the immutable sha tag
+#   3. Terraform: reconcile the *.staging.skyrict.com wildcard record to the
+#      ingress load balancer address (Route 53, remote state)
+#   4. Verify from an external network (the GitHub runner): wait for the
+#      wildcard certificate, assert public DNS resolution and that
+#      https://acme-test.staging.skyrict.com/health returns 200 with a valid
+#      TLS certificate
+#
+# Cluster / cloud credentials never live in the repository — they are GitHub
+# secrets on the `staging` environment (see docs/runbooks/staging-deployment.md
+# for the full secret list and bootstrap procedure).
+# =============================================================================
 
-# on:
-#   push:
-#     branches: [main]
-#     paths:
-#       - "services/**"
-#       - "apps/**"
-#       - "libs/**"
+name: CD — Staging
 
-# env:
-#   REGISTRY: ghcr.io
-#   IMAGE_PREFIX: ${{ github.repository }}
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "apps/**"
+      - "libs/**"
+      - "infra/**"
+      - ".github/workflows/cd-staging.yml"
+  workflow_dispatch:
 
-# jobs:
-#   build-and-push-identity:
-#     name: Build & Push Identity Service
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       packages: write
-#     steps:
-#       - uses: actions/checkout@v4
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
 
-#       - name: Log in to Container Registry
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ${{ env.REGISTRY }}
-#           username: ${{ github.actor }}
-#           password: ${{ secrets.GITHUB_TOKEN }}
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  IMAGE_NAME: identity
+  IMAGE_TAG_STAGING: staging
+  STAGING_DOMAIN: staging.skyrict.com
+  STAGING_NAMESPACE: skyrict-staging
+  VERIFY_HOST: acme-test.staging.skyrict.com
 
-#       - name: Build and push
-#         uses: docker/build-push-action@v6
-#         with:
-#           context: services/identity
-#           push: true
-#           tags: |
-#             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/identity:staging
-#             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/identity:${{ github.sha }}
+permissions:
+  contents: read
+  packages: write
 
-#   deploy:
-#     name: Deploy to Staging
-#     needs: build-and-push-identity
-#     runs-on: ubuntu-latest
-#     environment: staging
-#     steps:
-#       - uses: actions/checkout@v4
+jobs:
+  build-and-push-identity:
+    name: Build & Push Identity Service
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
 
-#       - name: Deploy to staging cluster
-#         run: |
-#           echo "Deploying to staging..."
-#           # TODO: Add kubectl/terraform deploy commands
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          # The Dockerfile copies pyproject.toml/uv.lock and libs/* from the
+          # workspace root, so the build context is the repo root.
+          context: .
+          file: services/identity/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG_STAGING }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Emit immutable image reference
+        id: image
+        run: |
+          echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Identity to Staging Cluster
+    needs: build-and-push-identity
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.0
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl version --client
+          kubectl cluster-info --request-timeout=15s
+
+      - name: Create GHCR image pull secret
+        run: |
+          kubectl create secret docker-registry skyrict-registry \
+            --namespace "${{ env.STAGING_NAMESPACE }}" \
+            --docker-server="${{ env.REGISTRY }}" \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create cert-manager DNS-01 credentials secret
+        run: |
+          kubectl create secret generic cert-manager-dns-credentials \
+            --namespace cert-manager \
+            --from-literal=access-key-id="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            --from-literal=secret-access-key="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply staging overlay
+        run: kubectl apply -k infra/k8s/overlays/staging
+
+      - name: Pin identity image to immutable tag
+        run: |
+          kubectl set image deployment/identity identity="${{ needs.build-and-push-identity.outputs.image }}" \
+            --namespace "${{ env.STAGING_NAMESPACE }}"
+          kubectl rollout status deployment/identity \
+            --namespace "${{ env.STAGING_NAMESPACE }}" --timeout=300s
+
+      - name: Resolve ingress load balancer address
+        id: lb
+        run: |
+          ADDR="$(kubectl get svc -n ingress-nginx ingress-nginx-controller \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)"
+          if [ -z "$ADDR" ]; then
+            ADDR="$(kubectl get svc -n ingress-nginx ingress-nginx-controller \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)"
+          fi
+          if [ -z "$ADDR" ]; then
+            echo "::error::Could not resolve the ingress-nginx load balancer address"
+            kubectl get svc -n ingress-nginx ingress-nginx-controller || true
+            exit 1
+          fi
+          echo "address=$ADDR" >> "$GITHUB_OUTPUT"
+    outputs:
+      lb_address: ${{ steps.lb.outputs.address }}
+
+  dns:
+    name: Provision Wildcard DNS (Terraform)
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init (remote state)
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=staging/terraform.tfstate" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -input=false
+
+      - name: Terraform apply (wildcard record)
+        working-directory: infra/terraform/environments/staging
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="zone_name=${{ env.STAGING_DOMAIN }}" \
+            -var="wildcard_target=${{ needs.deploy.outputs.lb_address }}"
+
+  verify:
+    name: Verify Staging End-to-End
+    needs: [dns]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.0
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Wait for wildcard certificate
+        run: |
+          kubectl wait --for=condition=Ready certificate/skyrict-staging-wildcard \
+            --namespace "${{ env.STAGING_NAMESPACE }}" --timeout=600s
+          kubectl get certificate skyrict-staging-wildcard \
+            --namespace "${{ env.STAGING_NAMESPACE }}" -o wide
+
+      - name: Assert public DNS resolution
+        run: |
+          echo "Resolving ${{ env.VERIFY_HOST }} from an external network:"
+          getent hosts "${{ env.VERIFY_HOST }}"
+
+      - name: Assert HTTPS health endpoint (valid TLS, HTTP 200)
+        run: |
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 10 --retry-all-errors \
+            "https://${{ env.VERIFY_HOST }}/health" | tee /dev/stderr \
+            | grep -q '"status":"healthy"'

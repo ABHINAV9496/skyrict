@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from identity.core.config import Environment, settings
@@ -25,6 +26,7 @@ from identity.core.security import (
     create_email_verification_token,
     create_refresh_token,
     hash_password,
+    hash_refresh_token,
     verify_jwt,
     verify_password,
 )
@@ -36,6 +38,7 @@ from skyrict_common.exceptions import (
     InvalidPasswordError,
     TokenExpiredError,
     TokenInvalidError,
+    TokenReuseDetectedError,
     UserDisabledError,
     UserNotFoundError,
 )
@@ -46,6 +49,7 @@ if TYPE_CHECKING:
     from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.sessions.ports import SessionRepositoryPort
+    from identity.features.sessions.service import SessionService
     from identity.features.users.ports import UserRepositoryPort
 
 _SLUG_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
@@ -68,6 +72,7 @@ class AuthenticationService:
         token_service: TokenService,
         audit_service: AuditService,
         email_service: EmailService,
+        session_service: SessionService,
     ) -> None:
         self.user_repo = user_repo
         self.tenant_repo = tenant_repo
@@ -75,6 +80,7 @@ class AuthenticationService:
         self.token_service = token_service
         self.audit_service = audit_service
         self.email_service = email_service
+        self.session_service = session_service
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
@@ -110,9 +116,25 @@ class AuthenticationService:
         roles = await self.role_repo.get_roles_for_user(user.id, tenant_id)
         mfa_required = "tenant_owner" in roles and not user.mfa_enabled
 
+        session_id = uuid.uuid4()
         tokens = await self.token_service.create_token_pair(
             user_id=str(user.id),
             tenant_id=tenant_id,
+            session_id=str(session_id),
+        )
+
+        new_device = not await self.session_service.has_prior_device(
+            user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+        await self.session_service.create_session(
+            session_id=session_id,
+            user_id=user.id,
+            tenant_id=uuid.UUID(tenant_id),
+            refresh_token_hash=hash_refresh_token(tokens.refresh_token),
+            user_agent=user_agent,
+            ip_address=ip_address,
         )
 
         await self.audit_service.log(
@@ -122,6 +144,14 @@ class AuthenticationService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        if new_device:
+            await self.email_service.send_security_alert(
+                to=user.email,
+                full_name=user.full_name,
+                event_type="new_device",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         return {
             "access_token": tokens.access_token,
@@ -263,13 +293,20 @@ class AuthenticationService:
 class TokenService:
     """Manages JWT token lifecycle — creation, refresh, revocation."""
 
-    def __init__(self, session_repo: SessionRepositoryPort) -> None:
+    def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
         self.session_repo = session_repo
+        self.audit_service = audit_service
 
-    async def create_token_pair(self, *, user_id: str, tenant_id: str) -> TokenPair:
+    async def create_token_pair(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str,
+        session_id: str | None = None,
+    ) -> TokenPair:
         """Create an access + refresh token pair."""
         access_token = create_access_token(user_id, tenant_id=tenant_id)
-        refresh_token = create_refresh_token(user_id, tenant_id=tenant_id)
+        refresh_token = create_refresh_token(user_id, tenant_id=tenant_id, session_id=session_id)
 
         return TokenPair(
             access_token=access_token,
@@ -278,12 +315,7 @@ class TokenService:
         )
 
     async def refresh_tokens(self, refresh_token: str) -> TokenPair:
-        """Validate a refresh token and issue a new pair.
-
-        Raises:
-            TokenInvalidError: If the refresh token is invalid.
-            TokenExpiredError: If the refresh token has expired.
-        """
+        """Validate a refresh token, rotate it, and issue a new pair."""
         payload = verify_jwt(refresh_token)
 
         if payload.get("type") != "refresh":
@@ -291,14 +323,50 @@ class TokenService:
 
         user_id = payload["sub"]
         tenant_id = payload["tenant_id"]
+        session_id = payload.get("session_id")
 
-        # Verify the session is still active
-        sessions = await self.session_repo.get_active_by_user(uuid.UUID(user_id))
-        if not sessions:
-            raise TokenInvalidError("No active session found")
+        session = await self.session_repo.get_by_id(session_id) if session_id else None
+        if (
+            session is None
+            or session.user_id != uuid.UUID(user_id)
+            or not session.is_active
+            or session.refresh_token_hash != hash_refresh_token(refresh_token)
+        ):
+            await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session_id=session_id)
+            raise TokenReuseDetectedError()
 
-        # Create new pair
-        return await self.create_token_pair(user_id=user_id, tenant_id=tenant_id)
+        assert session.id is not None
+        if session.expires_at <= datetime.now(UTC):
+            await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session_id=session_id)
+            raise TokenReuseDetectedError()
+
+        tokens = await self.create_token_pair(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
+        await self.session_repo.rotate(
+            session.id,
+            refresh_token_hash=hash_refresh_token(tokens.refresh_token),
+            expires_at=datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+        await self.audit_service.log(
+            action="auth.refresh.success",
+            target=f"session:{session.id}",
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+        return tokens
+
+    async def _handle_reuse(self, *, user_id: str, tenant_id: str, session_id: str | None) -> None:
+        await self.session_repo.revoke_all_for_user(uuid.UUID(user_id))
+        await self.audit_service.log(
+            action="auth.refresh.reuse_detected",
+            target=f"session:{session_id}",
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+        await self.session_repo.commit()
 
     async def revoke_token(self, refresh_token: str) -> None:
         """Revoke a refresh token (invalidate the session)."""
@@ -306,7 +374,12 @@ class TokenService:
         if payload.get("type") != "refresh":
             raise TokenInvalidError("Token is not a refresh token")
 
-        await self.session_repo.revoke_all_for_user(uuid.UUID(payload["sub"]))
+        user_id = payload["sub"]
+        session_id = payload.get("session_id")
+        session = await self.session_repo.get_by_id(session_id) if session_id else None
+        if session is not None and session.user_id == uuid.UUID(user_id):
+            assert session.id is not None
+            await self.session_repo.revoke_session(session.id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
         """Introspect a token — return its claims if valid."""

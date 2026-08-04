@@ -6,8 +6,10 @@ Single verification path: verify_jwt().
 
 from __future__ import annotations
 
+import hashlib
+import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -45,6 +47,7 @@ class TokenClaims(TypedDict):
     exp: int
     nbf: int
     type: str
+    session_id: NotRequired[str]
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +125,7 @@ def create_refresh_token(
     subject: str,
     *,
     tenant_id: str,
+    session_id: str | None = None,
 ) -> str:
     """Create a signed RS256 refresh token with longer expiry."""
     now = datetime.now(UTC)
@@ -135,8 +139,15 @@ def create_refresh_token(
         "nbf": now,
         "exp": expire,
         "type": "refresh",
+        "jti": str(uuid.uuid4()),
     }
+    if session_id is not None:
+        payload["session_id"] = session_id
     return jwt.encode(payload, settings.jwt_private_key, algorithm="RS256")
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_email_verification_token(subject: str, *, tenant_id: str) -> str:

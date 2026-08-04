@@ -31,6 +31,16 @@ class EmailService(Protocol):
         base_url: str | None = None,
     ) -> None: ...
 
+    async def send_security_alert(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        event_type: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None: ...
+
 
 class LogEmailService:
     """Transport that logs the verification payload (dev/test default)."""
@@ -63,4 +73,22 @@ class LogEmailService:
             organization_name=organization_name,
             invitation_token=token,
             base_url=base_url,
+        )
+
+    async def send_security_alert(
+        self,
+        *,
+        to: str,
+        full_name: str,
+        event_type: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        logger.info(
+            "email.security_alert.sent",
+            to=to,
+            full_name=full_name,
+            event_type=event_type,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )

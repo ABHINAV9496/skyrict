@@ -38,6 +38,7 @@ from skyrict_common.exceptions import (
     TenantNotFoundError,
     TokenExpiredError,
     TokenInvalidError,
+    TokenReuseDetectedError,
     UserAlreadyExistsError,
     UserDisabledError,
     UserNotFoundError,
@@ -69,6 +70,7 @@ __all__ = [
     "TenantNotFoundError",
     "TokenExpiredError",
     "TokenInvalidError",
+    "TokenReuseDetectedError",
     "UserAlreadyExistsError",
     "UserDisabledError",
     "UserNotFoundError",
@@ -97,6 +99,7 @@ _PROBLEM_BASE = "https://api.skyrict.io/problems"
 _STATUS_MAP: dict[type, tuple[int, str]] = {
     TokenExpiredError: (401, f"{_PROBLEM_BASE}/token-expired"),
     TokenInvalidError: (401, f"{_PROBLEM_BASE}/token-invalid"),
+    TokenReuseDetectedError: (401, f"{_PROBLEM_BASE}/token-reuse-detected"),
     AuthenticationError: (401, f"{_PROBLEM_BASE}/authentication-error"),
     TenantMismatchError: (401, f"{_PROBLEM_BASE}/tenant-mismatch"),
     InvalidPasswordError: (401, f"{_PROBLEM_BASE}/invalid-password"),

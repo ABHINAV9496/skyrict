@@ -145,16 +145,19 @@ def get_role_repo(db: AsyncSession = Depends(get_db)) -> RoleRepository:
 # --- Service deps (feature services imported at call sites) ---
 
 
-def get_token_service(session_repo: SessionRepository = Depends(get_session_repo)) -> TokenService:
-    from identity.features.auth.service import TokenService
-
-    return TokenService(session_repo)
-
-
 def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:
     from identity.features.audit.service import AuditService
 
     return AuditService(audit_repo)
+
+
+def get_token_service(
+    session_repo: SessionRepository = Depends(get_session_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> TokenService:
+    from identity.features.auth.service import TokenService
+
+    return TokenService(session_repo, audit_service)
 
 
 def get_email_service() -> EmailService:
@@ -167,6 +170,14 @@ def get_rate_limiter() -> RateLimiter:
     return default_rate_limiter
 
 
+def get_session_service(
+    session_repo: SessionRepository = Depends(get_session_repo),
+) -> SessionService:
+    from identity.features.sessions.service import SessionService
+
+    return SessionService(session_repo)
+
+
 def get_authn_service(
     user_repo: UserRepository = Depends(get_user_repo),
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
@@ -174,6 +185,7 @@ def get_authn_service(
     token_service: TokenService = Depends(get_token_service),
     audit_service: AuditService = Depends(get_audit_service),
     email_service: EmailService = Depends(get_email_service),
+    session_service: SessionService = Depends(get_session_service),
 ) -> AuthenticationService:
     from identity.features.auth.service import AuthenticationService
 
@@ -184,6 +196,7 @@ def get_authn_service(
         token_service,
         audit_service,
         email_service,
+        session_service,
     )
 
 
@@ -203,14 +216,6 @@ def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo))
     from identity.features.organizations.service import TenantService
 
     return TenantService(tenant_repo)
-
-
-def get_session_service(
-    session_repo: SessionRepository = Depends(get_session_repo),
-) -> SessionService:
-    from identity.features.sessions.service import SessionService
-
-    return SessionService(session_repo)
 
 
 def get_invitation_repo(

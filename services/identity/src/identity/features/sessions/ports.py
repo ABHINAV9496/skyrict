@@ -7,6 +7,7 @@ return domain entities; SQLAlchemy lives in the concrete implementation
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from identity.domain.entities import Session
@@ -27,3 +28,13 @@ class SessionRepositoryPort(Protocol):
     async def revoke_session(self, session_id: str | uuid.UUID) -> None: ...
 
     async def revoke_all_for_user(self, user_id: str | uuid.UUID) -> None: ...
+
+    async def rotate(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        refresh_token_hash: str,
+        expires_at: datetime,
+    ) -> None: ...
+
+    async def commit(self) -> None: ...

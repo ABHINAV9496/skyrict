@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_session_service
+from identity.features.sessions.schemas import SessionListResponse, SessionResponse
 from identity.features.sessions.service import SessionService
 from skyrict_common.schemas import ResponseEnvelope
 
@@ -18,20 +19,14 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 async def list_sessions(
     current_user: dict[str, Any] = Depends(get_current_user),
     session_svc: SessionService = Depends(get_session_service),
-) -> ResponseEnvelope[list[dict[str, Any]]]:
+) -> ResponseEnvelope[SessionListResponse]:
     """List all active sessions for the current user."""
     sessions = await session_svc.list_user_sessions(current_user["user_id"])
     return ResponseEnvelope(
-        data=[
-            {
-                "id": str(s.id),
-                "user_agent": s.user_agent,
-                "ip_address": s.ip_address,
-                "created_at": s.created_at.isoformat(),
-                "expires_at": s.expires_at.isoformat(),
-            }
-            for s in sessions
-        ]
+        data=SessionListResponse(
+            sessions=[SessionResponse.model_validate(session) for session in sessions],
+            total=len(sessions),
+        )
     )
 
 
@@ -42,7 +37,7 @@ async def revoke_session(
     session_svc: SessionService = Depends(get_session_service),
 ) -> ResponseEnvelope[None]:
     """Revoke a specific session."""
-    await session_svc.revoke_session(session_id)
+    await session_svc.revoke_session(current_user["user_id"], session_id)
     return ResponseEnvelope(message="Session revoked")
 
 

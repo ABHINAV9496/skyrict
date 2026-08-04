@@ -19,6 +19,11 @@
 # Cluster / cloud credentials never live in the repository — they are GitHub
 # secrets on the `staging` environment (see docs/runbooks/staging-deployment.md
 # for the full secret list and bootstrap procedure).
+#
+# The deploy/dns/verify jobs are inert until staging CD is enabled: set the
+# repository variable CD_STAGING_ENABLED=true (plus the staging environment
+# secrets) or trigger manually via workflow_dispatch. Until then, push
+# triggers only run the build-and-push-identity job.
 # =============================================================================
 
 name: CD — Staging
@@ -46,6 +51,8 @@ env:
   STAGING_DOMAIN: staging.skyrict.com
   STAGING_NAMESPACE: skyrict-staging
   VERIFY_HOST: acme-test.staging.skyrict.com
+  # Never expand steps' debug output (protects secrets on every future run).
+  ACTIONS_STEP_DEBUG: "false"
 
 permissions:
   contents: read
@@ -88,6 +95,7 @@ jobs:
 
   deploy:
     name: Deploy Identity to Staging Cluster
+    if: github.event_name == 'workflow_dispatch' || vars.CD_STAGING_ENABLED == 'true'
     needs: build-and-push-identity
     runs-on: ubuntu-latest
     environment: staging
@@ -154,6 +162,7 @@ jobs:
 
   dns:
     name: Provision Wildcard DNS (Terraform)
+    if: github.event_name == 'workflow_dispatch' || vars.CD_STAGING_ENABLED == 'true'
     needs: deploy
     runs-on: ubuntu-latest
     environment: staging
@@ -189,6 +198,7 @@ jobs:
 
   verify:
     name: Verify Staging End-to-End
+    if: github.event_name == 'workflow_dispatch' || vars.CD_STAGING_ENABLED == 'true'
     needs: [dns]
     runs-on: ubuntu-latest
     environment: staging

@@ -49,6 +49,14 @@ or as repository secrets:
 > `route53:ListHostedZones`, and `route53:GetChange` on the
 > `staging.skyrict.com` zone, plus S3/DynamoDB access for Terraform state.
 
+> **Enabling automated deploys**: the `deploy`/`dns`/`verify` jobs of
+> `cd-staging.yml` are inert until the repository **variable**
+> `CD_STAGING_ENABLED` is set to `true` (Settings → Variables → Actions). Until
+> then, `main` pushes only trigger the image build job, and the deploy chain
+> can still be exercised on demand with `workflow_dispatch`. Set the variable
+> only after every item in this runbook (secrets above, backend §3, zone §4,
+> cluster secrets §5) is in place.
+
 ## 3. Terraform remote state backend (one-time, manual)
 
 ```bash

@@ -30,6 +30,7 @@ from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory, engine
 from identity.models import (  # noqa: F401  # register every ORM model
     AuditLogModel,
+    InvitationModel,
     PermissionModel,
     RoleModel,
     SessionModel,

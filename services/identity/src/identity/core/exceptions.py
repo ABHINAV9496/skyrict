@@ -20,6 +20,9 @@ from skyrict_common.exceptions import (
     ConflictError,
     EmailNotVerifiedError,
     InvalidPasswordError,
+    InvitationAlreadyUsedError,
+    InvitationEmailMismatchError,
+    InvitationExpiredError,
     MFARequiredError,
     MFAVerificationError,
     NotFoundError,
@@ -47,6 +50,9 @@ __all__ = [
     "ConflictError",
     "EmailNotVerifiedError",
     "InvalidPasswordError",
+    "InvitationAlreadyUsedError",
+    "InvitationEmailMismatchError",
+    "InvitationExpiredError",
     "MFARequiredError",
     "MFAVerificationError",
     "NotFoundError",
@@ -112,6 +118,9 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     UserAlreadyExistsError: (409, f"{_PROBLEM_BASE}/user-already-exists"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
     RateLimitExceededError: (429, f"{_PROBLEM_BASE}/rate-limit-exceeded"),
+    InvitationExpiredError: (400, f"{_PROBLEM_BASE}/invitation-expired"),
+    InvitationEmailMismatchError: (400, f"{_PROBLEM_BASE}/invitation-email-mismatch"),
+    InvitationAlreadyUsedError: (409, f"{_PROBLEM_BASE}/invitation-already-used"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

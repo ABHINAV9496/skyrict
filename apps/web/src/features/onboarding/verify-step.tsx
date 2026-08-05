@@ -18,11 +18,26 @@ function VerifyStep({ email }: { email: string }) {
   const [error, setError] = useState<string>();
   const [resendIn, setResendIn] = useState(RESEND_SECONDS);
   const [resending, setResending] = useState(false);
+  const [devCode, setDevCode] = useState<string>();
+  const [sendError, setSendError] = useState<string>();
   const verifyingRef = useRef(false);
 
-  useEffect(() => {
-    requestVerificationCode({ email }).catch(() => {});
+  const sendCode = useCallback(async () => {
+    setSendError(undefined);
+    try {
+      const result = await requestVerificationCode({ email });
+      setResendIn(result.resendIn);
+      setDevCode(result.code ?? undefined);
+    } catch (err) {
+      setSendError(
+        err instanceof Error ? err.message : "Could not send the code. Try again.",
+      );
+    }
   }, [email]);
+
+  useEffect(() => {
+    sendCode().catch(() => {});
+  }, [sendCode]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -67,11 +82,10 @@ function VerifyStep({ email }: { email: string }) {
 
   async function handleResend() {
     setResending(true);
-    await requestVerificationCode({ email });
-    setResending(false);
     setCode("");
     setError(undefined);
-    setResendIn(RESEND_SECONDS);
+    await sendCode();
+    setResending(false);
   }
 
   async function handleVerify() {
@@ -92,11 +106,24 @@ function VerifyStep({ email }: { email: string }) {
         <div className="space-y-1 text-sm">
           <p className="font-medium text-foreground">Code sent to {email}</p>
           <p className="text-xs text-muted-foreground">
-            Enter the 6-digit code below. Demo code:{" "}
-            <span className="font-mono font-medium text-primary">123456</span>
+            Enter the 6-digit code below.
+            {devCode ? (
+              <>
+                {" Dev code: "}
+                <span className="font-mono font-medium text-primary">
+                  {devCode}
+                </span>
+              </>
+            ) : null}
           </p>
         </div>
       </div>
+
+      {sendError ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          {sendError}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         <OtpInput

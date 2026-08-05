@@ -7,8 +7,9 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2, LoaderCircle, Mail } from "lucide-react";
 
+import { env } from "@/config/env";
 import { RiskChallenge } from "@/components/onboarding/risk-challenge";
-import { checkEmailAvailability } from "@/lib/api/auth-api";
+import { checkEmailAvailability, signupStart } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 
@@ -25,7 +26,9 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [captchaVisible, setCaptchaVisible] = useState(false);
   const [captchaValid, setCaptchaValid] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState(false);
+  const [submitError, setSubmitError] = useState<string>();
   const [availability, setAvailability] = useState<
     "idle" | "checking" | "available" | "taken"
   >("idle");
@@ -79,6 +82,22 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
       setCaptchaError(true);
       return;
     }
+    if (env.turnstileSiteKey && !captchaToken) {
+      setCaptchaError(true);
+      return;
+    }
+    setSubmitError(undefined);
+    try {
+      await signupStart({
+        email: values.email.trim(),
+        turnstileToken: captchaToken ?? undefined,
+      });
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Could not start signup. Try again.",
+      );
+      return;
+    }
     const next = new URLSearchParams({ email: values.email.trim() });
     router.push(`/register/verify?${next.toString()}`);
   }
@@ -127,6 +146,7 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
         <RiskChallenge
           demoCaptcha={demoCaptcha}
           onShowChange={setCaptchaVisible}
+          onTokenChange={setCaptchaToken}
           onValidChange={(valid) => {
             setCaptchaValid(valid);
             if (valid) setCaptchaError(false);
@@ -135,6 +155,11 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
         {captchaError && captchaVisible ? (
           <p className="mt-1.5 text-xs font-medium text-destructive">
             Confirm you&apos;re not a robot to continue.
+          </p>
+        ) : null}
+        {submitError ? (
+          <p className="mt-1.5 text-xs font-medium text-destructive">
+            {submitError}
           </p>
         ) : null}
       </div>

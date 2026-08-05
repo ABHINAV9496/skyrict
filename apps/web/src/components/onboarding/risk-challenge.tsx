@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { TurnstileWidget } from "@/components/onboarding/turnstile-widget";
+import { env } from "@/config/env";
 import { assessRisk, solveCaptcha } from "@/lib/api/auth-api";
 import { cn } from "@/lib/utils";
 
@@ -11,16 +13,20 @@ function RiskChallenge({
   demoCaptcha = false,
   onValidChange,
   onShowChange,
+  onTokenChange,
 }: {
   demoCaptcha?: boolean;
   onValidChange?: (valid: boolean) => void;
   onShowChange?: (visible: boolean) => void;
+  onTokenChange?: (token: string | null) => void;
 }) {
   const [show, setShow] = useState(false);
   const [state, setState] = useState<"idle" | "verifying" | "verified">(
     "idle",
   );
   const [checked, setChecked] = useState(false);
+
+  const useTurnstile = Boolean(env.turnstileSiteKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,11 +41,37 @@ function RiskChallenge({
     };
   }, [demoCaptcha, onShowChange]);
 
+  if (useTurnstile) {
+    if (!show) {
+      return (
+        <div aria-hidden="true" className="hidden">
+          <input
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="absolute -left-[9999px] h-0 w-0"
+          />
+        </div>
+      );
+    }
+    return (
+      <TurnstileWidget
+        siteKey={env.turnstileSiteKey}
+        onTokenChange={(token) => {
+          onTokenChange?.(token);
+          onValidChange?.(Boolean(token));
+        }}
+      />
+    );
+  }
+
   async function handleToggle(checked: boolean | "indeterminate") {
     if (!checked) {
       setState("idle");
       setChecked(false);
       onValidChange?.(false);
+      onTokenChange?.(null);
       return;
     }
     setState("verifying");
@@ -48,10 +80,12 @@ function RiskChallenge({
       setState("verified");
       setChecked(true);
       onValidChange?.(true);
+      onTokenChange?.(null);
     } else {
       setState("idle");
       setChecked(false);
       onValidChange?.(false);
+      onTokenChange?.(null);
     }
   }
 

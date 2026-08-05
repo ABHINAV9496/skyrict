@@ -1,16 +1,3 @@
-"""Integration tests for MFA enforcement (AUTH-TASK-035).
-
-Proves the end-to-end contract over real Postgres:
-  - Tenant owners are always forced to enroll: login is 200 with
-    ``mfa_required``/``next_step``, and every other authenticated route returns
-    403 until MFA is enabled.
-  - TOTP setup/verify enables MFA; the same TOTP secret works at /users/me.
-  - Tenant policy (``mfa_required_for_all_members``) extends the same forced
-    enrollment + gate to ordinary members.
-  - Backup codes enroll a user and are single-use.
-  - Owner-assisted reset clears a member's MFA (forcing re-enrollment).
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -21,6 +8,7 @@ from sqlalchemy import delete
 
 from identity.db.session import async_session_factory
 from identity.models.tenant import TenantModel
+from tests.integration.api.mfa_helpers import mfa_challenge_login
 from tests.integration.api.wizard import provision_tenant
 
 pytestmark = pytest.mark.integration
@@ -63,12 +51,10 @@ class TestOwnerMfaFlow:
             token = login["access_token"]
             headers = {"X-Tenant-Slug": data["tenant_slug"], "Authorization": f"Bearer {token}"}
 
-            # Enforcement gate: authenticated routes are blocked until MFA is on.
             me = await client.get("/api/v1/users/me", headers=headers)
             assert me.status_code == 403
             assert me.json()["type"].endswith("/mfa-required")
 
-            # Enrollment endpoints are exempt from the gate.
             setup = await client.post("/api/v1/mfa/setup", headers=headers)
             assert setup.status_code == 200
             setup_data = setup.json()["data"]
@@ -80,13 +66,22 @@ class TestOwnerMfaFlow:
             assert verify.status_code == 200
             assert verify.json()["data"]["method"] == "totp"
 
-            # Re-login: MFA is now satisfied — no gate, no next step.
             relogin = await _verify_and_login(client, data)
-            assert relogin["mfa_required"] is False
-            assert relogin["next_step"] is None
+            assert relogin["mfa_required"] is True
+            assert relogin["next_step"] == "mfa.verify"
+            assert relogin["mfa_token"] is not None
+            assert relogin["access_token"] is None
+
+            redeemed = await mfa_challenge_login(
+                client,
+                slug=data["tenant_slug"],
+                email=data["email"],
+                password="TestPassword123!",
+                code=pyotp.TOTP(setup_data["secret"]).now(),
+            )
             headers = {
                 "X-Tenant-Slug": data["tenant_slug"],
-                "Authorization": f"Bearer {relogin['access_token']}",
+                "Authorization": f"Bearer {redeemed['access_token']}",
             }
             me = await client.get("/api/v1/users/me", headers=headers)
             assert me.status_code == 200
@@ -114,13 +109,22 @@ class TestOwnerMfaFlow:
                 json={"code": pyotp.TOTP(setup_data["secret"]).now()},
             )
             relogin = await _verify_and_login(client, data)
+            assert relogin["mfa_required"] is True
+            assert relogin["next_step"] == "mfa.verify"
+            redeemed = await mfa_challenge_login(
+                client,
+                slug=data["tenant_slug"],
+                email=data["email"],
+                password="TestPassword123!",
+                code=pyotp.TOTP(setup_data["secret"]).now(),
+            )
             headers = {
                 "X-Tenant-Slug": data["tenant_slug"],
-                "Authorization": f"Bearer {relogin['access_token']}",
+                "Authorization": f"Bearer {redeemed['access_token']}",
             }
 
             updated = await client.patch(
-                f"/api/v1/tenants/{data['tenant_id']}/settings",
+                f"/api/v1/organizations/{data['tenant_id']}/settings",
                 headers=headers,
                 json={"mfa_required_for_all_members": True},
             )
@@ -146,7 +150,6 @@ class TestMemberMfaPolicy:
                 "Authorization": f"Bearer {login['access_token']}",
             }
 
-            # Owner enables MFA and the tenant-wide policy.
             setup = await client.post("/api/v1/mfa/setup", headers=owner_headers)
             setup_data = setup.json()["data"]
             await client.post(
@@ -155,17 +158,16 @@ class TestMemberMfaPolicy:
                 json={"code": pyotp.TOTP(setup_data["secret"]).now()},
             )
             await client.patch(
-                f"/api/v1/tenants/{data['tenant_id']}/settings",
+                f"/api/v1/organizations/{data['tenant_id']}/settings",
                 headers=owner_headers,
                 json={"mfa_required_for_all_members": True},
             )
 
-            # Invite and accept a member (not an owner).
             invite_email = f"member-{uuid.uuid4().hex[:8]}@test.com"
             invite = await client.post(
                 "/api/v1/invitations",
                 headers=owner_headers,
-                json={"email": invite_email, "role_name": "viewer"},
+                json={"email": invite_email, "role_name": "standard_user"},
             )
             assert invite.status_code == 200
             invite_token = invite.json()["data"]["token"]
@@ -182,7 +184,6 @@ class TestMemberMfaPolicy:
             assert accepted.status_code == 200
             member_id = accepted.json()["data"]["id"]
 
-            # Member login under the enforced policy: forced but not blocked.
             member_login = await client.post(
                 "/api/v1/auth/login",
                 headers={"X-Tenant-Slug": data["tenant_slug"]},
@@ -201,10 +202,10 @@ class TestMemberMfaPolicy:
             assert blocked.status_code == 403
             assert blocked.json()["type"].endswith("/mfa-required")
 
-            # Member enrolls using a backup code.
             member_setup = await client.post("/api/v1/mfa/setup", headers=member_headers)
             assert member_setup.status_code == 200
-            backup_code = member_setup.json()["data"]["backup_codes"][0]
+            member_setup_data = member_setup.json()["data"]
+            backup_code = member_setup_data["backup_codes"][0]
             member_verify = await client.post(
                 "/api/v1/mfa/verify",
                 headers=member_headers,
@@ -213,7 +214,6 @@ class TestMemberMfaPolicy:
             assert member_verify.status_code == 200
             assert member_verify.json()["data"]["method"] == "backup_code"
 
-            # Same backup code is single-use: verification now fails.
             replay = await client.post(
                 "/api/v1/mfa/verify",
                 headers=member_headers,
@@ -222,19 +222,19 @@ class TestMemberMfaPolicy:
             assert replay.status_code == 403
             assert replay.json()["type"].endswith("/mfa-verification-error")
 
-            member_relogin = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": data["tenant_slug"]},
-                json={"email": invite_email, "password": "TestPassword123!"},
+            member_relogin = await mfa_challenge_login(
+                client,
+                slug=data["tenant_slug"],
+                email=invite_email,
+                password="TestPassword123!",
+                code=pyotp.TOTP(member_setup_data["secret"]).now(),
             )
-            assert member_relogin.json()["data"]["mfa_required"] is False
             member_headers = {
                 "X-Tenant-Slug": data["tenant_slug"],
-                "Authorization": f"Bearer {member_relogin.json()['data']['access_token']}",
+                "Authorization": f"Bearer {member_relogin['access_token']}",
             }
             assert (await client.get("/api/v1/users/me", headers=member_headers)).status_code == 200
 
-            # Owner-assisted reset clears the member's MFA — forced again.
             reset = await client.post(
                 "/api/v1/mfa/reset",
                 headers=owner_headers,
@@ -274,7 +274,7 @@ class TestMemberNotForcedWithoutPolicy:
             invite = await client.post(
                 "/api/v1/invitations",
                 headers=owner_headers,
-                json={"email": invite_email, "role_name": "viewer"},
+                json={"email": invite_email, "role_name": "standard_user"},
             )
             await client.post(
                 "/api/v1/invitations/accept",

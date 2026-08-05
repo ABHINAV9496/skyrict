@@ -1,9 +1,3 @@
-"""Integration tests for the invitation flow (SKY-16).
-
-Tests the full invitation lifecycle: create, accept, expired token rejection,
-already-used token rejection, and email-mismatch rejection.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -53,12 +47,13 @@ class TestInvitationFlow:
         create_resp = await client.post(
             "/api/v1/invitations",
             headers=headers,
-            json={"email": invite_email, "role_name": "viewer"},
+            json={"email": invite_email, "role_name": "standard_user"},
         )
         assert create_resp.status_code == 200
         invite_data = create_resp.json()["data"]
         assert invite_data["email"] == invite_email
         assert invite_data["token"]
+        assert invite_data["role_name"] == "standard_user"
         assert invite_data["used_at"] is None
 
         accept_resp = await client.post(

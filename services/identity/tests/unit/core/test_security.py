@@ -1,11 +1,3 @@
-"""Unit tests for security utilities — JWT (RS256) and password hashing (Argon2id).
-
-Includes adversarial tests: expired / wrong-issuer / wrong-audience / future-nbf
-tokens, alg:none forgery, HS256 algorithm-confusion with the public key, tokens
-signed by a foreign keypair, and missing required claims. Covers every line of
-``identity.core.security``.
-"""
-
 from __future__ import annotations
 
 import base64
@@ -25,18 +17,15 @@ from identity.core.security import (
     create_access_token,
     create_refresh_token,
     hash_password,
+    validate_password_policy,
     verify_jwt,
     verify_jwt_keys_usable,
     verify_password,
 )
-from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
+from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError, ValidationError
 
 
-# ---------------------------------------------------------------------------
-# Helpers — craft JWTs to probe verify_jwt's validation logic
-# ---------------------------------------------------------------------------
 def _valid_claims(**overrides) -> dict:
-    """Return a claims dict that verify_jwt accepts (correct iss/aud, valid exp)."""
     now = int(datetime.now(UTC).timestamp())
     claims = {
         "sub": "user-123",
@@ -53,12 +42,10 @@ def _valid_claims(**overrides) -> dict:
 
 
 def _sign(payload: dict, private_key_pem: str, algorithm: str = "RS256") -> str:
-    """Sign claims with python-jose — used to build adversarial tokens."""
     return jose_jwt.encode(payload, private_key_pem, algorithm=algorithm)
 
 
 def _generate_keypair() -> tuple[str, str]:
-    """Generate a throwaway RSA keypair, returning (private_pem, public_pem)."""
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -77,25 +64,16 @@ def _generate_keypair() -> tuple[str, str]:
 
 
 def _b64url(data: bytes) -> str:
-    """Base64url-encode without padding (JWT segment format)."""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 
 def _bare_token(header: dict, payload: dict, signature: str = "") -> str:
-    """Manually assemble a token without python-jose (for alg:none forgeries)."""
     h = _b64url(json.dumps(header).encode())
     p = _b64url(json.dumps(payload).encode())
     return f"{h}.{p}.{signature}"
 
 
 def _hmac_token(payload: dict, secret: str) -> str:
-    """Manually sign an HS256 token with an HMAC secret.
-
-    python-jose's cryptography backend refuses to construct an HMAC key from an
-    asymmetric PEM, so this builds the token directly — reproducing the real
-    algorithm-confusion attack where the attacker uses the public key as the
-    HMAC secret.
-    """
     header = {"alg": "HS256", "typ": "JWT"}
     signing_input = (
         f"{_b64url(json.dumps(header).encode())}.{_b64url(json.dumps(payload).encode())}"
@@ -104,12 +82,7 @@ def _hmac_token(payload: dict, secret: str) -> str:
     return f"{signing_input}.{signature}"
 
 
-# ---------------------------------------------------------------------------
-# Password hashing — Argon2id
-# ---------------------------------------------------------------------------
 class TestPasswordHashing:
-    """Test Argon2id password hashing."""
-
     def test_hash_password_returns_hash(self):
         hashed = hash_password("TestPassword123!")
         assert hashed != "TestPassword123!"
@@ -129,25 +102,66 @@ class TestPasswordHashing:
         assert verify_password("WrongPassword!1", hashed) is False
 
     def test_verify_password_malformed_hash(self):
-        # A corrupted/malformed stored hash must never raise — just return False.
         assert verify_password("Anything!1", "not-a-valid-argon2-hash") is False
 
     def test_different_hashes_for_same_password(self):
         h1 = hash_password("SamePassword!1")
         h2 = hash_password("SamePassword!1")
-        assert h1 != h2  # Argon2id uses a random salt per call
+        assert h1 != h2
 
     def test_verify_password_empty_string(self):
         hashed = hash_password("Password123!")
         assert verify_password("", hashed) is False
 
 
-# ---------------------------------------------------------------------------
-# Token creation
-# ---------------------------------------------------------------------------
-class TestJWTCreation:
-    """Tokens are signed with RS256 and carry correct claims."""
+class TestPasswordPolicy:
+    def _reset_policy(self, monkeypatch) -> None:
+        monkeypatch.setattr(settings, "PASSWORD_MIN_LENGTH", 12)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_UPPERCASE", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_LOWERCASE", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_DIGIT", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_SPECIAL", True)
 
+    def test_accepts_strong_password(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        validate_password_policy("ValidPass123!")
+
+    def test_rejects_short_password(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("Short1!")
+
+    def test_rejects_missing_uppercase(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("alllowercase1!")
+
+    def test_rejects_missing_lowercase(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("ALLUPPERCASE1!")
+
+    def test_rejects_missing_digit(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("AllLetters!")
+
+    def test_rejects_missing_special(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("AllLetters1")
+
+    def test_reports_all_violations(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError) as exc_info:
+            validate_password_policy("weak")
+        message = str(exc_info.value.message)
+        assert "12" in message
+        assert "uppercase" in message.lower() or "upper" in message.lower()
+        assert "digit" in message.lower() or "number" in message.lower()
+
+
+class TestJWTCreation:
     def test_access_token_claims(self):
         token = create_access_token("user-123", tenant_id="tenant-456")
         payload = verify_jwt(token)
@@ -194,12 +208,7 @@ class TestJWTCreation:
         assert (refresh["exp"] - refresh["iat"]) > (access["exp"] - access["iat"])
 
 
-# ---------------------------------------------------------------------------
-# Basic verification
-# ---------------------------------------------------------------------------
 class TestJWTVerification:
-    """Happy-path and basic rejection cases."""
-
     def test_verify_invalid_token(self):
         with pytest.raises(TokenInvalidError):
             verify_jwt("not.a.valid.token")
@@ -218,12 +227,7 @@ class TestJWTVerification:
             verify_jwt(token)
 
 
-# ---------------------------------------------------------------------------
-# Adversarial — token forgery and algorithm confusion
-# ---------------------------------------------------------------------------
 class TestJWTAdversarial:
-    """Attack vectors that must always be rejected."""
-
     def test_rejects_alg_none_forgery(self, rsa_private_key: str):
         token = _bare_token(
             {"alg": "none", "typ": "JWT"},
@@ -233,14 +237,11 @@ class TestJWTAdversarial:
             verify_jwt(token)
 
     def test_rejects_missing_algorithm_header(self):
-        # Header with no alg — the code must not default to trusting anything.
         token = _bare_token({"typ": "JWT"}, {"sub": "user-123"})
         with pytest.raises(TokenInvalidError):
             verify_jwt(token)
 
     def test_rejects_hs256_forged_with_public_key(self, rsa_public_key: str):
-        # Algorithm-confusion: attacker signs with the PUBLIC key as the HMAC
-        # secret. Any implementation that trusts the header would accept this.
         token = _hmac_token(_valid_claims(), rsa_public_key)
         with pytest.raises(TokenInvalidError):
             verify_jwt(token)
@@ -277,11 +278,7 @@ class TestJWTAdversarial:
             verify_jwt(token)
 
 
-# ---------------------------------------------------------------------------
-# Startup key validation — verify_jwt_keys_usable
-# ---------------------------------------------------------------------------
 def _pem_private(key) -> str:
-    """Serialize a private key object to PKCS8 PEM."""
     return key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -290,7 +287,6 @@ def _pem_private(key) -> str:
 
 
 def _pem_public(key) -> str:
-    """Serialize a public key object to SubjectPublicKeyInfo PEM."""
     return (
         key.public_key()
         .public_bytes(
@@ -302,14 +298,12 @@ def _pem_public(key) -> str:
 
 
 class TestVerifyJwtKeysUsable:
-    """Startup validation: both keys must parse as RSA >= 2048 bits."""
-
     def test_valid_rsa_keys_pass(
         self, monkeypatch: pytest.MonkeyPatch, rsa_private_key: str, rsa_public_key: str
     ):
         monkeypatch.setattr(settings, "jwt_private_key", rsa_private_key)
         monkeypatch.setattr(settings, "jwt_public_key", rsa_public_key)
-        verify_jwt_keys_usable()  # must not raise
+        verify_jwt_keys_usable()
 
     def test_garbage_private_key_rejected(
         self, monkeypatch: pytest.MonkeyPatch, rsa_public_key: str
@@ -337,7 +331,7 @@ class TestVerifyJwtKeysUsable:
     def test_small_rsa_public_key_rejected(self, monkeypatch: pytest.MonkeyPatch):
         full = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         monkeypatch.setattr(settings, "jwt_private_key", _pem_private(full))
-        # valid private key + public key from a DIFFERENT (small) pair
+
         other_small = rsa.generate_private_key(public_exponent=65537, key_size=1024)
         monkeypatch.setattr(settings, "jwt_public_key", _pem_public(other_small))
         with pytest.raises(StartupError, match="1024 bits"):

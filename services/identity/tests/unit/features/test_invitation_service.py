@@ -1,5 +1,3 @@
-"""Unit tests for the invitation feature InvitationService (fake ports)."""
-
 from __future__ import annotations
 
 import uuid
@@ -8,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from identity.core.constants import DEFAULT_INVITE_ROLE
+from identity.core.security import hash_invitation_token
 from identity.domain.entities import Invitation, Role, User
 from identity.features.invitations.service import InvitationService
 from skyrict_common.exceptions import (
@@ -17,6 +16,7 @@ from skyrict_common.exceptions import (
     InvitationNotFoundError,
     NotFoundError,
     UserAlreadyExistsError,
+    ValidationError,
 )
 
 
@@ -32,8 +32,9 @@ class FakeInvitationRepo:
         return invitation
 
     async def get_by_token(self, token: str) -> Invitation | None:
+        token_hash = hash_invitation_token(token)
         for inv in self.invitations.values():
-            if inv.token == token:
+            if inv.token_hash == token_hash:
                 return inv
         return None
 
@@ -181,13 +182,16 @@ class TestCreateInvitation:
     async def test_creates_invitation_and_sends_email(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        _, _, _, email = repos
+        _, _, role_repo, email = repos
         inviter_id = uuid.uuid4()
+        await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
 
-        invitation = await service.create_invitation(
+        invitation, token = await service.create_invitation(
             tenant_id=tenant_id,
             email="new@test.com",
-            role_name="viewer",
+            role_name=DEFAULT_INVITE_ROLE,
             created_by_user_id=inviter_id,
             inviter_name="Admin",
             organization_name="Test Corp",
@@ -198,17 +202,31 @@ class TestCreateInvitation:
         assert invitation.tenant_id == tenant_id
         assert invitation.created_by_user_id == inviter_id
         assert invitation.expires_at > datetime.now(UTC)
+        assert invitation.role_name == DEFAULT_INVITE_ROLE
+        assert invitation.token_hash == hash_invitation_token(token)
+        assert token
         assert len(email.sent) == 1
         assert email.sent[0]["to"] == "new@test.com"
 
+    async def test_create_rejects_unknown_role(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        with pytest.raises(ValidationError):
+            await service.create_invitation(
+                tenant_id=tenant_id,
+                email="new@test.com",
+                role_name="viewer",
+                created_by_user_id=uuid.uuid4(),
+            )
+
 
 class TestAcceptInvitation:
-    async def test_accept_creates_user_with_viewer_role(
+    async def test_accept_grants_invitation_role(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
         inv_repo, _, role_repo, _ = repos
 
-        viewer_role = await role_repo.create(
+        standard_role = await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
         )
 
@@ -216,7 +234,8 @@ class TestAcceptInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="invitee@test.com",
-                token="valid-token-123",
+                token_hash=hash_invitation_token("valid-token-123"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )
@@ -234,8 +253,31 @@ class TestAcceptInvitation:
         assert user.is_verified is True
         assert user.is_active is True
         assert len(role_repo.grants) == 1
-        assert role_repo.grants[0]["role_id"] == str(viewer_role.id)
+        assert role_repo.grants[0]["role_id"] == str(standard_role.id)
         assert inv_repo.invitations[invitation.id].used_at is not None
+
+    async def test_accept_missing_invitation_role_raises(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, _, _, _ = repos
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="roless@test.com",
+                token_hash=hash_invitation_token("roless-token"),
+                role_name="ghost-role",
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+        with pytest.raises(ValidationError):
+            await service.accept_invitation(
+                token="roless-token",
+                email="roless@test.com",
+                password="SecurePass123!",
+                full_name="Roleless User",
+            )
 
     async def test_accept_expired_token_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
@@ -245,7 +287,8 @@ class TestAcceptInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="expired@test.com",
-                token="expired-token",
+                token_hash=hash_invitation_token("expired-token"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) - timedelta(days=1),
             )
@@ -267,7 +310,8 @@ class TestAcceptInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="used@test.com",
-                token="used-token",
+                token_hash=hash_invitation_token("used-token"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )
@@ -290,7 +334,8 @@ class TestAcceptInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="original@test.com",
-                token="mismatch-token",
+                token_hash=hash_invitation_token("mismatch-token"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )
@@ -331,7 +376,8 @@ class TestAcceptInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="exists@test.com",
-                token="existing-user-token",
+                token_hash=hash_invitation_token("existing-user-token"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )
@@ -355,7 +401,8 @@ class TestExpireInvitation:
             Invitation(
                 tenant_id=tenant_id,
                 email="to-expire@test.com",
-                token="expire-token",
+                token_hash=hash_invitation_token("expire-token"),
+                role_name=DEFAULT_INVITE_ROLE,
                 created_by_user_id=uuid.uuid4(),
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )

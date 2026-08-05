@@ -46,6 +46,8 @@ def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
         slug="default",
         is_active=True,
         plan_tier="free",
+        industry=None,
+        billing_address=None,
         created_at=now,
         updated_at=now,
     )

@@ -658,9 +658,7 @@ class TestWizard:
     async def test_signup_start_passes_with_valid_turnstile(self) -> None:
         harness = _Harness()
 
-        result = await harness.service.signup_start(
-            email="owner@neworg.com", turnstile_token="tok"
-        )
+        result = await harness.service.signup_start(email="owner@neworg.com", turnstile_token="tok")
 
         assert result == {"status": "ok"}
         assert harness.turnstile.calls == ["tok"]
@@ -673,9 +671,7 @@ class TestWizard:
         assert sent["resend_in"] == settings.OTP_RESEND_COOLDOWN_SECONDS
         assert sent["code"] is not None
 
-        invalid = await harness.service.signup_verify_code(
-            email="owner@neworg.com", code="000000"
-        )
+        invalid = await harness.service.signup_verify_code(email="owner@neworg.com", code="000000")
         assert invalid["status"] == "invalid"
         assert invalid["verification_token"] is None
         assert await harness.verification_store.get_attempts("owner@neworg.com") == 1
@@ -709,9 +705,7 @@ class TestWizard:
             )
             assert result["status"] == "invalid"
 
-        locked = await harness.service.signup_verify_code(
-            email="owner@neworg.com", code=code
-        )
+        locked = await harness.service.signup_verify_code(email="owner@neworg.com", code=code)
         assert locked["status"] == "invalid"
         assert locked["verification_token"] is None
         assert await harness.verification_store.get_otp_hash("owner@neworg.com") is None
@@ -733,9 +727,7 @@ class TestWizard:
 
     async def test_check_slug_availability_and_validation(self) -> None:
         harness = _Harness()
-        assert (await harness.service.signup_check_slug(slug="my-workspace"))[
-            "available"
-        ] is True
+        assert (await harness.service.signup_check_slug(slug="my-workspace"))["available"] is True
         assert (await harness.service.signup_check_slug(slug="  My-Workspace  "))[
             "available"
         ] is True
@@ -779,9 +771,9 @@ class TestWizard:
         sent = await harness.service.signup_send_code(email="owner@neworg.com")
         code = sent["code"]
         assert code is not None
-        vt = (
-            await harness.service.signup_verify_code(email="owner@neworg.com", code=code)
-        )["verification_token"]
+        vt = (await harness.service.signup_verify_code(email="owner@neworg.com", code=code))[
+            "verification_token"
+        ]
         assert vt is not None
         await harness.service.signup_set_password(
             email="owner@neworg.com", verification_token=vt, password="ValidPass123!"
@@ -845,9 +837,7 @@ class TestWizard:
 
     async def test_create_organization_rejects_token_email_mismatch(self) -> None:
         harness = _Harness()
-        await harness.verification_store.set_verification_token(
-            "vt", "other@example.com", "hash"
-        )
+        await harness.verification_store.set_verification_token("vt", "other@example.com", "hash")
 
         with pytest.raises(TokenInvalidError):
             await harness.service.signup_create_organization(

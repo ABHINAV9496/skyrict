@@ -29,7 +29,6 @@ from tests.integration.api.wizard import (
     wizard_start,
     wizard_verify_code,
 )
-from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -66,9 +65,7 @@ class TestProvisioning:
                 assert row.plan_tier == "professional"
 
                 roles = (
-                    await session.scalars(
-                        select(RoleModel).where(RoleModel.tenant_id == row.id)
-                    )
+                    await session.scalars(select(RoleModel).where(RoleModel.tenant_id == row.id))
                 ).all()
                 assert len(roles) == 5
                 by_name = {role.name: role for role in roles}
@@ -111,7 +108,9 @@ class TestProvisioning:
         await wizard_start(client, email=email)
         code = await wizard_send_code(client, email=email)
         vt = await wizard_verify_code(client, email=email, code=code)
-        await wizard_set_password(client, email=email, verification_token=vt, password=DEFAULT_PASSWORD)
+        await wizard_set_password(
+            client, email=email, verification_token=vt, password=DEFAULT_PASSWORD
+        )
 
         response = await client.post(
             "/api/v1/auth/signup/organization",
@@ -180,6 +179,7 @@ class TestProvisioning:
         finally:
             await _cleanup_tenant(first["slug"])
 
+
 class TestAuthPosture:
     async def test_mfa_required_for_tenant_owner_without_mfa(self, client: AsyncClient) -> None:
         tenant = await provision_tenant(client)
@@ -207,17 +207,6 @@ class TestCustomRoles:
             "Authorization": f"Bearer {creds['token']}",
         }
         try:
-            await client.post(
-                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-            )
-            login = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
-            )
-            token = await enroll_mfa_if_required(client, slug=slug, login_data=login.json()["data"])
-            headers = {"X-Tenant-Slug": slug, "Authorization": f"Bearer {token}"}
-
             created = await client.post(
                 "/api/v1/roles",
                 headers=headers,
@@ -255,9 +244,7 @@ class TestRateLimit:
 
         app.dependency_overrides[get_rate_limiter] = lambda: DenyLimiter()
         try:
-            response = await client.post(
-                "/api/v1/auth/signup/start", json={"email": "rl@test.com"}
-            )
+            response = await client.post("/api/v1/auth/signup/start", json={"email": "rl@test.com"})
             assert response.status_code == 429
             assert response.json()["type"].endswith("/rate-limit-exceeded")
         finally:

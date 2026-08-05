@@ -376,9 +376,7 @@ class TestTokenBinding:
 
         # Remove only the rows this test created (tenant cascades).
         async with async_session_factory() as session:
-            await session.execute(
-                delete(TenantModel).where(TenantModel.slug == tenant["slug"])
-            )
+            await session.execute(delete(TenantModel).where(TenantModel.slug == tenant["slug"]))
             await session.commit()
 
         claims = verify_jwt(login_token)

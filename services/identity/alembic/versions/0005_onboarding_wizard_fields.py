@@ -30,7 +30,11 @@ def upgrade() -> None:
 
     # --- users: global unique email ---
     op.create_index(
-        "uq_users_email", "users", ["email"], unique=True, postgresql_where=sa.text("email IS NOT NULL")
+        "uq_users_email",
+        "users",
+        ["email"],
+        unique=True,
+        postgresql_where=sa.text("email IS NOT NULL"),
     )
 
     # --- tenants: plan tiers, backfill legacy 'pro' ---

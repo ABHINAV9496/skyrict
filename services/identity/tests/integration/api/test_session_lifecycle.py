@@ -9,8 +9,8 @@ from sqlalchemy import delete, select
 from identity.db.session import async_session_factory
 from identity.models.audit_log import AuditLogModel
 from identity.models.tenant import TenantModel
-from tests.integration.api.wizard import provision_tenant
 from tests.integration.api.mfa_helpers import enroll_mfa_if_required
+from tests.integration.api.wizard import provision_tenant
 
 if TYPE_CHECKING:
     from httpx import AsyncClient

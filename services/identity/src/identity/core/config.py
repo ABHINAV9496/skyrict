@@ -152,6 +152,7 @@ class Settings(BaseSettings):
     )
     SIGNUP_CHECK_RATE_LIMIT: int = Field(
         default=60, description="max /signup/check-email|check-slug calls per IP per window"
+    )
     # --- MFA (CRITICAL — no default) ---
     MFA_ENCRYPTION_KEY: str = Field(
         ...,

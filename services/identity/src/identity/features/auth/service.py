@@ -352,9 +352,7 @@ class AuthenticationService:
     async def signup_create_organization(
         self, request: CreateOrganizationRequest, *, ip_address: str | None, user_agent: str | None
     ) -> dict[str, Any]:
-        payload = await self._require_verification_token(
-            request.verification_token, request.email
-        )
+        payload = await self._require_verification_token(request.verification_token, request.email)
         if not payload["password_hash"]:
             raise TokenInvalidError("Password has not been set for this session")
         slug = _normalize_slug(request.workspace_slug)
@@ -423,9 +421,7 @@ class AuthenticationService:
             "tenant_slug": slug,
         }
 
-    async def _require_verification_token(
-        self, token: str, email: str
-    ) -> dict[str, str]:
+    async def _require_verification_token(self, token: str, email: str) -> dict[str, str]:
         payload = await self.verification_store.get_verification_token(token)
         if payload is None or payload["email"].lower() != email.lower():
             raise TokenInvalidError("Verification session is invalid or expired")

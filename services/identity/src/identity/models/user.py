@@ -38,10 +38,9 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mfa_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
-    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     phone_country: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
-    mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     mfa_backup_codes: Mapped[list[str | None] | None] = mapped_column(ARRAY(TEXT), nullable=True)
 
     # Relationships

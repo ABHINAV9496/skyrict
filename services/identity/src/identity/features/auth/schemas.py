@@ -92,9 +92,7 @@ class SignupStartRequest(_CamelModel):
     """POST /auth/signup/start"""
 
     email: EmailStr
-    turnstile_token: str | None = Field(
-        default=None, description="Cloudflare Turnstile response"
-    )
+    turnstile_token: str | None = Field(default=None, description="Cloudflare Turnstile response")
 
 
 class SignupStartResponse(_CamelModel):
@@ -131,9 +129,7 @@ class VerifyCodeResponse(_CamelModel):
     """Result of an OTP check — never reveals whether the email has an account."""
 
     status: Literal["ok", "invalid", "expired"]
-    verification_token: str | None = Field(
-        default=None, description="Opaque single-use token"
-    )
+    verification_token: str | None = Field(default=None, description="Opaque single-use token")
 
 
 class SetPasswordRequest(_CamelModel):

@@ -21,29 +21,23 @@ from sqlalchemy import delete
 
 from identity.db.session import async_session_factory
 from identity.models.tenant import TenantModel
+from tests.integration.api.wizard import provision_tenant
 
 pytestmark = pytest.mark.integration
 
 
 async def _register_org(client):
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": f"mfa-{uuid.uuid4().hex[:8]}@test.com",
-            "password": "TestPassword123!",
-            "full_name": "MFA Owner",
-            "organization_name": f"MFA Corp {uuid.uuid4().hex[:8]}",
-        },
+    tenant = await provision_tenant(
+        client, email=f"mfa-{uuid.uuid4().hex[:8]}@test.com", org=f"MFA Corp {uuid.uuid4().hex[:8]}"
     )
-    assert response.status_code == 200
-    return response.json()["data"]
+    return {
+        "tenant_slug": tenant["slug"],
+        "tenant_id": tenant["tenant_id"],
+        "email": tenant["email"],
+    }
 
 
 async def _verify_and_login(client, data):
-    verified = await client.post(
-        "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-    )
-    assert verified.status_code == 200
     login = await client.post(
         "/api/v1/auth/login",
         headers={"X-Tenant-Slug": data["tenant_slug"]},

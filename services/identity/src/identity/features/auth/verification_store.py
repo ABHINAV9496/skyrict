@@ -86,9 +86,7 @@ class VerificationStore:
         return bool(await self._client.exists(_otp_resend_key(email)))
 
     async def mark_resend(self, email: str) -> None:
-        await self._client.set(
-            _otp_resend_key(email), "1", ex=settings.OTP_RESEND_COOLDOWN_SECONDS
-        )
+        await self._client.set(_otp_resend_key(email), "1", ex=settings.OTP_RESEND_COOLDOWN_SECONDS)
 
     async def resend_in(self, email: str) -> int:
         return max(_as_int(await self._client.ttl(_otp_resend_key(email))), 0)

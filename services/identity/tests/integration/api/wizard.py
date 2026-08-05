@@ -12,6 +12,8 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
+
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
@@ -38,9 +40,7 @@ async def wizard_send_code(client: AsyncClient, *, email: str) -> str:
 
 
 async def wizard_verify_code(client: AsyncClient, *, email: str, code: str) -> str:
-    resp = await client.post(
-        "/api/v1/auth/signup/verify-code", json={"email": email, "code": code}
-    )
+    resp = await client.post("/api/v1/auth/signup/verify-code", json={"email": email, "code": code})
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["status"] == "ok"
@@ -118,9 +118,7 @@ async def provision_tenant(
     await wizard_start(client, email=email)
     code = await wizard_send_code(client, email=email)
     vt = await wizard_verify_code(client, email=email, code=code)
-    await wizard_set_password(
-        client, email=email, verification_token=vt, password=password
-    )
+    await wizard_set_password(client, email=email, verification_token=vt, password=password)
     data = await wizard_create_organization(
         client,
         email=email,
@@ -150,10 +148,11 @@ async def wizard_login(
         json={"email": email, "password": password},
     )
     assert resp.status_code == 200, resp.text
-    tokens = resp.json()["data"]
-    assert tokens["mfa_required"] is True
+    data = resp.json()["data"]
+    assert data["mfa_required"] is True
+    token = await enroll_mfa_if_required(client, slug=slug, login_data=data)
     return {
-        "token": tokens["access_token"],
-        "refresh_token": tokens["refresh_token"],
-        "user_id": str(tokens["user"]["id"]),
+        "token": token,
+        "refresh_token": data["refresh_token"],
+        "user_id": str(data["user"]["id"]),
     }

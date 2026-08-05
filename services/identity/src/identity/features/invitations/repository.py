@@ -1,5 +1,3 @@
-"""Invitation repository — DB operations for the invitations table."""
-
 from __future__ import annotations
 
 import uuid
@@ -8,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from identity.core.security import hash_invitation_token
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Invitation
 from identity.models.invitation import InvitationModel
@@ -17,7 +16,8 @@ def _to_orm(invitation: Invitation) -> InvitationModel:
     model_kwargs: dict[str, Any] = {
         "tenant_id": invitation.tenant_id,
         "email": invitation.email,
-        "token": invitation.token,
+        "token_hash": invitation.token_hash,
+        "role_name": invitation.role_name,
         "created_by_user_id": invitation.created_by_user_id,
         "expires_at": invitation.expires_at,
     }
@@ -35,7 +35,8 @@ def _from_orm(model: InvitationModel) -> Invitation:
         id=model.id,
         tenant_id=model.tenant_id,
         email=model.email,
-        token=model.token,
+        token_hash=model.token_hash,
+        role_name=model.role_name,
         created_by_user_id=model.created_by_user_id,
         expires_at=model.expires_at,
         used_at=model.used_at,
@@ -53,7 +54,9 @@ class InvitationRepository(SqlRepository):
         return _from_orm(model)
 
     async def get_by_token(self, token: str) -> Invitation | None:
-        stmt = select(InvitationModel).where(InvitationModel.token == token)
+        stmt = select(InvitationModel).where(
+            InvitationModel.token_hash == hash_invitation_token(token)
+        )
         result = await self.session.execute(stmt)
         model = result.scalar_one_or_none()
         return _from_orm(model) if model is not None else None

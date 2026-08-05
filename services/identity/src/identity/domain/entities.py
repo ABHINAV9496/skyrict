@@ -1,9 +1,3 @@
-"""Domain entities — pure Python dataclasses, no framework dependencies.
-
-These represent the core business objects of the identity domain.
-Services operate on these, not on ORM models directly.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,8 +10,6 @@ if TYPE_CHECKING:
 
 
 class ScopeType(Enum):
-    """Scope an RBAC grant applies to."""
-
     TENANT = "tenant"
     ORG = "org"
     WORKSPACE = "workspace"
@@ -27,8 +19,6 @@ class ScopeType(Enum):
 
 @dataclass
 class User:
-    """User entity."""
-
     tenant_id: UUID
     email: str
     password_hash: str
@@ -47,8 +37,6 @@ class User:
 
 @dataclass
 class Tenant:
-    """Tenant (organization) entity."""
-
     name: str
     slug: str
     is_active: bool = True
@@ -63,8 +51,6 @@ class Tenant:
 
 @dataclass
 class Session:
-    """User session entity."""
-
     user_id: UUID
     tenant_id: UUID
     refresh_token_hash: str
@@ -82,8 +68,6 @@ class Session:
 
 @dataclass
 class Role:
-    """Role entity for RBAC."""
-
     tenant_id: UUID
     name: str
     permissions: list[str] = field(default_factory=list)
@@ -94,8 +78,6 @@ class Role:
 
 @dataclass
 class Permission:
-    """Platform-fixed permission catalog entry (no tenant)."""
-
     id: UUID
     key: str
     description: str = ""
@@ -103,8 +85,6 @@ class Permission:
 
 @dataclass
 class UserRole:
-    """Grant of a role to a user within a scope."""
-
     id: UUID
     user_id: UUID
     role_id: UUID
@@ -116,11 +96,10 @@ class UserRole:
 
 @dataclass
 class Invitation:
-    """Invitation entity — single-use, expiring invite token."""
-
     tenant_id: UUID
     email: str
-    token: str
+    token_hash: str
+    role_name: str
     created_by_user_id: UUID
     expires_at: datetime
     id: UUID | None = None
@@ -131,8 +110,6 @@ class Invitation:
 
 @dataclass
 class AuditLog:
-    """Audit log entry entity — hash-chained, append-only."""
-
     tenant_id: UUID
     action: str
     target: str

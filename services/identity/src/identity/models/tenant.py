@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, CheckConstraint, String, true
+from sqlalchemy import Boolean, CheckConstraint, String, false, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -24,6 +24,9 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     plan_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
+    )
+    mfa_required_for_all_members: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
 
     # Relationships

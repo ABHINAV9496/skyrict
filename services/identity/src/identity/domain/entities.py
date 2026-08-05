@@ -37,6 +37,7 @@ class User:
     is_verified: bool = False
     mfa_enabled: bool = False
     mfa_secret: str | None = None
+    mfa_backup_codes: list[str | None] = field(default_factory=list)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None
@@ -50,6 +51,7 @@ class Tenant:
     slug: str
     is_active: bool = True
     plan_tier: str = "free"
+    mfa_required_for_all_members: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None

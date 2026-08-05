@@ -20,6 +20,7 @@ from identity.models.tenant import TenantModel
 from identity.models.user import UserModel
 from identity.models.user_role import UserRoleModel
 from skyrict_common.exceptions import RateLimitExceededError
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -229,7 +230,7 @@ class TestCustomRoles:
                 headers={"X-Tenant-Slug": slug},
                 json={"email": email, "password": "TestPassword123!"},
             )
-            token = login.json()["data"]["access_token"]
+            token = await enroll_mfa_if_required(client, slug=slug, login_data=login.json()["data"])
             headers = {"X-Tenant-Slug": slug, "Authorization": f"Bearer {token}"}
 
             created = await client.post(

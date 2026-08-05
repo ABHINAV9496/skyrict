@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from identity.core.exceptions import TenantNotFoundError
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Tenant
 from identity.models.tenant import TenantModel
@@ -23,6 +24,7 @@ def _to_orm(tenant: Tenant) -> TenantModel:
         "slug": tenant.slug,
         "plan_tier": tenant.plan_tier,
         "is_active": tenant.is_active,
+        "mfa_required_for_all_members": tenant.mfa_required_for_all_members,
     }
     if tenant.id is not None:
         model_kwargs["id"] = tenant.id
@@ -37,6 +39,7 @@ def _from_orm(model: TenantModel) -> Tenant:
         slug=model.slug,
         is_active=model.is_active,
         plan_tier=model.plan_tier,
+        mfa_required_for_all_members=model.mfa_required_for_all_members,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -66,6 +69,18 @@ class TenantRepository(SqlRepository):
         """Persist a new tenant and return it with its DB-generated id."""
         model = _to_orm(tenant)
         self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def update_settings(
+        self, tenant_id: str | uuid.UUID, *, mfa_required_for_all_members: bool
+    ) -> Tenant:
+        """Update tenant security settings and flush."""
+        model = await self.session.get(TenantModel, tenant_id)
+        if model is None:
+            raise TenantNotFoundError("Organization not found")
+        model.mfa_required_for_all_members = mfa_required_for_all_members
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

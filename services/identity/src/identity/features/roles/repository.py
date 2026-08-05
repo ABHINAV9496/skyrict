@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Role, ScopeType
@@ -134,9 +134,18 @@ class RoleRepository(SqlRepository):
         return _from_orm(model)
 
     async def delete(self, role_id: str | uuid.UUID) -> None:
-        """Delete a role by primary key (user_roles rows cascade)."""
+        """Delete a role by primary key.
+
+        ``user_roles`` grants are removed explicitly first: the ORM relationship
+        has no ``cascade``/``passive_deletes`` wiring, so ``session.delete(role)``
+        would otherwise try to null out ``user_roles.role_id`` (NOT NULL) and
+        fail. The DB-level ON DELETE CASCADE covers the same rows as a backstop.
+        """
         model = await self.session.get(RoleModel, role_id)
         if model is not None:
+            await self.session.execute(
+                delete(UserRoleModel).where(UserRoleModel.role_id == role_id)
+            )
             await self.session.delete(model)
             await self.session.flush()
 

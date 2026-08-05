@@ -107,6 +107,10 @@ class RoleManagementService:
         """List all roles (system + custom) for a tenant."""
         return await self.role_repo.list_by_tenant(tenant_id, offset=offset, limit=limit)
 
+    async def get_role(self, tenant_id: str | uuid.UUID, role_id: str | uuid.UUID) -> Role:
+        """Fetch a single role within the routed tenant (404 when absent/foreign)."""
+        return await self._require_owned_role(tenant_id, role_id)
+
     async def update_role(
         self,
         tenant_id: str | uuid.UUID,

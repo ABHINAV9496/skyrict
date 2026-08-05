@@ -32,6 +32,7 @@ def _to_orm(user: User) -> UserModel:
         "is_verified": user.is_verified,
         "mfa_enabled": user.mfa_enabled,
         "mfa_secret": user.mfa_secret,
+        "mfa_backup_codes": user.mfa_backup_codes or None,
     }
     if user.id is not None:
         model_kwargs["id"] = user.id
@@ -50,6 +51,7 @@ def _from_orm(model: UserModel) -> User:
         is_verified=model.is_verified,
         mfa_enabled=model.mfa_enabled,
         mfa_secret=model.mfa_secret,
+        mfa_backup_codes=list(model.mfa_backup_codes) if model.mfa_backup_codes else [],
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -111,6 +113,40 @@ class UserRepository(SqlRepository):
         if model is None:
             raise UserNotFoundError("User not found")
         model.password_hash = password_hash
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def update_mfa(
+        self,
+        user_id: str | uuid.UUID,
+        *,
+        mfa_enabled: bool | None = None,
+        mfa_secret: str | None = None,
+        mfa_backup_codes: list[str | None] | None = None,
+    ) -> User:
+        """Apply the provided MFA field updates; ``None`` leaves a field unchanged."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        if mfa_enabled is not None:
+            model.mfa_enabled = mfa_enabled
+        if mfa_secret is not None:
+            model.mfa_secret = mfa_secret
+        if mfa_backup_codes is not None:
+            model.mfa_backup_codes = mfa_backup_codes
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def disable_mfa(self, user_id: str | uuid.UUID) -> User:
+        """Clear every MFA field (secret, backup codes, enabled flag) and flush."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        model.mfa_enabled = False
+        model.mfa_secret = None
+        model.mfa_backup_codes = None
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

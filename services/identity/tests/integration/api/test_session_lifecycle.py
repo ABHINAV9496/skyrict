@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from identity.db.session import async_session_factory
 from identity.models.audit_log import AuditLogModel
 from identity.models.tenant import TenantModel
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -48,6 +49,7 @@ async def _login(client: AsyncClient, *, slug: str, email: str) -> tuple[str, st
     )
     assert login.status_code == 200
     data = login.json()["data"]
+    await enroll_mfa_if_required(client, slug=slug, login_data=data)
     return str(data["user"]["id"]), data["access_token"], data["refresh_token"]
 
 

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import Boolean, CheckConstraint, String, false, true
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -14,7 +17,7 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
     __table_args__ = (
         CheckConstraint(
-            "plan_tier IN ('free', 'starter', 'pro', 'enterprise')",
+            "plan_tier IN ('free', 'starter', 'professional', 'business', 'enterprise')",
             name="ck_tenants_plan_tier",
         ),
     )
@@ -25,6 +28,8 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
     )
+    industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    billing_address: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     mfa_required_for_all_members: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )

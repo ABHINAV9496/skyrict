@@ -17,6 +17,8 @@ logger = structlog.get_logger("identity.email")
 class EmailService(Protocol):
     """Delivery contract for transactional email."""
 
+    async def send_otp(self, *, to: str, code: str) -> None: ...
+
     async def send_verification(
         self, *, to: str, full_name: str, token: str, base_url: str | None = None
     ) -> None: ...
@@ -44,6 +46,9 @@ class EmailService(Protocol):
 
 class LogEmailService:
     """Transport that logs the verification payload (dev/test default)."""
+
+    async def send_otp(self, *, to: str, code: str) -> None:
+        logger.info("email.otp.sent", to=to, otp_code=code)
 
     async def send_verification(
         self, *, to: str, full_name: str, token: str, base_url: str | None = None

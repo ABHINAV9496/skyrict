@@ -7,18 +7,30 @@ import uuid
 import pytest
 
 from identity.core.config import settings
-from identity.core.constants import LOGIN_FAILED_MESSAGE, SYSTEM_ROLE_DEFINITIONS
-from identity.core.security import (
-    create_access_token,
-    create_email_verification_token,
-    hash_password,
+from identity.core.constants import (
+    LOGIN_FAILED_MESSAGE,
+    RESERVED_EMAILS,
+    RESERVED_SLUGS,
+    SYSTEM_ROLE_DEFINITIONS,
 )
+from identity.core.security import hash_password
 from identity.core.tenant_context import TenantContext
 from identity.domain.entities import Role, Session, Tenant, User
 from identity.domain.value_objects import TokenPair
-from identity.features.auth.schemas import LoginRequest, RegisterRequest
+from identity.features.auth.schemas import (
+    BillingAddress,
+    CreateOrganizationRequest,
+    LoginRequest,
+)
 from identity.features.auth.service import AuthenticationService
-from skyrict_common.exceptions import AuthenticationError, TokenInvalidError, UserNotFoundError
+from skyrict_common.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    TokenInvalidError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+    ValidationError,
+)
 
 
 class FakeUserRepo:
@@ -43,6 +55,9 @@ class FakeUserRepo:
 
     async def email_exists(self, tenant_id: str | uuid.UUID, email: str) -> bool:
         return await self.get_by_email(tenant_id, email) is not None
+
+    async def email_exists_global(self, email: str) -> bool:
+        return any(user.email == email for user in self.users.values())
 
     async def create(self, user: User) -> User:
         if user.id is None:
@@ -208,6 +223,9 @@ class FakeEmailService:
     ) -> None:
         self.sent.append({"to": to, "full_name": full_name, "token": token, "base_url": base_url})
 
+    async def send_otp(self, *, to: str, code: str) -> None:
+        self.sent.append({"to": to, "code": code})
+
     async def send_security_alert(
         self,
         *,
@@ -270,6 +288,76 @@ class FakeSessionService:
         return session
 
 
+class FakeVerificationStore:
+    """In-memory VerificationStore double keyed by email/token."""
+
+    def __init__(self) -> None:
+        self.otp_hashes: dict[str, str] = {}
+        self.attempts: dict[str, int] = {}
+        self.resend_until: dict[str, float] = {}
+        self.tokens: dict[str, dict[str, str]] = {}
+        self.now: float = 0.0
+
+    async def set_otp(self, email: str, otp_hash: str) -> None:
+        self.otp_hashes[email.lower()] = otp_hash
+        self.attempts[email.lower()] = 0
+
+    async def get_otp_hash(self, email: str) -> str | None:
+        return self.otp_hashes.get(email.lower())
+
+    async def delete_otp(self, email: str) -> None:
+        self.otp_hashes.pop(email.lower(), None)
+        self.attempts.pop(email.lower(), None)
+
+    async def get_attempts(self, email: str) -> int:
+        return self.attempts.get(email.lower(), 0)
+
+    async def increment_attempts(self, email: str) -> int:
+        count = self.attempts.get(email.lower(), 0) + 1
+        self.attempts[email.lower()] = count
+        return count
+
+    async def is_resend_blocked(self, email: str) -> bool:
+        return self.resend_until.get(email.lower(), 0.0) > self.now
+
+    async def mark_resend(self, email: str) -> None:
+        self.resend_until[email.lower()] = self.now + settings.OTP_RESEND_COOLDOWN_SECONDS
+
+    async def resend_in(self, email: str) -> int:
+        remaining = self.resend_until.get(email.lower(), 0.0) - self.now
+        return max(int(remaining), 0)
+
+    async def set_verification_token(self, token: str, email: str, password_hash: str) -> str:
+        self.tokens[token] = {"email": email, "password_hash": password_hash}
+        return token
+
+    async def get_verification_token(self, token: str) -> dict[str, str] | None:
+        payload = self.tokens.get(token)
+        if payload is None:
+            return None
+        return dict(payload)
+
+    async def update_verification_token_password(self, token: str, password_hash: str) -> None:
+        payload = self.tokens.get(token)
+        if payload is not None:
+            self.tokens[token] = {"email": payload["email"], "password_hash": password_hash}
+
+    async def delete_verification_token(self, token: str) -> None:
+        self.tokens.pop(token, None)
+
+
+class FakeTurnstile:
+    """Turnstile double with a scripted verdict."""
+
+    def __init__(self, result: bool = True) -> None:
+        self.result = result
+        self.calls: list[str | None] = []
+
+    async def verify(self, token: str | None) -> bool:
+        self.calls.append(token)
+        return self.result
+
+
 class _Harness:
     """Wires AuthenticationService against in-memory port doubles."""
 
@@ -280,6 +368,8 @@ class _Harness:
         tenants: list[Tenant] | None = None,
         roles_for_user: dict[uuid.UUID, list[str]] | None = None,
         prior_device: bool = True,
+        verification_store: FakeVerificationStore | None = None,
+        turnstile: FakeTurnstile | None = None,
     ) -> None:
         self.user_repo = FakeUserRepo(users)
         self.tenant_repo = FakeTenantRepo(tenants)
@@ -288,6 +378,8 @@ class _Harness:
         self.audit_svc = FakeAuditService()
         self.email_svc = FakeEmailService()
         self.session_svc = FakeSessionService(prior_device=prior_device)
+        self.verification_store = verification_store or FakeVerificationStore()
+        self.turnstile = turnstile or FakeTurnstile()
         self.service = AuthenticationService(
             self.user_repo,
             self.tenant_repo,
@@ -296,6 +388,8 @@ class _Harness:
             self.audit_svc,
             self.email_svc,
             self.session_svc,
+            self.verification_store,
+            self.turnstile,
         )
 
 
@@ -533,55 +627,192 @@ class TestLogin:
         assert seen == {(AuthenticationError, LOGIN_FAILED_MESSAGE)}
 
 
-class TestRegister:
-    async def test_provisions_tenant_roles_and_owner(self) -> None:
+def _org_request(
+    *,
+    email: str = "owner@neworg.com",
+    token: str = "vt",
+    slug: str = "acme-inc",
+) -> CreateOrganizationRequest:
+    return CreateOrganizationRequest(
+        email=email,
+        verification_token=token,
+        plan_id="professional",
+        company_name="Acme Inc",
+        industry="Technology",
+        workspace_slug=slug,
+        owner_full_name="New Owner",
+        phone_country="US",
+        phone_number="+15550123",
+    )
+
+
+class TestWizard:
+    async def test_signup_start_requires_valid_turnstile(self) -> None:
+        harness = _Harness(turnstile=FakeTurnstile(result=False))
+
+        with pytest.raises(ValidationError):
+            await harness.service.signup_start(email="owner@neworg.com", turnstile_token="tok")
+
+        assert harness.turnstile.calls == ["tok"]
+
+    async def test_signup_start_passes_with_valid_turnstile(self) -> None:
         harness = _Harness()
 
-        result = await harness.service.register(
-            RegisterRequest(
-                email="owner@neworg.com",
-                password="Password1!",
-                full_name="New Owner",
-                organization_name="Acme Inc",
-            )
+        result = await harness.service.signup_start(email="owner@neworg.com", turnstile_token="tok")
+
+        assert result == {"status": "ok"}
+        assert harness.turnstile.calls == ["tok"]
+
+    async def test_send_code_and_verify_flow(self) -> None:
+        harness = _Harness()
+
+        sent = await harness.service.signup_send_code(email="owner@neworg.com")
+        assert sent["status"] == "ok"
+        assert sent["resend_in"] == settings.OTP_RESEND_COOLDOWN_SECONDS
+        assert sent["code"] is not None
+
+        invalid = await harness.service.signup_verify_code(email="owner@neworg.com", code="000000")
+        assert invalid["status"] == "invalid"
+        assert invalid["verification_token"] is None
+        assert await harness.verification_store.get_attempts("owner@neworg.com") == 1
+
+        verified = await harness.service.signup_verify_code(
+            email="owner@neworg.com", code=sent["code"]
         )
+        assert verified["status"] == "ok"
+        assert verified["verification_token"] is not None
+
+    async def test_resend_blocked_within_cooldown(self) -> None:
+        harness = _Harness()
+
+        await harness.service.signup_send_code(email="owner@neworg.com")
+        blocked = await harness.service.signup_send_code(email="owner@neworg.com")
+
+        assert blocked["status"] == "ok"
+        assert blocked["code"] is None
+        assert blocked["resend_in"] == settings.OTP_RESEND_COOLDOWN_SECONDS
+        assert len(harness.email_svc.sent) == 1
+
+    async def test_otp_lockout_after_max_attempts(self) -> None:
+        harness = _Harness()
+        sent = await harness.service.signup_send_code(email="owner@neworg.com")
+        code = sent["code"]
+        assert code is not None
+
+        for _ in range(settings.OTP_MAX_ATTEMPTS):
+            result = await harness.service.signup_verify_code(
+                email="owner@neworg.com", code="000000"
+            )
+            assert result["status"] == "invalid"
+
+        locked = await harness.service.signup_verify_code(email="owner@neworg.com", code=code)
+        assert locked["status"] == "invalid"
+        assert locked["verification_token"] is None
+        assert await harness.verification_store.get_otp_hash("owner@neworg.com") is None
+
+    async def test_check_email_availability(self) -> None:
+        harness = _Harness()
+        assert (await harness.service.signup_check_email(email="fresh@example.com"))[
+            "available"
+        ] is True
+
+        reserved = next(iter(RESERVED_EMAILS))
+        assert (await harness.service.signup_check_email(email=reserved))["available"] is False
+
+        existing = _make_user(tenant_id=uuid.uuid4(), email="taken@example.com")
+        harness = _Harness(users=[existing])
+        assert (await harness.service.signup_check_email(email="taken@example.com"))[
+            "available"
+        ] is False
+
+    async def test_check_slug_availability_and_validation(self) -> None:
+        harness = _Harness()
+        assert (await harness.service.signup_check_slug(slug="my-workspace"))["available"] is True
+        assert (await harness.service.signup_check_slug(slug="  My-Workspace  "))[
+            "available"
+        ] is True
+        assert (await harness.service.signup_check_slug(slug="bad_slug!"))["available"] is False
+        assert (await harness.service.signup_check_slug(slug=""))["available"] is False
+
+        reserved = next(iter(RESERVED_SLUGS))
+        assert (await harness.service.signup_check_slug(slug=reserved))["available"] is False
+
+        existing = Tenant(name="Existing", slug="existing", id=uuid.uuid4())
+        harness = _Harness(tenants=[existing])
+        assert (await harness.service.signup_check_slug(slug="existing"))["available"] is False
+
+    async def test_set_password_enforces_policy(self) -> None:
+        harness = _Harness()
+
+        with pytest.raises(ValidationError):
+            await harness.service.signup_set_password(
+                email="owner@neworg.com", verification_token="vt", password="short"
+            )
+        with pytest.raises(ValidationError):
+            await harness.service.signup_set_password(
+                email="owner@neworg.com", verification_token="vt", password="alllowercase1!"
+            )
+
+    async def test_set_password_stores_hash(self) -> None:
+        harness = _Harness()
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
+
+        await harness.service.signup_set_password(
+            email="owner@neworg.com", verification_token="vt", password="ValidPass123!"
+        )
+
+        payload = await harness.verification_store.get_verification_token("vt")
+        assert payload is not None
+        assert payload["password_hash"] != "ValidPass123!"
+
+    async def test_full_wizard_provisions_verified_owner(self) -> None:
+        harness = _Harness()
+        await harness.service.signup_start(email="owner@neworg.com", turnstile_token="tok")
+        sent = await harness.service.signup_send_code(email="owner@neworg.com")
+        code = sent["code"]
+        assert code is not None
+        vt = (await harness.service.signup_verify_code(email="owner@neworg.com", code=code))[
+            "verification_token"
+        ]
+        assert vt is not None
+        await harness.service.signup_set_password(
+            email="owner@neworg.com", verification_token=vt, password="ValidPass123!"
+        )
+
+        result = await harness.service.signup_create_organization(
+            _org_request(token=vt), ip_address=None, user_agent=None
+        )
+
+        assert result["status"] == "ok"
+        assert result["mfa_required"] is True
+        assert result["tenant_slug"] == "acme-inc"
 
         assert len(harness.tenant_repo.created) == 1
         tenant = harness.tenant_repo.created[0]
         assert tenant.name == "Acme Inc"
         assert tenant.slug == "acme-inc"
+        assert tenant.plan_tier == "professional"
+        assert tenant.industry == "Technology"
         assert tenant.is_active is True
 
-        assert {role.name for role in harness.role_repo.created} == {
-            name for name, _ in SYSTEM_ROLE_DEFINITIONS
-        }
-        assert len(harness.role_repo.created) == len(SYSTEM_ROLE_DEFINITIONS)
-        for role in harness.role_repo.created:
-            assert role.tenant_id == tenant.id
-            assert role.is_system_role is True
+        roles = {role.name: role for role in harness.role_repo.created}
+        assert set(roles) == {name for name, _ in SYSTEM_ROLE_DEFINITIONS}
 
         assert len(harness.user_repo.created) == 1
         user = harness.user_repo.created[0]
         assert user.email == "owner@neworg.com"
         assert user.full_name == "New Owner"
         assert user.is_active is True
-        assert user.is_verified is False
-        assert user.tenant_id == tenant.id
+        assert user.is_verified is True
+        assert user.phone_country == "US"
+        assert user.phone_number == "+15550123"
 
-        owner_role = harness.role_repo.created[0]
+        owner_role = roles["tenant_owner"]
         assert harness.role_repo.grants == [
             (str(user.id), str(owner_role.id), str(tenant.id), str(tenant.id))
         ]
 
-        assert result["email"] == "owner@neworg.com"
-        assert result["user_id"] == user.id
-        assert result["tenant_id"] == tenant.id
-        assert result["tenant_slug"] == "acme-inc"
-        assert result["verification_pending"] is True
-        assert result["verification_token"] is not None
-        assert result["expires_in"] == settings.VERIFICATION_TOKEN_EXPIRE_MINUTES * 60
-
-        assert harness.token_svc.pairs_created == []
+        assert await harness.verification_store.get_verification_token(vt) is None
         assert harness.audit_svc.events == [
             {
                 "action": "auth.register.success",
@@ -590,70 +821,81 @@ class TestRegister:
                 "tenant_id": str(tenant.id),
             }
         ]
-        assert len(harness.email_svc.sent) == 1
-        assert harness.email_svc.sent[0]["to"] == "owner@neworg.com"
-        assert harness.email_svc.sent[0]["token"] == result["verification_token"]
+        assert harness.email_svc.sent == [{"to": "owner@neworg.com", "code": code}]
 
-    async def test_slug_collision_is_suffixed(self) -> None:
-        existing = Tenant(name="Acme", slug="acme", id=uuid.uuid4())
+    async def test_create_organization_requires_password_first(self) -> None:
+        harness = _Harness()
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
+
+        with pytest.raises(TokenInvalidError):
+            await harness.service.signup_create_organization(
+                _org_request(), ip_address=None, user_agent=None
+            )
+
+        assert harness.tenant_repo.created == []
+        assert harness.user_repo.created == []
+
+    async def test_create_organization_rejects_token_email_mismatch(self) -> None:
+        harness = _Harness()
+        await harness.verification_store.set_verification_token("vt", "other@example.com", "hash")
+
+        with pytest.raises(TokenInvalidError):
+            await harness.service.signup_create_organization(
+                _org_request(email="owner@neworg.com"), ip_address=None, user_agent=None
+            )
+
+    async def test_create_organization_rejects_invalid_slug(self) -> None:
+        harness = _Harness()
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
+
+        with pytest.raises(ValidationError):
+            await harness.service.signup_create_organization(
+                _org_request(slug="Bad_Slug!"), ip_address=None, user_agent=None
+            )
+
+    async def test_create_organization_rejects_taken_slug(self) -> None:
+        existing = Tenant(name="Acme", slug="acme-inc", id=uuid.uuid4())
         harness = _Harness(tenants=[existing])
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
 
-        result = await harness.service.register(
-            RegisterRequest(
-                email="owner@acme.com",
-                password="Password1!",
-                full_name="Acme Owner",
-                organization_name="Acme",
+        with pytest.raises(ConflictError):
+            await harness.service.signup_create_organization(
+                _org_request(), ip_address=None, user_agent=None
             )
-        )
 
-        assert result["tenant_slug"] == "acme-2"
+        assert harness.user_repo.created == []
 
-    async def test_register_ignores_taken_email(self) -> None:
-        taken = _make_user(tenant_id=uuid.uuid4(), email="taken@example.com")
-        harness = _Harness(users=[taken])
+    async def test_create_organization_rejects_taken_email(self) -> None:
+        existing = _make_user(tenant_id=uuid.uuid4(), email="owner@neworg.com")
+        harness = _Harness(users=[existing])
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
 
-        result = await harness.service.register(
-            RegisterRequest(
-                email="taken@example.com",
-                password="Password1!",
-                full_name="Dup",
-                organization_name="Another Org",
+        with pytest.raises(UserAlreadyExistsError):
+            await harness.service.signup_create_organization(
+                _org_request(), ip_address=None, user_agent=None
             )
+
+    async def test_create_organization_captures_billing_address(self) -> None:
+        harness = _Harness()
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
+
+        request = _org_request()
+        request.address = BillingAddress(
+            country="US",
+            address_line1="1 Main St",
+            address_line2="Apt 2",
+            city="Springfield",
+            state="IL",
+            postal_code="62704",
         )
+        await harness.service.signup_create_organization(request, ip_address=None, user_agent=None)
 
-        assert result["verification_pending"] is True
-        assert len(harness.user_repo.created) == 1
-
-
-class TestVerifyEmail:
-    async def test_valid_token_marks_user_verified_and_is_idempotent(self) -> None:
-        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
-        harness = _Harness(users=[user])
-        token = create_email_verification_token(str(user.id), tenant_id=str(user.tenant_id))
-
-        await harness.service.verify_email(token)
-        assert user.is_verified is True
-
-        await harness.service.verify_email(token)
-        assert user.is_verified is True
-
-    async def test_wrong_token_type_raises(self) -> None:
-        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
-        harness = _Harness(users=[user])
-        token = create_access_token(str(user.id), tenant_id=str(user.tenant_id))
-
-        with pytest.raises(TokenInvalidError):
-            await harness.service.verify_email(token)
-
-        assert user.is_verified is False
-
-    async def test_tenant_mismatch_raises(self) -> None:
-        user = _make_user(tenant_id=uuid.uuid4(), is_verified=False)
-        harness = _Harness(users=[user])
-        token = create_email_verification_token(str(user.id), tenant_id=str(uuid.uuid4()))
-
-        with pytest.raises(TokenInvalidError):
-            await harness.service.verify_email(token)
-
-        assert user.is_verified is False
+        tenant = harness.tenant_repo.created[0]
+        assert tenant.billing_address == {
+            "country": "US",
+            "addressLine1": "1 Main St",
+            "addressLine2": "Apt 2",
+            "city": "Springfield",
+            "state": "IL",
+            "postalCode": "62704",
+        }

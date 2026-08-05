@@ -1,8 +1,9 @@
-"""Integration tests for self-service tenant provisioning (SKY-15).
+"""Integration tests for self-service tenant provisioning (SKY-30).
 
-Proves the atomic register contract: a successful request provisions tenant +
-5 system roles + owner + grant; a mid-transaction failure leaves ZERO orphan
-rows; and anti-enumeration returns an identical 200 for a taken email.
+Proves the onboarding wizard contract: a successful organization step
+provisions tenant + 5 system roles + verified owner + grant; a mid-transaction
+failure leaves ZERO orphan rows; a taken email is rejected with a 409; and the
+provisioned owner can log in immediately (is_verified is set at provisioning).
 """
 
 from __future__ import annotations
@@ -13,14 +14,21 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete, func, select
 
-from identity.core.constants import LOGIN_FAILED_MESSAGE
 from identity.db.session import async_session_factory
 from identity.models.role import RoleModel
 from identity.models.tenant import TenantModel
 from identity.models.user import UserModel
 from identity.models.user_role import UserRoleModel
 from skyrict_common.exceptions import RateLimitExceededError
-from tests.integration.api.mfa_helpers import enroll_mfa_if_required
+from tests.integration.api.wizard import (
+    DEFAULT_PASSWORD,
+    provision_tenant,
+    wizard_login,
+    wizard_send_code,
+    wizard_set_password,
+    wizard_start,
+    wizard_verify_code,
+)
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -36,19 +44,6 @@ SYSTEM_ROLE_NAMES = {
 pytestmark = pytest.mark.integration
 
 
-async def _register(client: AsyncClient, *, email: str | None = None, org: str | None = None):
-    """Register a fresh tenant and return the raw response."""
-    return await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email or f"prov-{uuid.uuid4().hex[:8]}@test.com",
-            "password": "TestPassword123!",
-            "full_name": "Provisioning User",
-            "organization_name": org or f"Prov Corp {uuid.uuid4().hex[:8]}",
-        },
-    )
-
-
 async def _cleanup_tenant(slug: str) -> None:
     """Remove a provisioned tenant (cascades to users/roles/grants/audit)."""
     async with async_session_factory() as session:
@@ -57,24 +52,20 @@ async def _cleanup_tenant(slug: str) -> None:
 
 
 class TestProvisioning:
-    async def test_register_provisions_tenant_owner_and_five_system_roles(
+    async def test_wizard_provisions_tenant_owner_and_five_system_roles(
         self, client: AsyncClient
     ) -> None:
-        email = f"prov-{uuid.uuid4().hex[:8]}@test.com"
-        org = f"Prov Corp {uuid.uuid4().hex[:8]}"
-        response = await _register(client, email=email, org=org)
-        assert response.status_code == 200
-        data = response.json()["data"]
-        slug = data["tenant_slug"]
-
+        tenant = await provision_tenant(client)
         try:
             async with async_session_factory() as session:
-                tenant = await session.scalar(select(TenantModel).where(TenantModel.slug == slug))
-                assert tenant is not None
-                assert tenant.name == org
+                row = await session.scalar(
+                    select(TenantModel).where(TenantModel.slug == tenant["slug"])
+                )
+                assert row is not None
+                assert row.plan_tier == "professional"
 
                 roles = (
-                    await session.scalars(select(RoleModel).where(RoleModel.tenant_id == tenant.id))
+                    await session.scalars(select(RoleModel).where(RoleModel.tenant_id == row.id))
                 ).all()
                 assert len(roles) == 5
                 by_name = {role.name: role for role in roles}
@@ -82,10 +73,12 @@ class TestProvisioning:
                 assert all(role.is_system_role for role in roles)
                 assert "*" in by_name["tenant_owner"].permissions
 
-                user = await session.scalar(select(UserModel).where(UserModel.email == email))
+                user = await session.scalar(
+                    select(UserModel).where(UserModel.email == tenant["email"])
+                )
                 assert user is not None
-                assert user.tenant_id == tenant.id
-                assert user.is_verified is False
+                assert user.tenant_id == row.id
+                assert user.is_verified is True
 
                 grant = await session.scalar(
                     select(UserRoleModel).where(
@@ -94,11 +87,11 @@ class TestProvisioning:
                     )
                 )
                 assert grant is not None
-                assert grant.scope_id == tenant.id
+                assert grant.scope_id == row.id
         finally:
-            await _cleanup_tenant(slug)
+            await _cleanup_tenant(tenant["slug"])
 
-    async def test_register_failure_leaves_no_orphan_rows(
+    async def test_wizard_failure_leaves_no_orphan_rows(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from identity.features.roles.repository import RoleRepository
@@ -112,13 +105,23 @@ class TestProvisioning:
         org = f"Prov Corp {uuid.uuid4().hex[:8]}"
         slug = org.lower().replace(" ", "-")
 
+        await wizard_start(client, email=email)
+        code = await wizard_send_code(client, email=email)
+        vt = await wizard_verify_code(client, email=email, code=code)
+        await wizard_set_password(
+            client, email=email, verification_token=vt, password=DEFAULT_PASSWORD
+        )
+
         response = await client.post(
-            "/api/v1/auth/register",
+            "/api/v1/auth/signup/organization",
             json={
                 "email": email,
-                "password": "TestPassword123!",
-                "full_name": "Provisioning User",
-                "organization_name": org,
+                "verificationToken": vt,
+                "planId": "professional",
+                "companyName": org,
+                "industry": "Technology",
+                "workspaceSlug": slug,
+                "ownerFullName": "Provisioning User",
             },
         )
         assert response.status_code == 500
@@ -137,102 +140,73 @@ class TestProvisioning:
                 == 0
             )
 
-    async def test_duplicate_email_returns_identical_200(self, client: AsyncClient) -> None:
+    async def test_duplicate_email_rejected_with_409(self, client: AsyncClient) -> None:
+        from identity.core.security import hash_password
+        from identity.features.auth.verification_store import VerificationStore
+
         email = f"prov-{uuid.uuid4().hex[:8]}@test.com"
-        first = await _register(client, email=email)
-        assert first.status_code == 200
-        second = await _register(client, email=email)
-        assert second.status_code == 200
-
-        d1 = first.json()["data"]
-        d2 = second.json()["data"]
-        # No existence leak: same shape, no 409, no error detail.
-        assert d1["email"] == d2["email"] == email
-        assert d1["verification_pending"] is True
-        assert d2["verification_pending"] is True
-        assert d1["tenant_slug"] != d2["tenant_slug"]
-
-        await _cleanup_tenant(d1["tenant_slug"])
-        await _cleanup_tenant(d2["tenant_slug"])
-
-    async def test_unverified_login_blocked_until_verified(self, client: AsyncClient) -> None:
-        response = await _register(client)
-        data = response.json()["data"]
-        slug = data["tenant_slug"]
-        email = data["email"]
+        first = await provision_tenant(client, email=email)
         try:
-            blocked = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
-            )
-            # Uniform 401 — an unverified account must be indistinguishable
-            # from any other login failure (anti-enumeration, ADR-004).
-            assert blocked.status_code == 401
-            assert blocked.json()["type"].endswith("/authentication-error")
-            assert blocked.json()["detail"] == LOGIN_FAILED_MESSAGE
+            # A second signup for the same email would hit the OTP resend
+            # cooldown, so model the session directly: a fresh verification
+            # token bound to this email with a password hash set, then walk
+            # the org step that must refuse to re-provision the email.
+            vt = uuid.uuid4().hex
+            store = VerificationStore()
+            await store.set_verification_token(vt, email, hash_password(DEFAULT_PASSWORD))
+            await wizard_start(client, email=email)
 
-            verified = await client.post(
-                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
+            second = await client.post(
+                "/api/v1/auth/signup/organization",
+                json={
+                    "email": email,
+                    "verificationToken": vt,
+                    "planId": "professional",
+                    "companyName": "Second Corp",
+                    "industry": "Technology",
+                    "workspaceSlug": f"dup-{uuid.uuid4().hex[:8]}",
+                    "ownerFullName": "Second Owner",
+                },
             )
-            assert verified.status_code == 200
+            assert second.status_code == 409
+            assert second.json()["type"].endswith("/user-already-exists")
 
-            # verify-email is idempotent.
-            verified_again = await client.post(
-                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-            )
-            assert verified_again.status_code == 200
-
-            login = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
-            )
-            assert login.status_code == 200
+            async with async_session_factory() as session:
+                count = await session.scalar(
+                    select(func.count()).select_from(UserModel).where(UserModel.email == email)
+                )
+                assert count == 1
         finally:
-            await _cleanup_tenant(slug)
+            await _cleanup_tenant(first["slug"])
 
 
 class TestAuthPosture:
     async def test_mfa_required_for_tenant_owner_without_mfa(self, client: AsyncClient) -> None:
-        response = await _register(client)
-        data = response.json()["data"]
-        slug = data["tenant_slug"]
-        email = data["email"]
+        tenant = await provision_tenant(client)
         try:
-            await client.post(
-                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-            )
             login = await client.post(
                 "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
+                headers={"X-Tenant-Slug": tenant["slug"]},
+                json={"email": tenant["email"], "password": DEFAULT_PASSWORD},
             )
             assert login.status_code == 200
             assert login.json()["data"]["mfa_required"] is True
             assert login.json()["data"]["access_token"]
         finally:
-            await _cleanup_tenant(slug)
+            await _cleanup_tenant(tenant["slug"])
 
 
 class TestCustomRoles:
     async def test_create_and_list_custom_role(self, client: AsyncClient) -> None:
-        response = await _register(client)
-        data = response.json()["data"]
-        slug = data["tenant_slug"]
-        email = data["email"]
+        tenant = await provision_tenant(client)
+        creds = await wizard_login(
+            client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
+        )
+        headers = {
+            "X-Tenant-Slug": tenant["slug"],
+            "Authorization": f"Bearer {creds['token']}",
+        }
         try:
-            await client.post(
-                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-            )
-            login = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
-            )
-            token = await enroll_mfa_if_required(client, slug=slug, login_data=login.json()["data"])
-            headers = {"X-Tenant-Slug": slug, "Authorization": f"Bearer {token}"}
-
             created = await client.post(
                 "/api/v1/roles",
                 headers=headers,
@@ -249,7 +223,6 @@ class TestCustomRoles:
             assert "custom_ops" in names
             assert names >= SYSTEM_ROLE_NAMES
 
-            # Reserved system names are rejected for custom roles.
             reserved = await client.post(
                 "/api/v1/roles",
                 headers=headers,
@@ -257,11 +230,11 @@ class TestCustomRoles:
             )
             assert reserved.status_code == 422
         finally:
-            await _cleanup_tenant(slug)
+            await _cleanup_tenant(tenant["slug"])
 
 
 class TestRateLimit:
-    async def test_register_rate_limited(self, client: AsyncClient) -> None:
+    async def test_signup_start_rate_limited(self, client: AsyncClient) -> None:
         from identity.api.deps import get_rate_limiter
         from identity.main import app
 
@@ -271,7 +244,7 @@ class TestRateLimit:
 
         app.dependency_overrides[get_rate_limiter] = lambda: DenyLimiter()
         try:
-            response = await _register(client)
+            response = await client.post("/api/v1/auth/signup/start", json={"email": "rl@test.com"})
             assert response.status_code == 429
             assert response.json()["type"].endswith("/rate-limit-exceeded")
         finally:

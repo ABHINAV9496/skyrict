@@ -1,13 +1,3 @@
-"""FastAPI dependency injection — get_db, get_current_user, require_permission.
-
-The api layer is the sole composition point: feature services and repositories
-are wired together here and nowhere else. Feature imports stay inside the
-factory functions (call sites) so importing this module never pulls the whole
-feature tree at load time, and no feature ever imports another feature.
-
-Every route that touches the database or requires auth goes through these deps.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -25,6 +15,7 @@ from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
 from identity.db.session import async_session_factory
 from identity.features.audit.repository import AuditRepository
+from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.auth.verification_store import VerificationStore
 from identity.features.organizations.repository import TenantRepository
@@ -46,18 +37,11 @@ if TYPE_CHECKING:
 
 security = HTTPBearer(auto_error=False)
 
-# MFA enrollment endpoints are exempt from the enforcement gate so a user who
-# must set up MFA (owner or tenant policy) can actually finish enrollment.
+
 _MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
 
 
 async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: str) -> None:
-    """Block authenticated calls while forced MFA is not yet set up.
-
-    Raises:
-        MFARequiredError: When MFA is mandatory for this account (tenant owner
-            or tenant-level policy) but not yet enabled.
-    """
     from identity.core.security import mfa_is_required
 
     user = await UserRepository(db).get_by_id(user_id)
@@ -76,12 +60,6 @@ async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: 
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an async database session; commit on success, roll back on error.
-
-    Without the commit, every write made by a route handler (user registration,
-    audit logs, session revocation) is rolled back when the session closes —
-    registration was returning tokens for a user that never persisted.
-    """
     async with async_session_factory() as session:
         try:
             yield session
@@ -95,25 +73,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Extract and verify JWT from Authorization header, return user claims.
 
-    Uses security.verify_jwt() — the ONE AND ONLY decode path.
-    The tenant is consumed from TenantContext (resolved once by the middleware)
-    and the JWT-vs-routed cross-check is enforced again here as defense in
-    depth, so a token can never be used against a different tenant even if a
-    route is reached without going through the middleware.
-
-    Enforces the MFA gate on every authenticated route except the enrollment
-    endpoints (``/api/v1/mfa/setup``, ``/api/v1/mfa/verify``): accounts that
-    must enroll (tenant owner or tenant policy) get 403 MFARequiredError until
-    MFA is enabled.
-
-    Raises:
-        AuthenticationError: If no token, token is invalid, or token is expired.
-        MFARequiredError: If MFA is mandatory for this account but not enabled.
-        TenantContextMissingError: If the middleware hasn't resolved a tenant.
-        TenantMismatchError: If the token's tenant claim differs from the routed tenant.
-    """
     if credentials is None:
         raise AuthenticationError("Missing Authorization header")
 
@@ -122,7 +82,6 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise AuthenticationError("Invalid token type")
 
-    # Single source of truth: the routed tenant was resolved by the middleware.
     routed_tenant_id = TenantContext.get()
     cross_check_jwt_tenant(payload.get("tenant_id"), routed_tenant_id)
     TenantContext.set_user_id(payload["sub"])
@@ -138,8 +97,6 @@ async def get_current_user(
 
 
 def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]]]:
-    """Dependency factory — returns a dependency that checks a specific permission."""
-
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
         user_repo: UserRepository = Depends(get_user_repo),
@@ -158,9 +115,6 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
         return current_user
 
     return _check
-
-
-# --- Repository deps ---
 
 
 def get_user_repo(db: AsyncSession = Depends(get_db)) -> UserRepository:
@@ -183,9 +137,6 @@ def get_role_repo(db: AsyncSession = Depends(get_db)) -> RoleRepository:
     return RoleRepository(db)
 
 
-# --- Service deps (feature services imported at call sites) ---
-
-
 def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:
     from identity.features.audit.service import AuditService
 
@@ -202,22 +153,22 @@ def get_token_service(
 
 
 def get_email_service() -> EmailService:
-    """Email transport — log-based until a real provider is wired."""
     return LogEmailService()
 
 
 def get_rate_limiter() -> RateLimiter:
-    """Return the process-wide rate limiter (Redis-backed, fail-open)."""
     return default_rate_limiter
 
 
 def get_verification_store() -> VerificationStore:
-    """Return the Redis-backed OTP / verification-token store."""
     return VerificationStore()
 
 
+def get_mfa_challenge_store() -> MfaChallengeStore:
+    return MfaChallengeStore()
+
+
 def get_turnstile_verifier() -> TurnstileVerifier:
-    """Return the Cloudflare Turnstile server-side verifier."""
     return TurnstileVerifier()
 
 

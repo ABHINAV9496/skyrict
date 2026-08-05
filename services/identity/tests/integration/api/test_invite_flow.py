@@ -202,6 +202,75 @@ class TestInvitationFlow:
         with contextlib.suppress(Exception):
             await _cleanup_tenant(tenant["slug"])
 
+    async def test_invitee_grant_and_permission_gate(self, client: AsyncClient) -> None:
+        tenant = await _register_tenant(client)
+        headers = {"X-Tenant-Slug": tenant["slug"], "Authorization": f"Bearer {tenant['token']}"}
+
+        viewer = await client.post(
+            "/api/v1/roles",
+            headers=headers,
+            json={"name": "viewer", "permission_keys": ["roles:read"]},
+        )
+        assert viewer.status_code == 200
+
+        invite_email = f"gate-{uuid.uuid4().hex[:8]}@test.com"
+        create_resp = await client.post(
+            "/api/v1/invitations",
+            headers=headers,
+            json={"email": invite_email, "role_name": "viewer"},
+        )
+        assert create_resp.status_code == 200
+        invite_token = create_resp.json()["data"]["token"]
+
+        accept_resp = await client.post(
+            "/api/v1/invitations/accept",
+            headers={"X-Tenant-Slug": tenant["slug"]},
+            json={
+                "token": invite_token,
+                "email": invite_email,
+                "password": "InviteePass123!",
+                "full_name": "Gated Invitee",
+            },
+        )
+        assert accept_resp.status_code == 200
+
+        invitee_login = await client.post(
+            "/api/v1/auth/login",
+            headers={"X-Tenant-Slug": tenant["slug"]},
+            json={"email": invite_email, "password": "InviteePass123!"},
+        )
+        assert invitee_login.status_code == 200
+        invitee_token = invitee_login.json()["data"]["access_token"]
+        invitee_headers = {
+            "X-Tenant-Slug": tenant["slug"],
+            "Authorization": f"Bearer {invitee_token}",
+        }
+
+        me = await client.get("/api/v1/users/me", headers=invitee_headers)
+        assert me.status_code == 200
+        assert me.json()["data"]["email"] == invite_email
+
+        roles = await client.get("/api/v1/roles", headers=invitee_headers)
+        assert roles.status_code == 200
+
+        denied = await client.post(
+            "/api/v1/invitations",
+            headers=invitee_headers,
+            json={"email": f"gate-2-{uuid.uuid4().hex[:8]}@test.com"},
+        )
+        assert denied.status_code == 403
+        assert denied.json()["type"].endswith("/permission-denied")
+
+        control = await client.post(
+            "/api/v1/invitations",
+            headers=headers,
+            json={"email": f"gate-3-{uuid.uuid4().hex[:8]}@test.com"},
+        )
+        assert control.status_code == 200
+
+        with contextlib.suppress(Exception):
+            await _cleanup_tenant(tenant["slug"])
+
     async def test_requires_admin_permission(self, client: AsyncClient) -> None:
         tenant = await _register_tenant(client)
 

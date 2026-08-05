@@ -121,14 +121,14 @@ class TestLoginRateLimit:
 
     async def test_sixth_attempt_in_window_is_rate_limited(self, client: AsyncClient) -> None:
         email = f"rl-{uuid.uuid4().hex[:8]}@acme.io"
-        for _ in range(settings.RATE_LIMIT_LOGIN):
+        for attempt in range(settings.RATE_LIMIT_LOGIN):
             resp = await client.post(
                 "/api/v1/auth/login",
                 headers=_HEADERS,
                 json={"email": email, "password": "WrongPass1!"},
             )
             assert resp.status_code >= 400, (
-                f"attempt {_ + 1} expected rejected, got {resp.status_code}"
+                f"attempt {attempt + 1} expected rejected, got {resp.status_code}"
             )
 
         blocked = await client.post(

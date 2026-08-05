@@ -73,6 +73,17 @@ async def list_roles(
     )
 
 
+@router.get("/{role_id}", response_model=ResponseEnvelope[RoleResponse])
+async def get_role(
+    role_id: UUID,
+    _: dict[str, object] = Depends(_require_roles_read),
+    roles_service: RoleManagementService = Depends(get_roles_service),
+) -> ResponseEnvelope[RoleResponse]:
+    """Get a single role in the routed tenant (404 when absent or foreign)."""
+    role = await roles_service.get_role(TenantContext.get(), role_id)
+    return ResponseEnvelope(data=RoleResponse.model_validate(role), message="Role retrieved")
+
+
 @router.patch("/{role_id}", response_model=ResponseEnvelope[RoleResponse])
 async def update_role(
     role_id: UUID,

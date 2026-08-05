@@ -27,6 +27,7 @@ from identity.core.security import (
     create_refresh_token,
     hash_password,
     hash_refresh_token,
+    mfa_is_required,
     verify_jwt,
     verify_password,
 )
@@ -112,9 +113,19 @@ class AuthenticationService:
 
         assert user.id is not None
 
-        # Forced MFA: tenant owners must complete MFA setup before the flag clears.
+        # Forced MFA: tenant owners must always enroll, and other members are
+        # forced when the tenant configures enforcement. The flag clears only
+        # once MFA is actually enabled, so tokens issued now are gated until then.
         roles = await self.role_repo.get_roles_for_user(user.id, tenant_id)
-        mfa_required = "tenant_owner" in roles and not user.mfa_enabled
+        tenant = await self.tenant_repo.get_by_id(tenant_id)
+        mfa_required = mfa_is_required(
+            roles=roles,
+            mfa_enabled=user.mfa_enabled,
+            tenant_requires_all_members=(
+                tenant.mfa_required_for_all_members if tenant is not None else False
+            ),
+        )
+        next_step = "mfa.setup" if mfa_required else None
 
         session_id = uuid.uuid4()
         tokens = await self.token_service.create_token_pair(
@@ -159,6 +170,7 @@ class AuthenticationService:
             "token_type": tokens.token_type,
             "expires_in": tokens.expires_in,
             "mfa_required": mfa_required,
+            "next_step": next_step,
             "user": user,
         }
 

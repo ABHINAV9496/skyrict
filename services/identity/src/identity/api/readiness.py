@@ -23,7 +23,7 @@ from sqlalchemy import text
 from identity.core.exceptions import StartupError
 from identity.core.logging import get_logger
 from identity.core.redis import redis_client
-from identity.core.security import verify_jwt_keys_usable
+from identity.core.security import verify_jwt_keys_usable, verify_mfa_encryption_key
 from identity.db.session import engine
 
 logger = get_logger("identity.readiness")
@@ -117,7 +117,18 @@ async def verify_startup_dependencies() -> None:
         logger.error("startup.verification_failed", dependency="jwt_keys", exc_info=True)
         raise
 
+    try:
+        verify_mfa_encryption_key()
+    except StartupError:
+        logger.error("startup.verification_failed", dependency="mfa_encryption_key", exc_info=True)
+        raise
+
     logger.info(
         "startup.dependencies_verified",
-        checks={"database": "ok", "redis": "ok", "jwt_keys": "ok"},
+        checks={
+            "database": "ok",
+            "redis": "ok",
+            "jwt_keys": "ok",
+            "mfa_encryption_key": "ok",
+        },
     )

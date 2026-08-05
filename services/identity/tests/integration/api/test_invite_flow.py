@@ -17,6 +17,7 @@ from sqlalchemy import delete
 from identity.db.session import async_session_factory
 from identity.models.invitation import InvitationModel
 from identity.models.tenant import TenantModel
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -54,7 +55,8 @@ async def _register_tenant(client: AsyncClient, *, org_name: str | None = None) 
         json={"email": email, "password": "AdminPass123!"},
     )
     assert login.status_code == 200
-    token = login.json()["data"]["access_token"]
+    login_data = login.json()["data"]
+    token = await enroll_mfa_if_required(client, slug=data["tenant_slug"], login_data=login_data)
     return {
         "slug": data["tenant_slug"],
         "tenant_id": data["tenant_id"],

@@ -38,14 +38,15 @@ class FakeInvitationRepo:
         return None
 
     async def mark_used(
-        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID
+        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID | None
     ) -> Invitation:
         inv = self.invitations.get(uuid.UUID(str(invitation_id)))
         if inv is None:
             raise NotFoundError("Invitation not found")
         inv.used_at = datetime.now(UTC)
-        inv.used_by_user_id = uuid.UUID(str(user_id))
-        self.used.append((inv.id, uuid.UUID(str(user_id))))
+        inv.used_by_user_id = uuid.UUID(str(user_id)) if user_id else None
+        if user_id is not None:
+            self.used.append((inv.id, uuid.UUID(str(user_id))))
         return inv
 
     async def list_by_tenant(

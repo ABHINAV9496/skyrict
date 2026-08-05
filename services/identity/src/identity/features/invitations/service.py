@@ -135,6 +135,6 @@ class InvitationService:
         self, invitation_id: str | uuid.UUID, tenant_id: str | uuid.UUID
     ) -> None:
         try:
-            await self.invitation_repo.mark_used(invitation_id, invitation_id)
+            await self.invitation_repo.mark_used(invitation_id, None)
         except NotFoundError as exc:
             raise InvitationNotFoundError("Invitation not found") from exc

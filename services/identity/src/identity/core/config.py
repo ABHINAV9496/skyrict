@@ -119,6 +119,41 @@ class Settings(BaseSettings):
         description="base URL for verification links, e.g. https://app.skyrict.io/verify-email",
     )
 
+    # --- Onboarding wizard (SKY-30) ---
+    TURNSTILE_SITE_KEY: str = Field(
+        default="",
+        description="Cloudflare Turnstile site key (served to the browser)",
+    )
+    TURNSTILE_SECRET_KEY: str = Field(
+        default="",
+        description=(
+            "Cloudflare Turnstile secret key for server-side siteverify. Empty "
+            "in dev/test allows the wizard to run without a real Cloudflare "
+            "account; staging/production fail closed when it is missing."
+        ),
+    )
+    OTP_EXPIRE_SECONDS: int = Field(default=600, description="email OTP TTL (seconds)")
+    OTP_MAX_ATTEMPTS: int = Field(default=5, description="OTP verify attempts before lockout")
+    OTP_RESEND_COOLDOWN_SECONDS: int = Field(default=60, description="OTP resend cooldown")
+    VERIFICATION_TOKEN_TTL_SECONDS: int = Field(
+        default=1800, description="wizard verificationToken TTL (seconds)"
+    )
+    ONBOARDING_PASSWORD_MIN_LENGTH: int = Field(
+        default=12, description="minimum password length for the onboarding wizard"
+    )
+    SIGNUP_START_RATE_LIMIT: int = Field(
+        default=5, description="max /signup/start calls per IP per window"
+    )
+    SIGNUP_CODE_RATE_LIMIT: int = Field(
+        default=10, description="max /signup/send-code calls per email per window"
+    )
+    SIGNUP_VERIFY_RATE_LIMIT: int = Field(
+        default=10, description="max /signup/verify-code attempts per email per window"
+    )
+    SIGNUP_CHECK_RATE_LIMIT: int = Field(
+        default=60, description="max /signup/check-email|check-slug calls per IP per window"
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_private_key: str = ""
     jwt_public_key: str = ""

@@ -1,4 +1,4 @@
-"""Auth endpoints — login, self-service register, email verification, refresh, logout."""
+"""Auth endpoints — login, onboarding wizard, refresh, logout, introspect."""
 
 from __future__ import annotations
 
@@ -13,15 +13,32 @@ from identity.api.deps import (
     get_token_service,
 )
 from identity.core.config import settings
+from identity.core.constants import (
+    SIGNUP_CHECK_LIMIT_KEY,
+    SIGNUP_CODE_IP_LIMIT_KEY,
+    SIGNUP_CODE_LIMIT_KEY,
+    SIGNUP_START_LIMIT_KEY,
+    SIGNUP_VERIFY_LIMIT_KEY,
+)
 from identity.features.auth.schemas import (
     AuthResponse,
+    CheckEmailRequest,
+    CheckEmailResponse,
+    CheckSlugRequest,
+    CheckSlugResponse,
+    CreateOrganizationRequest,
+    CreateOrganizationResponse,
     LoginRequest,
     LogoutRequest,
-    RegisterRequest,
-    RegisterResponse,
+    SendCodeRequest,
+    SendCodeResponse,
+    SetPasswordRequest,
+    SetPasswordResponse,
+    SignupStartRequest,
+    SignupStartResponse,
     TokenRefreshRequest,
-    VerifyEmailRequest,
-    VerifyEmailResponse,
+    VerifyCodeRequest,
+    VerifyCodeResponse,
 )
 from identity.features.auth.service import AuthenticationService, TokenService
 from skyrict_common.schemas import ResponseEnvelope
@@ -30,6 +47,10 @@ if TYPE_CHECKING:
     from identity.core.rate_limit import RateLimiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
 
 
 @router.post("/login", response_model=ResponseEnvelope[AuthResponse])
@@ -46,7 +67,7 @@ async def login(
     stuffing against the highest-value endpoint. The limiter fails open when
     Redis is unavailable so a Redis outage never becomes a login outage.
     """
-    ip_address = request.client.host if request.client else "unknown"
+    ip_address = _client_ip(request)
     await limiter.enforce(
         key=f"login:{ip_address}:{body.email.lower()}",
         limit=settings.RATE_LIMIT_LOGIN,
@@ -65,43 +86,130 @@ async def login(
     )
 
 
-@router.post("/register", response_model=ResponseEnvelope[RegisterResponse])
-async def register(
-    body: RegisterRequest,
+@router.post("/signup/start", response_model=ResponseEnvelope[SignupStartResponse])
+async def signup_start(
+    body: SignupStartRequest,
     request: Request,
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
-) -> ResponseEnvelope[RegisterResponse]:
-    """Self-service registration: atomically provision a tenant and return a
-    verification-pending response (no tokens until the email is verified)."""
-    ip_address = request.client.host if request.client else "unknown"
+) -> ResponseEnvelope[SignupStartResponse]:
+    """Gate the wizard: server-side Turnstile verification + per-IP throttling."""
+    ip_address = _client_ip(request)
     await limiter.enforce(
-        key=f"register:{ip_address}",
-        limit=settings.RATE_LIMIT_REGISTER,
-        window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW_SECONDS,
+        key=f"{SIGNUP_START_LIMIT_KEY}:{ip_address}",
+        limit=settings.SIGNUP_START_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
+    result = await authn.signup_start(email=body.email, turnstile_token=body.turnstile_token)
+    return ResponseEnvelope(data=SignupStartResponse(**result))
 
-    result = await authn.register(
+
+@router.post("/signup/send-code", response_model=ResponseEnvelope[SendCodeResponse])
+async def signup_send_code(
+    body: SendCodeRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[SendCodeResponse]:
+    """Send a 6-digit OTP to the address (throttled per email and per IP)."""
+    ip_address = _client_ip(request)
+    email_key = body.email.lower()
+    await limiter.enforce(
+        key=f"{SIGNUP_CODE_LIMIT_KEY}:{email_key}",
+        limit=settings.SIGNUP_CODE_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    await limiter.enforce(
+        key=f"{SIGNUP_CODE_IP_LIMIT_KEY}:{ip_address}",
+        limit=settings.SIGNUP_CODE_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    result = await authn.signup_send_code(email=body.email)
+    return ResponseEnvelope(data=SendCodeResponse(**result))
+
+
+@router.post("/signup/verify-code", response_model=ResponseEnvelope[VerifyCodeResponse])
+async def signup_verify_code(
+    body: VerifyCodeRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[VerifyCodeResponse]:
+    """Check an OTP; on success return an opaque single-use verification token."""
+    await limiter.enforce(
+        key=f"{SIGNUP_VERIFY_LIMIT_KEY}:{body.email.lower()}",
+        limit=settings.SIGNUP_VERIFY_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    result = await authn.signup_verify_code(email=body.email, code=body.code)
+    return ResponseEnvelope(data=VerifyCodeResponse(**result))
+
+
+@router.post("/signup/password", response_model=ResponseEnvelope[SetPasswordResponse])
+async def signup_password(
+    body: SetPasswordRequest,
+    authn: AuthenticationService = Depends(get_authn_service),
+) -> ResponseEnvelope[SetPasswordResponse]:
+    """Set the password for the wizard session bound to the verification token."""
+    result = await authn.signup_set_password(
+        email=body.email,
+        verification_token=body.verification_token,
+        password=body.password,
+    )
+    return ResponseEnvelope(data=SetPasswordResponse(**result))
+
+
+@router.post("/signup/check-email", response_model=ResponseEnvelope[CheckEmailResponse])
+async def signup_check_email(
+    body: CheckEmailRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[CheckEmailResponse]:
+    """Expose email availability for the account step (rate-limited per IP)."""
+    ip_address = _client_ip(request)
+    await limiter.enforce(
+        key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
+        limit=settings.SIGNUP_CHECK_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    result = await authn.signup_check_email(email=body.email)
+    return ResponseEnvelope(data=CheckEmailResponse(**result))
+
+
+@router.post("/signup/check-slug", response_model=ResponseEnvelope[CheckSlugResponse])
+async def signup_check_slug(
+    body: CheckSlugRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[CheckSlugResponse]:
+    """Expose workspace slug availability for the organization step."""
+    ip_address = _client_ip(request)
+    await limiter.enforce(
+        key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
+        limit=settings.SIGNUP_CHECK_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    result = await authn.signup_check_slug(slug=body.slug)
+    return ResponseEnvelope(data=CheckSlugResponse(**result))
+
+
+@router.post("/signup/organization", response_model=ResponseEnvelope[CreateOrganizationResponse])
+async def signup_organization(
+    body: CreateOrganizationRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+) -> ResponseEnvelope[CreateOrganizationResponse]:
+    """Provision the tenant, roles, and verified owner in one transaction."""
+    result = await authn.signup_create_organization(
         body,
-        ip_address=ip_address,
+        ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     return ResponseEnvelope(
-        data=RegisterResponse(**result),
-        message="Registration successful. Check your email to verify your account.",
-    )
-
-
-@router.post("/verify-email", response_model=ResponseEnvelope[VerifyEmailResponse])
-async def verify_email(
-    body: VerifyEmailRequest,
-    authn: AuthenticationService = Depends(get_authn_service),
-) -> ResponseEnvelope[VerifyEmailResponse]:
-    """Confirm an email address using the token from the registration email."""
-    await authn.verify_email(body.token)
-    return ResponseEnvelope(
-        data=VerifyEmailResponse(verified=True),
-        message="Email verified",
+        data=CreateOrganizationResponse(**result),
+        message="Your organization is ready",
     )
 
 

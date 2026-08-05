@@ -22,9 +22,11 @@ from identity.core.rate_limit import RateLimiter
 from identity.core.rate_limit import limiter as default_rate_limiter
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
+from identity.core.turnstile import TurnstileVerifier
 from identity.db.session import async_session_factory
 from identity.features.audit.repository import AuditRepository
 from identity.features.auth.security import cross_check_jwt_tenant
+from identity.features.auth.verification_store import VerificationStore
 from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
 from identity.features.sessions.repository import SessionRepository
@@ -170,6 +172,16 @@ def get_rate_limiter() -> RateLimiter:
     return default_rate_limiter
 
 
+def get_verification_store() -> VerificationStore:
+    """Return the Redis-backed OTP / verification-token store."""
+    return VerificationStore()
+
+
+def get_turnstile_verifier() -> TurnstileVerifier:
+    """Return the Cloudflare Turnstile server-side verifier."""
+    return TurnstileVerifier()
+
+
 def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repo),
 ) -> SessionService:
@@ -186,6 +198,8 @@ def get_authn_service(
     audit_service: AuditService = Depends(get_audit_service),
     email_service: EmailService = Depends(get_email_service),
     session_service: SessionService = Depends(get_session_service),
+    verification_store: VerificationStore = Depends(get_verification_store),
+    turnstile: TurnstileVerifier = Depends(get_turnstile_verifier),
 ) -> AuthenticationService:
     from identity.features.auth.service import AuthenticationService
 
@@ -197,6 +211,8 @@ def get_authn_service(
         audit_service,
         email_service,
         session_service,
+        verification_store=verification_store,
+        turnstile=turnstile,
     )
 
 

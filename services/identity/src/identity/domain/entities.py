@@ -37,6 +37,8 @@ class User:
     is_verified: bool = False
     mfa_enabled: bool = False
     mfa_secret: str | None = None
+    phone_country: str | None = None
+    phone_number: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None
@@ -50,6 +52,8 @@ class Tenant:
     slug: str
     is_active: bool = True
     plan_tier: str = "free"
+    industry: str | None = None
+    billing_address: dict[str, Any] | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None

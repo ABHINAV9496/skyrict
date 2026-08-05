@@ -7,7 +7,7 @@ Authentication, authorization, multi-tenancy, sessions, and audit for Skyrict.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/auth/login` | Authenticate with email/password |
-| POST | `/api/v1/auth/register` | Register a new account |
+| POST | `/api/v1/auth/signup/*` | Onboarding wizard (start, send-code, verify-code, password, check-email, check-slug, organization) |
 | POST | `/api/v1/auth/refresh` | Refresh access token |
 | POST | `/api/v1/auth/logout` | Revoke session |
 | POST | `/api/v1/auth/introspect` | Inspect a token |

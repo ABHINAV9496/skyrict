@@ -23,6 +23,8 @@ def _to_orm(tenant: Tenant) -> TenantModel:
         "slug": tenant.slug,
         "plan_tier": tenant.plan_tier,
         "is_active": tenant.is_active,
+        "industry": tenant.industry,
+        "billing_address": tenant.billing_address,
     }
     if tenant.id is not None:
         model_kwargs["id"] = tenant.id
@@ -37,6 +39,8 @@ def _from_orm(model: TenantModel) -> Tenant:
         slug=model.slug,
         is_active=model.is_active,
         plan_tier=model.plan_tier,
+        industry=model.industry,
+        billing_address=model.billing_address,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )

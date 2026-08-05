@@ -67,22 +67,51 @@ LOGIN_FAILED_MESSAGE = "Invalid email or password."
 #
 # These are the REAL mounted paths (the api_router is mounted under /api/v1).
 # Everything else — including /api/v1/auth/login — requires tenant resolution
-# so the tenant is known before route execution. /auth/register and
-# /auth/verify-email are self-service (no tenant exists yet), so they bypass
-# tenant resolution.
+# so the tenant is known before route execution. The onboarding wizard paths
+# (/auth/signup/*) and /invitations/accept are self-service (no tenant exists
+# yet), so they bypass tenant resolution.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {
         f"{API_V1_PREFIX}/health",
         f"{API_V1_PREFIX}/ready",
-        f"{API_V1_PREFIX}/auth/register",
-        f"{API_V1_PREFIX}/auth/verify-email",
+        f"{API_V1_PREFIX}/auth/signup/start",
+        f"{API_V1_PREFIX}/auth/signup/send-code",
+        f"{API_V1_PREFIX}/auth/signup/verify-code",
+        f"{API_V1_PREFIX}/auth/signup/password",
+        f"{API_V1_PREFIX}/auth/signup/check-email",
+        f"{API_V1_PREFIX}/auth/signup/check-slug",
+        f"{API_V1_PREFIX}/auth/signup/organization",
         f"{API_V1_PREFIX}/invitations/accept",
         "/docs",
         "/openapi.json",
         "/redoc",
     }
 )
+
+# ---------------------------------------------------------------------------
+# Onboarding wizard
+#
+# Platform-owned workspace slugs and email addresses are never available for
+# self-service. The check-email / check-slug endpoints treat them as taken.
+# ---------------------------------------------------------------------------
+RESERVED_SLUGS = frozenset(
+    {"admin", "api", "app", "auth", "billing", "demo", "support", "www", "skyrict"}
+)
+RESERVED_EMAILS = frozenset(
+    {
+        "admin@skyrict.com",
+        "no-reply@skyrict.com",
+        "sales@skyrict.com",
+        "support@skyrict.com",
+    }
+)
+
+SIGNUP_START_LIMIT_KEY = "signup_start_ip"
+SIGNUP_CODE_LIMIT_KEY = "signup_code"
+SIGNUP_CODE_IP_LIMIT_KEY = "signup_code_ip"
+SIGNUP_VERIFY_LIMIT_KEY = "signup_verify"
+SIGNUP_CHECK_LIMIT_KEY = "signup_check_ip"
 
 # ---------------------------------------------------------------------------
 # Default system roles (single source of truth)

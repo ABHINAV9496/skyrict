@@ -32,6 +32,8 @@ def _to_orm(user: User) -> UserModel:
         "is_verified": user.is_verified,
         "mfa_enabled": user.mfa_enabled,
         "mfa_secret": user.mfa_secret,
+        "phone_country": user.phone_country,
+        "phone_number": user.phone_number,
     }
     if user.id is not None:
         model_kwargs["id"] = user.id
@@ -50,6 +52,8 @@ def _from_orm(model: UserModel) -> User:
         is_verified=model.is_verified,
         mfa_enabled=model.mfa_enabled,
         mfa_secret=model.mfa_secret,
+        phone_country=model.phone_country,
+        phone_number=model.phone_number,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -77,6 +81,11 @@ class UserRepository(SqlRepository):
         """Check if a user with this email already exists within a tenant."""
         user = await self.get_by_email(tenant_id, email)
         return user is not None
+
+    async def email_exists_global(self, email: str) -> bool:
+        stmt = select(UserModel.id).where(UserModel.email == email).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
     async def create(self, user: User) -> User:
         """Persist a new user and return it with its DB-generated id."""

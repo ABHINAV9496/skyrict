@@ -39,6 +39,8 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_country: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="users")

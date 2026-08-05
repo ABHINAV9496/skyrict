@@ -13,17 +13,22 @@ resolution via SKIP_AUTH_PATHS) and provisions its own.
 
 from __future__ import annotations
 
+import hmac
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from identity.core.config import Environment, settings
-from identity.core.constants import LOGIN_FAILED_MESSAGE, SYSTEM_ROLE_DEFINITIONS
+from identity.core.constants import (
+    LOGIN_FAILED_MESSAGE,
+    RESERVED_EMAILS,
+    RESERVED_SLUGS,
+    SYSTEM_ROLE_DEFINITIONS,
+)
 from identity.core.email import EmailService
 from identity.core.security import (
     create_access_token,
-    create_email_verification_token,
     create_refresh_token,
     hash_password,
     hash_refresh_token,
@@ -31,26 +36,43 @@ from identity.core.security import (
     verify_password,
 )
 from identity.core.tenant_context import TenantContext
+from identity.core.turnstile import TurnstileVerifier
 from identity.domain.entities import Role, Tenant, User
 from identity.domain.value_objects import TokenPair
+from identity.features.auth.verification_store import (
+    VerificationStore,
+    generate_otp,
+    generate_verification_token,
+    hash_otp,
+)
 from skyrict_common.exceptions import (
     AuthenticationError,
+    ConflictError,
     TokenExpiredError,
     TokenInvalidError,
     TokenReuseDetectedError,
-    UserNotFoundError,
+    UserAlreadyExistsError,
+    ValidationError,
 )
 
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
-    from identity.features.auth.schemas import LoginRequest, RegisterRequest
+    from identity.features.auth.schemas import (
+        CreateOrganizationRequest,
+        LoginRequest,
+    )
     from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.sessions.ports import SessionRepositoryPort
     from identity.features.sessions.service import SessionService
     from identity.features.users.ports import UserRepositoryPort
 
-_SLUG_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+_PASSWORD_UPPERCASE_RE = re.compile(r"[A-Z]")
+_PASSWORD_LOWERCASE_RE = re.compile(r"[a-z]")
+_PASSWORD_DIGIT_RE = re.compile(r"\d")
+_PASSWORD_SPECIAL_RE = re.compile(r"[^A-Za-z0-9]")
 
 # A valid Argon2id hash of a throwaway value, verified against on the
 # unknown-email path so response TIME is indistinguishable from the
@@ -59,10 +81,30 @@ _SLUG_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
 _DUMMY_PASSWORD_HASH = hash_password("anti-enumeration-timing-dummy")
 
 
-def _slugify(name: str) -> str:
-    """Lowercase, hyphen-separated slug from a display name."""
-    slug = _SLUG_SEPARATOR_RE.sub("-", name.lower()).strip("-")
-    return slug[:100] or "organization"
+def _validate_wizard_password(password: str) -> None:
+    if len(password) < settings.ONBOARDING_PASSWORD_MIN_LENGTH:
+        raise ValidationError(
+            f"Password must be at least {settings.ONBOARDING_PASSWORD_MIN_LENGTH} characters"
+        )
+    if not _PASSWORD_UPPERCASE_RE.search(password):
+        raise ValidationError("Password must contain an uppercase letter")
+    if not _PASSWORD_LOWERCASE_RE.search(password):
+        raise ValidationError("Password must contain a lowercase letter")
+    if not _PASSWORD_DIGIT_RE.search(password):
+        raise ValidationError("Password must contain a number")
+    if not _PASSWORD_SPECIAL_RE.search(password):
+        raise ValidationError("Password must contain a special character")
+
+
+def _normalize_slug(slug: str) -> str | None:
+    normalized = slug.strip().lower()
+    if not _SLUG_RE.fullmatch(normalized):
+        return None
+    return normalized
+
+
+def _compare_otp(provided: str, expected_hash: str) -> bool:
+    return hmac.compare_digest(hash_otp(provided), expected_hash)
 
 
 class AuthenticationService:
@@ -77,6 +119,8 @@ class AuthenticationService:
         audit_service: AuditService,
         email_service: EmailService,
         session_service: SessionService,
+        verification_store: VerificationStore | None = None,
+        turnstile: TurnstileVerifier | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.tenant_repo = tenant_repo
@@ -85,6 +129,8 @@ class AuthenticationService:
         self.audit_service = audit_service
         self.email_service = email_service
         self.session_service = session_service
+        self.verification_store = verification_store or VerificationStore()
+        self.turnstile = turnstile or TurnstileVerifier()
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
@@ -229,28 +275,96 @@ class AuthenticationService:
             tenant_id=tenant_id,
         )
 
-    async def register(
-        self,
-        request: RegisterRequest,
-        *,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
+    async def signup_start(self, *, email: str, turnstile_token: str | None) -> dict[str, Any]:
+        ok = await self.turnstile.verify(turnstile_token)
+        if not ok:
+            raise ValidationError("Unable to verify you are not a robot. Try again.")
+        return {"status": "ok"}
+
+    async def signup_send_code(self, *, email: str) -> dict[str, Any]:
+        if await self.verification_store.is_resend_blocked(email):
+            return {
+                "status": "ok",
+                "resend_in": await self.verification_store.resend_in(email),
+                "code": None,
+            }
+        code = generate_otp()
+        await self.verification_store.set_otp(email, hash_otp(code))
+        await self.verification_store.mark_resend(email)
+        await self.email_service.send_otp(to=email, code=code)
+        return {
+            "status": "ok",
+            "resend_in": settings.OTP_RESEND_COOLDOWN_SECONDS,
+            "code": code if settings.ENVIRONMENT != Environment.PRODUCTION else None,
+        }
+
+    async def signup_verify_code(self, *, email: str, code: str) -> dict[str, Any]:
+        if await self.verification_store.get_attempts(email) >= settings.OTP_MAX_ATTEMPTS:
+            await self.verification_store.delete_otp(email)
+            return {"status": "invalid", "verification_token": None}
+        stored_hash = await self.verification_store.get_otp_hash(email)
+        if stored_hash is None:
+            return {"status": "invalid", "verification_token": None}
+        if not _compare_otp(code, stored_hash):
+            await self.verification_store.increment_attempts(email)
+            return {"status": "invalid", "verification_token": None}
+        await self.verification_store.delete_otp(email)
+        token = generate_verification_token()
+        await self.verification_store.set_verification_token(token, email, "")
+        return {"status": "ok", "verification_token": token}
+
+    async def signup_set_password(
+        self, *, email: str, verification_token: str, password: str
     ) -> dict[str, Any]:
-        """Self-service provisioning: tenant, system roles, owner, and grant.
+        _validate_wizard_password(password)
+        await self._require_verification_token(verification_token, email)
+        await self.verification_store.update_verification_token_password(
+            verification_token, hash_password(password)
+        )
+        return {"status": "ok"}
 
-        All writes happen on the caller's request session and are committed
-        together, so a failure anywhere rolls back the whole provisioning (no
-        orphan tenants/roles/users). Returns a verification-pending response —
-        no tokens are issued; login stays blocked until the email is verified.
+    async def signup_check_email(self, *, email: str) -> dict[str, Any]:
+        normalized = email.lower().strip()
+        available = not await self.user_repo.email_exists_global(normalized)
+        available = available and normalized not in RESERVED_EMAILS
+        return {"available": available}
 
-        Never raises on a taken email (anti-enumeration): the response is the
-        same shape regardless.
-        """
-        slug = await self._allocate_slug(request.organization_name)
+    async def signup_check_slug(self, *, slug: str) -> dict[str, Any]:
+        normalized = _normalize_slug(slug)
+        if normalized is None or normalized in RESERVED_SLUGS:
+            return {"available": False}
+        if await self.tenant_repo.slug_exists(normalized):
+            return {"available": False}
+        return {"available": True}
+
+    async def signup_create_organization(
+        self, request: CreateOrganizationRequest, *, ip_address: str | None, user_agent: str | None
+    ) -> dict[str, Any]:
+        payload = await self._require_verification_token(
+            request.verification_token, request.email
+        )
+        if not payload["password_hash"]:
+            raise TokenInvalidError("Password has not been set for this session")
+        slug = _normalize_slug(request.workspace_slug)
+        if slug is None:
+            raise ValidationError(
+                "Workspace slug may only contain lowercase letters, numbers, and hyphens"
+            )
+        if slug in RESERVED_SLUGS or await self.tenant_repo.slug_exists(slug):
+            raise ConflictError("This workspace URL is already taken")
+        if await self.user_repo.email_exists_global(request.email):
+            raise UserAlreadyExistsError()
+
         tenant_id = uuid.uuid4()
-
         await self.tenant_repo.create(
-            Tenant(name=request.organization_name, slug=slug, id=tenant_id)
+            Tenant(
+                name=request.company_name,
+                slug=slug,
+                plan_tier=request.plan_id,
+                industry=request.industry,
+                billing_address=self._billing_address_payload(request),
+                id=tenant_id,
+            )
         )
 
         roles = await self._create_system_roles(tenant_id)
@@ -260,10 +374,12 @@ class AuthenticationService:
             User(
                 tenant_id=tenant_id,
                 email=request.email,
-                password_hash=hash_password(request.password),
-                full_name=request.full_name,
+                password_hash=payload["password_hash"],
+                full_name=request.owner_full_name,
                 is_active=True,
-                is_verified=False,
+                is_verified=True,
+                phone_country=request.phone_country,
+                phone_number=request.phone_number,
             )
         )
 
@@ -277,8 +393,6 @@ class AuthenticationService:
             scope_id=tenant_id,
         )
 
-        verification_token = create_email_verification_token(str(user.id), tenant_id=str(tenant_id))
-
         await self.audit_service.log(
             action="auth.register.success",
             target=f"user:{user.id}",
@@ -287,59 +401,37 @@ class AuthenticationService:
             user_agent=user_agent,
             tenant_id=str(tenant_id),
         )
-        await self.email_service.send_verification(
-            to=request.email,
-            full_name=request.full_name,
-            token=verification_token,
-            base_url=settings.EMAIL_VERIFICATION_BASE_URL or None,
-        )
 
-        # Verification tokens are exposed only outside production (dev/test).
+        await self.verification_store.delete_verification_token(request.verification_token)
+
         return {
-            "email": request.email,
-            "user_id": user.id,
+            "status": "ok",
+            "mfa_required": True,
             "tenant_id": tenant_id,
             "tenant_slug": slug,
-            "verification_pending": True,
-            "verification_token": (
-                verification_token if settings.ENVIRONMENT != Environment.PRODUCTION else None
-            ),
-            "expires_in": settings.VERIFICATION_TOKEN_EXPIRE_MINUTES * 60,
         }
 
-    async def verify_email(self, token: str) -> None:
-        """Mark the account verified when the token is valid (idempotent).
+    async def _require_verification_token(
+        self, token: str, email: str
+    ) -> dict[str, str]:
+        payload = await self.verification_store.get_verification_token(token)
+        if payload is None or payload["email"].lower() != email.lower():
+            raise TokenInvalidError("Verification session is invalid or expired")
+        return payload
 
-        Raises:
-            TokenInvalidError: If the token is malformed, wrong purpose, or
-                its tenant does not match the user.
-            UserNotFoundError: If the token's subject no longer exists.
-        """
-        payload = verify_jwt(token)
-        if payload.get("type") != "email_verify":
-            raise TokenInvalidError("Token is not an email verification token")
-
-        user = await self.user_repo.get_by_id(uuid.UUID(payload["sub"]))
-        if user is None:
-            raise UserNotFoundError()
-
-        token_tenant = payload.get("tenant_id")
-        if token_tenant is not None and str(token_tenant) != str(user.tenant_id):
-            raise TokenInvalidError("Verification token tenant does not match the user")
-
-        if not user.is_verified:
-            assert user.id is not None
-            await self.user_repo.mark_verified(user.id)
-
-    async def _allocate_slug(self, organization_name: str) -> str:
-        """Return a collision-safe slug: base name, suffixed on clash."""
-        base = _slugify(organization_name)
-        candidate = base
-        suffix = 2
-        while await self.tenant_repo.slug_exists(candidate):
-            candidate = f"{base}-{suffix}"
-            suffix += 1
-        return candidate
+    @staticmethod
+    def _billing_address_payload(request: CreateOrganizationRequest) -> dict[str, Any] | None:
+        if request.address is None:
+            return None
+        address = request.address
+        return {
+            "country": address.country,
+            "addressLine1": address.address_line1,
+            "addressLine2": address.address_line2,
+            "city": address.city,
+            "state": address.state,
+            "postalCode": address.postal_code,
+        }
 
     async def _create_system_roles(self, tenant_id: uuid.UUID) -> dict[str, Role]:
         """Provision the platform-defined system roles for a tenant."""

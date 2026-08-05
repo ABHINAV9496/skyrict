@@ -2,41 +2,42 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
-class MFAEnableRequest(BaseModel):
-    """POST /mfa/enable — initiate MFA setup."""
+class MFASetupResponse(BaseModel):
+    """POST /mfa/setup — TOTP secret, otpauth URI, and one-time backup codes.
 
-    method: str = Field(..., pattern=r"^(totp|sms|email)$", description="MFA method")
+    ``secret`` and ``backup_codes`` are shown once and never returned again.
+    """
+
+    secret: str = Field(..., description="TOTP secret — encrypted at rest after this response")
+    provisioning_uri: str = Field(..., description="otpauth:// URI for QR code enrollment")
+    backup_codes: list[str] = Field(..., description="10 one-time backup codes (shown once)")
 
 
 class MFAVerifyRequest(BaseModel):
-    """POST /mfa/verify — verify an MFA code."""
+    """POST /mfa/verify — a 6-digit TOTP code or a one-time backup code."""
 
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit MFA code")
-    method: str = Field(..., pattern=r"^(totp|sms|email)$")
-
-
-class MFAResponse(BaseModel):
-    """Response after MFA setup."""
-
-    secret: str | None = Field(default=None, description="TOTP secret (shown once)")
-    qr_code_url: str | None = Field(default=None, description="otpauth:// URI for QR code")
-    backup_codes: list[str] = Field(default_factory=list, description="One-time backup codes")
-    method: str
-    enabled: bool
+    code: str = Field(..., min_length=6, max_length=32, description="TOTP code or backup code")
 
 
-class MFAStatusResponse(BaseModel):
-    """GET /mfa/status — current MFA state."""
+class MFAVerifyResponse(BaseModel):
+    """Result of MFA verification during setup/enablement."""
 
-    enabled: bool
-    methods: list[str] = Field(default_factory=list, description="Enabled MFA methods")
-    backup_codes_remaining: int = 0
+    verified: bool = True
+    method: str = Field(..., description='Verified method: "totp" or "backup_code"')
 
 
 class MFADisableRequest(BaseModel):
-    """POST /mfa/disable — disable MFA."""
+    """POST /mfa/disable — password confirmation required."""
 
-    password: str = Field(..., min_length=1, description="Current password for confirmation")
+    password: str = Field(..., min_length=1, description="Current password")
+
+
+class MFAResetRequest(BaseModel):
+    """POST /mfa/reset — owner-assisted reset for a locked-out user."""
+
+    user_id: UUID = Field(..., description="Target user whose MFA is reset")

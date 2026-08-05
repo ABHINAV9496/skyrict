@@ -433,6 +433,7 @@ class TestLogin:
         assert result["refresh_token"] == "refresh-token"
         assert result["token_type"] == "Bearer"
         assert result["mfa_required"] is False
+        assert result["next_step"] is None
         assert result["user"] is user
         user_id, created_tenant, session_id = harness.token_svc.pairs_created[0]
         assert (user_id, created_tenant) == (str(user.id), tenant_ctx)
@@ -495,6 +496,7 @@ class TestLogin:
         result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
         assert result["mfa_required"] is True
+        assert result["next_step"] == "mfa.setup"
 
     async def test_tenant_owner_with_mfa_not_required(self, tenant_ctx: str) -> None:
         user = _make_user(mfa_enabled=True)
@@ -503,6 +505,37 @@ class TestLogin:
         result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
         assert result["mfa_required"] is False
+        assert result["next_step"] is None
+
+    async def test_member_under_enforced_policy_requires_mfa(self, tenant_ctx: str) -> None:
+        user = _make_user()
+        tenant = Tenant(
+            id=uuid.UUID(tenant_ctx),
+            name="Acme",
+            slug="acme",
+            mfa_required_for_all_members=True,
+        )
+        harness = _Harness(users=[user], tenants=[tenant])
+
+        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
+
+        assert result["mfa_required"] is True
+        assert result["next_step"] == "mfa.setup"
+
+    async def test_member_without_enforced_policy_not_required(self, tenant_ctx: str) -> None:
+        user = _make_user()
+        tenant = Tenant(
+            id=uuid.UUID(tenant_ctx),
+            name="Acme",
+            slug="acme",
+            mfa_required_for_all_members=False,
+        )
+        harness = _Harness(users=[user], tenants=[tenant])
+
+        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
+
+        assert result["mfa_required"] is False
+        assert result["next_step"] is None
 
     async def test_unknown_email_raises(self, tenant_ctx: str) -> None:
         harness = _Harness()

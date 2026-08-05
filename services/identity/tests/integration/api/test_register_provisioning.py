@@ -29,6 +29,7 @@ from tests.integration.api.wizard import (
     wizard_start,
     wizard_verify_code,
 )
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -206,6 +207,17 @@ class TestCustomRoles:
             "Authorization": f"Bearer {creds['token']}",
         }
         try:
+            await client.post(
+                "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
+            )
+            login = await client.post(
+                "/api/v1/auth/login",
+                headers={"X-Tenant-Slug": slug},
+                json={"email": email, "password": "TestPassword123!"},
+            )
+            token = await enroll_mfa_if_required(client, slug=slug, login_data=login.json()["data"])
+            headers = {"X-Tenant-Slug": slug, "Authorization": f"Bearer {token}"}
+
             created = await client.post(
                 "/api/v1/roles",
                 headers=headers,

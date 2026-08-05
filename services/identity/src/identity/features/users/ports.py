@@ -38,4 +38,15 @@ class UserRepositoryPort(Protocol):
 
     async def update_password_hash(self, user_id: str | uuid.UUID, password_hash: str) -> User: ...
 
+    async def update_mfa(
+        self,
+        user_id: str | uuid.UUID,
+        *,
+        mfa_enabled: bool | None = None,
+        mfa_secret: str | None = None,
+        mfa_backup_codes: list[str | None] | None = None,
+    ) -> User: ...
+
+    async def disable_mfa(self, user_id: str | uuid.UUID) -> User: ...
+
     async def mark_verified(self, user_id: str | uuid.UUID) -> User: ...

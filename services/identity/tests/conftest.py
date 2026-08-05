@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -49,9 +50,16 @@ os.environ.setdefault("IDENTITY_SIGNUP_VERIFY_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CHECK_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_JWT_PRIVATE_KEY_PATH", str(_KEY_DIR / "private.pem"))
 os.environ.setdefault("IDENTITY_JWT_PUBLIC_KEY_PATH", str(_KEY_DIR / "public.pem"))
+os.environ["IDENTITY_JWT_PRIVATE_KEY_PATH"] = str(_KEY_DIR / "private.pem")
+os.environ["IDENTITY_JWT_PUBLIC_KEY_PATH"] = str(_KEY_DIR / "public.pem")
 os.environ.setdefault("IDENTITY_JWKS_ISSUER", "https://auth.test.skyrict.io")
 os.environ.setdefault("IDENTITY_JWKS_AUDIENCE", "api.test.skyrict.io")
 os.environ.setdefault("IDENTITY_ENVIRONMENT", "test")
+os.environ["IDENTITY_DEBUG"] = "false"
+os.environ.setdefault(
+    "IDENTITY_MFA_ENCRYPTION_KEY",
+    Fernet.generate_key().decode("utf-8"),
+)
 
 
 @pytest.fixture(scope="session", autouse=True)

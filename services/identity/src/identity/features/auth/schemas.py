@@ -70,7 +70,11 @@ class AuthResponse(BaseModel):
     expires_in: int = Field(default=900, description="Access token TTL in seconds")
     mfa_required: bool = Field(
         default=False,
-        description="True when MFA setup is mandatory for this account (tenant owners)",
+        description="True when MFA setup is mandatory for this account (tenant owners or tenant policy)",
+    )
+    next_step: str | None = Field(
+        default=None,
+        description='Required next step when mfa_required — e.g. "mfa.setup"',
     )
     user: UserResponse | None = None
 

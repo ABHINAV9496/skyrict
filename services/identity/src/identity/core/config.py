@@ -152,6 +152,17 @@ class Settings(BaseSettings):
     )
     SIGNUP_CHECK_RATE_LIMIT: int = Field(
         default=60, description="max /signup/check-email|check-slug calls per IP per window"
+    # --- MFA (CRITICAL — no default) ---
+    MFA_ENCRYPTION_KEY: str = Field(
+        ...,
+        description=(
+            "Fernet key used to encrypt TOTP secrets at rest — REQUIRED. "
+            'Generate with: python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
+        ),
+    )
+    MFA_TOTP_ISSUER: str = Field(
+        default="Skyrict", description="issuer name embedded in TOTP provisioning URIs"
     )
 
     # --- Derived (loaded from files at validation time) ---
@@ -194,6 +205,21 @@ class Settings(BaseSettings):
             )
             sys.exit(1)
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_mfa_encryption_key(self) -> Settings:
+        """Fail-fast when MFA_ENCRYPTION_KEY is missing or not a valid Fernet key."""
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(self.MFA_ENCRYPTION_KEY.encode("utf-8"))
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError(
+                "MFA_ENCRYPTION_KEY is not a valid Fernet key. Generate one with: "
+                'python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())"'
+            ) from exc
         return self
 
     @model_validator(mode="after")

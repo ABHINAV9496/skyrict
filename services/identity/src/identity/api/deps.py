@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,19 +31,48 @@ from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
 from identity.features.sessions.repository import SessionRepository
 from identity.features.users.repository import UserRepository
-from skyrict_common.exceptions import AuthenticationError
+from skyrict_common.exceptions import AuthenticationError, MFARequiredError
 
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.service import AuthenticationService, TokenService
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
+    from identity.features.mfa.service import MFAService
     from identity.features.organizations.service import TenantService
     from identity.features.roles.service import RoleManagementService
     from identity.features.sessions.service import SessionService
     from identity.features.users.service import UserService
 
 security = HTTPBearer(auto_error=False)
+
+# MFA enrollment endpoints are exempt from the enforcement gate so a user who
+# must set up MFA (owner or tenant policy) can actually finish enrollment.
+_MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
+
+
+async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: str) -> None:
+    """Block authenticated calls while forced MFA is not yet set up.
+
+    Raises:
+        MFARequiredError: When MFA is mandatory for this account (tenant owner
+            or tenant-level policy) but not yet enabled.
+    """
+    from identity.core.security import mfa_is_required
+
+    user = await UserRepository(db).get_by_id(user_id)
+    if user is None:
+        return
+    roles = await RoleRepository(db).get_roles_for_user(user_id, tenant_id)
+    tenant = await TenantRepository(db).get_by_id(tenant_id)
+    if mfa_is_required(
+        roles=roles,
+        mfa_enabled=user.mfa_enabled,
+        tenant_requires_all_members=(
+            tenant.mfa_required_for_all_members if tenant is not None else False
+        ),
+    ):
+        raise MFARequiredError()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -62,6 +91,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -73,8 +103,14 @@ async def get_current_user(
     depth, so a token can never be used against a different tenant even if a
     route is reached without going through the middleware.
 
+    Enforces the MFA gate on every authenticated route except the enrollment
+    endpoints (``/api/v1/mfa/setup``, ``/api/v1/mfa/verify``): accounts that
+    must enroll (tenant owner or tenant policy) get 403 MFARequiredError until
+    MFA is enabled.
+
     Raises:
         AuthenticationError: If no token, token is invalid, or token is expired.
+        MFARequiredError: If MFA is mandatory for this account but not enabled.
         TenantContextMissingError: If the middleware hasn't resolved a tenant.
         TenantMismatchError: If the token's tenant claim differs from the routed tenant.
     """
@@ -90,6 +126,9 @@ async def get_current_user(
     routed_tenant_id = TenantContext.get()
     cross_check_jwt_tenant(payload.get("tenant_id"), routed_tenant_id)
     TenantContext.set_user_id(payload["sub"])
+
+    if request.url.path not in _MFA_EXEMPT_PATHS:
+        await _enforce_mfa_enrollment(db=db, user_id=payload["sub"], tenant_id=routed_tenant_id)
 
     return {
         "user_id": payload["sub"],
@@ -251,3 +290,13 @@ def get_invitation_service(
     from identity.features.invitations.service import InvitationService
 
     return InvitationService(invitation_repo, user_repo, role_repo, email_service)
+
+
+def get_mfa_service(
+    user_repo: UserRepository = Depends(get_user_repo),
+    role_repo: RoleRepository = Depends(get_role_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> MFAService:
+    from identity.features.mfa.service import MFAService
+
+    return MFAService(user_repo, role_repo, audit_service)

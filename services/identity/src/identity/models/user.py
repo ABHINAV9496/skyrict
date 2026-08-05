@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, false, true
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, TEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from identity.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -41,6 +41,8 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     phone_country: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mfa_backup_codes: Mapped[list[str | None] | None] = mapped_column(ARRAY(TEXT), nullable=True)
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="users")

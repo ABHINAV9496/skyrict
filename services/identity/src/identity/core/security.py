@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import JWTError, jwt
@@ -84,6 +85,49 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return _ph.verify(hashed_password, plain_password)
     except (InvalidHashError, VerificationError):
         return False
+
+
+# ---------------------------------------------------------------------------
+# MFA secret encryption — Fernet (symmetric) at rest
+#
+# TOTP secrets are as sensitive as passwords: they are encrypted before being
+# written to ``users.mfa_secret`` and decrypted only on read. The key comes
+# from ``settings.MFA_ENCRYPTION_KEY`` (a required, fail-fast setting).
+# ---------------------------------------------------------------------------
+def encrypt_mfa_secret(secret: str) -> str:
+    """Encrypt a plaintext TOTP secret for storage at rest."""
+    return (
+        Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
+        .encrypt(secret.encode("utf-8"))
+        .decode("utf-8")
+    )
+
+
+def decrypt_mfa_secret(encrypted_secret: str) -> str:
+    """Decrypt a stored TOTP secret back to plaintext for verification."""
+    return (
+        Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
+        .decrypt(encrypted_secret.encode("utf-8"))
+        .decode("utf-8")
+    )
+
+
+def mfa_is_required(
+    *,
+    roles: list[str],
+    mfa_enabled: bool,
+    tenant_requires_all_members: bool,
+) -> bool:
+    """Return whether MFA must be set up before this account can be used.
+
+    Tenant owners are always forced; other members are forced only when the
+    tenant configures ``mfa_required_for_all_members``. The one source of truth
+    used by both login (``mfa_required``/``next_step``) and the request-time
+    enforcement gate, so the two can never disagree.
+    """
+    if mfa_enabled:
+        return False
+    return "tenant_owner" in roles or tenant_requires_all_members
 
 
 # ---------------------------------------------------------------------------
@@ -246,3 +290,19 @@ def verify_jwt_keys_usable() -> None:
     if not isinstance(public_key, rsa.RSAPublicKey):
         raise StartupError(f"JWT public key is not an RSA key (got {type(public_key).__name__})")
     _verify_rsa_key_size(public_key, "public")
+
+
+def verify_mfa_encryption_key() -> None:
+    """Verify the configured MFA_ENCRYPTION_KEY parses as a Fernet key.
+
+    Runs ONCE at application startup so a missing or malformed key fails fast
+    at boot (the lifespan raises :class:`StartupError`) instead of surfacing
+    mid-request when a TOTP secret is first encrypted/decrypted.
+
+    Raises:
+        StartupError: If the key is missing, not base64, or not 32 bytes.
+    """
+    try:
+        Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
+    except (ValueError, TypeError) as exc:
+        raise StartupError("MFA_ENCRYPTION_KEY is not a valid Fernet key") from exc

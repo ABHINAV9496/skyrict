@@ -18,6 +18,7 @@ from identity.db.session import async_session_factory
 from identity.models.invitation import InvitationModel
 from identity.models.tenant import TenantModel
 from tests.integration.api.wizard import provision_tenant, wizard_login
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -36,6 +37,20 @@ async def _register_tenant(client: AsyncClient, *, org_name: str | None = None) 
     creds = await wizard_login(
         client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
     )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    await client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": data["verification_token"]},
+    )
+    login = await client.post(
+        "/api/v1/auth/login",
+        headers={"X-Tenant-Slug": data["tenant_slug"]},
+        json={"email": email, "password": "AdminPass123!"},
+    )
+    assert login.status_code == 200
+    login_data = login.json()["data"]
+    token = await enroll_mfa_if_required(client, slug=data["tenant_slug"], login_data=login_data)
     return {
         "slug": tenant["slug"],
         "tenant_id": tenant["tenant_id"],

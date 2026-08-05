@@ -38,4 +38,9 @@ class RoleModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="roles")
-    user_roles = relationship("UserRoleModel", back_populates="role", lazy="selectin")
+    user_roles = relationship(
+        "UserRoleModel",
+        back_populates="role",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )

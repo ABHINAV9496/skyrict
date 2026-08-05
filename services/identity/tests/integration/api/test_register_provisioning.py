@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete, func, select
 
+from identity.core.constants import LOGIN_FAILED_MESSAGE
 from identity.db.session import async_session_factory
 from identity.models.role import RoleModel
 from identity.models.tenant import TenantModel
@@ -164,8 +165,11 @@ class TestProvisioning:
                 headers={"X-Tenant-Slug": slug},
                 json={"email": email, "password": "TestPassword123!"},
             )
-            assert blocked.status_code == 403
-            assert blocked.json()["type"].endswith("/email-not-verified")
+            # Uniform 401 — an unverified account must be indistinguishable
+            # from any other login failure (anti-enumeration, ADR-004).
+            assert blocked.status_code == 401
+            assert blocked.json()["type"].endswith("/authentication-error")
+            assert blocked.json()["detail"] == LOGIN_FAILED_MESSAGE
 
             verified = await client.post(
                 "/api/v1/auth/verify-email", json={"token": data["verification_token"]}

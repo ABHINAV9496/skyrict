@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from identity.core.config import settings
-from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
+from identity.core.constants import LOGIN_FAILED_MESSAGE, SYSTEM_ROLE_DEFINITIONS
 from identity.core.security import (
     create_access_token,
     create_email_verification_token,
@@ -18,13 +18,7 @@ from identity.domain.entities import Role, Session, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.schemas import LoginRequest, RegisterRequest
 from identity.features.auth.service import AuthenticationService
-from skyrict_common.exceptions import (
-    EmailNotVerifiedError,
-    InvalidPasswordError,
-    TokenInvalidError,
-    UserDisabledError,
-    UserNotFoundError,
-)
+from skyrict_common.exceptions import AuthenticationError, TokenInvalidError, UserNotFoundError
 
 
 class FakeUserRepo:
@@ -387,11 +381,18 @@ class TestLogin:
         user = _make_user(is_verified=False)
         harness = _Harness(users=[user])
 
-        with pytest.raises(EmailNotVerifiedError):
+        with pytest.raises(AuthenticationError):
             await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
         assert harness.token_svc.pairs_created == []
-        assert harness.audit_svc.events == []
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.failed",
+                "target": f"user:{user.id}",
+                "user_id": str(user.id),
+                "tenant_id": tenant_ctx,
+            }
+        ]
 
     async def test_tenant_owner_without_mfa_requires_mfa(self, tenant_ctx: str) -> None:
         user = _make_user()
@@ -412,33 +413,91 @@ class TestLogin:
     async def test_unknown_email_raises(self, tenant_ctx: str) -> None:
         harness = _Harness()
 
-        with pytest.raises(UserNotFoundError):
+        with pytest.raises(AuthenticationError) as excinfo:
             await harness.service.login(
                 LoginRequest(email="nobody@example.com", password="Password1!")
             )
 
+        assert excinfo.value.message == LOGIN_FAILED_MESSAGE
         assert harness.token_svc.pairs_created == []
-        assert harness.audit_svc.events == []
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.failed",
+                "target": "email:nobody@example.com",
+                "user_id": None,
+                "tenant_id": tenant_ctx,
+            }
+        ]
 
     async def test_disabled_user_raises(self, tenant_ctx: str) -> None:
         user = _make_user(is_active=False)
         harness = _Harness(users=[user])
 
-        with pytest.raises(UserDisabledError):
+        with pytest.raises(AuthenticationError) as excinfo:
             await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
+        assert excinfo.value.message == LOGIN_FAILED_MESSAGE
         assert harness.token_svc.pairs_created == []
-        assert harness.audit_svc.events == []
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.failed",
+                "target": f"user:{user.id}",
+                "user_id": str(user.id),
+                "tenant_id": tenant_ctx,
+            }
+        ]
 
     async def test_wrong_password_raises(self, tenant_ctx: str) -> None:
         user = _make_user()
         harness = _Harness(users=[user])
 
-        with pytest.raises(InvalidPasswordError):
+        with pytest.raises(AuthenticationError) as excinfo:
             await harness.service.login(LoginRequest(email=user.email, password="WrongPass1!"))
 
+        assert excinfo.value.message == LOGIN_FAILED_MESSAGE
         assert harness.token_svc.pairs_created == []
-        assert harness.audit_svc.events == []
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.failed",
+                "target": f"user:{user.id}",
+                "user_id": str(user.id),
+                "tenant_id": tenant_ctx,
+            }
+        ]
+
+    async def test_all_failure_modes_raise_the_same_error(self, tenant_ctx: str) -> None:
+        """Anti-enumeration invariant: every login failure is indistinguishable.
+
+        Same exception type, same message — no account-existence oracle via
+        error semantics.
+        """
+        disabled_user = _make_user(is_active=False)
+        unverified_user = _make_user(is_verified=False)
+        valid_user = _make_user()
+
+        failures: list[tuple[_Harness, LoginRequest]] = [
+            (_Harness(), LoginRequest(email="nobody@example.com", password="Password1!")),
+            (
+                _Harness(users=[disabled_user]),
+                LoginRequest(email=disabled_user.email, password="Password1!"),
+            ),
+            (
+                _Harness(users=[unverified_user]),
+                LoginRequest(email=unverified_user.email, password="Password1!"),
+            ),
+            (
+                _Harness(users=[valid_user]),
+                LoginRequest(email=valid_user.email, password="WrongPass1!"),
+            ),
+        ]
+
+        seen: set[tuple[type, str]] = set()
+        for harness, request in failures:
+            with pytest.raises(AuthenticationError) as excinfo:
+                await harness.service.login(request)
+            seen.add((type(excinfo.value), excinfo.value.message))
+
+        assert seen == {(AuthenticationError, LOGIN_FAILED_MESSAGE)}
 
 
 class TestRegister:

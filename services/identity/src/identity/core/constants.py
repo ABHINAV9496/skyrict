@@ -53,6 +53,16 @@ DEFAULT_RATE_LIMIT_LOGIN = 5
 DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 300
 
 # ---------------------------------------------------------------------------
+# Login security posture (see ADR-004)
+#
+# One message for EVERY login failure (unknown email, wrong password,
+# disabled, unverified) so the API exposes no account-existence oracle via
+# status code, problem type, or detail. The frontend guides recovery via
+# account-level state (SKY-21), never via backend error semantics.
+# ---------------------------------------------------------------------------
+LOGIN_FAILED_MESSAGE = "Invalid email or password."
+
+# ---------------------------------------------------------------------------
 # Skip-auth paths (middleware bypass)
 #
 # These are the REAL mounted paths (the api_router is mounted under /api/v1).

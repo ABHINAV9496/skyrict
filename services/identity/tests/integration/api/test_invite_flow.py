@@ -17,6 +17,7 @@ from sqlalchemy import delete
 from identity.db.session import async_session_factory
 from identity.models.invitation import InvitationModel
 from identity.models.tenant import TenantModel
+from tests.integration.api.wizard import provision_tenant, wizard_login
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -31,35 +32,15 @@ async def _cleanup_tenant(slug: str) -> None:
 
 
 async def _register_tenant(client: AsyncClient, *, org_name: str | None = None) -> dict:
-    org = org_name or f"Invite Corp {uuid.uuid4().hex[:8]}"
-    email = f"admin-{uuid.uuid4().hex[:8]}@test.com"
-    resp = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": "AdminPass123!",
-            "full_name": "Admin User",
-            "organization_name": org,
-        },
+    tenant = await provision_tenant(client, org=org_name)
+    creds = await wizard_login(
+        client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
     )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-    await client.post(
-        "/api/v1/auth/verify-email",
-        json={"token": data["verification_token"]},
-    )
-    login = await client.post(
-        "/api/v1/auth/login",
-        headers={"X-Tenant-Slug": data["tenant_slug"]},
-        json={"email": email, "password": "AdminPass123!"},
-    )
-    assert login.status_code == 200
-    token = login.json()["data"]["access_token"]
     return {
-        "slug": data["tenant_slug"],
-        "tenant_id": data["tenant_id"],
-        "email": email,
-        "token": token,
+        "slug": tenant["slug"],
+        "tenant_id": tenant["tenant_id"],
+        "email": tenant["email"],
+        "token": creds["token"],
     }
 
 
@@ -274,30 +255,14 @@ class TestInvitationFlow:
     async def test_requires_admin_permission(self, client: AsyncClient) -> None:
         tenant = await _register_tenant(client)
 
-        unprivileged = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": f"regular-{uuid.uuid4().hex[:8]}@test.com",
-                "password": "RegularPass123!",
-                "full_name": "Regular User",
-                "organization_name": f"Regular Corp {uuid.uuid4().hex[:8]}",
-            },
-        )
-        assert unprivileged.status_code == 200
-        reg_data = unprivileged.json()["data"]
-        await client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": reg_data["verification_token"]},
-        )
-        await client.post(
-            "/api/v1/auth/login",
-            headers={"X-Tenant-Slug": reg_data["tenant_slug"]},
-            json={
-                "email": reg_data["email"],
-                "password": "RegularPass123!",
-            },
+        unprivileged = await provision_tenant(client)
+        await wizard_login(
+            client,
+            slug=unprivileged["slug"],
+            email=unprivileged["email"],
+            password=unprivileged["password"],
         )
 
         with contextlib.suppress(Exception):
             await _cleanup_tenant(tenant["slug"])
-            await _cleanup_tenant(reg_data["tenant_slug"])
+            await _cleanup_tenant(unprivileged["slug"])

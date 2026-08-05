@@ -29,6 +29,7 @@ from identity.core.security import create_access_token, verify_jwt
 from identity.core.tenant_context import TenantContext
 from identity.db.session import async_session_factory
 from identity.models.tenant import TenantModel
+from tests.integration.api.wizard import provision_tenant, wizard_login
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -37,39 +38,18 @@ pytestmark = pytest.mark.integration
 
 
 async def _register_and_login(client: AsyncClient) -> dict:
-    """Register a brand-new tenant and return routed credentials for its owner."""
-    email = f"iso-{uuid.uuid4().hex[:8]}@test.com"
-    resp = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": "TestPassword123!",
-            "full_name": "Isolation User",
-            "organization_name": f"Isolation Corp {uuid.uuid4().hex[:8]}",
-        },
+    """Provision a brand-new tenant via the wizard and return owner credentials."""
+    tenant = await provision_tenant(client)
+    creds = await wizard_login(
+        client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
     )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-
-    verify = await client.post(
-        "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-    )
-    assert verify.status_code == 200
-
-    login = await client.post(
-        "/api/v1/auth/login",
-        headers={"X-Tenant-Slug": data["tenant_slug"]},
-        json={"email": email, "password": "TestPassword123!"},
-    )
-    assert login.status_code == 200
-    tokens = login.json()["data"]
     return {
-        "slug": data["tenant_slug"],
-        "tenant_id": data["tenant_id"],
-        "email": email,
-        "user_id": str(tokens["user"]["id"]),
-        "token": tokens["access_token"],
-        "refresh_token": tokens["refresh_token"],
+        "slug": tenant["slug"],
+        "tenant_id": tenant["tenant_id"],
+        "email": tenant["email"],
+        "user_id": creds["user_id"],
+        "token": creds["token"],
+        "refresh_token": creds["refresh_token"],
     }
 
 
@@ -387,42 +367,20 @@ class TestTokenBinding:
     async def test_login_issues_token_bound_to_routed_tenant(
         self, client: AsyncClient, integration_db: dict[str, str]
     ) -> None:
-        email = f"tenant-bound-{uuid.uuid4().hex[:8]}@acme.io"
-        org = f"Tenant Bound {uuid.uuid4().hex[:8]}"
-        slug: str | None = None
-        try:
-            register = await client.post(
-                "/api/v1/auth/register",
-                json={
-                    "email": email,
-                    "password": "TestPassword123!",
-                    "full_name": "Tenant Bound",
-                    "organization_name": org,
-                },
-            )
-            assert register.status_code == 200
-            reg = register.json()["data"]
-            slug = reg["tenant_slug"]
+        tenant = await provision_tenant(client)
+        creds = await wizard_login(
+            client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
+        )
+        login_token = creds["token"]
+        reg_tenant_id = tenant["tenant_id"]
 
-            verify = await client.post(
-                "/api/v1/auth/verify-email", json={"token": reg["verification_token"]}
+        # Remove only the rows this test created (tenant cascades).
+        async with async_session_factory() as session:
+            await session.execute(
+                delete(TenantModel).where(TenantModel.slug == tenant["slug"])
             )
-            assert verify.status_code == 200
-
-            login = await client.post(
-                "/api/v1/auth/login",
-                headers={"X-Tenant-Slug": slug},
-                json={"email": email, "password": "TestPassword123!"},
-            )
-            assert login.status_code == 200
-            login_token = login.json()["data"]["access_token"]
-        finally:
-            # Remove only the rows this test created (tenant cascades).
-            if slug is not None:
-                async with async_session_factory() as session:
-                    await session.execute(delete(TenantModel).where(TenantModel.slug == slug))
-                    await session.commit()
+            await session.commit()
 
         claims = verify_jwt(login_token)
-        assert claims["tenant_id"] == reg["tenant_id"]
+        assert claims["tenant_id"] == reg_tenant_id
         assert claims["type"] == "access"

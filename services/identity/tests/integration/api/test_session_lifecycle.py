@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from identity.db.session import async_session_factory
 from identity.models.audit_log import AuditLogModel
 from identity.models.tenant import TenantModel
+from tests.integration.api.wizard import provision_tenant
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -21,23 +22,8 @@ async def _delete_tenant_by_slug(slug: str) -> None:
 
 
 async def _provision(client: AsyncClient) -> tuple[str, str]:
-    email = f"session-{uuid.uuid4().hex[:8]}@test.com"
-    register = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": "TestPassword123!",
-            "full_name": "Session User",
-            "organization_name": f"Session Org {uuid.uuid4().hex[:8]}",
-        },
-    )
-    assert register.status_code == 200
-    data = register.json()["data"]
-    verify = await client.post(
-        "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
-    )
-    assert verify.status_code == 200
-    return data["tenant_slug"], email
+    tenant = await provision_tenant(client)
+    return tenant["slug"], tenant["email"]
 
 
 async def _login(client: AsyncClient, *, slug: str, email: str) -> tuple[str, str, str]:

@@ -79,6 +79,24 @@ async def migrated_schema() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_rate_limiter_client() -> None:
+    """Rebind the rate limiter's Redis client to the current test's event loop.
+
+    ``get_rate_limiter`` returns a module singleton whose lazy Redis client is
+    created on the first test's event loop. pytest-asyncio gives every test its
+    own loop, so a cached client crosses loops and its first command fails with
+    "Event loop is closed" — the limiter then fails OPEN, silently skipping one
+    count and making rate-limit tests flaky. Resetting the client each test
+    forces a fresh connection on the current loop, the same treatment the DB
+    engine gets in ``integration_db``.
+    """
+    from identity.core.rate_limit import limiter as default_rate_limiter
+
+    default_rate_limiter._client = None
+    yield
+
+
+@pytest.fixture(autouse=True)
 async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str], None]:
     """Seed isolation fixtures after the schema exists; clean up only its rows."""
     # Fresh context — no tenant can leak from a previous test into this one.

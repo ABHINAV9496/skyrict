@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from identity.core.config import Environment, settings
-from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
+from identity.core.constants import LOGIN_FAILED_MESSAGE, SYSTEM_ROLE_DEFINITIONS
 from identity.core.email import EmailService
 from identity.core.security import (
     create_access_token,
@@ -34,12 +34,10 @@ from identity.core.tenant_context import TenantContext
 from identity.domain.entities import Role, Tenant, User
 from identity.domain.value_objects import TokenPair
 from skyrict_common.exceptions import (
-    EmailNotVerifiedError,
-    InvalidPasswordError,
+    AuthenticationError,
     TokenExpiredError,
     TokenInvalidError,
     TokenReuseDetectedError,
-    UserDisabledError,
     UserNotFoundError,
 )
 
@@ -53,6 +51,12 @@ if TYPE_CHECKING:
     from identity.features.users.ports import UserRepositoryPort
 
 _SLUG_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
+
+# A valid Argon2id hash of a throwaway value, verified against on the
+# unknown-email path so response TIME is indistinguishable from the
+# wrong-password path (anti-enumeration via the timing side-channel).
+# Computed once at import — the one-time cost is paid at process start.
+_DUMMY_PASSWORD_HASH = hash_password("anti-enumeration-timing-dummy")
 
 
 def _slugify(name: str) -> str:
@@ -87,28 +91,67 @@ class AuthenticationService:
     ) -> dict[str, Any]:
         """Authenticate a user and return a token pair (plus MFA posture).
 
+        Anti-enumeration contract (ADR-004): every failure mode raises the
+        SAME :class:`AuthenticationError` with the same message, and every
+        attempt performs exactly one Argon2id verification (a dummy one for
+        unknown emails), so neither the response NOR its timing reveals
+        whether an account exists, is disabled, or is unverified. Failed
+        attempts are audited for brute-force / credential-stuffing monitoring.
+
         Raises:
-            UserNotFoundError: If no user with this email exists.
-            EmailNotVerifiedError: If the account has not verified its email.
-            UserDisabledError: If the user account is disabled.
-            InvalidPasswordError: If the password is wrong.
+            AuthenticationError: For any failed authentication — unknown
+                email, disabled or unverified account, or wrong password.
         """
         tenant_id = TenantContext.get()
 
         # Emails are unique per tenant, so lookups are tenant-scoped.
         user = await self.user_repo.get_by_email(tenant_id, request.email)
         if not user:
-            raise UserNotFoundError()
+            # Dummy verification keeps timing uniform: an unknown email is as
+            # slow as a wrong password, so latency cannot be used to probe
+            # which accounts exist.
+            verify_password(request.password, _DUMMY_PASSWORD_HASH)
+            await self._log_login_failure(
+                email=request.email,
+                user_id=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tenant_id=tenant_id,
+            )
+            raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
+        if not verify_password(request.password, user.password_hash):
+            await self._log_login_failure(
+                email=request.email,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tenant_id=tenant_id,
+            )
+            raise AuthenticationError(LOGIN_FAILED_MESSAGE)
+
+        # Account-state gates run AFTER password verification so every failure
+        # path costs exactly one Argon2id — no state oracle via timing either.
         if not user.is_active:
-            raise UserDisabledError()
+            await self._log_login_failure(
+                email=request.email,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tenant_id=tenant_id,
+            )
+            raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
         # Verification gate: unverified accounts cannot sign in.
         if not user.is_verified:
-            raise EmailNotVerifiedError()
-
-        if not verify_password(request.password, user.password_hash):
-            raise InvalidPasswordError()
+            await self._log_login_failure(
+                email=request.email,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tenant_id=tenant_id,
+            )
+            raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
         assert user.id is not None
 
@@ -161,6 +204,30 @@ class AuthenticationService:
             "mfa_required": mfa_required,
             "user": user,
         }
+
+    async def _log_login_failure(
+        self,
+        *,
+        email: str,
+        user_id: str | uuid.UUID | None,
+        ip_address: str | None,
+        user_agent: str | None,
+        tenant_id: str,
+    ) -> None:
+        """Record a failed login for brute-force / credential-stuffing monitoring.
+
+        Unknown emails are targeted as ``email:<address>`` (no user row
+        exists); known accounts as ``user:<id>``. The attempted email is the
+        point of the event — it is what an incident response would search on.
+        """
+        await self.audit_service.log(
+            action="auth.login.failed",
+            target=f"user:{user_id}" if user_id is not None else f"email:{email}",
+            user_id=str(user_id) if user_id is not None else None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            tenant_id=tenant_id,
+        )
 
     async def register(
         self,

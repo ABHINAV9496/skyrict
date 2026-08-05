@@ -37,11 +37,25 @@ async def login(
     body: LoginRequest,
     request: Request,
     authn: AuthenticationService = Depends(get_authn_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[AuthResponse]:
-    """Authenticate a user and return tokens."""
+    """Authenticate a user and return tokens.
+
+    Rate-limited per (source IP, account) — ``RATE_LIMIT_LOGIN`` attempts per
+    ``RATE_LIMIT_WINDOW_SECONDS`` — to blunt brute-force and credential-
+    stuffing against the highest-value endpoint. The limiter fails open when
+    Redis is unavailable so a Redis outage never becomes a login outage.
+    """
+    ip_address = request.client.host if request.client else "unknown"
+    await limiter.enforce(
+        key=f"login:{ip_address}:{body.email.lower()}",
+        limit=settings.RATE_LIMIT_LOGIN,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+
     result = await authn.login(
         body,
-        ip_address=request.client.host if request.client else None,
+        ip_address=ip_address,
         user_agent=request.headers.get("user-agent"),
     )
     user = result.pop("user")

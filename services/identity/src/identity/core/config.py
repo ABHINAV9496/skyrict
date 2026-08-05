@@ -1,22 +1,14 @@
-"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
-
-Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly — everything routes through the ``settings`` object.
-"""
-
 from __future__ import annotations
 
 import enum
 import sys
-from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
+from pathlib import Path  # noqa: TC003
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
-    """Deployment environments — exactly four, no ad-hoc values."""
-
     DEV = "dev"
     TEST = "test"
     STAGING = "staging"
@@ -24,13 +16,6 @@ class Environment(enum.StrEnum):
 
 
 class Settings(BaseSettings):
-    """All configuration loaded from environment variables.
-
-    Prefix: IDENTITY_ (set via .env or shell environment).
-    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults —
-    the process refuses to start if they are missing.
-    """
-
     model_config = SettingsConfigDict(
         env_prefix="IDENTITY_",
         env_file=".env",
@@ -39,20 +24,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Environment ---
     ENVIRONMENT: Environment = Field(
         default=Environment.DEV,
         description="deployment environment: dev, test, staging, production",
     )
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
-    # --- Database (CRITICAL — no default) ---
     DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
 
-    # --- Redis (CRITICAL — no default) ---
     REDIS_URL: str = Field(..., description="Redis connection — REQUIRED")
 
-    # --- JWT RS256 (CRITICAL — all four required) ---
     JWT_PRIVATE_KEY_PATH: Path = Field(
         ..., description="path to RSA private key PEM for signing — REQUIRED"
     )
@@ -68,17 +49,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
 
-    # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default=[],
         description="allowed CORS origins — must be explicit, never '*' in staging/production",
     )
 
-    # --- Logging ---
     LOG_LEVEL: str = Field(default="INFO", description="log level")
     LOG_JSON: bool = Field(default=True, description="JSON log output")
 
-    # --- Multi-tenancy ---
     DEFAULT_TENANT_ID: str = Field(
         default="00000000-0000-0000-0000-000000000001",
         description="default tenant ID for single-tenant or bootstrap",
@@ -93,16 +71,26 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Password policy ---
-    PASSWORD_MIN_LENGTH: int = Field(default=8, description="minimum password length")
+    PASSWORD_MIN_LENGTH: int = Field(default=12, description="minimum password length")
     PASSWORD_REQUIRE_UPPERCASE: bool = Field(default=True)
     PASSWORD_REQUIRE_LOWERCASE: bool = Field(default=True)
     PASSWORD_REQUIRE_DIGIT: bool = Field(default=True)
     PASSWORD_REQUIRE_SPECIAL: bool = Field(default=True)
 
-    # --- Rate limiting ---
     RATE_LIMIT_LOGIN: int = Field(default=5, description="max login attempts per window")
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=300, description="rate limit window")
+    RATE_LIMIT_LOGIN_IP: int = Field(
+        default=50,
+        description="coarse max login attempts per source IP per window (anti-spraying)",
+    )
+    RATE_LIMIT_FAIL_CLOSED: bool = Field(
+        default=False,
+        description=(
+            "When true, rate limiting FAILS CLOSED on Redis errors (rejects the "
+            "request) instead of failing open. Keep false unless an outage must "
+            "shut down auth rather than allow traffic."
+        ),
+    )
     RATE_LIMIT_REGISTER: int = Field(
         default=5, description="max self-service registrations per IP per window"
     )
@@ -110,7 +98,6 @@ class Settings(BaseSettings):
         default=3600, description="register rate limit window (seconds)"
     )
 
-    # --- Email verification ---
     VERIFICATION_TOKEN_EXPIRE_MINUTES: int = Field(
         default=60, description="email verification token TTL (minutes)"
     )
@@ -119,7 +106,6 @@ class Settings(BaseSettings):
         description="base URL for verification links, e.g. https://app.skyrict.io/verify-email",
     )
 
-    # --- Onboarding wizard (SKY-30) ---
     TURNSTILE_SITE_KEY: str = Field(
         default="",
         description="Cloudflare Turnstile site key (served to the browser)",
@@ -153,7 +139,7 @@ class Settings(BaseSettings):
     SIGNUP_CHECK_RATE_LIMIT: int = Field(
         default=60, description="max /signup/check-email|check-slug calls per IP per window"
     )
-    # --- MFA (CRITICAL — no default) ---
+
     MFA_ENCRYPTION_KEY: str = Field(
         ...,
         description=(
@@ -165,18 +151,26 @@ class Settings(BaseSettings):
     MFA_TOTP_ISSUER: str = Field(
         default="Skyrict", description="issuer name embedded in TOTP provisioning URIs"
     )
+    MFA_CHALLENGE_TTL_SECONDS: int = Field(
+        default=300,
+        description="TTL of a login mfaToken challenge before it expires (seconds)",
+    )
+    MFA_CHALLENGE_MAX_ATTEMPTS: int = Field(
+        default=5, description="max code attempts before a login mfaToken challenge is revoked"
+    )
+    RATE_LIMIT_MFA_VERIFY: int = Field(
+        default=20,
+        description=(
+            "coarse per-IP/per-token limit on MFA challenge verifies; the "
+            "stricter per-challenge MFA_CHALLENGE_MAX_ATTEMPTS binds first"
+        ),
+    )
 
-    # --- Derived (loaded from files at validation time) ---
     jwt_private_key: str = ""
     jwt_public_key: str = ""
 
-    # ------------------------------------------------------------------
-    # Validators — run in definition order (pydantic v2)
-    # ------------------------------------------------------------------
-
     @model_validator(mode="after")
     def load_rsa_keys(self) -> Settings:
-        """Load RSA key files and fail immediately if missing or unreadable."""
         errors: list[str] = []
 
         for label, path_attr, dest_attr in [
@@ -210,7 +204,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_mfa_encryption_key(self) -> Settings:
-        """Fail-fast when MFA_ENCRYPTION_KEY is missing or not a valid Fernet key."""
         from cryptography.fernet import Fernet
 
         try:
@@ -225,21 +218,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> Settings:
-        """Fail-fast guards that apply ONLY in staging and production.
-
-        Runs after load_rsa_keys so all fields are populated.
-        Checks:
-          1. JWT key paths must not point at committed test fixtures.
-          2. DEBUG must be False.
-          3. CORS_ORIGINS must not contain wildcard '*'.
-          4. BASE_DOMAIN must be set (tenant subdomain resolution).
-        """
         if self.ENVIRONMENT not in (Environment.STAGING, Environment.PRODUCTION):
             return self
 
         errors: list[str] = []
 
-        # Check 1: test fixture keys
         for label, path_attr in [
             ("JWT_PRIVATE_KEY_PATH", "JWT_PRIVATE_KEY_PATH"),
             ("JWT_PUBLIC_KEY_PATH", "JWT_PUBLIC_KEY_PATH"),
@@ -253,21 +236,18 @@ class Settings(BaseSettings):
                     f"dev/test keypair."
                 )
 
-        # Check 2: DEBUG must be off
         if self.DEBUG:
             errors.append(
                 "Refusing to start: DEBUG=true is not allowed in staging/production. "
                 "Set DEBUG=false or omit it entirely."
             )
 
-        # Check 3: no wildcard CORS
         if "*" in self.CORS_ORIGINS:
             errors.append(
                 "Refusing to start: CORS_ORIGINS contains '*' which is not "
                 "allowed in staging/production. List explicit origins instead."
             )
 
-        # Check 4: BASE_DOMAIN required for Host-subdomain tenant resolution
         if not self.BASE_DOMAIN.strip():
             errors.append(
                 "IDENTITY_BASE_DOMAIN is required in staging/production so "
@@ -283,4 +263,4 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings()  # type: ignore[call-arg]  # pydantic-settings populates from env
+settings = Settings()  # type: ignore[call-arg]

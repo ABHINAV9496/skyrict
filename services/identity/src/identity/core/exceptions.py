@@ -1,9 +1,3 @@
-"""Domain exceptions -> RFC 7807 problem+json error responses.
-
-Catch SkyrictError subclasses at the API layer and map to FastAPI responses
-following https://www.rfc-editor.org/rfc/rfc7807 (Problem Details for HTTP APIs).
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -29,6 +23,7 @@ from skyrict_common.exceptions import (
     PasskeyError,
     PermissionDeniedError,
     RateLimitExceededError,
+    RateLimitUnavailableError,
     SessionExpiredError,
     SessionNotFoundError,
     SkyrictError,
@@ -60,6 +55,7 @@ __all__ = [
     "PasskeyError",
     "PermissionDeniedError",
     "RateLimitExceededError",
+    "RateLimitUnavailableError",
     "SessionExpiredError",
     "SessionNotFoundError",
     "SkyrictError",
@@ -80,22 +76,12 @@ __all__ = [
 logger = structlog.get_logger("identity.exceptions")
 
 
-class StartupError(RuntimeError):
-    """A required dependency failed startup verification.
-
-    Raised from the application lifespan so the process refuses to boot
-    (fail-fast) instead of serving traffic with a dead database, an
-    unreachable Redis, or unusable JWT keys. NOT a SkyrictError — it is
-    never mapped to an HTTP response; the orchestrator sees the non-zero
-    exit and restarts the pod.
-    """
+class StartupError(RuntimeError): ...
 
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
-# Mapping from exception type to HTTP status code and problem type URI.
-# Lookup walks the MRO (exact type wins, base classes provide the generic
-# fallback) so EVERY SkyrictError subclass maps to the correct status.
+
 _STATUS_MAP: dict[type, tuple[int, str]] = {
     TokenExpiredError: (401, f"{_PROBLEM_BASE}/token-expired"),
     TokenInvalidError: (401, f"{_PROBLEM_BASE}/token-invalid"),
@@ -121,6 +107,7 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     UserAlreadyExistsError: (409, f"{_PROBLEM_BASE}/user-already-exists"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
     RateLimitExceededError: (429, f"{_PROBLEM_BASE}/rate-limit-exceeded"),
+    RateLimitUnavailableError: (503, f"{_PROBLEM_BASE}/rate-limit-unavailable"),
     InvitationExpiredError: (400, f"{_PROBLEM_BASE}/invitation-expired"),
     InvitationEmailMismatchError: (400, f"{_PROBLEM_BASE}/invitation-email-mismatch"),
     InvitationAlreadyUsedError: (409, f"{_PROBLEM_BASE}/invitation-already-used"),
@@ -130,7 +117,6 @@ _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")
 
 
 def _status_and_type(exc: SkyrictError) -> tuple[int, str]:
-    """Resolve (status_code, problem_type) by walking the exception MRO."""
     for exc_type in type(exc).__mro__:
         if exc_type in _STATUS_MAP:
             return _STATUS_MAP[exc_type]
@@ -138,15 +124,12 @@ def _status_and_type(exc: SkyrictError) -> tuple[int, str]:
 
 
 def _request_id(request: Request) -> str | None:
-    """Return the request_id attached by RequestIdMiddleware, if any."""
     return getattr(request.state, "request_id", None)
 
 
 async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResponse:
-    """Map SkyrictError to an RFC 7807 problem+json response."""
     status_code, problem_type = _status_and_type(exc)
 
-    # RFC 7807 required fields
     body: dict[str, Any] = {
         "type": problem_type,
         "status": status_code,
@@ -161,7 +144,7 @@ async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResp
 async def request_validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """Return FastAPI body-validation failures as RFC 7807 (422)."""
+
     errors = exc.errors()
     messages = [
         f"{'.'.join(str(loc) for loc in error.get('loc', ()))}: {error.get('msg', '')}"
@@ -181,7 +164,6 @@ async def request_validation_error_handler(
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    """Return route-level HTTP errors (404/405/...) as RFC 7807."""
     status_code = exc.status_code
     body: dict[str, Any] = {
         "type": f"{_PROBLEM_BASE}/http-{status_code}",
@@ -195,10 +177,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions — NEVER leak internals.
-
-    Logs full traceback for debugging, returns sanitized 500 to the client.
-    """
     request_id = _request_id(request) or "unknown"
     logger.error(
         "unhandled_exception",
@@ -207,7 +185,7 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
         request_id=request_id,
         path=request.url.path,
         method=request.method,
-        exc_info=True,  # full traceback in logs
+        exc_info=True,
     )
 
     return JSONResponse(

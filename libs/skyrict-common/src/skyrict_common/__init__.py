@@ -1,5 +1,3 @@
-"""Skyrict common utilities — shared across all services."""
-
 from skyrict_common.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -8,6 +6,7 @@ from skyrict_common.exceptions import (
     MFAVerificationError,
     PasskeyError,
     RateLimitExceededError,
+    RateLimitUnavailableError,
     SessionExpiredError,
     SessionNotFoundError,
     SkyrictError,
@@ -44,6 +43,7 @@ __all__ = [
     "PaginationParams",
     "PasskeyError",
     "RateLimitExceededError",
+    "RateLimitUnavailableError",
     "ResponseEnvelope",
     "SessionExpiredError",
     "SessionNotFoundError",

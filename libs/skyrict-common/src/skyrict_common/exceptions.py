@@ -1,15 +1,7 @@
-"""Base exceptions for Skyrict services.
-
-Every service should catch these at the API layer and map them to HTTP responses.
-Domain code should raise these, never HTTPException.
-"""
-
 from __future__ import annotations
 
 
 class SkyrictError(Exception):
-    """Base exception for all Skyrict domain errors."""
-
     message: str = "An unexpected error occurred"
     code: str = "SKYRICT_ERROR"
 
@@ -17,9 +9,6 @@ class SkyrictError(Exception):
         self.message = message or self.__class__.message
         self.code = code or self.__class__.code
         super().__init__(self.message)
-
-
-# ---------- Auth ----------
 
 
 class AuthenticationError(SkyrictError):
@@ -72,9 +61,6 @@ class PasskeyError(AuthenticationError):
     code = "PASSKEY_ERROR"
 
 
-# ---------- User ----------
-
-
 class NotFoundError(SkyrictError):
     message = "Resource not found"
     code = "NOT_FOUND"
@@ -105,9 +91,6 @@ class InvalidPasswordError(AuthenticationError):
     code = "INVALID_PASSWORD"
 
 
-# ---------- Tenant / Organization ----------
-
-
 class TenantNotFoundError(NotFoundError):
     message = "Organization not found"
     code = "TENANT_NOT_FOUND"
@@ -128,9 +111,6 @@ class TenantMismatchError(AuthenticationError):
     code = "TENANT_MISMATCH"
 
 
-# ---------- Session ----------
-
-
 class SessionNotFoundError(NotFoundError):
     message = "Session not found"
     code = "SESSION_NOT_FOUND"
@@ -141,20 +121,19 @@ class SessionExpiredError(SkyrictError):
     code = "SESSION_EXPIRED"
 
 
-# ---------- Validation ----------
-
-
 class ValidationError(SkyrictError):
     message = "Validation failed"
     code = "VALIDATION_ERROR"
 
 
-# ---------- Rate Limiting ----------
-
-
 class RateLimitExceededError(SkyrictError):
     message = "Rate limit exceeded"
     code = "RATE_LIMIT_EXCEEDED"
+
+
+class RateLimitUnavailableError(SkyrictError):
+    message = "Service temporarily unavailable"
+    code = "RATE_LIMIT_UNAVAILABLE"
 
 
 class InvitationNotFoundError(NotFoundError):

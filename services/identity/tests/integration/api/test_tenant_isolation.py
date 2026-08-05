@@ -18,6 +18,7 @@ The whole suite skips when Postgres is unavailable (see conftest.py).
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from typing import TYPE_CHECKING
 
@@ -35,6 +36,55 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 
+async def _register_and_login(client: AsyncClient) -> dict:
+    """Register a brand-new tenant and return routed credentials for its owner."""
+    email = f"iso-{uuid.uuid4().hex[:8]}@test.com"
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "TestPassword123!",
+            "full_name": "Isolation User",
+            "organization_name": f"Isolation Corp {uuid.uuid4().hex[:8]}",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+
+    verify = await client.post(
+        "/api/v1/auth/verify-email", json={"token": data["verification_token"]}
+    )
+    assert verify.status_code == 200
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        headers={"X-Tenant-Slug": data["tenant_slug"]},
+        json={"email": email, "password": "TestPassword123!"},
+    )
+    assert login.status_code == 200
+    tokens = login.json()["data"]
+    return {
+        "slug": data["tenant_slug"],
+        "tenant_id": data["tenant_id"],
+        "email": email,
+        "user_id": str(tokens["user"]["id"]),
+        "token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+    }
+
+
+async def _delete_tenant_by_slug(slug: str) -> None:
+    async with async_session_factory() as session:
+        await session.execute(delete(TenantModel).where(TenantModel.slug == slug))
+        await session.commit()
+
+
+async def _delete_tenant_by_id(tenant_id: str) -> None:
+    async with async_session_factory() as session:
+        await session.execute(delete(TenantModel).where(TenantModel.id == uuid.UUID(tenant_id)))
+        await session.commit()
+
+
 @pytest.fixture
 def acme_access_token(integration_db: dict[str, str]) -> str:
     """A valid access token for alice@acme.io bound to the acme tenant."""
@@ -42,6 +92,182 @@ def acme_access_token(integration_db: dict[str, str]) -> str:
         subject=integration_db["user_a_id"],
         tenant_id=integration_db["acme_id"],
     )
+
+
+class TestTwoRealTenants:
+    """Two real signup tenants: every bearer-gated endpoint rejects a token from
+    the other tenant (401 tenant-mismatch) while succeeding on its own."""
+
+    async def test_full_endpoint_sweep_rejects_cross_tenant(self, client: AsyncClient) -> None:
+        tenant_a = await _register_and_login(client)
+        tenant_b = await _register_and_login(client)
+        extra_orgs: list[str] = []
+        try:
+            headers_a = {
+                "X-Tenant-Slug": tenant_a["slug"],
+                "Authorization": f"Bearer {tenant_a['token']}",
+            }
+
+            role = await client.post(
+                "/api/v1/roles",
+                headers=headers_a,
+                json={
+                    "name": f"iso-role-{uuid.uuid4().hex[:8]}",
+                    "permission_keys": ["roles:read"],
+                },
+            )
+            assert role.status_code == 200
+            role_id = role.json()["data"]["id"]
+
+            sessions = await client.get("/api/v1/sessions", headers=headers_a)
+            assert sessions.status_code == 200
+            session_id = sessions.json()["data"]["sessions"][0]["id"]
+
+            invitation = await client.post(
+                "/api/v1/invitations",
+                headers=headers_a,
+                json={
+                    "email": f"iso-inv-{uuid.uuid4().hex[:8]}@test.com",
+                    "role_name": "viewer",
+                },
+            )
+            assert invitation.status_code == 200
+            invitation_id = invitation.json()["data"]["id"]
+
+            specs: list[tuple[str, str, dict | None]] = [
+                ("GET", "/api/v1/users/me", None),
+                ("PUT", "/api/v1/users/me", {"full_name": "Updated Name"}),
+                (
+                    "POST",
+                    "/api/v1/users/me/password",
+                    {
+                        "current_password": "TestPassword123!",
+                        "new_password": "NewPassword123!",
+                    },
+                ),
+                ("GET", "/api/v1/organizations/me", None),
+                (
+                    "POST",
+                    "/api/v1/auth/introspect",
+                    {"refresh_token": tenant_a["refresh_token"]},
+                ),
+                ("GET", "/api/v1/sessions", None),
+                ("DELETE", f"/api/v1/sessions/{session_id}", None),
+                ("DELETE", "/api/v1/sessions", None),
+                ("GET", "/api/v1/roles", None),
+                (
+                    "POST",
+                    "/api/v1/roles",
+                    {
+                        "name": f"iso-role-2-{uuid.uuid4().hex[:8]}",
+                        "permission_keys": ["roles:read"],
+                    },
+                ),
+                (
+                    "PATCH",
+                    f"/api/v1/roles/{role_id}",
+                    {"name": f"iso-renamed-{uuid.uuid4().hex[:8]}"},
+                ),
+                (
+                    "POST",
+                    f"/api/v1/roles/{role_id}/assign",
+                    {"user_id": tenant_a["user_id"], "scope_type": "tenant"},
+                ),
+                ("DELETE", f"/api/v1/roles/{role_id}", None),
+                ("GET", "/api/v1/permissions", None),
+                (
+                    "POST",
+                    "/api/v1/invitations",
+                    {
+                        "email": f"iso-inv-2-{uuid.uuid4().hex[:8]}@test.com",
+                        "role_name": "viewer",
+                    },
+                ),
+                ("POST", f"/api/v1/invitations/{invitation_id}/expire", None),
+            ]
+
+            for method, path, body in specs:
+                own = await client.request(method, path, headers=headers_a, json=body)
+                assert own.status_code == 200, (
+                    f"{method} {path} own-tenant -> {own.status_code} {own.text[:300]}"
+                )
+                for slug, token, direction in (
+                    (tenant_b["slug"], tenant_a["token"], "A->B"),
+                    (tenant_a["slug"], tenant_b["token"], "B->A"),
+                ):
+                    blocked = await client.request(
+                        method,
+                        path,
+                        headers={
+                            "X-Tenant-Slug": slug,
+                            "Authorization": f"Bearer {token}",
+                        },
+                        json=body,
+                    )
+                    assert blocked.status_code == 401, (
+                        f"{method} {path} ({direction}) -> "
+                        f"{blocked.status_code} {blocked.text[:300]}"
+                    )
+                    assert blocked.json()["type"].endswith("/tenant-mismatch")
+
+            org = await client.post(
+                "/api/v1/organizations",
+                headers=headers_a,
+                json={
+                    "name": f"Isolation Org {uuid.uuid4().hex[:8]}",
+                    "slug": f"iso-org-{uuid.uuid4().hex[:8]}",
+                },
+            )
+            assert org.status_code == 200
+            extra_orgs.append(org.json()["data"]["id"])
+            for slug, token in (
+                (tenant_b["slug"], tenant_a["token"]),
+                (tenant_a["slug"], tenant_b["token"]),
+            ):
+                blocked = await client.post(
+                    "/api/v1/organizations",
+                    headers={
+                        "X-Tenant-Slug": slug,
+                        "Authorization": f"Bearer {token}",
+                    },
+                    json={"name": "Sneaky Org", "slug": f"sneaky-{uuid.uuid4().hex[:8]}"},
+                )
+                assert blocked.status_code == 401
+                assert blocked.json()["type"].endswith("/tenant-mismatch")
+
+            relogin = await client.post(
+                "/api/v1/auth/login",
+                headers={"X-Tenant-Slug": tenant_a["slug"]},
+                json={"email": tenant_a["email"], "password": "NewPassword123!"},
+            )
+            assert relogin.status_code == 200
+            fresh_refresh = relogin.json()["data"]["refresh_token"]
+            own_logout = await client.post(
+                "/api/v1/auth/logout",
+                headers=headers_a,
+                json={"refresh_token": fresh_refresh},
+            )
+            assert own_logout.status_code == 200
+            for slug, token in (
+                (tenant_b["slug"], tenant_a["token"]),
+                (tenant_a["slug"], tenant_b["token"]),
+            ):
+                blocked = await client.post(
+                    "/api/v1/auth/logout",
+                    headers={
+                        "X-Tenant-Slug": slug,
+                        "Authorization": f"Bearer {token}",
+                    },
+                    json={"refresh_token": fresh_refresh},
+                )
+                assert blocked.status_code == 401
+                assert blocked.json()["type"].endswith("/tenant-mismatch")
+        finally:
+            with contextlib.suppress(Exception):
+                await _delete_tenant_by_slug(tenant_a["slug"])
+                await _delete_tenant_by_slug(tenant_b["slug"])
+                for org_id in extra_orgs:
+                    await _delete_tenant_by_id(org_id)
 
 
 class TestTenantIsolation:

@@ -21,7 +21,7 @@ class InvitationRepositoryPort(Protocol):
     async def get_by_token(self, token: str) -> Invitation | None: ...
 
     async def mark_used(
-        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID
+        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID | None
     ) -> Invitation: ...
 
     async def list_by_tenant(

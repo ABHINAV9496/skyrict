@@ -59,7 +59,7 @@ class InvitationRepository(SqlRepository):
         return _from_orm(model) if model is not None else None
 
     async def mark_used(
-        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID
+        self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID | None
     ) -> Invitation:
         model = await self.session.get(InvitationModel, invitation_id)
         if model is None:
@@ -67,7 +67,7 @@ class InvitationRepository(SqlRepository):
 
             raise NotFoundError("Invitation not found")
         model.used_at = datetime.now(UTC)
-        model.used_by_user_id = uuid.UUID(str(user_id))
+        model.used_by_user_id = uuid.UUID(str(user_id)) if user_id else None
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete
 
+from identity.core.config import settings
 from identity.db.session import async_session_factory
 from identity.models.tenant import TenantModel
 
@@ -102,3 +103,37 @@ class TestAuthEndpoints:
     async def test_list_sessions_unauthorized(self, client: AsyncClient):
         response = await client.get("/api/v1/sessions", headers=_HEADERS)
         assert response.status_code == 401
+
+
+class TestLoginRateLimit:
+    """POST /auth/login is rate-limited per (source IP, account).
+
+    Blunts brute-force / credential-stuffing on the highest-value endpoint
+    (Redis fixed-window; the limiter fails open on infra errors). The first
+    ``RATE_LIMIT_LOGIN`` attempts are rejected as auth failures; the next
+    attempt in the same window is a 429.
+    """
+
+    async def test_sixth_attempt_in_window_is_rate_limited(self, client: AsyncClient) -> None:
+        email = f"rl-{uuid.uuid4().hex[:8]}@acme.io"
+        for _ in range(settings.RATE_LIMIT_LOGIN):
+            resp = await client.post(
+                "/api/v1/auth/login",
+                headers=_HEADERS,
+                json={"email": email, "password": "WrongPass1!"},
+            )
+            assert resp.status_code >= 400, (
+                f"attempt {_ + 1} expected rejected, got {resp.status_code}"
+            )
+
+        blocked = await client.post(
+            "/api/v1/auth/login",
+            headers=_HEADERS,
+            json={"email": email, "password": "WrongPass1!"},
+        )
+        assert blocked.status_code == 429
+        body = blocked.json()
+        assert body["type"].endswith("/rate-limit-exceeded")
+        assert body["status"] == 429
+        # The 429 must not hint at the account's existence either.
+        assert "not found" not in body["detail"].lower()

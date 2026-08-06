@@ -19,15 +19,23 @@ export async function POST(request: NextRequest) {
   const verificationToken =
     typeof body.verificationToken === "string" ? body.verificationToken : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!email || !verificationToken || !password) {
+  const captchaId = typeof body.captchaId === "string" ? body.captchaId : "";
+  const captchaAnswer = typeof body.captchaAnswer === "string" ? body.captchaAnswer : "";
+  if (!email || !verificationToken || !password || !captchaId || !captchaAnswer) {
     return NextResponse.json(
-      { error: "Email, verification token, and password are required." },
+      { error: "Email, verification token, password, and the security code are required." },
       { status: 400 },
     );
   }
 
   const result = await callBackend("/auth/signup/password", {
-    body: { email, verification_token: verificationToken, password },
+    body: {
+      email,
+      verification_token: verificationToken,
+      password,
+      captcha_id: captchaId,
+      captcha_answer: captchaAnswer,
+    },
   });
   if (!result.ok) return backendError(result);
   return NextResponse.json({ status: "ok" });

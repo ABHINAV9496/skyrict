@@ -52,14 +52,22 @@ os.environ.setdefault("IDENTITY_SIGNUP_CHECK_RATE_LIMIT", "10000")
 
 os.environ.setdefault("IDENTITY_RATE_LIMIT_LOGIN_IP", "10000")
 os.environ.setdefault("IDENTITY_RATE_LIMIT_MFA_VERIFY", "10000")
+os.environ.setdefault("IDENTITY_RATE_LIMIT_MFA_ENROLL", "10000")
+os.environ.setdefault("IDENTITY_RATE_LIMIT_MFA_BACKUP_CODES", "10000")
 os.environ.setdefault("IDENTITY_JWT_PRIVATE_KEY_PATH", str(_KEY_DIR / "private.pem"))
 os.environ.setdefault("IDENTITY_JWT_PUBLIC_KEY_PATH", str(_KEY_DIR / "public.pem"))
 os.environ["IDENTITY_JWT_PRIVATE_KEY_PATH"] = str(_KEY_DIR / "private.pem")
 os.environ["IDENTITY_JWT_PUBLIC_KEY_PATH"] = str(_KEY_DIR / "public.pem")
 os.environ.setdefault("IDENTITY_JWKS_ISSUER", "https://auth.test.skyrict.io")
 os.environ.setdefault("IDENTITY_JWKS_AUDIENCE", "api.test.skyrict.io")
-os.environ.setdefault("IDENTITY_ENVIRONMENT", "test")
+# Force the test environment even when the host/container exports dev vars:
+# several features branch on ENVIRONMENT (e.g. the wizard's plaintext OTP
+# return, which is TEST-only).
+os.environ["IDENTITY_ENVIRONMENT"] = "test"
 os.environ["IDENTITY_DEBUG"] = "false"
+# Tests must use the log-only email transport regardless of the dev container's
+# SMTP config, so delivery side effects never depend on MailHog being up.
+os.environ["IDENTITY_EMAIL_SMTP_HOST"] = ""
 os.environ.setdefault(
     "IDENTITY_MFA_ENCRYPTION_KEY",
     Fernet.generate_key().decode("utf-8"),

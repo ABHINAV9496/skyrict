@@ -150,12 +150,28 @@ class SetPasswordRequest(_CamelModel):
     email: EmailStr
     verification_token: str
     password: str = Field(..., min_length=12)
+    captcha_id: str = Field(..., min_length=1, max_length=64, description="Opaque challenge id")
+    captcha_answer: str = Field(..., min_length=1, max_length=16)
 
 
 class SetPasswordResponse(_CamelModel):
     """Response after the wizard password is set."""
 
     status: Literal["ok"] = "ok"
+
+
+class CaptchaResponse(_CamelModel):
+    """GET /auth/signup/captcha — a text CAPTCHA challenge.
+
+    ``answer`` is the plaintext code exposed ONLY in test so integration
+    tests can drive the wizard; every other environment returns ``None`` and
+    the user reads the code from the image.
+    """
+
+    captcha_id: str
+    image: str = Field(description="base64 PNG data URI of the rendered challenge")
+    expires_in: int = Field(description="TTL of the challenge in seconds")
+    answer: str | None = Field(default=None, description="Plaintext answer, test only")
 
 
 class CheckEmailRequest(_CamelModel):

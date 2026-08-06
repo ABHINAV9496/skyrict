@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from identity.api.deps import (
     get_audit_service,
     get_authn_service,
+    get_captcha_store,
     get_current_user,
     get_mfa_challenge_store,
     get_mfa_service,
@@ -17,17 +18,21 @@ from identity.api.deps import (
     get_token_service,
     get_user_repo,
 )
-from identity.core.config import settings
+from identity.core.config import Environment, settings
 from identity.core.constants import (
     LOGIN_FAILED_MESSAGE,
+    SIGNUP_CAPTCHA_LIMIT_KEY,
     SIGNUP_CHECK_LIMIT_KEY,
     SIGNUP_CODE_IP_LIMIT_KEY,
     SIGNUP_CODE_LIMIT_KEY,
     SIGNUP_START_LIMIT_KEY,
     SIGNUP_VERIFY_LIMIT_KEY,
 )
+from identity.features.auth.captcha.captcha import generate_captcha, png_data_uri
+from identity.features.auth.captcha.captcha_store import CaptchaStore
 from identity.features.auth.schemas import (
     AuthResponse,
+    CaptchaResponse,
     CheckEmailRequest,
     CheckEmailResponse,
     CheckSlugRequest,
@@ -233,6 +238,33 @@ async def signup_verify_code(
     return ResponseEnvelope(data=VerifyCodeResponse(**result))
 
 
+@router.get("/signup/captcha", response_model=ResponseEnvelope[CaptchaResponse])
+async def signup_captcha(
+    request: Request,
+    captcha_store: CaptchaStore = Depends(get_captcha_store),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[CaptchaResponse]:
+    """Issue a text CAPTCHA challenge for the password step (rate-limited per IP)."""
+    ip_address = _client_ip(request)
+    await limiter.enforce(
+        key=f"{SIGNUP_CAPTCHA_LIMIT_KEY}:{ip_address}",
+        limit=settings.SIGNUP_CAPTCHA_RATE_LIMIT,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    captcha = generate_captcha()
+    captcha_id = await captcha_store.issue(captcha.text)
+    return ResponseEnvelope(
+        data=CaptchaResponse(
+            captcha_id=captcha_id,
+            image=png_data_uri(captcha.image_png),
+            expires_in=settings.CAPTCHA_TTL_SECONDS,
+            # Plaintext answer only in TEST so integration tests can drive the
+            # wizard; everywhere else the user reads the code from the image.
+            answer=captcha.text if settings.ENVIRONMENT == Environment.TEST else None,
+        )
+    )
+
+
 @router.post("/signup/password", response_model=ResponseEnvelope[SetPasswordResponse])
 async def signup_password(
     body: SetPasswordRequest,
@@ -243,6 +275,8 @@ async def signup_password(
         email=body.email,
         verification_token=body.verification_token,
         password=body.password,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
     )
     return ResponseEnvelope(data=SetPasswordResponse(**result))
 

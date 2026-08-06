@@ -43,6 +43,7 @@ from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
 from identity.domain.entities import Role, Session, SessionStatus, Tenant, User
 from identity.domain.value_objects import TokenPair
+from identity.features.auth.captcha.captcha_store import CaptchaStore
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.verification_store import (
     VerificationStore,
@@ -113,6 +114,7 @@ class AuthenticationService:
         verification_store: VerificationStore | None = None,
         turnstile: TurnstileVerifier | None = None,
         mfa_challenge_store: MfaChallengeStore | None = None,
+        captcha_store: CaptchaStore | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.tenant_repo = tenant_repo
@@ -125,6 +127,7 @@ class AuthenticationService:
         self.verification_store = verification_store or VerificationStore()
         self.turnstile = turnstile or TurnstileVerifier()
         self.mfa_challenge_store = mfa_challenge_store or MfaChallengeStore()
+        self.captcha_store = captcha_store or CaptchaStore()
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
@@ -366,9 +369,17 @@ class AuthenticationService:
         return {"status": "ok", "verification_token": token}
 
     async def signup_set_password(
-        self, *, email: str, verification_token: str, password: str
+        self,
+        *,
+        email: str,
+        verification_token: str,
+        password: str,
+        captcha_id: str,
+        captcha_answer: str,
     ) -> dict[str, Any]:
         _validate_wizard_password(password)
+        if not await self.captcha_store.verify(captcha_id, captcha_answer):
+            raise ValidationError("Unable to verify the security code. Try again.")
         await self._require_verification_token(verification_token, email)
         await self.verification_store.update_verification_token_password(
             verification_token, hash_password(password)

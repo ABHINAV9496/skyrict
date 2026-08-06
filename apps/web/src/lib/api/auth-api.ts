@@ -1,13 +1,17 @@
 /**
  * Auth API seam.
  *
- * The onboarding wizard (SKY-30) calls the real identity service — every
- * /auth/signup/* endpoint mirrors the backend contract and returns a typed
- * result. Login, password reset, and MFA are still simulated until their
- * tickets land; their functions below keep returning mock data.
+ * Login and MFA verification go through the BFF route handlers
+ * (/api/auth/*), which set the httpOnly refresh-token cookie and hand the
+ * access token back in the body — the browser keeps it in memory only.
+ * Onboarding stays on the real /auth/signup/* endpoints directly.
  */
 
 import { env } from "@/config/env";
+import { ApiError, apiPost } from "@/lib/api/http";
+import { setAccessToken } from "@/lib/auth/session-store";
+
+export { ApiError };
 
 export interface AuthUser {
   id: string;
@@ -19,38 +23,14 @@ export interface AuthUser {
   createdAt: string;
 }
 
-export interface AuthSession {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  tokenType: "Bearer";
-  user: AuthUser;
-}
-
 export type LoginResult =
-  | { status: "ok"; session: AuthSession }
-  | { status: "mfa_required"; mfaToken: string }
-  | { status: "email_unverified"; email: string };
-
-export type ResetRequestResult = { status: "sent"; email: string };
-
-export type ResetConfirmResult = { status: "ok" };
+  | { status: "authenticated"; accessToken: string; expiresIn: number; user: AuthUser }
+  | { status: "mfa_setup"; accessToken: string; expiresIn: number; user: AuthUser }
+  | { status: "mfa_challenge"; mfaToken: string; user: AuthUser };
 
 export type VerifyMfaResult =
-  | { status: "ok"; session: AuthSession }
+  | { status: "ok"; accessToken: string; expiresIn: number; user: AuthUser }
   | { status: "invalid" };
-
-const delay = (ms = 700) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-export class ApiError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   let res: Response;
@@ -85,63 +65,113 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Mocked until their tickets land: login, password reset, MFA
+// Sign in
 // ---------------------------------------------------------------------------
+
+interface BffLoginResponse {
+  status: "authenticated" | "mfa_setup" | "mfa_challenge";
+  accessToken?: string | null;
+  expiresIn?: number;
+  mfaToken?: string | null;
+  user?: AuthUser | null;
+  error?: string;
+}
 
 export async function loginEmailPassword(input: {
   email: string;
   password: string;
 }): Promise<LoginResult> {
-  await delay();
-  const session: AuthSession = {
-    accessToken: "demo-access-token",
-    refreshToken: "demo-refresh-token",
-    expiresIn: 3600,
-    tokenType: "Bearer",
-    user: {
-      id: "demo-user",
-      email: input.email,
-      fullName: "Demo User",
-      isActive: true,
-      isVerified: true,
-      mfaEnabled: false,
-      createdAt: new Date().toISOString(),
-    },
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as BffLoginResponse;
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload.error ?? "Unable to sign in. Check your credentials and try again.",
+    );
+  }
+
+  if (payload.status === "mfa_challenge") {
+    setAccessToken(null);
+    if (!payload.mfaToken || !payload.user) {
+      throw new ApiError(502, "Unexpected login response.");
+    }
+    return {
+      status: "mfa_challenge",
+      mfaToken: payload.mfaToken,
+      user: payload.user,
+    };
+  }
+
+  if (!payload.accessToken || !payload.user) {
+    throw new ApiError(502, "Unexpected login response.");
+  }
+  setAccessToken(payload.accessToken);
+  return {
+    status: payload.status === "mfa_setup" ? "mfa_setup" : "authenticated",
+    accessToken: payload.accessToken,
+    expiresIn: payload.expiresIn ?? 0,
+    user: payload.user,
   };
-  return { status: "ok", session };
 }
 
-export async function requestPasswordReset(input: {
-  email: string;
-}): Promise<ResetRequestResult> {
-  await delay();
-  return { status: "sent", email: input.email };
-}
-
-export async function confirmPasswordReset(input: {
-  token: string;
-  newPassword: string;
-}): Promise<ResetConfirmResult> {
-  void input;
-  await delay();
-  return { status: "ok" };
+interface BffMfaVerifyResponse {
+  status: "authenticated";
+  accessToken?: string | null;
+  expiresIn?: number;
+  user?: AuthUser | null;
+  error?: string;
 }
 
 export async function verifyMfa(input: {
   code: string;
   mfaToken: string;
-  isBackupCode?: boolean;
 }): Promise<VerifyMfaResult> {
-  void input;
-  await delay();
-  return { status: "invalid" };
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/mfa/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mfa_token: input.mfaToken, code: input.code }),
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as BffMfaVerifyResponse;
+  if (response.status === 401 || response.status === 403) {
+    return { status: "invalid" };
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload.error ?? "Unable to verify the code.",
+    );
+  }
+  if (!payload.accessToken || !payload.user) {
+    throw new ApiError(502, "Unexpected verification response.");
+  }
+  setAccessToken(payload.accessToken);
+  return {
+    status: "ok",
+    accessToken: payload.accessToken,
+    expiresIn: payload.expiresIn ?? 0,
+    user: payload.user,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Onboarding wizard (real /auth/signup/* endpoints)
 // ---------------------------------------------------------------------------
-
-export const DEMO_MFA_CODE = "123456";
 
 export interface RiskAssessment {
   requiresCaptcha: boolean;
@@ -273,7 +303,7 @@ export async function createOrganization(
 }
 
 // ---------------------------------------------------------------------------
-// Mandatory MFA setup (still simulated — backend wiring is a separate ticket)
+// Mandatory MFA enrollment (authenticated /mfa/* endpoints)
 // ---------------------------------------------------------------------------
 
 export interface MfaSetup {
@@ -282,61 +312,29 @@ export interface MfaSetup {
   backupCodes: string[];
 }
 
-const BACKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function randomBase32(bytes: number): string {
-  const values = new Uint8Array(bytes);
-  crypto.getRandomValues(values);
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = 0;
-  let value = 0;
-  let output = "";
-  for (const byte of values) {
-    value = (value << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      output += alphabet[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) {
-    output += alphabet[(value << (5 - bits)) & 31];
-  }
-  return output;
-}
-
-function randomBackupCodes(count: number): string[] {
-  return Array.from({ length: count }, () => {
-    const chars = Array.from(
-      { length: 10 },
-      () =>
-        BACKUP_CODE_ALPHABET[
-          Math.floor(Math.random() * BACKUP_CODE_ALPHABET.length)
-        ],
-    );
-    return `${chars.slice(0, 5).join("")}-${chars.slice(5).join("")}`;
-  });
-}
-
-export async function setupMfa(input: { email: string }): Promise<MfaSetup> {
-  await delay(700);
-  const secret = randomBase32(20).replace(/=+$/, "");
-  const otpauthUri = `otpauth://totp/Skyrict:${encodeURIComponent(
-    input.email,
-  )}?secret=${secret}&issuer=Skyrict&period=30&digits=6`;
+export async function setupMfa(): Promise<MfaSetup> {
+  const data = await apiPost<{
+    secret: string;
+    provisioning_uri: string;
+    backup_codes: string[];
+  }>("/api/v1/mfa/setup", undefined);
   return {
-    secret,
-    otpauthUri,
-    backupCodes: randomBackupCodes(10),
+    secret: data.secret,
+    otpauthUri: data.provisioning_uri,
+    backupCodes: data.backup_codes,
   };
 }
 
 export async function confirmMfaSetup(input: {
   code: string;
-  secret: string;
 }): Promise<{ status: "ok" } | { status: "invalid" }> {
-  void input.secret;
-  await delay(700);
-  if (input.code === DEMO_MFA_CODE) return { status: "ok" };
-  return { status: "invalid" };
+  try {
+    await apiPost<{ verified: boolean }>("/api/v1/mfa/verify", { code: input.code });
+    return { status: "ok" };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400) {
+      return { status: "invalid" };
+    }
+    throw err;
+  }
 }

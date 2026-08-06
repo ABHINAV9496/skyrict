@@ -1,0 +1,89 @@
+/**
+ * Authenticated fetch wrapper for /api/v1 calls.
+ *
+ * Attaches the in-memory Bearer token and X-Tenant-Slug, and on a 401
+ * performs a single-flight silent refresh through the BFF (the refresh token
+ * lives in an httpOnly cookie the browser cannot read), then retries once.
+ */
+
+import { getAccessToken, getTenantSlug, setAccessToken } from "@/lib/auth/session-store";
+
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+
+function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch("/api/auth/refresh", { method: "POST", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const payload = (await response.json().catch(() => ({}))) as {
+          status?: string;
+          accessToken?: string | null;
+        };
+        if (payload.status === "authenticated" && payload.accessToken) {
+          setAccessToken(payload.accessToken);
+          return true;
+        }
+        return false;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+async function toResult<T>(response: Response): Promise<T> {
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: T | null;
+    detail?: { error?: { message?: string }; message?: string } | string;
+  };
+  if (!response.ok) {
+    const message =
+      (typeof payload.detail === "object" && payload.detail?.error?.message) ||
+      (typeof payload.detail === "object" && payload.detail?.message) ||
+      (typeof payload.detail === "string" ? payload.detail : null) ||
+      "Request failed. Please try again.";
+    throw new ApiError(response.status, message);
+  }
+  return payload.data as T;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set("X-Tenant-Slug", getTenantSlug());
+  const token = getAccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (options.body != null && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  let response = await fetch(path, { ...options, headers });
+
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      headers.set("Authorization", `Bearer ${getAccessToken() ?? ""}`);
+      response = await fetch(path, { ...options, headers });
+    } else {
+      setAccessToken(null);
+    }
+  }
+
+  return toResult<T>(response);
+}
+
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

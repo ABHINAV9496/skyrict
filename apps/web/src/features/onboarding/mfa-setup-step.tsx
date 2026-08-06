@@ -1,32 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Check,
   Copy,
+  Download,
   KeyRound,
   LoaderCircle,
   QrCode,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
-import { confirmMfaSetup, setupMfa, type MfaSetup } from "@/lib/api/auth-api";
+import {
+  completeHandoff,
+  confirmMfaSetup,
+  regenerateBackupCodes,
+  setupMfa,
+  type MfaSetup,
+} from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 import { cn } from "@/lib/utils";
 
 function MfaSetupStep() {
-  const router = useRouter();
   const [setup, setSetup] = useState<MfaSetup>();
   const [code, setCode] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [handingOff, setHandingOff] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [codesCopied, setCodesCopied] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string>();
+  const [regenerated, setRegenerated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +67,37 @@ function MfaSetupStep() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  async function copyCodes() {
+    if (!setup || setup.backupCodes.length === 0) return;
+    await navigator.clipboard.writeText(setup.backupCodes.join("\n"));
+    setCodesCopied(true);
+    setTimeout(() => setCodesCopied(false), 1500);
+  }
+
+  function downloadCodes() {
+    if (!setup || setup.backupCodes.length === 0) return;
+    const body = [
+      "Skyrict recovery codes",
+      "Workspace owner sign-in backup.",
+      "Store this file in a safe place. Each code works exactly once.",
+      "Do not share these codes. Anyone with a code can sign in as you.",
+      "",
+      ...setup.backupCodes,
+      "",
+      "If you use a code, remember to download the updated list later.",
+    ].join("\n");
+    const url = URL.createObjectURL(
+      new Blob([body], { type: "text/plain;charset=utf-8" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "skyrict-recovery-codes.txt";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function confirm() {
     if (!setup) return;
     if (code.length !== 6) {
@@ -73,8 +116,33 @@ function MfaSetupStep() {
     }
   }
 
+  async function regenerate() {
+    if (!setup) return;
+    setRegenerating(true);
+    setRegenerateError(undefined);
+    try {
+      const result = await regenerateBackupCodes();
+      setSetup({ ...setup, backupCodes: result.backupCodes });
+      setAcknowledged(false);
+      setCodesCopied(false);
+      setRegenerated(true);
+    } catch (err: unknown) {
+      setRegenerateError(
+        err instanceof Error ? err.message : "Could not regenerate codes. Try again.",
+      );
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   function finish() {
-    router.push("/dashboard/agents");
+    setHandingOff(true);
+    void completeHandoff("/").catch((err: unknown) => {
+      setHandingOff(false);
+      setError(
+        err instanceof Error ? err.message : "Could not open your workspace.",
+      );
+    });
   }
 
   if (!setup) {
@@ -205,6 +273,30 @@ function MfaSetupStep() {
               Store these in a safe place. Each works once to sign in if you
               lose your authenticator app.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyCodes}
+                aria-label="Copy recovery codes"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                {codesCopied ? (
+                  <Check aria-hidden="true" className="size-3.5 text-primary" />
+                ) : (
+                  <Copy aria-hidden="true" className="size-3.5" />
+                )}
+                {codesCopied ? "Copied" : "Copy all"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadCodes}
+                aria-label="Download recovery codes"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                <Download aria-hidden="true" className="size-3.5" />
+                Download
+              </button>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-1.5">
               {setup.backupCodes.map((backupCode) => (
                 <code
@@ -214,6 +306,48 @@ function MfaSetupStep() {
                   {backupCode}
                 </code>
               ))}
+            </div>
+            {regenerated ? (
+              <p className="mt-3 text-center text-xs font-medium text-primary">
+                New codes generated. Save them and delete the old list.
+              </p>
+            ) : null}
+            {regenerateError ? (
+              <p className="mt-3 text-center text-xs font-medium text-destructive">
+                {regenerateError}
+              </p>
+            ) : null}
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmingRegenerate) {
+                    setConfirmingRegenerate(false);
+                    void regenerate();
+                  } else {
+                    setConfirmingRegenerate(true);
+                  }
+                }}
+                disabled={regenerating}
+                aria-label="Regenerate recovery codes"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  confirmingRegenerate
+                    ? "border-destructive/60 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                    : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted",
+                )}
+              >
+                {regenerating ? (
+                  <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw aria-hidden="true" className="size-3.5" />
+                )}
+                {regenerating
+                  ? "Regenerating…"
+                  : confirmingRegenerate
+                    ? "Regenerate anyway?"
+                    : "Regenerate"}
+              </button>
             </div>
           </div>
 
@@ -243,14 +377,15 @@ function MfaSetupStep() {
             I&apos;ve saved my recovery codes somewhere safe.
           </button>
 
-          <AuthButton
-            type="button"
-            className="w-full"
-            disabled={!acknowledged}
-            onClick={finish}
-          >
-            Finish setup
-          </AuthButton>
+            <AuthButton
+              type="button"
+              className="w-full"
+              loading={handingOff}
+              disabled={!acknowledged}
+              onClick={finish}
+            >
+              {handingOff ? "Opening your workspace…" : "Finish setup"}
+            </AuthButton>
         </div>
       )}
     </div>

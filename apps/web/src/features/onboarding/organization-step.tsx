@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,12 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { countries, industries } from "@/config/onboarding";
-import {
-  checkWorkspaceSlug,
-  createOrganization,
-  loginEmailPassword,
-} from "@/lib/api/auth-api";
-import { consumeWizardCredentials } from "@/lib/auth/wizard-session";
+import { checkWorkspaceSlug, createOrganization } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { ProvisioningScreen } from "@/features/onboarding/provisioning-screen";
@@ -75,8 +69,8 @@ function OrganizationStep({
   vt: string;
   plan: string;
 }) {
-  const router = useRouter();
   const [provisioning, setProvisioning] = useState(false);
+  const [createdSlug, setCreatedSlug] = useState<string>();
   const slugTouched = useRef(false);
   const [slugAvailability, setSlugAvailability] = useState<
     "idle" | "checking" | "available" | "taken"
@@ -157,8 +151,13 @@ function OrganizationStep({
   }, [workspaceSlug]);
 
   function handleCompleteProvisioning() {
-    const next = new URLSearchParams({ email });
-    router.push(`/setup-mfa?${next.toString()}`);
+    if (!createdSlug) return;
+    const { protocol, hostname, port } = window.location;
+    const apex = hostname.split(".").slice(1).join(".") || hostname;
+    const target = `${protocol}//${createdSlug}.signin.${apex}${
+      port ? `:${port}` : ""
+    }/signin?email=${encodeURIComponent(email)}`;
+    window.location.assign(target);
   }
 
   async function onSubmit(values: OrganizationValues) {
@@ -171,7 +170,7 @@ function OrganizationStep({
       return;
     }
     try {
-      await createOrganization({
+      const result = await createOrganization({
         email,
         verificationToken: vt,
         planId: plan,
@@ -190,14 +189,7 @@ function OrganizationStep({
           postalCode: values.postalCode,
         },
       });
-
-      const credentials = consumeWizardCredentials();
-      if (credentials) {
-        const login = await loginEmailPassword(credentials);
-        if (login.status !== "mfa_setup") {
-          throw new Error("Your workspace was created, but we couldn't start your session.");
-        }
-      }
+      setCreatedSlug(result.tenantSlug);
     } catch (err) {
       setError("root", {
         type: "manual",

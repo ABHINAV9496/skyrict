@@ -1,15 +1,16 @@
 /**
  * Auth API seam.
  *
- * Login and MFA verification go through the BFF route handlers
- * (/api/auth/*), which set the httpOnly refresh-token cookie and hand the
- * access token back in the body — the browser keeps it in memory only.
- * Onboarding stays on the real /auth/signup/* endpoints directly.
+ * Every call goes through the same-origin BFF route handlers (/api/auth/*),
+ * which enforce the Origin/Referer CSRF gate, resolve the tenant slug from
+ * the Host header, and proxy to the identity service — the browser never
+ * talks to the identity service directly. Login/MFA set the httpOnly
+ * refresh-token cookie and return the access token in the body; the browser
+ * keeps it in memory only.
  */
 
-import { env } from "@/config/env";
-import { ApiError, apiPost } from "@/lib/api/http";
-import { setAccessToken } from "@/lib/auth/session-store";
+import { ApiError } from "@/lib/api/http";
+import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 export { ApiError };
 
@@ -32,36 +33,28 @@ export type VerifyMfaResult =
   | { status: "ok"; accessToken: string; expiresIn: number; user: AuthUser }
   | { status: "invalid" };
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+/** POST to a same-origin BFF route; the JSON body is the response payload. */
+async function bffPost<T>(path: string, body: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${env.apiBaseUrl}${path}`, {
+    res = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      cache: "no-store",
     });
   } catch {
     throw new ApiError(0, "Network error — check your connection and try again.");
   }
 
-  let payload: {
-    data?: T | null;
-    detail?: { error?: { message?: string }; message?: string };
-  };
-  try {
-    payload = await res.json();
-  } catch {
-    payload = {};
-  }
-
+  const payload = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
-    const message =
-      payload.detail?.error?.message ??
-      payload.detail?.message ??
-      "Request failed. Please try again.";
-    throw new ApiError(res.status, message);
+    throw new ApiError(
+      res.status,
+      payload.error ?? "Request failed. Please try again.",
+    );
   }
-  return payload.data as T;
+  return payload as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +163,7 @@ export async function verifyMfa(input: {
 }
 
 // ---------------------------------------------------------------------------
-// Onboarding wizard (real /auth/signup/* endpoints)
+// Onboarding wizard (through the BFF)
 // ---------------------------------------------------------------------------
 
 export interface RiskAssessment {
@@ -195,7 +188,7 @@ export async function signupStart(input: {
   email: string;
   turnstileToken?: string;
 }): Promise<{ status: "ok" }> {
-  return post<{ status: "ok" }>("/auth/signup/start", {
+  return bffPost<{ status: "ok" }>("/api/auth/start", {
     email: input.email,
     turnstileToken: input.turnstileToken,
   });
@@ -204,7 +197,7 @@ export async function signupStart(input: {
 export async function checkEmailAvailability(input: {
   email: string;
 }): Promise<{ available: boolean }> {
-  return post<{ available: boolean }>("/auth/signup/check-email", {
+  return bffPost<{ available: boolean }>("/api/auth/check/email", {
     email: input.email,
   });
 }
@@ -216,11 +209,10 @@ export async function requestVerificationCode(input: {
   resendIn: number;
   code?: string | null;
 }> {
-  const data = await post<{ status: "ok"; resendIn: number; code?: string | null }>(
-    "/auth/signup/send-code",
+  return bffPost<{ status: "ok"; resendIn: number; code?: string | null }>(
+    "/api/auth/code/send",
     { email: input.email },
   );
-  return data;
 }
 
 export type VerifyEmailCodeResult =
@@ -232,10 +224,10 @@ export async function verifyEmailCode(input: {
   email: string;
   code: string;
 }): Promise<VerifyEmailCodeResult> {
-  const data = await post<{
+  const data = await bffPost<{
     status: "ok" | "invalid" | "expired";
     verificationToken?: string | null;
-  }>("/auth/signup/verify-code", { email: input.email, code: input.code });
+  }>("/api/auth/code/verify", { email: input.email, code: input.code });
   if (data.status === "ok" && data.verificationToken) {
     return { status: "ok", verificationToken: data.verificationToken };
   }
@@ -250,7 +242,7 @@ export async function completeSecurityStep(input: {
   verificationToken: string;
   password: string;
 }): Promise<{ status: "ok" }> {
-  return post<{ status: "ok" }>("/auth/signup/password", {
+  return bffPost<{ status: "ok" }>("/api/auth/password", {
     email: input.email,
     verificationToken: input.verificationToken,
     password: input.password,
@@ -260,7 +252,7 @@ export async function completeSecurityStep(input: {
 export async function checkWorkspaceSlug(input: {
   slug: string;
 }): Promise<{ available: boolean }> {
-  return post<{ available: boolean }>("/auth/signup/check-slug", {
+  return bffPost<{ available: boolean }>("/api/auth/check/slug", {
     slug: input.slug,
   });
 }
@@ -285,10 +277,17 @@ export interface CreateOrganizationInput {
   };
 }
 
+export interface CreateOrganizationResult {
+  status: "ok";
+  mfaRequired: boolean;
+  tenantId: string;
+  tenantSlug: string;
+}
+
 export async function createOrganization(
   input: CreateOrganizationInput,
-): Promise<{ status: "ok"; mfaRequired: boolean }> {
-  return post<{ status: "ok"; mfaRequired: boolean }>("/auth/signup/organization", {
+): Promise<CreateOrganizationResult> {
+  return bffPost<CreateOrganizationResult>("/api/auth/org", {
     email: input.email,
     verificationToken: input.verificationToken,
     planId: input.planId,
@@ -303,7 +302,7 @@ export async function createOrganization(
 }
 
 // ---------------------------------------------------------------------------
-// Mandatory MFA enrollment (authenticated /mfa/* endpoints)
+// Mandatory MFA enrollment (authenticated, through the BFF)
 // ---------------------------------------------------------------------------
 
 export interface MfaSetup {
@@ -312,29 +311,149 @@ export interface MfaSetup {
   backupCodes: string[];
 }
 
+function authHeaders(): Headers {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = getAccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return headers;
+}
+
 export async function setupMfa(): Promise<MfaSetup> {
-  const data = await apiPost<{
-    secret: string;
-    provisioning_uri: string;
-    backup_codes: string[];
-  }>("/api/v1/mfa/setup", undefined);
-  return {
-    secret: data.secret,
-    otpauthUri: data.provisioning_uri,
-    backupCodes: data.backup_codes,
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/mfa/setup", {
+      method: "POST",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    secret?: string;
+    provisioning_uri?: string;
+    backup_codes?: string[];
+    error?: string;
   };
+  if (!res.ok) {
+    throw new ApiError(res.status, payload.error ?? "Could not start MFA setup.");
+  }
+
+  return {
+    secret: payload.secret ?? "",
+    otpauthUri: payload.provisioning_uri ?? "",
+    backupCodes: Array.isArray(payload.backup_codes) ? payload.backup_codes : [],
+  };
+}
+
+export async function regenerateBackupCodes(): Promise<{ backupCodes: string[] }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/mfa/backup-codes", {
+      method: "POST",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    backup_codes?: string[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      payload.error ?? "Could not regenerate recovery codes.",
+    );
+  }
+
+  return {
+    backupCodes: Array.isArray(payload.backup_codes) ? payload.backup_codes : [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Handoff (auth origin → workspace origin)
+// ---------------------------------------------------------------------------
+
+function safeRedirect(path: string): boolean {
+  if (path.includes("//") || path.includes("..") || path.includes(":") || path.includes("\\")) {
+    return false;
+  }
+  return path === "/" || /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*$/.test(path);
+}
+
+/**
+ * Complete a finished auth flow: mint a single-use handoff token on the auth
+ * origin, POST it (body only) to the workspace origin's /api/auth/handoff to
+ * establish the host-scoped session cookie, then navigate to the workspace
+ * root. The URL bar ends on {slug}.localhost — never signin.
+ */
+export async function completeHandoff(redirect = "/"): Promise<void> {
+  const mint = await bffPost<{
+    token: string;
+    workspaceUrl: string;
+    redirect: string;
+  }>("/api/auth/handoff/mint", { redirect });
+
+  let res: Response;
+  try {
+    res = await fetch(new URL("/api/auth/handoff", mint.workspaceUrl), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: mint.token }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach your workspace. Try again.");
+  }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    redirect?: string;
+    error?: string;
+  };
+  if (!res.ok || !payload.ok) {
+    throw new ApiError(
+      res.status ?? 0,
+      payload.error ?? "Could not complete sign-in. Try again.",
+    );
+  }
+
+  const target =
+    typeof payload.redirect === "string" && safeRedirect(payload.redirect)
+      ? payload.redirect
+      : "/";
+  window.location.assign(new URL(target, mint.workspaceUrl).toString());
 }
 
 export async function confirmMfaSetup(input: {
   code: string;
 }): Promise<{ status: "ok" } | { status: "invalid" }> {
+  let res: Response;
   try {
-    await apiPost<{ verified: boolean }>("/api/v1/mfa/verify", { code: input.code });
-    return { status: "ok" };
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 400) {
-      return { status: "invalid" };
-    }
-    throw err;
+    res = await fetch("/api/auth/mfa/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ code: input.code }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
   }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+  };
+  if (res.status === 400) {
+    return { status: "invalid" };
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, payload.error ?? "Could not verify the code.");
+  }
+  return payload.ok ? { status: "ok" } : { status: "invalid" };
 }

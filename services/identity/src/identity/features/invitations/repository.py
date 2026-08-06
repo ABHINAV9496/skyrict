@@ -25,6 +25,8 @@ def _to_orm(invitation: Invitation) -> InvitationModel:
     }
     if invitation.id is not None:
         model_kwargs["id"] = invitation.id
+    if invitation.membership_id is not None:
+        model_kwargs["membership_id"] = invitation.membership_id
     if invitation.used_at is not None:
         model_kwargs["used_at"] = invitation.used_at
     if invitation.used_by_user_id is not None:
@@ -41,6 +43,7 @@ def _from_orm(model: InvitationModel) -> Invitation:
         role_name=model.role_name,
         created_by_user_id=model.created_by_user_id,
         expires_at=model.expires_at,
+        membership_id=model.membership_id,
         used_at=model.used_at,
         used_by_user_id=model.used_by_user_id,
         created_at=model.created_at,

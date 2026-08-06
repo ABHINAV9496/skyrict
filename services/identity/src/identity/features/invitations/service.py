@@ -24,6 +24,7 @@ from skyrict_common.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from identity.features.memberships.service import MembershipService
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.users.ports import UserRepositoryPort
 
@@ -35,11 +36,13 @@ class InvitationService:
         user_repo: UserRepositoryPort,
         role_repo: RoleRepositoryPort,
         email_service: EmailService,
+        membership_service: MembershipService,
     ) -> None:
         self.invitation_repo = invitation_repo
         self.user_repo = user_repo
         self.role_repo = role_repo
         self.email_service = email_service
+        self.membership_service = membership_service
 
     async def create_invitation(
         self,
@@ -53,8 +56,21 @@ class InvitationService:
     ) -> tuple[Invitation, str]:
 
         role = await self.role_repo.get_by_name(tenant_id, role_name)
-        if role is None:
+        if role is None or role.id is None:
             raise ValidationError(f"Role '{role_name}' does not exist in this organization")
+
+        existing_user = await self.user_repo.get_by_email(tenant_id, email)
+        if existing_user is not None:
+            raise ValidationError("A user with this email already exists in this organization")
+
+        # The INVITED membership reserves the email within the tenant; it is
+        # the canonical pending relationship (no placeholder user).
+        membership = await self.membership_service.create_invited(
+            tenant_id=tenant_id,
+            email=email,
+            role_id=role.id,
+            invited_by_user_id=created_by_user_id,
+        )
 
         token = secrets.token_urlsafe(32)
         expires_at = datetime.now(UTC) + timedelta(days=INVITATION_TOKEN_EXPIRE_DAYS)
@@ -67,6 +83,7 @@ class InvitationService:
                 role_name=role_name,
                 created_by_user_id=uuid.UUID(str(created_by_user_id)),
                 expires_at=expires_at,
+                membership_id=membership.id,
             )
         )
 
@@ -122,7 +139,9 @@ class InvitationService:
             )
         )
 
+        assert invitation.id is not None
         assert user.id is not None
+
         role = await self.role_repo.get_by_name(tenant_id, invitation.role_name)
         if role is None or role.id is None:
             raise ValidationError(
@@ -135,8 +154,19 @@ class InvitationService:
             scope_id=uuid.UUID(str(tenant_id)),
         )
 
-        assert invitation.id is not None
-        assert user.id is not None
+        if invitation.membership_id is not None:
+            await self.membership_service.activate(
+                membership_id=invitation.membership_id, user_id=user.id
+            )
+        else:
+            # Legacy invitation (pre-0009): no linked membership exists, so
+            # materialize an ACTIVE membership for the new user.
+            await self.membership_service.create_active(
+                tenant_id=tenant_id,
+                user_id=user.id,
+                role_id=role.id,
+                invited_email=email,
+            )
 
         await self.invitation_repo.mark_used(invitation.id, user.id)
 

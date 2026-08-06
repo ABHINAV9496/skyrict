@@ -155,7 +155,11 @@ class UserRole:
 
 @dataclass
 class Invitation:
-    """Invitation entity — single-use, expiring invite token."""
+    """Invitation entity — single-use, expiring invite token.
+
+    ``membership_id`` links the invitation to its INVITED membership, which
+    owns the pending relationship; the user materializes on accept.
+    """
 
     tenant_id: UUID
     email: str
@@ -164,6 +168,7 @@ class Invitation:
     created_by_user_id: UUID
     expires_at: datetime
     id: UUID | None = None
+    membership_id: UUID | None = None
     used_at: datetime | None = None
     used_by_user_id: UUID | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

@@ -28,6 +28,7 @@ from identity.features.audit.repository import AuditRepository
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.auth.verification_store import VerificationStore
+from identity.features.memberships.repository import MembershipRepository
 from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
 from identity.features.sessions.repository import SessionRepository
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from identity.features.auth.service import AuthenticationService, TokenService
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
+    from identity.features.memberships.service import MembershipService
     from identity.features.mfa.service import MFAService
     from identity.features.organizations.service import TenantService
     from identity.features.roles.service import RoleManagementService
@@ -173,6 +175,10 @@ def get_tenant_repo(db: AsyncSession = Depends(get_db)) -> TenantRepository:
     return TenantRepository(db)
 
 
+def get_membership_repo(db: AsyncSession = Depends(get_db)) -> MembershipRepository:
+    return MembershipRepository(db)
+
+
 def get_session_repo(db: AsyncSession = Depends(get_db)) -> SessionRepository:
     return SessionRepository(db)
 
@@ -235,6 +241,14 @@ def get_session_service(
     return SessionService(session_repo)
 
 
+def get_membership_service(
+    membership_repo: MembershipRepository = Depends(get_membership_repo),
+) -> MembershipService:
+    from identity.features.memberships.service import MembershipService
+
+    return MembershipService(membership_repo)
+
+
 def get_authn_service(
     user_repo: UserRepository = Depends(get_user_repo),
     tenant_repo: TenantRepository = Depends(get_tenant_repo),
@@ -292,10 +306,17 @@ def get_invitation_service(
     user_repo: UserRepository = Depends(get_user_repo),
     role_repo: RoleRepository = Depends(get_role_repo),
     email_service: EmailService = Depends(get_email_service),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> InvitationService:
     from identity.features.invitations.service import InvitationService
 
-    return InvitationService(invitation_repo, user_repo, role_repo, email_service)
+    return InvitationService(
+        invitation_repo,
+        user_repo,
+        role_repo,
+        email_service,
+        membership_service,
+    )
 
 
 def get_mfa_service(

@@ -22,11 +22,13 @@ as tenants.
 from __future__ import annotations
 
 import re
-
-from starlette.requests import Request
+from typing import TYPE_CHECKING
 
 from identity.core.config import Environment, settings
 from identity.core.constants import RESERVED_SLUGS
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 # Slug grammar matches the nginx routing config (infra/nginx/dev.conf):
 # one label of lowercase letters, digits, and hyphens.

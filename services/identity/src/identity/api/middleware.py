@@ -20,7 +20,6 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from identity.core.config import settings
 from identity.core.constants import SKIP_AUTH_PATHS
 from identity.core.exceptions import (
     SkyrictError,

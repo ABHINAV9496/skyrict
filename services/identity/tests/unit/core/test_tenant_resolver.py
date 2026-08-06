@@ -7,7 +7,8 @@ environment-dependent resolution used by the middleware.
 
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
+
 from starlette.requests import Request
 
 from identity.core.config import Environment, settings
@@ -17,6 +18,9 @@ from identity.core.tenant_resolver import (
     derive_tenant_slug,
     resolve_tenant_slug_from_host,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def _make_request(headers: dict[str, str]) -> Request:
@@ -62,7 +66,7 @@ class TestReservedSlugsCatalog:
             "acme",
             "skyrict",
         }
-        assert RESERVED_SLUGS >= expected
+        assert expected <= RESERVED_SLUGS
 
 
 class TestResolveTenantSlugFromHost:
@@ -75,9 +79,7 @@ class TestResolveTenantSlugFromHost:
     def test_reserved_slug_never_resolves(self):
         for slug in ("web", "app", "admin", "signup", "signin", "api", "www", "acme"):
             assert (
-                resolve_tenant_slug_from_host(
-                    f"{slug}.skyrict.com", base_domain="skyrict.com"
-                )
+                resolve_tenant_slug_from_host(f"{slug}.skyrict.com", base_domain="skyrict.com")
                 is None
             ), f"{slug}.skyrict.com must not resolve as a tenant"
 
@@ -97,8 +99,7 @@ class TestResolveTenantSlugFromHost:
 
     def test_host_with_port_still_reserved(self):
         assert (
-            resolve_tenant_slug_from_host("web.skyrict.com:443", base_domain="skyrict.com")
-            is None
+            resolve_tenant_slug_from_host("web.skyrict.com:443", base_domain="skyrict.com") is None
         )
 
     def test_empty_host(self):
@@ -117,9 +118,7 @@ class TestTenantResolverFromHeader:
 
     def test_reserved_slug_rejected(self):
         for slug in ("web", "admin", "skyrict", "docs"):
-            assert (
-                TenantResolver(base_domain="skyrict.com").resolve_from_header(slug) is None
-            )
+            assert TenantResolver(base_domain="skyrict.com").resolve_from_header(slug) is None
 
     def test_invalid_slug_rejected(self):
         assert TenantResolver(base_domain="skyrict.com").resolve_from_header("Bad Slug!") is None

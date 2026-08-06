@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
     from identity.features.memberships.service import MembershipService
+    from identity.features.mfa.attempt_store import MFAAttemptStore
     from identity.features.mfa.service import MFAService
     from identity.features.organizations.service import TenantService
     from identity.features.roles.service import RoleManagementService
@@ -236,7 +237,19 @@ def get_token_service(
 
 
 def get_email_service() -> EmailService:
-    """Email transport — log-based until a real provider is wired."""
+    """Email transport — SMTP when configured, log-only otherwise."""
+    from identity.core.config import settings
+    from identity.core.email import SmtpEmailService
+
+    if settings.EMAIL_SMTP_HOST.strip():
+        return SmtpEmailService(
+            host=settings.EMAIL_SMTP_HOST,
+            port=settings.EMAIL_SMTP_PORT,
+            from_addr=settings.EMAIL_FROM_ADDR,
+            username=settings.EMAIL_SMTP_USERNAME,
+            password=settings.EMAIL_SMTP_PASSWORD,
+            use_tls=settings.EMAIL_SMTP_USE_TLS,
+        )
     return LogEmailService()
 
 
@@ -252,6 +265,13 @@ def get_verification_store() -> VerificationStore:
 
 def get_mfa_challenge_store() -> MfaChallengeStore:
     return MfaChallengeStore()
+
+
+def get_mfa_attempt_store() -> MFAAttemptStore:
+    """Return the Redis-backed MFA enrollment failed-attempt store."""
+    from identity.features.mfa.attempt_store import MFAAttemptStore
+
+    return MFAAttemptStore()
 
 
 def get_turnstile_verifier() -> TurnstileVerifier:

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+import { LoaderCircle, ShieldCheck } from "lucide-react";
 
-import { verifyMfa } from "@/lib/api/auth-api";
+import { completeHandoff, verifyMfa } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 
@@ -13,10 +12,10 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
   const [code, setCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
   const [error, setError] = useState(false);
-  const [done, setDone] = useState(false);
+  const [handingOff, setHandingOff] = useState(false);
 
   const codeReady = useBackup
-    ? backupCode.replace(/\D/g, "").length === 10
+    ? backupCode.length === 16
     : code.length === 6;
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -32,7 +31,8 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
       mfaToken: mfaToken,
     });
     if (result.status === "ok") {
-      setDone(true);
+      setHandingOff(true);
+      await completeHandoff("/");
     } else {
       setError(true);
       setCode("");
@@ -40,23 +40,11 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
     }
   }
 
-  if (done) {
+  if (handingOff) {
     return (
-      <div className="space-y-6 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/20">
-          <CheckCircle2 aria-hidden="true" className="size-6 text-primary" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="font-display text-2xl font-semibold text-foreground">
-            Verified
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Two-factor authentication passed. You&apos;re all set.
-          </p>
-        </div>
-        <Link href="/dashboard/agents" className="block">
-          <AuthButton className="w-full">Continue to workspace</AuthButton>
-        </Link>
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        {"Opening your workspace\n"}
       </div>
     );
   }
@@ -82,13 +70,13 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
         <input
           value={backupCode}
           onChange={(event) =>
-            setBackupCode(event.target.value.replace(/[^a-z0-9]/gi, ""))
+            setBackupCode(event.target.value.replace(/[^a-f0-9]/gi, "").toLowerCase())
           }
-          placeholder="XXXXX-XXXXX"
+          placeholder="abcdef0123456789"
           aria-label="Backup code"
           aria-invalid={error}
-          autoComplete="one-time-code"
-          className="h-14 w-full rounded-lg border border-border bg-card px-4 text-center font-mono text-lg uppercase tracking-widest tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          autoComplete="off"
+          className="h-14 w-full rounded-lg border border-border bg-card px-4 text-center font-mono text-lg lowercase tracking-widest tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
         />
       ) : (
         <OtpInput value={code} onChange={setCode} error={error} />

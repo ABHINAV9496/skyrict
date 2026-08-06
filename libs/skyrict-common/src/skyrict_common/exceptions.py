@@ -1,4 +1,5 @@
-"""Base exceptions for Skyrict services.
+"""
+Base exceptions for Skyrict services.
 
 Every service should catch these at the API layer and map them to HTTP responses.
 Domain code should raise these, never HTTPException.
@@ -155,6 +156,11 @@ class ValidationError(SkyrictError):
 class RateLimitExceededError(SkyrictError):
     message = "Rate limit exceeded"
     code = "RATE_LIMIT_EXCEEDED"
+
+
+class RateLimitUnavailableError(SkyrictError):
+    message = "Service temporarily unavailable"
+    code = "RATE_LIMIT_UNAVAILABLE"
 
 
 class InvitationNotFoundError(NotFoundError):

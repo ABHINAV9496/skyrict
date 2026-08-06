@@ -25,6 +25,7 @@ from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
 from identity.db.session import async_session_factory
 from identity.features.audit.repository import AuditRepository
+from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.auth.verification_store import VerificationStore
 from identity.features.organizations.repository import TenantRepository
@@ -52,7 +53,8 @@ _MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
 
 
 async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: str) -> None:
-    """Block authenticated calls while forced MFA is not yet set up.
+    """
+    Block authenticated calls while forced MFA is not yet set up.
 
     Raises:
         MFARequiredError: When MFA is mandatory for this account (tenant owner
@@ -214,6 +216,10 @@ def get_rate_limiter() -> RateLimiter:
 def get_verification_store() -> VerificationStore:
     """Return the Redis-backed OTP / verification-token store."""
     return VerificationStore()
+
+
+def get_mfa_challenge_store() -> MfaChallengeStore:
+    return MfaChallengeStore()
 
 
 def get_turnstile_verifier() -> TurnstileVerifier:

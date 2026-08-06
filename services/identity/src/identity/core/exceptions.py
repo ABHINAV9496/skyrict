@@ -1,4 +1,5 @@
-"""Domain exceptions -> RFC 7807 problem+json error responses.
+"""
+Domain exceptions -> RFC 7807 problem+json error responses.
 
 Catch SkyrictError subclasses at the API layer and map to FastAPI responses
 following https://www.rfc-editor.org/rfc/rfc7807 (Problem Details for HTTP APIs).
@@ -29,6 +30,7 @@ from skyrict_common.exceptions import (
     PasskeyError,
     PermissionDeniedError,
     RateLimitExceededError,
+    RateLimitUnavailableError,
     SessionExpiredError,
     SessionNotFoundError,
     SkyrictError,
@@ -60,6 +62,7 @@ __all__ = [
     "PasskeyError",
     "PermissionDeniedError",
     "RateLimitExceededError",
+    "RateLimitUnavailableError",
     "SessionExpiredError",
     "SessionNotFoundError",
     "SkyrictError",
@@ -121,6 +124,7 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     UserAlreadyExistsError: (409, f"{_PROBLEM_BASE}/user-already-exists"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
     RateLimitExceededError: (429, f"{_PROBLEM_BASE}/rate-limit-exceeded"),
+    RateLimitUnavailableError: (503, f"{_PROBLEM_BASE}/rate-limit-unavailable"),
     InvitationExpiredError: (400, f"{_PROBLEM_BASE}/invitation-expired"),
     InvitationEmailMismatchError: (400, f"{_PROBLEM_BASE}/invitation-email-mismatch"),
     InvitationAlreadyUsedError: (409, f"{_PROBLEM_BASE}/invitation-already-used"),

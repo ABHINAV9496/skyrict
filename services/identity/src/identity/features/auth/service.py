@@ -33,6 +33,7 @@ from identity.core.security import (
     hash_password,
     hash_refresh_token,
     mfa_is_required,
+    validate_password_policy,
     verify_jwt,
     verify_password,
 )
@@ -40,6 +41,7 @@ from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
 from identity.domain.entities import Role, Tenant, User
 from identity.domain.value_objects import TokenPair
+from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.verification_store import (
     VerificationStore,
     generate_otp,
@@ -70,11 +72,6 @@ if TYPE_CHECKING:
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-_PASSWORD_UPPERCASE_RE = re.compile(r"[A-Z]")
-_PASSWORD_LOWERCASE_RE = re.compile(r"[a-z]")
-_PASSWORD_DIGIT_RE = re.compile(r"\d")
-_PASSWORD_SPECIAL_RE = re.compile(r"[^A-Za-z0-9]")
-
 # A valid Argon2id hash of a throwaway value, verified against on the
 # unknown-email path so response TIME is indistinguishable from the
 # wrong-password path (anti-enumeration via the timing side-channel).
@@ -83,18 +80,7 @@ _DUMMY_PASSWORD_HASH = hash_password("anti-enumeration-timing-dummy")
 
 
 def _validate_wizard_password(password: str) -> None:
-    if len(password) < settings.ONBOARDING_PASSWORD_MIN_LENGTH:
-        raise ValidationError(
-            f"Password must be at least {settings.ONBOARDING_PASSWORD_MIN_LENGTH} characters"
-        )
-    if not _PASSWORD_UPPERCASE_RE.search(password):
-        raise ValidationError("Password must contain an uppercase letter")
-    if not _PASSWORD_LOWERCASE_RE.search(password):
-        raise ValidationError("Password must contain a lowercase letter")
-    if not _PASSWORD_DIGIT_RE.search(password):
-        raise ValidationError("Password must contain a number")
-    if not _PASSWORD_SPECIAL_RE.search(password):
-        raise ValidationError("Password must contain a special character")
+    validate_password_policy(password)
 
 
 def _normalize_slug(slug: str) -> str | None:
@@ -122,6 +108,7 @@ class AuthenticationService:
         session_service: SessionService,
         verification_store: VerificationStore | None = None,
         turnstile: TurnstileVerifier | None = None,
+        mfa_challenge_store: MfaChallengeStore | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.tenant_repo = tenant_repo
@@ -132,6 +119,7 @@ class AuthenticationService:
         self.session_service = session_service
         self.verification_store = verification_store or VerificationStore()
         self.turnstile = turnstile or TurnstileVerifier()
+        self.mfa_challenge_store = mfa_challenge_store or MfaChallengeStore()
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
@@ -202,6 +190,29 @@ class AuthenticationService:
 
         assert user.id is not None
 
+        if user.mfa_enabled:
+            mfa_token = await self.mfa_challenge_store.create(
+                user_id=str(user.id),
+                tenant_id=tenant_id,
+            )
+            await self.audit_service.log(
+                action="auth.login.mfa_challenged",
+                target=f"user:{user.id}",
+                user_id=str(user.id),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            return {
+                "access_token": None,
+                "refresh_token": None,
+                "token_type": "Bearer",
+                "expires_in": 0,
+                "mfa_required": True,
+                "mfa_token": mfa_token,
+                "next_step": "mfa.verify",
+                "user": user,
+            }
+
         # Forced MFA: tenant owners must always enroll, and other members are
         # forced when the tenant configures enforcement. The flag clears only
         # once MFA is actually enabled, so tokens issued now are gated until then.
@@ -209,12 +220,34 @@ class AuthenticationService:
         tenant = await self.tenant_repo.get_by_id(tenant_id)
         mfa_required = mfa_is_required(
             roles=roles,
-            mfa_enabled=user.mfa_enabled,
+            mfa_enabled=False,
             tenant_requires_all_members=(
                 tenant.mfa_required_for_all_members if tenant is not None else False
             ),
         )
-        next_step = "mfa.setup" if mfa_required else None
+
+        result = await self.complete_authenticated_login(
+            user=user,
+            tenant_id=tenant_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        result["mfa_required"] = mfa_required
+        result["next_step"] = "mfa.setup" if mfa_required else None
+        return result
+
+    async def complete_authenticated_login(
+        self,
+        *,
+        user: User,
+        tenant_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        audit_action: str = "auth.login.success",
+    ) -> dict[str, Any]:
+        """Issue a fresh token pair + session and audit the completed login."""
+
+        assert user.id is not None
 
         session_id = uuid.uuid4()
         tokens = await self.token_service.create_token_pair(
@@ -238,7 +271,7 @@ class AuthenticationService:
         )
 
         await self.audit_service.log(
-            action="auth.login.success",
+            action=audit_action,
             target=f"user:{user.id}",
             user_id=str(user.id),
             ip_address=ip_address,
@@ -258,8 +291,8 @@ class AuthenticationService:
             "refresh_token": tokens.refresh_token,
             "token_type": tokens.token_type,
             "expires_in": tokens.expires_in,
-            "mfa_required": mfa_required,
-            "next_step": next_step,
+            "mfa_required": False,
+            "next_step": None,
             "user": user,
         }
 

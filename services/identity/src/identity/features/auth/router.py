@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
 
 from identity.api.deps import (
+    get_audit_service,
     get_authn_service,
     get_current_user,
+    get_mfa_challenge_store,
+    get_mfa_service,
     get_rate_limiter,
     get_token_service,
+    get_user_repo,
 )
 from identity.core.config import settings
 from identity.core.constants import (
+    LOGIN_FAILED_MESSAGE,
     SIGNUP_CHECK_LIMIT_KEY,
     SIGNUP_CODE_IP_LIMIT_KEY,
     SIGNUP_CODE_LIMIT_KEY,
@@ -30,6 +36,7 @@ from identity.features.auth.schemas import (
     CreateOrganizationResponse,
     LoginRequest,
     LogoutRequest,
+    MfaChallengeVerifyRequest,
     SendCodeRequest,
     SendCodeResponse,
     SetPasswordRequest,
@@ -41,10 +48,15 @@ from identity.features.auth.schemas import (
     VerifyCodeResponse,
 )
 from identity.features.auth.service import AuthenticationService, TokenService
+from skyrict_common.exceptions import AuthenticationError
 from skyrict_common.schemas import ResponseEnvelope
 
 if TYPE_CHECKING:
     from identity.core.rate_limit import RateLimiter
+    from identity.features.audit.service import AuditService
+    from identity.features.auth.mfa_challenge_store import MfaChallengeStore
+    from identity.features.mfa.service import MFAService
+    from identity.features.users.repository import UserRepository
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -74,6 +86,12 @@ async def login(
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
 
+    await limiter.enforce(
+        key=f"login-ip:{ip_address}",
+        limit=settings.RATE_LIMIT_LOGIN_IP,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+
     result = await authn.login(
         body,
         ip_address=ip_address,
@@ -83,6 +101,76 @@ async def login(
     return ResponseEnvelope(
         data=AuthResponse(**result, user=user),
         message="Login successful",
+    )
+
+
+@router.post("/mfa/verify", response_model=ResponseEnvelope[AuthResponse])
+async def verify_mfa_challenge(
+    body: MfaChallengeVerifyRequest,
+    request: Request,
+    authn: AuthenticationService = Depends(get_authn_service),
+    mfa_service: MFAService = Depends(get_mfa_service),
+    user_repo: UserRepository = Depends(get_user_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+    challenge_store: MfaChallengeStore = Depends(get_mfa_challenge_store),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ResponseEnvelope[AuthResponse]:
+    """Redeem a login mfaToken with a TOTP/backup code and issue the token pair."""
+
+    ip_address = _client_ip(request)
+    await limiter.enforce(
+        key=f"mfa-verify-ip:{ip_address}",
+        limit=settings.RATE_LIMIT_MFA_VERIFY,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    await limiter.enforce(
+        key=f"mfa-verify-token:{body.mfa_token}",
+        limit=settings.RATE_LIMIT_MFA_VERIFY,
+        window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+
+    challenge = await challenge_store.get(body.mfa_token)
+    if challenge is None:
+        raise AuthenticationError(LOGIN_FAILED_MESSAGE)
+
+    attempts = await challenge_store.increment_attempts(body.mfa_token)
+    if attempts > settings.MFA_CHALLENGE_MAX_ATTEMPTS:
+        await challenge_store.consume(body.mfa_token)
+        raise AuthenticationError(LOGIN_FAILED_MESSAGE)
+
+    user = await user_repo.get_by_id(uuid.UUID(challenge["user_id"]))
+    if user is None or not user.is_active or not user.is_verified:
+        await challenge_store.consume(body.mfa_token)
+        raise AuthenticationError(LOGIN_FAILED_MESSAGE)
+
+    assert user.id is not None
+
+    verified = await mfa_service.verify_totp(user.id, body.code)
+    if not verified:
+        verified = await mfa_service.redeem_backup_code(user.id, body.code)
+    if not verified:
+        await audit_service.log(
+            action="auth.login.mfa.verify_failed",
+            target=f"user:{user.id}",
+            user_id=str(user.id),
+            ip_address=ip_address,
+            user_agent=request.headers.get("user-agent"),
+            tenant_id=challenge["tenant_id"],
+        )
+        raise AuthenticationError(LOGIN_FAILED_MESSAGE)
+
+    await challenge_store.consume(body.mfa_token)
+    result = await authn.complete_authenticated_login(
+        user=user,
+        tenant_id=challenge["tenant_id"],
+        ip_address=ip_address,
+        user_agent=request.headers.get("user-agent"),
+        audit_action="auth.login.mfa_verified",
+    )
+    user_response = result.pop("user")
+    return ResponseEnvelope(
+        data=AuthResponse(**result, user=user_response),
+        message="MFA verified",
     )
 
 

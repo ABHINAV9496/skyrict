@@ -31,14 +31,23 @@ async def create_invitation(
     current_user: dict[str, object] = Depends(_require_invite),
     invitation_service: InvitationService = Depends(get_invitation_service),
 ) -> ResponseEnvelope[InvitationResponse]:
-    invitation = await invitation_service.create_invitation(
+    invitation, token = await invitation_service.create_invitation(
         tenant_id=TenantContext.get(),
         email=body.email,
         role_name=body.role_name,
         created_by_user_id=str(current_user["user_id"]),
     )
+    assert invitation.id is not None
     return ResponseEnvelope(
-        data=InvitationResponse.model_validate(invitation),
+        data=InvitationResponse(
+            id=invitation.id,
+            token=token,
+            email=invitation.email,
+            role_name=invitation.role_name,
+            expires_at=invitation.expires_at,
+            used_at=invitation.used_at,
+            created_at=invitation.created_at,
+        ),
         message="Invitation sent",
     )
 

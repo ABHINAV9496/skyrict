@@ -64,19 +64,30 @@ class TokenIntrospectionResponse(BaseModel):
 class AuthResponse(BaseModel):
     """Response after successful login/refresh."""
 
-    access_token: str
-    refresh_token: str
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "Bearer"
     expires_in: int = Field(default=900, description="Access token TTL in seconds")
     mfa_required: bool = Field(
         default=False,
-        description="True when MFA setup is mandatory for this account (tenant owners or tenant policy)",
+        description="True when MFA must be satisfied before tokens are usable",
+    )
+    mfa_token: str | None = Field(
+        default=None,
+        description='Single-use challenge token when next_step is "mfa.verify"',
     )
     next_step: str | None = Field(
         default=None,
-        description='Required next step when mfa_required — e.g. "mfa.setup"',
+        description='Required next step when mfa_required — "mfa.setup" or "mfa.verify"',
     )
     user: UserResponse | None = None
+
+
+class MfaChallengeVerifyRequest(BaseModel):
+    """POST /auth/mfa/verify request body."""
+
+    code: str = Field(..., min_length=6, max_length=32, description="TOTP code or backup code")
+    mfa_token: str = Field(..., description="Opaque challenge token from the login response")
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +119,8 @@ class SendCodeRequest(_CamelModel):
 
 
 class SendCodeResponse(_CamelModel):
-    """Response after an OTP is sent (or a resend is still cooling down).
+    """
+    Response after an OTP is sent (or a resend is still cooling down).
 
     ``code`` is exposed only outside production (dev/test).
     """

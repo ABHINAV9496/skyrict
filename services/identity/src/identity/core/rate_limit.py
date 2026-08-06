@@ -1,4 +1,5 @@
-"""Fixed-window rate limiting backed by Redis, with fail-open semantics.
+"""
+Fixed-window rate limiting backed by Redis, with fail-open semantics.
 
 The limiter is keyed by an arbitrary string (e.g. ``"register:1.2.3.4"``) and
 counts hits within a fixed window (``timestamp // window``). When Redis is
@@ -18,7 +19,7 @@ import structlog
 from redis.asyncio import Redis
 
 from identity.core.config import settings
-from skyrict_common.exceptions import RateLimitExceededError
+from skyrict_common.exceptions import RateLimitExceededError, RateLimitUnavailableError
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
@@ -51,7 +52,10 @@ class RateLimiter:
             if count == 1:
                 await client.expire(rl_key, window_seconds + 1)
             return count <= limit
-        except Exception as exc:  # fail-open on any Redis error
+        except Exception as exc:  # fail-open, or fail-closed when RATE_LIMIT_FAIL_CLOSED
+            if settings.RATE_LIMIT_FAIL_CLOSED:
+                logger.warning("rate_limit_fail_closed", key=key, error=str(exc))
+                raise RateLimitUnavailableError() from exc
             logger.warning("rate_limit_fail_open", key=key, error=str(exc))
             return True
 

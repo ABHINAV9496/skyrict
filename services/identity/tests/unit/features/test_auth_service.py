@@ -288,6 +288,37 @@ class FakeSessionService:
         return session
 
 
+class FakeChallengeStore:
+    def __init__(self) -> None:
+        self.challenges: dict[str, dict[str, str]] = {}
+        self.consumed: list[str] = []
+        self.attempts: dict[str, int] = {}
+
+    async def create(self, *, user_id: str, tenant_id: str) -> str:
+        token = f"mfa-token-{len(self.challenges) + 1}"
+        self.challenges[token] = {"user_id": user_id, "tenant_id": tenant_id}
+        self.attempts[token] = 0
+        return token
+
+    async def get(self, token: str) -> dict[str, str] | None:
+        if token in self.consumed:
+            return None
+        return self.challenges.get(token)
+
+    async def get_attempts(self, token: str) -> int:
+        return self.attempts.get(token, 0)
+
+    async def increment_attempts(self, token: str) -> int:
+        count = self.attempts.get(token, 0) + 1
+        self.attempts[token] = count
+        return count
+
+    async def consume(self, token: str) -> None:
+        self.consumed.append(token)
+        self.challenges.pop(token, None)
+        self.attempts.pop(token, None)
+
+
 class FakeVerificationStore:
     """In-memory VerificationStore double keyed by email/token."""
 
@@ -380,6 +411,7 @@ class _Harness:
         self.session_svc = FakeSessionService(prior_device=prior_device)
         self.verification_store = verification_store or FakeVerificationStore()
         self.turnstile = turnstile or FakeTurnstile()
+        self.challenge_store = FakeChallengeStore()
         self.service = AuthenticationService(
             self.user_repo,
             self.tenant_repo,
@@ -390,6 +422,7 @@ class _Harness:
             self.session_svc,
             self.verification_store,
             self.turnstile,
+            mfa_challenge_store=self.challenge_store,
         )
 
 
@@ -498,14 +531,26 @@ class TestLogin:
         assert result["mfa_required"] is True
         assert result["next_step"] == "mfa.setup"
 
-    async def test_tenant_owner_with_mfa_not_required(self, tenant_ctx: str) -> None:
+    async def test_enrolled_owner_gets_challenge_not_tokens(self, tenant_ctx: str) -> None:
         user = _make_user(mfa_enabled=True)
         harness = _Harness(users=[user], roles_for_user={user.id: ["tenant_owner"]})
 
         result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
-        assert result["mfa_required"] is False
-        assert result["next_step"] is None
+        assert result["mfa_required"] is True
+        assert result["next_step"] == "mfa.verify"
+        assert result["mfa_token"] == "mfa-token-1"
+        assert result["access_token"] is None
+        assert result["refresh_token"] is None
+        assert harness.token_svc.pairs_created == []
+        assert harness.audit_svc.events == [
+            {
+                "action": "auth.login.mfa_challenged",
+                "target": f"user:{user.id}",
+                "user_id": str(user.id),
+                "tenant_id": None,
+            }
+        ]
 
     async def test_member_under_enforced_policy_requires_mfa(self, tenant_ctx: str) -> None:
         user = _make_user()
@@ -593,7 +638,8 @@ class TestLogin:
         ]
 
     async def test_all_failure_modes_raise_the_same_error(self, tenant_ctx: str) -> None:
-        """Anti-enumeration invariant: every login failure is indistinguishable.
+        """
+        Anti-enumeration invariant: every login failure is indistinguishable.
 
         Same exception type, same message — no account-existence oracle via
         error semantics.

@@ -1,4 +1,5 @@
-"""Integration tests proving tenant isolation at the HTTP layer.
+"""
+Integration tests proving tenant isolation at the HTTP layer.
 
 TenantContextMiddleware is the single source of truth for tenant resolution:
 it derives the tenant slug from the routing layer, verifies the tenant in the
@@ -75,8 +76,10 @@ def acme_access_token(integration_db: dict[str, str]) -> str:
 
 
 class TestTwoRealTenants:
-    """Two real signup tenants: every bearer-gated endpoint rejects a token from
-    the other tenant (401 tenant-mismatch) while succeeding on its own."""
+    """
+    Two real signup tenants: every bearer-gated endpoint rejects a token from
+    the other tenant (401 tenant-mismatch) while succeeding on its own.
+    """
 
     async def test_full_endpoint_sweep_rejects_cross_tenant(self, client: AsyncClient) -> None:
         tenant_a = await _register_and_login(client)
@@ -108,7 +111,7 @@ class TestTwoRealTenants:
                 headers=headers_a,
                 json={
                     "email": f"iso-inv-{uuid.uuid4().hex[:8]}@test.com",
-                    "role_name": "viewer",
+                    "role_name": "standard_user",
                 },
             )
             assert invitation.status_code == 200
@@ -160,7 +163,7 @@ class TestTwoRealTenants:
                     "/api/v1/invitations",
                     {
                         "email": f"iso-inv-2-{uuid.uuid4().hex[:8]}@test.com",
-                        "role_name": "viewer",
+                        "role_name": "standard_user",
                     },
                 ),
                 ("POST", f"/api/v1/invitations/{invitation_id}/expire", None),

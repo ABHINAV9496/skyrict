@@ -7,23 +7,29 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from identity.core.constants import DEFAULT_INVITE_ROLE
+
 
 class InvitationCreateRequest(BaseModel):
     email: EmailStr
-    role_name: str = Field(default="viewer", description="Role to assign on accept")
+    role_name: str = Field(
+        default=DEFAULT_INVITE_ROLE,
+        description="Role to assign on accept — must exist in the organization",
+    )
 
 
 class InvitationAcceptRequest(BaseModel):
     token: str
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=12)
     full_name: str = Field(..., min_length=1, max_length=256)
 
 
 class InvitationResponse(BaseModel):
     id: UUID
-    token: str
+    token: str = Field(..., description="Plaintext invite token — shown once at create only")
     email: EmailStr
+    role_name: str
     expires_at: datetime
     used_at: datetime | None
     created_at: datetime

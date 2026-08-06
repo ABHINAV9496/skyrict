@@ -23,12 +23,18 @@ class TenantUpdateRequest(BaseModel):
 
 
 class TenantSettingsUpdateRequest(BaseModel):
-    """PATCH /tenants/{id}/settings — tenant security policy."""
+    """PATCH /organizations/{id}/settings — tenant security policy."""
 
     mfa_required_for_all_members: bool = Field(
         ...,
         description="When true, every non-owner member must set up MFA to sign in",
     )
+
+
+class TenantSettingsResponse(BaseModel):
+    mfa_required_for_all_members: bool
+
+    model_config = {"from_attributes": True}
 
 
 class TenantResponse(BaseModel):

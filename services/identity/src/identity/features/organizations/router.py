@@ -12,6 +12,7 @@ from identity.core.tenant_context import get_current_tenant
 from identity.features.organizations.schemas import (
     TenantCreateRequest,
     TenantResponse,
+    TenantSettingsResponse,
     TenantSettingsUpdateRequest,
 )
 from identity.features.organizations.service import TenantService
@@ -19,10 +20,10 @@ from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
-# Security-policy endpoints live under /tenants and require tenants:write.
-settings_router = APIRouter(prefix="/tenants", tags=["organizations"])
-
-_require_tenants_write = require_permission("tenants:write")
+# Security-settings endpoints live under /organizations/{id}/settings and
+# require settings:read / settings:write.
+_require_settings_read = require_permission("settings:read")
+_require_settings_write = require_permission("settings:write")
 
 
 @router.get("/me", response_model=ResponseEnvelope[TenantResponse])
@@ -49,17 +50,33 @@ async def create_organization(
     )
 
 
-@settings_router.patch("/{tenant_id}/settings", response_model=ResponseEnvelope[TenantResponse])
-async def update_tenant_settings(
-    tenant_id: UUID,
+@router.get("/{organization_id}/settings", response_model=ResponseEnvelope[TenantSettingsResponse])
+async def get_organization_settings(
+    organization_id: UUID,
+    current_user: dict[str, Any] = Depends(get_current_user),
+    _permission: dict[str, Any] = Depends(_require_settings_read),
+    tenant_svc: TenantService = Depends(get_tenant_service),
+) -> ResponseEnvelope[TenantSettingsResponse]:
+    """Get the organization's security settings (requires settings:read)."""
+
+    tenant = await tenant_svc.get_organization(organization_id)
+    return ResponseEnvelope(data=TenantSettingsResponse.model_validate(tenant))
+
+
+@router.patch(
+    "/{organization_id}/settings", response_model=ResponseEnvelope[TenantSettingsResponse]
+)
+async def update_organization_settings(
+    organization_id: UUID,
     body: TenantSettingsUpdateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
-    _permission: dict[str, Any] = Depends(_require_tenants_write),
+    _permission: dict[str, Any] = Depends(_require_settings_write),
     tenant_svc: TenantService = Depends(get_tenant_service),
-) -> ResponseEnvelope[TenantResponse]:
-    """Update tenant security settings (requires ``tenants:write``)."""
-    tenant = await tenant_svc.update_settings(tenant_id, body)
+) -> ResponseEnvelope[TenantSettingsResponse]:
+    """Update the organization's security settings (requires settings:write)."""
+
+    tenant = await tenant_svc.update_settings(organization_id, body)
     return ResponseEnvelope(
-        data=TenantResponse.model_validate(tenant),
+        data=TenantSettingsResponse.model_validate(tenant),
         message="Organization settings updated",
     )

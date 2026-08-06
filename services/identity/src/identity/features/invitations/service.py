@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from identity.core.config import settings
-from identity.core.constants import DEFAULT_INVITE_ROLE, INVITATION_TOKEN_EXPIRE_DAYS
+from identity.core.constants import INVITATION_TOKEN_EXPIRE_DAYS
 from identity.core.email import EmailService
-from identity.core.security import hash_password
+from identity.core.security import hash_invitation_token, hash_password, validate_password_policy
 from identity.domain.entities import Invitation, User
 from identity.features.invitations.ports import InvitationRepositoryPort
 from skyrict_common.exceptions import (
@@ -20,6 +20,7 @@ from skyrict_common.exceptions import (
     InvitationNotFoundError,
     NotFoundError,
     UserAlreadyExistsError,
+    ValidationError,
 )
 
 if TYPE_CHECKING:
@@ -49,7 +50,12 @@ class InvitationService:
         created_by_user_id: str | uuid.UUID,
         inviter_name: str = "",
         organization_name: str = "",
-    ) -> Invitation:
+    ) -> tuple[Invitation, str]:
+
+        role = await self.role_repo.get_by_name(tenant_id, role_name)
+        if role is None:
+            raise ValidationError(f"Role '{role_name}' does not exist in this organization")
+
         token = secrets.token_urlsafe(32)
         expires_at = datetime.now(UTC) + timedelta(days=INVITATION_TOKEN_EXPIRE_DAYS)
 
@@ -57,7 +63,8 @@ class InvitationService:
             Invitation(
                 tenant_id=uuid.UUID(str(tenant_id)),
                 email=email,
-                token=token,
+                token_hash=hash_invitation_token(token),
+                role_name=role_name,
                 created_by_user_id=uuid.UUID(str(created_by_user_id)),
                 expires_at=expires_at,
             )
@@ -71,7 +78,7 @@ class InvitationService:
             base_url=settings.EMAIL_VERIFICATION_BASE_URL or None,
         )
 
-        return invitation
+        return invitation, token
 
     async def accept_invitation(
         self,
@@ -94,6 +101,8 @@ class InvitationService:
         if invitation.email.lower() != email.lower():
             raise InvitationEmailMismatchError("Email does not match the invitation")
 
+        validate_password_policy(password)
+
         tenant_id = invitation.tenant_id
 
         existing = await self.user_repo.get_by_email(tenant_id, email)
@@ -114,15 +123,17 @@ class InvitationService:
         )
 
         assert user.id is not None
-
-        role = await self.role_repo.get_by_name(tenant_id, DEFAULT_INVITE_ROLE)
-        if role is not None and role.id is not None:
-            await self.role_repo.grant_to_user(
-                user_id=user.id,
-                role_id=role.id,
-                tenant_id=tenant_id,
-                scope_id=uuid.UUID(str(tenant_id)),
+        role = await self.role_repo.get_by_name(tenant_id, invitation.role_name)
+        if role is None or role.id is None:
+            raise ValidationError(
+                f"Role '{invitation.role_name}' no longer exists in this organization"
             )
+        await self.role_repo.grant_to_user(
+            user_id=user.id,
+            role_id=role.id,
+            tenant_id=tenant_id,
+            scope_id=uuid.UUID(str(tenant_id)),
+        )
 
         assert invitation.id is not None
         assert user.id is not None

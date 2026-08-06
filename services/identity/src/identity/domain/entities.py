@@ -120,7 +120,8 @@ class Invitation:
 
     tenant_id: UUID
     email: str
-    token: str
+    token_hash: str
+    role_name: str
     created_by_user_id: UUID
     expires_at: datetime
     id: UUID | None = None

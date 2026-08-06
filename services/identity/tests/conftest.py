@@ -48,6 +48,10 @@ os.environ.setdefault("IDENTITY_SIGNUP_START_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CODE_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_VERIFY_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CHECK_RATE_LIMIT", "10000")
+
+
+os.environ.setdefault("IDENTITY_RATE_LIMIT_LOGIN_IP", "10000")
+os.environ.setdefault("IDENTITY_RATE_LIMIT_MFA_VERIFY", "10000")
 os.environ.setdefault("IDENTITY_JWT_PRIVATE_KEY_PATH", str(_KEY_DIR / "private.pem"))
 os.environ.setdefault("IDENTITY_JWT_PUBLIC_KEY_PATH", str(_KEY_DIR / "public.pem"))
 os.environ["IDENTITY_JWT_PRIVATE_KEY_PATH"] = str(_KEY_DIR / "private.pem")

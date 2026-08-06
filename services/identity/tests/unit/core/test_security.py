@@ -25,11 +25,12 @@ from identity.core.security import (
     create_access_token,
     create_refresh_token,
     hash_password,
+    validate_password_policy,
     verify_jwt,
     verify_jwt_keys_usable,
     verify_password,
 )
-from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError
+from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError, ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,53 @@ class TestPasswordHashing:
     def test_verify_password_empty_string(self):
         hashed = hash_password("Password123!")
         assert verify_password("", hashed) is False
+
+
+class TestPasswordPolicy:
+    def _reset_policy(self, monkeypatch) -> None:
+        monkeypatch.setattr(settings, "PASSWORD_MIN_LENGTH", 12)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_UPPERCASE", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_LOWERCASE", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_DIGIT", True)
+        monkeypatch.setattr(settings, "PASSWORD_REQUIRE_SPECIAL", True)
+
+    def test_accepts_strong_password(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        validate_password_policy("ValidPass123!")
+
+    def test_rejects_short_password(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("Short1!")
+
+    def test_rejects_missing_uppercase(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("alllowercase1!")
+
+    def test_rejects_missing_lowercase(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("ALLUPPERCASE1!")
+
+    def test_rejects_missing_digit(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("AllLetters!")
+
+    def test_rejects_missing_special(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError):
+            validate_password_policy("AllLetters1")
+
+    def test_reports_all_violations(self, monkeypatch):
+        self._reset_policy(monkeypatch)
+        with pytest.raises(ValidationError) as exc_info:
+            validate_password_policy("weak")
+        message = str(exc_info.value.message)
+        assert "12" in message
+        assert "uppercase" in message.lower() or "upper" in message.lower()
+        assert "digit" in message.lower() or "number" in message.lower()
 
 
 # ---------------------------------------------------------------------------

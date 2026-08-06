@@ -13,7 +13,8 @@ from identity.models.base import Base, UUIDPrimaryKeyMixin
 
 
 class InvitationModel(UUIDPrimaryKeyMixin, Base):
-    """SQLAlchemy model for the invitations table.
+    """
+    SQLAlchemy model for the invitations table.
 
     Stores single-use, expiring invite tokens bound to one email.
     """
@@ -27,7 +28,8 @@ class InvitationModel(UUIDPrimaryKeyMixin, Base):
         index=True,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
-    token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    role_name: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),

@@ -3,17 +3,20 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+import pyotp
 import pytest
 from sqlalchemy import delete, select
 
 from identity.db.session import async_session_factory
 from identity.models.audit_log import AuditLogModel
 from identity.models.tenant import TenantModel
-from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 from tests.integration.api.wizard import provision_tenant
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+
+
+_MFA_SECRETS: dict[str, str] = {}
 
 
 async def _delete_tenant_by_slug(slug: str) -> None:
@@ -27,6 +30,18 @@ async def _provision(client: AsyncClient) -> tuple[str, str]:
     return tenant["slug"], tenant["email"]
 
 
+async def _enroll_mfa(client: AsyncClient, *, slug: str, access_token: str) -> str:
+    headers = {"X-Tenant-Slug": slug, "Authorization": f"Bearer {access_token}"}
+    setup = await client.post("/api/v1/mfa/setup", headers=headers)
+    assert setup.status_code == 200
+    secret = setup.json()["data"]["secret"]
+    verify = await client.post(
+        "/api/v1/mfa/verify", headers=headers, json={"code": pyotp.TOTP(secret).now()}
+    )
+    assert verify.status_code == 200
+    return secret
+
+
 async def _login(client: AsyncClient, *, slug: str, email: str) -> tuple[str, str, str]:
     login = await client.post(
         "/api/v1/auth/login",
@@ -35,8 +50,19 @@ async def _login(client: AsyncClient, *, slug: str, email: str) -> tuple[str, st
     )
     assert login.status_code == 200
     data = login.json()["data"]
-    await enroll_mfa_if_required(client, slug=slug, login_data=data)
-    return str(data["user"]["id"]), data["access_token"], data["refresh_token"]
+    user_id = str(data["user"]["id"])
+    if data.get("mfa_required") and data["next_step"] == "mfa.verify":
+        secret = _MFA_SECRETS[user_id]
+        verify = await client.post(
+            "/api/v1/auth/mfa/verify",
+            headers={"X-Tenant-Slug": slug},
+            json={"mfa_token": data["mfa_token"], "code": pyotp.TOTP(secret).now()},
+        )
+        assert verify.status_code == 200, verify.text
+        redeemed = verify.json()["data"]
+        return user_id, redeemed["access_token"], redeemed["refresh_token"]
+    _MFA_SECRETS[user_id] = await _enroll_mfa(client, slug=slug, access_token=data["access_token"])
+    return user_id, data["access_token"], data["refresh_token"]
 
 
 async def _list_sessions(client: AsyncClient, *, slug: str, access_token: str) -> list[dict]:

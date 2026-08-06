@@ -169,7 +169,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 SYSTEM_ROLE_NAMES = frozenset(name for name, _ in SYSTEM_ROLE_DEFINITIONS)
 
 INVITATION_TOKEN_EXPIRE_DAYS = 7
-DEFAULT_INVITE_ROLE = "viewer"
+DEFAULT_INVITE_ROLE = "standard_user"
 
 PROBLEM_INVITATION_NOT_FOUND = f"{PROBLEM_BASE_URL}/invitation-not-found"
 PROBLEM_INVITATION_EXPIRED = f"{PROBLEM_BASE_URL}/invitation-expired"

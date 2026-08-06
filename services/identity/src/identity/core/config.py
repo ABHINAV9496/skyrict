@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     )
 
     # --- Password policy ---
-    PASSWORD_MIN_LENGTH: int = Field(default=8, description="minimum password length")
+    PASSWORD_MIN_LENGTH: int = Field(default=12, description="minimum password length")
     PASSWORD_REQUIRE_UPPERCASE: bool = Field(default=True)
     PASSWORD_REQUIRE_LOWERCASE: bool = Field(default=True)
     PASSWORD_REQUIRE_DIGIT: bool = Field(default=True)
@@ -103,6 +103,18 @@ class Settings(BaseSettings):
     # --- Rate limiting ---
     RATE_LIMIT_LOGIN: int = Field(default=5, description="max login attempts per window")
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=300, description="rate limit window")
+    RATE_LIMIT_LOGIN_IP: int = Field(
+        default=50,
+        description="coarse max login attempts per source IP per window (anti-spraying)",
+    )
+    RATE_LIMIT_FAIL_CLOSED: bool = Field(
+        default=False,
+        description=(
+            "When true, rate limiting FAILS CLOSED on Redis errors (rejects the "
+            "request) instead of failing open. Keep false unless an outage must "
+            "shut down auth rather than allow traffic."
+        ),
+    )
     RATE_LIMIT_REGISTER: int = Field(
         default=5, description="max self-service registrations per IP per window"
     )
@@ -165,6 +177,20 @@ class Settings(BaseSettings):
     MFA_TOTP_ISSUER: str = Field(
         default="Skyrict", description="issuer name embedded in TOTP provisioning URIs"
     )
+    MFA_CHALLENGE_TTL_SECONDS: int = Field(
+        default=300,
+        description="TTL of a login mfaToken challenge before it expires (seconds)",
+    )
+    MFA_CHALLENGE_MAX_ATTEMPTS: int = Field(
+        default=5, description="max code attempts before a login mfaToken challenge is revoked"
+    )
+    RATE_LIMIT_MFA_VERIFY: int = Field(
+        default=20,
+        description=(
+            "coarse per-IP/per-token limit on MFA challenge verifies; the "
+            "stricter per-challenge MFA_CHALLENGE_MAX_ATTEMPTS binds first"
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_private_key: str = ""
@@ -225,7 +251,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> Settings:
-        """Fail-fast guards that apply ONLY in staging and production.
+        """
+        Fail-fast guards that apply ONLY in staging and production.
 
         Runs after load_rsa_keys so all fields are populated.
         Checks:

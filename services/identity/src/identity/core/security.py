@@ -1,4 +1,5 @@
-"""JWT sign/verify (RS256) and password hashing (Argon2id).
+"""
+JWT sign/verify (RS256) and password hashing (Argon2id).
 
 Every other layer MUST go through these functions. Never verify JWTs inline.
 Single verification path: verify_jwt().
@@ -21,6 +22,8 @@ from jose import JWTError, jwt
 
 from identity.core.config import settings
 from identity.core.exceptions import StartupError, TokenExpiredError, TokenInvalidError
+from identity.domain.value_objects import PasswordPolicy
+from skyrict_common.exceptions import ValidationError
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.types import (
@@ -34,7 +37,8 @@ _ALLOWED_ALGORITHMS = {"RS256"}
 
 
 class TokenClaims(TypedDict):
-    """Verified JWT claims returned by :func:`verify_jwt`.
+    """
+    Verified JWT claims returned by :func:`verify_jwt`.
 
     ``iat``/``nbf``/``exp`` are POSIX timestamps (epoch seconds).
     ``type`` is ``"access"`` or ``"refresh"``.
@@ -76,7 +80,8 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against its Argon2id hash.
+    """
+    Verify a plaintext password against its Argon2id hash.
 
     Returns False (never raises) for wrong passwords and malformed hashes so
     callers don't need to know about Argon2 exception types.
@@ -85,6 +90,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return _ph.verify(hashed_password, plain_password)
     except (InvalidHashError, VerificationError):
         return False
+
+
+def validate_password_policy(password: str) -> None:
+    """Enforce the configured password policy, raising ValidationError on violation."""
+    errors = PasswordPolicy(
+        min_length=settings.PASSWORD_MIN_LENGTH,
+        require_uppercase=settings.PASSWORD_REQUIRE_UPPERCASE,
+        require_lowercase=settings.PASSWORD_REQUIRE_LOWERCASE,
+        require_digit=settings.PASSWORD_REQUIRE_DIGIT,
+        require_special=settings.PASSWORD_REQUIRE_SPECIAL,
+    ).validate(password)
+    if errors:
+        raise ValidationError("; ".join(errors))
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +136,8 @@ def mfa_is_required(
     mfa_enabled: bool,
     tenant_requires_all_members: bool,
 ) -> bool:
-    """Return whether MFA must be set up before this account can be used.
+    """
+    Return whether MFA must be set up before this account can be used.
 
     Tenant owners are always forced; other members are forced only when the
     tenant configures ``mfa_required_for_all_members``. The one source of truth
@@ -194,6 +213,11 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def hash_invitation_token(token: str) -> str:
+    """Return the SHA-256 hex digest stored for an invitation token."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def verify_jwt(token: str) -> TokenClaims:
     """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
 
@@ -258,7 +282,8 @@ def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) 
 
 
 def verify_jwt_keys_usable() -> None:
-    """Verify both configured JWT keys parse as RSA keys of >= 2048 bits.
+    """
+    Verify both configured JWT keys parse as RSA keys of >= 2048 bits.
 
     Runs ONCE at application startup so a corrupt, non-RSA, or weak key fails
     fast at boot (the lifespan raises :class:`StartupError`) instead of
@@ -293,7 +318,8 @@ def verify_jwt_keys_usable() -> None:
 
 
 def verify_mfa_encryption_key() -> None:
-    """Verify the configured MFA_ENCRYPTION_KEY parses as a Fernet key.
+    """
+    Verify the configured MFA_ENCRYPTION_KEY parses as a Fernet key.
 
     Runs ONCE at application startup so a missing or malformed key fails fast
     at boot (the lifespan raises :class:`StartupError`) instead of surfacing

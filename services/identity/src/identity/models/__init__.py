@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from identity.models.audit_log import AuditLogModel
 from identity.models.invitation import InvitationModel
+from identity.models.membership import MembershipModel
 from identity.models.permission import PermissionModel
 from identity.models.role import RoleModel
 from identity.models.session import SessionModel
@@ -19,6 +20,7 @@ from identity.models.user_role import UserRoleModel
 __all__ = [
     "AuditLogModel",
     "InvitationModel",
+    "MembershipModel",
     "PermissionModel",
     "RoleModel",
     "SessionModel",

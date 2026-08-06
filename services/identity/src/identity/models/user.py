@@ -45,6 +45,7 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="users")
+    memberships = relationship("MembershipModel", back_populates="user", lazy="selectin")
     sessions = relationship("SessionModel", back_populates="user", lazy="selectin")
     user_roles = relationship("UserRoleModel", back_populates="user", lazy="selectin")
     audit_logs = relationship("AuditLogModel", back_populates="actor_user", lazy="selectin")

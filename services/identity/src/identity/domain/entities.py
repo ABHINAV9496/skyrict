@@ -25,6 +25,45 @@ class ScopeType(Enum):
     TEAM = "team"
 
 
+class MembershipStatus(Enum):
+    """Lifecycle state of a user's membership in a tenant."""
+
+    INVITED = "invited"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+
+
+@dataclass
+class Membership:
+    """Membership entity — a user's relationship with a tenant.
+
+    ``user_id`` is NULL while the membership is INVITED (no placeholder users:
+    invitations carry the pending relationship, users materialize on accept).
+    ``invited_email`` reserves the email within the tenant. ``role_id`` is the
+    membership's primary role. Lifecycle: invited -> active -> (suspended <->
+    active).
+    """
+
+    tenant_id: UUID
+    invited_email: str | None = None
+    user_id: UUID | None = None
+    status: MembershipStatus = MembershipStatus.ACTIVE
+    role_id: UUID | None = None
+    invited_by_user_id: UUID | None = None
+    invited_at: datetime | None = None
+    joined_at: datetime | None = None
+    suspended_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if self.user_id is None and not self.invited_email:
+            raise ValueError("A membership needs a user_id or an invited_email")
+        if self.user_id is None and self.status is not MembershipStatus.INVITED:
+            raise ValueError("A membership without a user must be INVITED")
+
+
 @dataclass
 class User:
     """User entity."""

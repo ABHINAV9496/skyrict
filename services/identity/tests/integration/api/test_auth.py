@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 # Business routes must route through a tenant (X-Tenant-Slug in dev); the
 # autouse ``integration_db`` fixture skips the suite when Postgres is down.
 # Self-service /auth/signup/* endpoints bypass tenant resolution.
-_HEADERS = {"X-Tenant-Slug": "acme"}
+_HEADERS = {"X-Tenant-Slug": "olympus"}
 
 
 async def _delete_tenant_by_slug(slug: str) -> None:
@@ -75,7 +75,7 @@ class TestAuthEndpoints:
             await _delete_tenant_by_slug(tenant["slug"])
 
     async def test_get_profile_unauthorized(self, client: AsyncClient):
-        # Tenant resolves (acme) but there is no token -> route dependency 401.
+        # Tenant resolves (olympus) but there is no token -> route dependency 401.
         response = await client.get("/api/v1/users/me", headers=_HEADERS)
         assert response.status_code == 401  # No auth token
 

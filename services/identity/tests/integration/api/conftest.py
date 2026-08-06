@@ -8,7 +8,7 @@ integration suite is skipped — CI runs it against a provisioned database.
 The session-scoped ``migrated_schema`` fixture applies ``alembic upgrade head``
 once (real migrations — RLS policies, audit triggers, permission catalog — not
 ``create_all``). The autouse ``integration_db`` fixture then seeds the
-isolation fixtures (tenants acme/globex/disabledco + user alice@acme.io) and
+isolation fixtures (tenants olympus/globex/disabledco + user alice@acme.io) and
 removes only the rows it created.
 """
 
@@ -42,7 +42,9 @@ from identity.models import (  # noqa: F401  # register every ORM model
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-TENANT_ACME = "acme"
+# "acme" is a reserved platform slug (identity.core.constants.RESERVED_SLUGS),
+# so the canonical primary test tenant uses a non-reserved slug.
+TENANT_ACME = "olympus"
 TENANT_GLOBEX = "globex"
 TENANT_DISABLED = "disabledco"
 USER_A_EMAIL = "alice@acme.io"

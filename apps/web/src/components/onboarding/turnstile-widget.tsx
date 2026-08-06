@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, ShieldCheck } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 type TurnstileApi = {
   render: (
@@ -115,9 +115,9 @@ function TurnstileWidget({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-muted/40 p-3 shadow-sm">
+    <div className="relative w-fit">
       {loading ? (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
           <LoaderCircle
             aria-hidden="true"
             className="size-5 animate-spin text-muted-foreground"
@@ -125,16 +125,11 @@ function TurnstileWidget({
           <span className="text-sm font-medium">Checking your browser...</span>
         </div>
       ) : null}
-      <div ref={containerRef} className={loading ? "hidden" : undefined} />
-      <div className="mt-2 flex items-center justify-between border-t border-border/70 pt-2">
-        <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-          <ShieldCheck aria-hidden="true" className="size-3" />
-          Skyrict Shield
-        </p>
-        <p className="font-mono text-[10px] text-muted-foreground">
-          Protected by Cloudflare Turnstile
-        </p>
-      </div>
+      {/* Never use display:none on the render target: Turnstile fails to
+          initialize (shows its error/"Troubleshoot" state) when rendered
+          into a hidden element. The spinner row above covers the loading
+          window, and the container expands once the widget iframe lands. */}
+      <div ref={containerRef} />
       <input
         aria-hidden="true"
         name="website"

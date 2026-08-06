@@ -53,10 +53,6 @@ function PolicyDialog() {
               ))}
             </ul>
           </section>
-          <p className="text-xs text-muted-foreground/70">
-            Preview copy for the demo
-            this is not legal advice.
-          </p>
         </div>
       </DialogContent>
     </Dialog>

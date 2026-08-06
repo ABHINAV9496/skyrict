@@ -16,7 +16,8 @@ class SessionResponse(BaseModel):
     tenant_id: UUID
     ip_address: str | None = None
     user_agent: str | None = None
-    is_active: bool
+    status: str
+    is_trusted: bool = False
     created_at: datetime
     last_active_at: datetime
     expires_at: datetime | None = None

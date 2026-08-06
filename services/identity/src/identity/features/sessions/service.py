@@ -1,4 +1,10 @@
-"""Session service — track, list, revoke user sessions."""
+"""Session service — track, list, revoke, expire user sessions.
+
+Owns the session lifecycle. Every status mutation passes through the
+``SESSION_STATE_MACHINE`` so invalid hops fail fast. All persistence goes
+through the ``SessionRepositoryPort``; audit entries are produced for every
+security-relevant transition.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +12,18 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from identity.core.audit_events import (
+    SESSION_CREATED,
+    SESSION_REVOKED,
+    SESSION_REVOKED_ALL,
+)
 from identity.core.config import settings
-from identity.domain.entities import Session
+from identity.core.state_machine import StateMachine
+from identity.domain.entities import Session, SessionStatus
 from skyrict_common.exceptions import SessionNotFoundError
 
 if TYPE_CHECKING:
+    from identity.features.audit.service import AuditService
     from identity.features.sessions.ports import SessionRepositoryPort
 
 
@@ -30,11 +43,25 @@ def _same_device(session: Session, user_agent: str | None, ip_address: str | Non
     ) and _ip_prefix(session.ip_address) == _ip_prefix(ip_address)
 
 
-class SessionService:
-    """Manages user sessions — creation, listing, revocation."""
+# Session lifecycle: active is the only live state; revocation and expiry are
+# terminal. There is no path back into active.
+SESSION_STATE_MACHINE = StateMachine(
+    {
+        SessionStatus.ACTIVE.value: (
+            SessionStatus.REVOKED.value,
+            SessionStatus.EXPIRED.value,
+        ),
+    },
+    entity="session",
+)
 
-    def __init__(self, session_repo: SessionRepositoryPort) -> None:
+
+class SessionService:
+    """Manages user sessions — creation, listing, revocation, expiry."""
+
+    def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
         self.session_repo = session_repo
+        self.audit_service = audit_service
 
     async def create_session(
         self,
@@ -47,8 +74,9 @@ class SessionService:
         device_info: dict[str, Any] | None = None,
         location: str | None = None,
         session_id: uuid.UUID | None = None,
+        token_family_id: uuid.UUID | None = None,
     ) -> Session:
-        """Create a new session record."""
+        """Create a new active session record in its own token family."""
         now = datetime.now(UTC)
         session = Session(
             id=session_id,
@@ -59,15 +87,29 @@ class SessionService:
             ip_address=ip_address,
             device_info=device_info,
             location=location,
-            is_active=True,
+            status=SessionStatus.ACTIVE,
+            token_family_id=token_family_id or uuid.uuid4(),
             expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             last_active_at=now,
         )
-        return await self.session_repo.create(session)
+        created = await self.session_repo.create(session)
+        await self.audit_service.log(
+            action=SESSION_CREATED,
+            target=f"session:{created.id}",
+            user_id=str(user_id),
+            tenant_id=str(tenant_id),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return created
 
     async def list_user_sessions(self, user_id: str | uuid.UUID) -> list[Session]:
-        """List all active sessions for a user."""
+        """List all active, unexpired sessions for a user."""
         return await self.session_repo.get_active_by_user(user_id)
+
+    async def get_session(self, session_id: str | uuid.UUID) -> Session | None:
+        """Fetch a session by id (any status), or None when absent."""
+        return await self.session_repo.get_by_id(session_id)
 
     async def has_prior_device(
         self,
@@ -80,12 +122,41 @@ class SessionService:
         return any(_same_device(session, user_agent, ip_address) for session in sessions)
 
     async def revoke_session(self, user_id: str | uuid.UUID, session_id: str | uuid.UUID) -> None:
-        """Revoke a specific session."""
+        """Revoke a specific session (active -> revoked)."""
         session = await self.session_repo.get_by_id(session_id)
         if not session or session.user_id != uuid.UUID(str(user_id)):
             raise SessionNotFoundError()
+        SESSION_STATE_MACHINE.transition(session.status.value, SessionStatus.REVOKED.value)
         await self.session_repo.revoke_session(session_id)
+        await self.audit_service.log(
+            action=SESSION_REVOKED,
+            target=f"session:{session_id}",
+            user_id=str(user_id),
+            tenant_id=str(session.tenant_id),
+        )
 
     async def revoke_all_sessions(self, user_id: str | uuid.UUID) -> None:
         """Revoke all sessions for a user (force logout everywhere)."""
+        active = await self.session_repo.get_active_by_user(user_id)
         await self.session_repo.revoke_all_for_user(user_id)
+        if active:
+            await self.audit_service.log(
+                action=SESSION_REVOKED_ALL,
+                target=f"user:{user_id}",
+                user_id=str(user_id),
+                tenant_id=str(active[0].tenant_id),
+            )
+
+    async def expire_session(self, session_id: str | uuid.UUID) -> Session | None:
+        """Materialize the active -> expired transition for a past-expiry session."""
+        session = await self.session_repo.get_by_id(session_id)
+        if session is None:
+            return None
+        if session.status is SessionStatus.ACTIVE:
+            SESSION_STATE_MACHINE.transition(session.status.value, SessionStatus.EXPIRED.value)
+            await self.session_repo.mark_expired(session_id)
+            return await self.session_repo.get_by_id(session_id)
+        return session
+
+    async def commit(self) -> None:
+        await self.session_repo.commit()

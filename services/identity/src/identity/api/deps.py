@@ -235,10 +235,11 @@ def get_turnstile_verifier() -> TurnstileVerifier:
 
 def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repo),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> SessionService:
     from identity.features.sessions.service import SessionService
 
-    return SessionService(session_repo)
+    return SessionService(session_repo, audit_service)
 
 
 def get_membership_service(

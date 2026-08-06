@@ -33,6 +33,18 @@ class MembershipStatus(Enum):
     SUSPENDED = "suspended"
 
 
+class SessionStatus(Enum):
+    """Lifecycle state of a user session.
+
+    ``EXPIRED`` is materialized when a session passes its ``expires_at`` and is
+    touched again; queries treat past-expiry rows as expired regardless.
+    """
+
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
 @dataclass
 class Membership:
     """Membership entity — a user's relationship with a tenant.
@@ -102,7 +114,15 @@ class Tenant:
 
 @dataclass
 class Session:
-    """User session entity."""
+    """User session entity.
+
+    ``status`` is the session lifecycle state (active -> revoked/expired).
+    ``token_family_id`` groups every refresh rotation of one login so reuse
+    detection can revoke the whole family. ``is_trusted`` marks a recognized
+    device (surfaces the SESSION_TRUSTED flow). ``is_active`` is derived and
+    does not consider expiry — expiry is enforced explicitly by queries and
+    the refresh path.
+    """
 
     user_id: UUID
     tenant_id: UUID
@@ -111,12 +131,20 @@ class Session:
     device_info: dict[str, Any] | None = None
     ip_address: str | None = None
     location: str | None = None
-    is_active: bool = True
+    status: SessionStatus = SessionStatus.ACTIVE
+    token_family_id: UUID | None = None
+    is_trusted: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_active_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     revoked_at: datetime | None = None
+    expired_at: datetime | None = None
     id: UUID | None = None
+
+    @property
+    def is_active(self) -> bool:
+        """True while the session is ACTIVE (does not reflect expiry)."""
+        return self.status is SessionStatus.ACTIVE
 
 
 @dataclass

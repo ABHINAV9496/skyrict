@@ -95,7 +95,7 @@ class TestSessionLifecycle:
             assert len(sessions) == 1
             session = sessions[0]
             assert session["user_id"] == user_id
-            assert session["is_active"] is True
+            assert session["status"] == "active"
             assert session["last_active_at"]
             assert session["user_agent"]
         finally:

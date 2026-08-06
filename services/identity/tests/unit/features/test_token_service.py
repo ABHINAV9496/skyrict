@@ -13,7 +13,7 @@ from identity.core.security import (
     hash_refresh_token,
     verify_jwt,
 )
-from identity.domain.entities import Session
+from identity.domain.entities import Session, SessionStatus
 from identity.features.auth.service import TokenService
 from skyrict_common.exceptions import TokenInvalidError, TokenReuseDetectedError
 
@@ -53,13 +53,13 @@ class FakeSessionRepo:
         self.revoked.append(uuid.UUID(str(session_id)))
         session = self.sessions.get(uuid.UUID(str(session_id)))
         if session is not None:
-            session.is_active = False
+            session.status = SessionStatus.REVOKED
 
     async def revoke_all_for_user(self, user_id: str | uuid.UUID) -> None:
         self.revoked_for_users.append(uuid.UUID(str(user_id)))
         for session in self.sessions.values():
             if session.user_id == uuid.UUID(str(user_id)):
-                session.is_active = False
+                session.status = SessionStatus.REVOKED
 
     async def rotate(
         self,
@@ -105,7 +105,6 @@ def _bound_session(token: str) -> Session:
         user_id=uuid.UUID(USER_ID),
         tenant_id=uuid.UUID(TENANT_ID),
         refresh_token_hash=hash_refresh_token(token),
-        is_active=True,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
 
@@ -189,7 +188,7 @@ class TestRefreshTokens:
     async def test_reuse_when_session_revoked(self) -> None:
         token, _ = uuid_token_and_session()
         session = _bound_session(token)
-        session.is_active = False
+        session.status = SessionStatus.REVOKED
         repo = FakeSessionRepo([session])
         service = TokenService(repo, FakeAuditService())
 

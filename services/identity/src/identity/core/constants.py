@@ -94,9 +94,35 @@ SKIP_AUTH_PATHS = frozenset(
 #
 # Platform-owned workspace slugs and email addresses are never available for
 # self-service. The check-email / check-slug endpoints treat them as taken.
+#
+# The set covers every platform hostname that must never be a tenant
+# subdomain: marketing (web, www), auth surfaces (signup, signin, app, auth,
+# login), API/infra (api, docs, status, mail, support, help, blog), tooling
+# (dev, test, staging), the placeholder demo tenant (acme), and the apex brand
+# (skyrict). The tenant resolver returns None for these so platform hosts are
+# never looked up as tenants.
 # ---------------------------------------------------------------------------
 RESERVED_SLUGS = frozenset(
-    {"admin", "api", "app", "auth", "billing", "demo", "support", "www", "skyrict"}
+    {
+        "admin",
+        "api",
+        "app",
+        "blog",
+        "docs",
+        "dev",
+        "help",
+        "mail",
+        "signin",
+        "signup",
+        "staging",
+        "status",
+        "support",
+        "test",
+        "web",
+        "www",
+        "acme",
+        "skyrict",
+    }
 )
 RESERVED_EMAILS = frozenset(
     {

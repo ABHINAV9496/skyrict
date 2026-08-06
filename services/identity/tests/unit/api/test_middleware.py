@@ -46,23 +46,26 @@ def _make_request(headers: dict[str, str]) -> Request:
 class TestResolveTenantSlugFromHost:
     def test_simple_subdomain(self):
         assert (
-            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain="skyrict.com") == "acme"
+            resolve_tenant_slug_from_host("globex.skyrict.com", base_domain="skyrict.com")
+            == "globex"
         )
 
     def test_uppercase_host_normalized(self):
         assert (
-            resolve_tenant_slug_from_host("ACME.Skyrict.COM", base_domain="skyrict.com") == "acme"
+            resolve_tenant_slug_from_host("GLOBEX.Skyrict.COM", base_domain="skyrict.com")
+            == "globex"
         )
 
     def test_host_with_port(self):
         assert (
-            resolve_tenant_slug_from_host("acme.skyrict.com:443", base_domain="skyrict.com")
-            == "acme"
+            resolve_tenant_slug_from_host("globex.skyrict.com:443", base_domain="skyrict.com")
+            == "globex"
         )
 
     def test_base_domain_with_leading_dot(self):
         assert (
-            resolve_tenant_slug_from_host("acme.skyrict.com", base_domain=".skyrict.com") == "acme"
+            resolve_tenant_slug_from_host("globex.skyrict.com", base_domain=".skyrict.com")
+            == "globex"
         )
 
     def test_apex_is_not_a_tenant(self):
@@ -97,11 +100,11 @@ class TestResolveTenantSlugFromHost:
 class TestDeriveTenantSlug:
     def test_dev_uses_x_tenant_slug(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
-        assert derive_tenant_slug(_make_request({"X-Tenant-Slug": "acme"})) == "acme"
+        assert derive_tenant_slug(_make_request({"X-Tenant-Slug": "globex"})) == "globex"
 
     def test_dev_normalizes_case(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
-        assert derive_tenant_slug(_make_request({"X-Tenant-Slug": "Acme"})) == "acme"
+        assert derive_tenant_slug(_make_request({"X-Tenant-Slug": "Globex"})) == "globex"
 
     def test_dev_missing_header_unresolvable(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
@@ -114,8 +117,8 @@ class TestDeriveTenantSlug:
     def test_production_uses_host_ignores_spoofed_header(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.PRODUCTION)
         monkeypatch.setattr(settings, "BASE_DOMAIN", "skyrict.com")
-        request = _make_request({"X-Tenant-Slug": "evil", "Host": "acme.skyrict.com"})
-        assert derive_tenant_slug(request) == "acme"
+        request = _make_request({"X-Tenant-Slug": "evil", "Host": "globex.skyrict.com"})
+        assert derive_tenant_slug(request) == "globex"
 
     def test_production_unresolvable_host(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings, "ENVIRONMENT", Environment.PRODUCTION)

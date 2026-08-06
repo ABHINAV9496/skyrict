@@ -237,15 +237,41 @@ export async function verifyEmailCode(input: {
   return { status: "invalid" };
 }
 
+export async function getCaptcha(): Promise<{ captchaId: string; image: string }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/captcha", { cache: "no-store" });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    captchaId?: string;
+    image?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new ApiError(res.status, payload.error ?? "Could not load the security code.");
+  }
+  if (!payload.captchaId || !payload.image) {
+    throw new ApiError(502, "Unexpected captcha response.");
+  }
+  return { captchaId: payload.captchaId, image: payload.image };
+}
+
 export async function completeSecurityStep(input: {
   email: string;
   verificationToken: string;
   password: string;
+  captchaId: string;
+  captchaAnswer: string;
 }): Promise<{ status: "ok" }> {
   return bffPost<{ status: "ok" }>("/api/auth/password", {
     email: input.email,
     verificationToken: input.verificationToken,
     password: input.password,
+    captchaId: input.captchaId,
+    captchaAnswer: input.captchaAnswer,
   });
 }
 

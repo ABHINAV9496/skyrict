@@ -77,16 +77,25 @@ export function resolveTenantSlug(host: string | null | undefined): string {
  * CSRF gate for state-changing routes: the request must come from our own
  * origin (matching Host). SameSite=Lax already stops cross-site POSTs from
  * carrying the cookie; this is defense in depth for older browsers.
+ *
+ * When the browser sends an `Origin` header it must match Host. Browsers omit
+ * `Origin` on same-origin GET/HEAD/OPTIONS requests (e.g. fetching the
+ * CAPTCHA challenge), so those safe methods pass when no header is present;
+ * state-changing requests are rejected without a matching `Origin`.
  */
 export function assertSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
+  if (!host) return false;
+  if (origin) {
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
   }
+  const method = request.method.toUpperCase();
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
 }
 
 interface BackendCallOptions {

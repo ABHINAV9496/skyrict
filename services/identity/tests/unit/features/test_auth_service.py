@@ -1,3 +1,5 @@
+"""Unit tests for the auth feature AuthenticationService (fake ports)."""
+
 from __future__ import annotations
 
 import uuid
@@ -32,6 +34,8 @@ from skyrict_common.exceptions import (
 
 
 class FakeUserRepo:
+    """In-memory UserRepositoryPort double (subset used by auth flows)."""
+
     def __init__(self, users: list[User] | None = None) -> None:
         self.users: dict[uuid.UUID, User] = {}
         for user in users or []:
@@ -94,6 +98,8 @@ class FakeUserRepo:
 
 
 class FakeTenantRepo:
+    """In-memory TenantRepositoryPort double."""
+
     def __init__(self, tenants: list[Tenant] | None = None) -> None:
         self.tenants: dict[uuid.UUID, Tenant] = {}
         for tenant in tenants or []:
@@ -123,6 +129,8 @@ class FakeTenantRepo:
 
 
 class FakeRoleRepo:
+    """In-memory RoleRepositoryPort double."""
+
     def __init__(self, roles_for_user: dict[uuid.UUID, list[str]] | None = None) -> None:
         self.roles_by_user: dict[uuid.UUID, list[str]] = dict(roles_for_user or {})
         self.created: list[Role] = []
@@ -170,6 +178,8 @@ class FakeRoleRepo:
 
 
 class FakeTokenService:
+    """TokenService double â€” returns a fixed TokenPair, records call args."""
+
     def __init__(self) -> None:
         self.pairs_created: list[tuple[str, str, str | None]] = []
 
@@ -181,6 +191,8 @@ class FakeTokenService:
 
 
 class FakeAuditService:
+    """AuditService double â€” records log() calls."""
+
     def __init__(self) -> None:
         self.events: list[dict[str, str | None]] = []
 
@@ -201,6 +213,8 @@ class FakeAuditService:
 
 
 class FakeEmailService:
+    """EmailService double â€” records send_verification calls."""
+
     def __init__(self) -> None:
         self.sent: list[dict[str, str | None]] = []
 
@@ -306,6 +320,8 @@ class FakeChallengeStore:
 
 
 class FakeVerificationStore:
+    """In-memory VerificationStore double keyed by email/token."""
+
     def __init__(self) -> None:
         self.otp_hashes: dict[str, str] = {}
         self.attempts: dict[str, int] = {}
@@ -362,6 +378,8 @@ class FakeVerificationStore:
 
 
 class FakeTurnstile:
+    """Turnstile double with a scripted verdict."""
+
     def __init__(self, result: bool = True) -> None:
         self.result = result
         self.calls: list[str | None] = []
@@ -372,6 +390,8 @@ class FakeTurnstile:
 
 
 class _Harness:
+    """Wires AuthenticationService against in-memory port doubles."""
+
     def __init__(
         self,
         *,
@@ -618,6 +638,12 @@ class TestLogin:
         ]
 
     async def test_all_failure_modes_raise_the_same_error(self, tenant_ctx: str) -> None:
+        """
+        Anti-enumeration invariant: every login failure is indistinguishable.
+
+        Same exception type, same message â€” no account-existence oracle via
+        error semantics.
+        """
         disabled_user = _make_user(is_active=False)
         unverified_user = _make_user(is_verified=False)
         valid_user = _make_user()

@@ -1,3 +1,5 @@
+"""Auth endpoints â€” login, onboarding wizard, refresh, logout, introspect."""
+
 from __future__ import annotations
 
 import uuid
@@ -70,7 +72,14 @@ async def login(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[AuthResponse]:
+    """
+    Authenticate a user and return tokens.
 
+    Rate-limited per (source IP, account) â€” ``RATE_LIMIT_LOGIN`` attempts per
+    ``RATE_LIMIT_WINDOW_SECONDS`` â€” to blunt brute-force and credential-
+    stuffing against the highest-value endpoint. The limiter fails open when
+    Redis is unavailable so a Redis outage never becomes a login outage.
+    """
     ip_address = _client_ip(request)
     await limiter.enforce(
         key=f"login:{ip_address}:{body.email.lower()}",
@@ -107,6 +116,7 @@ async def verify_mfa_challenge(
     challenge_store: MfaChallengeStore = Depends(get_mfa_challenge_store),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[AuthResponse]:
+    """Redeem a login mfaToken with a TOTP/backup code and issue the token pair."""
 
     ip_address = _client_ip(request)
     await limiter.enforce(
@@ -172,7 +182,7 @@ async def signup_start(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[SignupStartResponse]:
-
+    """Gate the wizard: server-side Turnstile verification + per-IP throttling."""
     ip_address = _client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_START_LIMIT_KEY}:{ip_address}",
@@ -190,7 +200,7 @@ async def signup_send_code(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[SendCodeResponse]:
-
+    """Send a 6-digit OTP to the address (throttled per email and per IP)."""
     ip_address = _client_ip(request)
     email_key = body.email.lower()
     await limiter.enforce(
@@ -214,7 +224,7 @@ async def signup_verify_code(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[VerifyCodeResponse]:
-
+    """Check an OTP; on success return an opaque single-use verification token."""
     await limiter.enforce(
         key=f"{SIGNUP_VERIFY_LIMIT_KEY}:{body.email.lower()}",
         limit=settings.SIGNUP_VERIFY_RATE_LIMIT,
@@ -229,7 +239,7 @@ async def signup_password(
     body: SetPasswordRequest,
     authn: AuthenticationService = Depends(get_authn_service),
 ) -> ResponseEnvelope[SetPasswordResponse]:
-
+    """Set the password for the wizard session bound to the verification token."""
     result = await authn.signup_set_password(
         email=body.email,
         verification_token=body.verification_token,
@@ -245,7 +255,7 @@ async def signup_check_email(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[CheckEmailResponse]:
-
+    """Expose email availability for the account step (rate-limited per IP)."""
     ip_address = _client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
@@ -263,7 +273,7 @@ async def signup_check_slug(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[CheckSlugResponse]:
-
+    """Expose workspace slug availability for the organization step."""
     ip_address = _client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
@@ -280,7 +290,7 @@ async def signup_organization(
     request: Request,
     authn: AuthenticationService = Depends(get_authn_service),
 ) -> ResponseEnvelope[CreateOrganizationResponse]:
-
+    """Provision the tenant, roles, and verified owner in one transaction."""
     result = await authn.signup_create_organization(
         body,
         ip_address=_client_ip(request),
@@ -297,7 +307,7 @@ async def refresh_token(
     body: TokenRefreshRequest,
     token_svc: TokenService = Depends(get_token_service),
 ) -> ResponseEnvelope[AuthResponse]:
-
+    """Refresh an access token using a refresh token."""
     tokens = await token_svc.refresh_tokens(body.refresh_token)
     return ResponseEnvelope(
         data=AuthResponse(
@@ -315,7 +325,7 @@ async def logout(
     current_user: dict[str, Any] = Depends(get_current_user),
     token_svc: TokenService = Depends(get_token_service),
 ) -> ResponseEnvelope[None]:
-
+    """Revoke the current session."""
     if body.refresh_token:
         await token_svc.revoke_token(body.refresh_token)
     return ResponseEnvelope(message="Logged out successfully")
@@ -326,6 +336,6 @@ async def introspect_token(
     body: TokenRefreshRequest,
     token_svc: TokenService = Depends(get_token_service),
 ) -> ResponseEnvelope[dict[str, Any]]:
-
+    """Introspect a token â€” return its claims if active."""
     result = await token_svc.introspect(body.refresh_token)
     return ResponseEnvelope(data=result)

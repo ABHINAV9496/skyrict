@@ -1,3 +1,17 @@
+"""
+Integration tests for MFA enforcement (AUTH-TASK-035).
+
+Proves the end-to-end contract over real Postgres:
+  - Tenant owners are always forced to enroll: login is 200 with
+    ``mfa_required``/``next_step``, and every other authenticated route returns
+    403 until MFA is enabled.
+  - TOTP setup/verify enables MFA; the same TOTP secret works at /users/me.
+  - Tenant policy (``mfa_required_for_all_members``) extends the same forced
+    enrollment + gate to ordinary members.
+  - Backup codes enroll a user and are single-use.
+  - Owner-assisted reset clears a member's MFA (forcing re-enrollment).
+"""
+
 from __future__ import annotations
 
 import uuid

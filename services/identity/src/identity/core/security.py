@@ -1,3 +1,10 @@
+"""
+JWT sign/verify (RS256) and password hashing (Argon2id).
+
+Every other layer MUST go through these functions. Never verify JWTs inline.
+Single verification path: verify_jwt().
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -29,6 +36,13 @@ _ALLOWED_ALGORITHMS = {"RS256"}
 
 
 class TokenClaims(TypedDict):
+    """
+    Verified JWT claims returned by :func:`verify_jwt`.
+
+    ``iat``/``nbf``/``exp`` are POSIX timestamps (epoch seconds).
+    ``type`` is ``"access"`` or ``"refresh"``.
+    """
+
     sub: str
     tenant_id: str
     iss: str
@@ -50,10 +64,21 @@ _ph = PasswordHasher(
 
 
 def hash_password(password: str) -> str:
+    """
+    Hash a plaintext password with Argon2id.
+
+    Uses a random salt per call â€” hashes for the same password always differ.
+    """
     return _ph.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a plaintext password against its Argon2id hash.
+
+    Returns False (never raises) for wrong passwords and malformed hashes so
+    callers don't need to know about Argon2 exception types.
+    """
     try:
         return _ph.verify(hashed_password, plain_password)
     except (InvalidHashError, VerificationError):
@@ -61,6 +86,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def validate_password_policy(password: str) -> None:
+    """Enforce the configured password policy, raising ValidationError on violation."""
     errors = PasswordPolicy(
         min_length=settings.PASSWORD_MIN_LENGTH,
         require_uppercase=settings.PASSWORD_REQUIRE_UPPERCASE,
@@ -73,6 +99,7 @@ def validate_password_policy(password: str) -> None:
 
 
 def encrypt_mfa_secret(secret: str) -> str:
+    """Encrypt a plaintext TOTP secret for storage at rest."""
     return (
         Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
         .encrypt(secret.encode("utf-8"))
@@ -81,6 +108,7 @@ def encrypt_mfa_secret(secret: str) -> str:
 
 
 def decrypt_mfa_secret(encrypted_secret: str) -> str:
+    """Decrypt a stored TOTP secret back to plaintext for verification."""
     return (
         Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
         .decrypt(encrypted_secret.encode("utf-8"))
@@ -94,7 +122,14 @@ def mfa_is_required(
     mfa_enabled: bool,
     tenant_requires_all_members: bool,
 ) -> bool:
+    """
+    Return whether MFA must be set up before this account can be used.
 
+    Tenant owners are always forced; other members are forced only when the
+    tenant configures ``mfa_required_for_all_members``. The one source of truth
+    used by both login (``mfa_required``/``next_step``) and the request-time
+    enforcement gate, so the two can never disagree.
+    """
     if mfa_enabled:
         return False
     return "tenant_owner" in roles or tenant_requires_all_members
@@ -107,7 +142,15 @@ def create_access_token(
     extra_claims: dict[str, Any] | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
+    """
+    Create a signed RS256 access token.
 
+    Args:
+        subject: User ID (sub claim).
+        tenant_id: Tenant ID (tenant_id claim) â€” always included.
+        extra_claims: Additional claims to embed.
+        expires_delta: Override default expiry.
+    """
     now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     payload: dict[str, Any] = {
@@ -131,7 +174,7 @@ def create_refresh_token(
     tenant_id: str,
     session_id: str | None = None,
 ) -> str:
-
+    """Create a signed RS256 refresh token with longer expiry."""
     now = datetime.now(UTC)
     expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     payload: dict[str, Any] = {
@@ -155,10 +198,28 @@ def hash_refresh_token(token: str) -> str:
 
 
 def hash_invitation_token(token: str) -> str:
+    """Return the SHA-256 hex digest stored for an invitation token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def verify_jwt(token: str) -> TokenClaims:
+    """
+    Decode and VERIFY a JWT â€” the ONE AND ONLY verification path.
+
+    Security guarantees:
+      - RS256 only (asymmetric â€” public key verifies, private key signs)
+      - Algorithm whitelist rejects "none" and header-driven attacks
+      - Issuer and audience are validated
+      - Expiry (exp) and not-before (nbf) are checked
+
+    Returns:
+        The verified claims as a :class:`TokenClaims`.
+
+    Raises:
+        TokenExpiredError: If the token has expired.
+        TokenInvalidError: If the token is malformed, signature is invalid,
+            algorithm is not RS256, or issuer/audience don't match.
+    """
     try:
         unverified_header = jwt.get_unverified_header(token)
         alg = unverified_header.get("alg", "")
@@ -189,6 +250,7 @@ def verify_jwt(token: str) -> TokenClaims:
 
 
 def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) -> None:
+    """Reject RSA keys below 2048 bits (NIST / PCI-DSS baseline)."""
     if key.key_size < 2048:
         raise StartupError(
             f"JWT {label} key is only {key.key_size} bits — RSA 2048 or larger required"
@@ -196,6 +258,17 @@ def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) 
 
 
 def verify_jwt_keys_usable() -> None:
+    """
+    Verify both configured JWT keys parse as RSA keys of >= 2048 bits.
+
+    Runs ONCE at application startup so a corrupt, non-RSA, or weak key fails
+    fast at boot (the lifespan raises :class:`StartupError`) instead of
+    surfacing mid-request as opaque signing/verification failures.
+
+    Raises:
+        StartupError: If either key cannot be parsed, is not RSA, or is
+            smaller than 2048 bits.
+    """
     try:
         private_key: PrivateKeyTypes = serialization.load_pem_private_key(
             settings.jwt_private_key.encode("utf-8"),
@@ -221,6 +294,16 @@ def verify_jwt_keys_usable() -> None:
 
 
 def verify_mfa_encryption_key() -> None:
+    """
+    Verify the configured MFA_ENCRYPTION_KEY parses as a Fernet key.
+
+    Runs ONCE at application startup so a missing or malformed key fails fast
+    at boot (the lifespan raises :class:`StartupError`) instead of surfacing
+    mid-request when a TOTP secret is first encrypted/decrypted.
+
+    Raises:
+        StartupError: If the key is missing, not base64, or not 32 bytes.
+    """
     try:
         Fernet(settings.MFA_ENCRYPTION_KEY.encode("utf-8"))
     except (ValueError, TypeError) as exc:

@@ -1,3 +1,14 @@
+"""
+FastAPI dependency injection â€” get_db, get_current_user, require_permission.
+
+The api layer is the sole composition point: feature services and repositories
+are wired together here and nowhere else. Feature imports stay inside the
+factory functions (call sites) so importing this module never pulls the whole
+feature tree at load time, and no feature ever imports another feature.
+
+Every route that touches the database or requires auth goes through these deps.
+"""
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -42,6 +53,13 @@ _MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
 
 
 async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: str) -> None:
+    """
+    Block authenticated calls while forced MFA is not yet set up.
+
+    Raises:
+        MFARequiredError: When MFA is mandatory for this account (tenant owner
+            or tenant-level policy) but not yet enabled.
+    """
     from identity.core.security import mfa_is_required
 
     user = await UserRepository(db).get_by_id(user_id)
@@ -60,6 +78,13 @@ async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: 
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Yield an async database session; commit on success, roll back on error.
+
+    Without the commit, every write made by a route handler (user registration,
+    audit logs, session revocation) is rolled back when the session closes â€”
+    registration was returning tokens for a user that never persisted.
+    """
     async with async_session_factory() as session:
         try:
             yield session
@@ -73,7 +98,26 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    """
+    Extract and verify JWT from Authorization header, return user claims.
 
+    Uses security.verify_jwt() â€” the ONE AND ONLY decode path.
+    The tenant is consumed from TenantContext (resolved once by the middleware)
+    and the JWT-vs-routed cross-check is enforced again here as defense in
+    depth, so a token can never be used against a different tenant even if a
+    route is reached without going through the middleware.
+
+    Enforces the MFA gate on every authenticated route except the enrollment
+    endpoints (``/api/v1/mfa/setup``, ``/api/v1/mfa/verify``): accounts that
+    must enroll (tenant owner or tenant policy) get 403 MFARequiredError until
+    MFA is enabled.
+
+    Raises:
+        AuthenticationError: If no token, token is invalid, or token is expired.
+        MFARequiredError: If MFA is mandatory for this account but not enabled.
+        TenantContextMissingError: If the middleware hasn't resolved a tenant.
+        TenantMismatchError: If the token's tenant claim differs from the routed tenant.
+    """
     if credentials is None:
         raise AuthenticationError("Missing Authorization header")
 
@@ -97,6 +141,8 @@ async def get_current_user(
 
 
 def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory â€” returns a dependency that checks a specific permission."""
+
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
         user_repo: UserRepository = Depends(get_user_repo),
@@ -153,14 +199,17 @@ def get_token_service(
 
 
 def get_email_service() -> EmailService:
+    """Email transport â€” log-based until a real provider is wired."""
     return LogEmailService()
 
 
 def get_rate_limiter() -> RateLimiter:
+    """Return the process-wide rate limiter (Redis-backed, fail-open)."""
     return default_rate_limiter
 
 
 def get_verification_store() -> VerificationStore:
+    """Return the Redis-backed OTP / verification-token store."""
     return VerificationStore()
 
 
@@ -169,6 +218,7 @@ def get_mfa_challenge_store() -> MfaChallengeStore:
 
 
 def get_turnstile_verifier() -> TurnstileVerifier:
+    """Return the Cloudflare Turnstile server-side verifier."""
     return TurnstileVerifier()
 
 

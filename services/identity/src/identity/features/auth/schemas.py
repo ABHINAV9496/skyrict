@@ -1,3 +1,5 @@
+"""Authentication schemas â€” requests, responses, and token payloads."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -17,22 +19,30 @@ class _CamelModel(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    """POST /auth/login"""
+
     email: EmailStr
     password: str = Field(..., min_length=1)
     tenant_slug: str | None = Field(default=None, description="Tenant slug for multi-tenant login")
 
 
 class TokenRefreshRequest(BaseModel):
+    """POST /auth/refresh"""
+
     refresh_token: str
 
 
 class LogoutRequest(BaseModel):
+    """POST /auth/logout"""
+
     refresh_token: str | None = Field(
         default=None, description="Specific token to revoke; if omitted, revoke all"
     )
 
 
 class TokenPayloadSchema(BaseModel):
+    """Decoded JWT payload."""
+
     sub: str
     tenant_id: str
     type: str
@@ -41,6 +51,8 @@ class TokenPayloadSchema(BaseModel):
 
 
 class TokenIntrospectionResponse(BaseModel):
+    """POST /auth/introspect â€” token introspection."""
+
     active: bool
     sub: str | None = None
     tenant_id: str | None = None
@@ -50,6 +62,8 @@ class TokenIntrospectionResponse(BaseModel):
 
 
 class AuthResponse(BaseModel):
+    """Response after successful login/refresh."""
+
     access_token: str | None = None
     refresh_token: str | None = None
     token_type: str = "Bearer"
@@ -70,66 +84,98 @@ class AuthResponse(BaseModel):
 
 
 class MfaChallengeVerifyRequest(BaseModel):
+    """POST /auth/mfa/verify request body."""
+
     code: str = Field(..., min_length=6, max_length=32, description="TOTP code or backup code")
     mfa_token: str = Field(..., description="Opaque challenge token from the login response")
 
 
 class SignupStartRequest(_CamelModel):
+    """POST /auth/signup/start"""
+
     email: EmailStr
     turnstile_token: str | None = Field(default=None, description="Cloudflare Turnstile response")
 
 
 class SignupStartResponse(_CamelModel):
+    """Response after a successful Turnstile + email gate."""
+
     status: Literal["ok"] = "ok"
 
 
 class SendCodeRequest(_CamelModel):
+    """POST /auth/signup/send-code"""
+
     email: EmailStr
 
 
 class SendCodeResponse(_CamelModel):
+    """
+    Response after an OTP is sent (or a resend is still cooling down).
+
+    ``code`` is exposed only outside production (dev/test).
+    """
+
     status: Literal["ok"] = "ok"
     resend_in: int = Field(default=60, description="Seconds until a new code can be sent")
     code: str | None = Field(default=None, description="Plaintext OTP, dev/test only")
 
 
 class VerifyCodeRequest(_CamelModel):
+    """POST /auth/signup/verify-code"""
+
     email: EmailStr
     code: str = Field(..., min_length=6, max_length=6)
 
 
 class VerifyCodeResponse(_CamelModel):
+    """Result of an OTP check â€” never reveals whether the email has an account."""
+
     status: Literal["ok", "invalid", "expired"]
     verification_token: str | None = Field(default=None, description="Opaque single-use token")
 
 
 class SetPasswordRequest(_CamelModel):
+    """POST /auth/signup/password"""
+
     email: EmailStr
     verification_token: str
     password: str = Field(..., min_length=12)
 
 
 class SetPasswordResponse(_CamelModel):
+    """Response after the wizard password is set."""
+
     status: Literal["ok"] = "ok"
 
 
 class CheckEmailRequest(_CamelModel):
+    """POST /auth/signup/check-email"""
+
     email: EmailStr
 
 
 class CheckEmailResponse(_CamelModel):
+    """Availability of an email for self-service signup."""
+
     available: bool
 
 
 class CheckSlugRequest(_CamelModel):
+    """POST /auth/signup/check-slug"""
+
     slug: str = Field(..., min_length=1, max_length=100)
 
 
 class CheckSlugResponse(_CamelModel):
+    """Availability of a workspace slug."""
+
     available: bool
 
 
 class BillingAddress(_CamelModel):
+    """Billing address captured on the organization step."""
+
     country: str = Field(..., min_length=2, max_length=2)
     address_line1: str = Field(..., min_length=1, max_length=256)
     address_line2: str | None = Field(default=None, max_length=256)
@@ -139,6 +185,8 @@ class BillingAddress(_CamelModel):
 
 
 class CreateOrganizationRequest(_CamelModel):
+    """POST /auth/signup/organization â€” final wizard step, provisions the tenant."""
+
     email: EmailStr
     verification_token: str
     plan_id: Literal["starter", "professional", "business", "enterprise"]
@@ -152,6 +200,8 @@ class CreateOrganizationRequest(_CamelModel):
 
 
 class CreateOrganizationResponse(_CamelModel):
+    """Response after the organization is provisioned â€” MFA setup is mandatory."""
+
     status: Literal["ok"] = "ok"
     mfa_required: bool = True
     tenant_id: UUID

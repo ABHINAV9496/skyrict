@@ -1,3 +1,5 @@
+"""Unit tests for the Redis-backed fixed-window rate limiter."""
+
 from __future__ import annotations
 
 import pytest
@@ -7,6 +9,8 @@ from skyrict_common.exceptions import RateLimitExceededError, RateLimitUnavailab
 
 
 class FakeRedis:
+    """In-memory incr/expire double for the limiter."""
+
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}
 
@@ -19,6 +23,8 @@ class FakeRedis:
 
 
 class BrokenRedis:
+    """Redis double that always raises (infra failure)."""
+
     async def incr(self, key: str) -> int:
         raise ConnectionError("redis down")
 

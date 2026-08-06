@@ -1,3 +1,5 @@
+"""Integration coverage for the mfaToken login challenge flow."""
+
 from __future__ import annotations
 
 import uuid

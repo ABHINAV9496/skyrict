@@ -1,7 +1,16 @@
+"""
+Base exceptions for Skyrict services.
+
+Every service should catch these at the API layer and map them to HTTP responses.
+Domain code should raise these, never HTTPException.
+"""
+
 from __future__ import annotations
 
 
 class SkyrictError(Exception):
+    """Base exception for all Skyrict domain errors."""
+
     message: str = "An unexpected error occurred"
     code: str = "SKYRICT_ERROR"
 

@@ -1,3 +1,9 @@
+"""Invitation security: persist the invite role and store only a token hash.
+
+Adds ``invitations.role_name`` (backfilled to ``standard_user``) and replaces
+the plaintext ``invitations.token`` with its SHA-256 ``token_hash``.
+"""
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -10,6 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Add role_name + token_hash, backfill them, then drop the plaintext token."""
     op.add_column("invitations", sa.Column("role_name", sa.String(64), nullable=True))
     op.execute("UPDATE invitations SET role_name = 'standard_user' WHERE role_name IS NULL")
     op.alter_column(
@@ -36,6 +43,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Restore the plaintext token column and drop the security columns."""
     op.drop_index("uq_invitations_token_hash", table_name="invitations")
     op.add_column("invitations", sa.Column("token", sa.String(128), nullable=True))
     op.drop_column("invitations", "token_hash")

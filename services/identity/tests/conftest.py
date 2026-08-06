@@ -1,3 +1,12 @@
+"""
+Test fixtures â€” ephemeral RSA keys, database sessions, test client.
+
+This conftest.py is loaded by pytest before any test module. It generates a
+fresh RSA key pair in a temporary directory (never committed to the repo),
+sets the environment variables needed for identity/core/config.py to start,
+and provides reusable fixtures.
+"""
+
 from __future__ import annotations
 
 import os
@@ -56,27 +65,42 @@ os.environ.setdefault(
 
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_ephemeral_keys():
+    """Remove the generated temp key directory at the end of the session."""
     yield
     shutil.rmtree(_KEY_DIR, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
 def rsa_private_key() -> str:
+    """Load the ephemeral RSA private key generated for this test session."""
     return (_KEY_DIR / "private.pem").read_text()
 
 
 @pytest.fixture(scope="session")
 def rsa_public_key() -> str:
+    """Load the ephemeral RSA public key generated for this test session."""
     return (_KEY_DIR / "public.pem").read_text()
 
 
 @pytest.fixture
 def anyio_backend():
+    """Use asyncio backend for anyio/pytest-asyncio."""
     return "asyncio"
 
 
 @pytest.fixture
 async def client():
+    """
+    Async HTTP client against the FastAPI app (ASGI transport).
+
+    Runs the REAL application lifespan (startup dependency verification +
+    graceful shutdown) so integration tests exercise the lifecycle SKY-11
+    implements. Skips the test when the identity application cannot be built
+    OR when startup verification fails (database or Redis unreachable) â€”
+    mirroring how the ``migrated_schema`` fixture skips when Postgres is
+    down. CI runs against the provisioned compose stack (postgres + redis),
+    where startup succeeds.
+    """
     try:
         from httpx import ASGITransport, AsyncClient
 

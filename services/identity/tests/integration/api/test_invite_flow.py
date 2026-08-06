@@ -1,3 +1,10 @@
+"""
+Integration tests for the invitation flow (SKY-16).
+
+Tests the full invitation lifecycle: create, accept, expired token rejection,
+already-used token rejection, and email-mismatch rejection.
+"""
+
 from __future__ import annotations
 
 import contextlib

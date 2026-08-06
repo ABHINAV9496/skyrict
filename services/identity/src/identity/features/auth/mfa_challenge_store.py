@@ -1,3 +1,10 @@
+"""Redis-backed storage for one-time MFA login challenges.
+
+An mfaToken binds a login attempt to a user + tenant for a short TTL with a
+bounded attempt budget. The challenge is consumed (deleted) on success or
+when the attempt limit is hit, so each token is single-use.
+"""
+
 from __future__ import annotations
 
 import json
@@ -33,14 +40,18 @@ def _as_int(value: object) -> int:
 
 
 def generate_mfa_token() -> str:
+    """Return a cryptographically random mfaToken."""
     return secrets.token_urlsafe(32)
 
 
 class MfaChallengeStore:
+    """Redis-backed store for one-time MFA login challenges."""
+
     def __init__(self, client: Redis | None = None) -> None:
         self._client = client if client is not None else redis_client
 
     async def create(self, *, user_id: str, tenant_id: str) -> str:
+        """Issue a new challenge and return its opaque mfaToken."""
         token = generate_mfa_token()
         payload = {"user_id": user_id, "tenant_id": tenant_id}
         await self._client.set(
@@ -56,6 +67,7 @@ class MfaChallengeStore:
         return token
 
     async def get(self, token: str) -> dict[str, str] | None:
+        """Return the challenge payload (user_id/tenant_id) or None if absent."""
         raw = _as_str(await self._client.get(_challenge_key(token)))
         if raw is None:
             return None
@@ -72,9 +84,11 @@ class MfaChallengeStore:
         return {"user_id": payload["user_id"], "tenant_id": payload["tenant_id"]}
 
     async def get_attempts(self, token: str) -> int:
+        """Return the number of failed attempts recorded for this token."""
         return _as_int(await self._client.get(_attempts_key(token)))
 
     async def increment_attempts(self, token: str) -> int:
+        """Record one more attempt and return the new count."""
         key = _attempts_key(token)
         count = _as_int(await self._client.incr(key))
         ttl = _as_int(await self._client.ttl(key))
@@ -83,4 +97,5 @@ class MfaChallengeStore:
         return count
 
     async def consume(self, token: str) -> None:
+        """Delete the challenge and its attempt counter (single-use)."""
         await self._client.delete(_challenge_key(token), _attempts_key(token))

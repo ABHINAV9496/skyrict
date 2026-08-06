@@ -1,3 +1,5 @@
+"""Invitation repository â€” DB operations for the invitations table."""
+
 from __future__ import annotations
 
 import uuid

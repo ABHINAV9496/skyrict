@@ -1,3 +1,5 @@
+"""Unit tests for the invitation feature InvitationService (fake ports)."""
+
 from __future__ import annotations
 
 import uuid

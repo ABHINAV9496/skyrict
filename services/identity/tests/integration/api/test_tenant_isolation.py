@@ -1,3 +1,22 @@
+"""
+Integration tests proving tenant isolation at the HTTP layer.
+
+TenantContextMiddleware is the single source of truth for tenant resolution:
+it derives the tenant slug from the routing layer, verifies the tenant in the
+database, cross-checks the verified JWT's tenant claim, and populates
+TenantContext. These tests exercise the full stack (middleware -> JWT
+cross-check -> route dependencies -> database) against a real Postgres:
+
+  - a token bound to tenant A succeeds on tenant A and is rejected on
+    tenant B (401 tenant-mismatch);
+  - unresolvable / unknown / disabled tenants are rejected before any route
+    handler runs;
+  - the request-scoped context is cleared after every request (no leakage);
+  - tokens issued by login/register carry the routed tenant's ID.
+
+The whole suite skips when Postgres is unavailable (see conftest.py).
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -20,6 +39,7 @@ pytestmark = pytest.mark.integration
 
 
 async def _register_and_login(client: AsyncClient) -> dict:
+    """Provision a brand-new tenant via the wizard and return owner credentials."""
     tenant = await provision_tenant(client)
     creds = await wizard_login(
         client, slug=tenant["slug"], email=tenant["email"], password=tenant["password"]
@@ -48,6 +68,7 @@ async def _delete_tenant_by_id(tenant_id: str) -> None:
 
 @pytest.fixture
 def acme_access_token(integration_db: dict[str, str]) -> str:
+    """A valid access token for alice@acme.io bound to the acme tenant."""
     return create_access_token(
         subject=integration_db["user_a_id"],
         tenant_id=integration_db["acme_id"],
@@ -55,6 +76,11 @@ def acme_access_token(integration_db: dict[str, str]) -> str:
 
 
 class TestTwoRealTenants:
+    """
+    Two real signup tenants: every bearer-gated endpoint rejects a token from
+    the other tenant (401 tenant-mismatch) while succeeding on its own.
+    """
+
     async def test_full_endpoint_sweep_rejects_cross_tenant(self, client: AsyncClient) -> None:
         tenant_a = await _register_and_login(client)
         tenant_b = await _register_and_login(client)
@@ -228,6 +254,8 @@ class TestTwoRealTenants:
 
 
 class TestTenantIsolation:
+    """JWT-vs-routed-tenant cross-check is enforced on every request."""
+
     async def test_token_succeeds_on_its_own_tenant(
         self,
         client: AsyncClient,
@@ -260,6 +288,8 @@ class TestTenantIsolation:
 
 
 class TestTenantResolution:
+    """Routing failures are rejected before any route handler runs."""
+
     async def test_unresolvable_tenant_rejected(self, client: AsyncClient) -> None:
         response = await client.get("/api/v1/users/me")
         assert response.status_code == 400
@@ -291,6 +321,8 @@ class TestTenantResolution:
 
 
 class TestContextLifecycle:
+    """The request-scoped context is cleared so no tenant leaks between requests."""
+
     async def test_no_tenant_leaks_to_next_request(
         self,
         client: AsyncClient,
@@ -327,6 +359,8 @@ class TestContextLifecycle:
 
 
 class TestTokenBinding:
+    """login issues tokens bound to the routed tenant."""
+
     async def test_login_issues_token_bound_to_routed_tenant(
         self, client: AsyncClient, integration_db: dict[str, str]
     ) -> None:

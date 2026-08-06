@@ -1,3 +1,5 @@
+"""Invitation schemas â€” requests and responses."""
+
 from __future__ import annotations
 
 from datetime import datetime

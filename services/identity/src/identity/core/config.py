@@ -1,3 +1,10 @@
+"""
+Application configuration â€” pydantic-settings, env-driven, fail-fast on missing secrets.
+
+Single source of truth for ALL configuration. Application code must never
+call os.getenv() directly â€” everything routes through the ``settings`` object.
+"""
+
 from __future__ import annotations
 
 import enum
@@ -9,6 +16,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
+    """Deployment environments â€” exactly four, no ad-hoc values."""
+
     DEV = "dev"
     TEST = "test"
     STAGING = "staging"
@@ -16,6 +25,14 @@ class Environment(enum.StrEnum):
 
 
 class Settings(BaseSettings):
+    """
+    All configuration loaded from environment variables.
+
+    Prefix: IDENTITY_ (set via .env or shell environment).
+    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults â€”
+    the process refuses to start if they are missing.
+    """
+
     model_config = SettingsConfigDict(
         env_prefix="IDENTITY_",
         env_file=".env",
@@ -171,6 +188,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def load_rsa_keys(self) -> Settings:
+        """Load RSA key files and fail immediately if missing or unreadable."""
         errors: list[str] = []
 
         for label, path_attr, dest_attr in [
@@ -204,6 +222,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_mfa_encryption_key(self) -> Settings:
+        """Fail-fast when MFA_ENCRYPTION_KEY is missing or not a valid Fernet key."""
         from cryptography.fernet import Fernet
 
         try:
@@ -218,6 +237,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> Settings:
+        """
+        Fail-fast guards that apply ONLY in staging and production.
+
+        Runs after load_rsa_keys so all fields are populated.
+        Checks:
+          1. JWT key paths must not point at committed test fixtures.
+          2. DEBUG must be False.
+          3. CORS_ORIGINS must not contain wildcard '*'.
+          4. BASE_DOMAIN must be set (tenant subdomain resolution).
+        """
         if self.ENVIRONMENT not in (Environment.STAGING, Environment.PRODUCTION):
             return self
 

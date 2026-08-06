@@ -1,3 +1,5 @@
+"""Organization endpoints â€” tenant CRUD and security settings."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,7 +30,7 @@ async def get_my_organization(
     tenant_svc: TenantService = Depends(get_tenant_service),
     tenant_id: str = Depends(get_current_tenant),
 ) -> ResponseEnvelope[TenantResponse]:
-
+    """Get the current user's organization."""
     tenant = await tenant_svc.get_organization(tenant_id)
     return ResponseEnvelope(data=TenantResponse.model_validate(tenant))
 
@@ -39,7 +41,7 @@ async def create_organization(
     current_user: dict[str, Any] = Depends(get_current_user),
     tenant_svc: TenantService = Depends(get_tenant_service),
 ) -> ResponseEnvelope[TenantResponse]:
-
+    """Create a new organization."""
     tenant = await tenant_svc.create_organization(body)
     return ResponseEnvelope(
         data=TenantResponse.model_validate(tenant), message="Organization created"
@@ -53,6 +55,7 @@ async def get_organization_settings(
     _permission: dict[str, Any] = Depends(_require_settings_read),
     tenant_svc: TenantService = Depends(get_tenant_service),
 ) -> ResponseEnvelope[TenantSettingsResponse]:
+    """Get the organization's security settings (requires settings:read)."""
 
     tenant = await tenant_svc.get_organization(organization_id)
     return ResponseEnvelope(data=TenantSettingsResponse.model_validate(tenant))
@@ -68,6 +71,7 @@ async def update_organization_settings(
     _permission: dict[str, Any] = Depends(_require_settings_write),
     tenant_svc: TenantService = Depends(get_tenant_service),
 ) -> ResponseEnvelope[TenantSettingsResponse]:
+    """Update the organization's security settings (requires settings:write)."""
 
     tenant = await tenant_svc.update_settings(organization_id, body)
     return ResponseEnvelope(

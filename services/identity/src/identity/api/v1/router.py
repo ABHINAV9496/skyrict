@@ -1,3 +1,5 @@
+"""V1 API router â€” aggregates all v1 endpoint modules."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter

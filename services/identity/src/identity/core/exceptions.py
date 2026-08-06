@@ -1,3 +1,10 @@
+"""
+Domain exceptions -> RFC 7807 problem+json error responses.
+
+Catch SkyrictError subclasses at the API layer and map to FastAPI responses
+following https://www.rfc-editor.org/rfc/rfc7807 (Problem Details for HTTP APIs).
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -76,7 +83,16 @@ __all__ = [
 logger = structlog.get_logger("identity.exceptions")
 
 
-class StartupError(RuntimeError): ...
+class StartupError(RuntimeError):
+    """
+    A required dependency failed startup verification.
+
+    Raised from the application lifespan so the process refuses to boot
+    (fail-fast) instead of serving traffic with a dead database, an
+    unreachable Redis, or unusable JWT keys. NOT a SkyrictError â€” it is
+    never mapped to an HTTP response; the orchestrator sees the non-zero
+    exit and restarts the pod.
+    """
 
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
@@ -117,6 +133,7 @@ _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")
 
 
 def _status_and_type(exc: SkyrictError) -> tuple[int, str]:
+    """Resolve (status_code, problem_type) by walking the exception MRO."""
     for exc_type in type(exc).__mro__:
         if exc_type in _STATUS_MAP:
             return _STATUS_MAP[exc_type]
@@ -124,10 +141,12 @@ def _status_and_type(exc: SkyrictError) -> tuple[int, str]:
 
 
 def _request_id(request: Request) -> str | None:
+    """Return the request_id attached by RequestIdMiddleware, if any."""
     return getattr(request.state, "request_id", None)
 
 
 async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResponse:
+    """Map SkyrictError to an RFC 7807 problem+json response."""
     status_code, problem_type = _status_and_type(exc)
 
     body: dict[str, Any] = {
@@ -144,7 +163,7 @@ async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResp
 async def request_validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-
+    """Return FastAPI body-validation failures as RFC 7807 (422)."""
     errors = exc.errors()
     messages = [
         f"{'.'.join(str(loc) for loc in error.get('loc', ()))}: {error.get('msg', '')}"
@@ -164,6 +183,7 @@ async def request_validation_error_handler(
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Return route-level HTTP errors (404/405/...) as RFC 7807."""
     status_code = exc.status_code
     body: dict[str, Any] = {
         "type": f"{_PROBLEM_BASE}/http-{status_code}",
@@ -177,6 +197,11 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Catch-all for unhandled exceptions â€” NEVER leak internals.
+
+    Logs full traceback for debugging, returns sanitized 500 to the client.
+    """
     request_id = _request_id(request) or "unknown"
     logger.error(
         "unhandled_exception",

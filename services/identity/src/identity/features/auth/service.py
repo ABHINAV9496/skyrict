@@ -1,3 +1,17 @@
+"""
+Authentication feature services â€” login/register and the token lifecycle.
+
+``AuthenticationService`` authenticates users, self-service provisions new
+tenants, and verifies emails; ``TokenService`` owns the JWT lifecycle (create,
+refresh, revoke, introspect). Both live in this feature because they model the
+same domain.
+
+The tenant is resolved ONCE by the middleware (Host subdomain in production,
+X-Tenant-Slug in dev) and consumed from TenantContext â€” except self-service
+registration, which runs without a routed tenant (the request bypasses tenant
+resolution via SKIP_AUTH_PATHS) and provisions its own.
+"""
+
 from __future__ import annotations
 
 import hmac
@@ -79,6 +93,8 @@ def _compare_otp(provided: str, expected_hash: str) -> bool:
 
 
 class AuthenticationService:
+    """Handles user authentication, provisioning, and email verification."""
+
     def __init__(
         self,
         user_repo: UserRepositoryPort,
@@ -106,7 +122,20 @@ class AuthenticationService:
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
     ) -> dict[str, Any]:
+        """
+        Authenticate a user and return a token pair (plus MFA posture).
 
+        Anti-enumeration contract (ADR-004): every failure mode raises the
+        SAME :class:`AuthenticationError` with the same message, and every
+        attempt performs exactly one Argon2id verification (a dummy one for
+        unknown emails), so neither the response NOR its timing reveals
+        whether an account exists, is disabled, or is unverified. Failed
+        attempts are audited for brute-force / credential-stuffing monitoring.
+
+        Raises:
+            AuthenticationError: For any failed authentication â€” unknown
+                email, disabled or unverified account, or wrong password.
+        """
         tenant_id = TenantContext.get()
 
         user = await self.user_repo.get_by_email(tenant_id, request.email)
@@ -205,6 +234,7 @@ class AuthenticationService:
         user_agent: str | None = None,
         audit_action: str = "auth.login.success",
     ) -> dict[str, Any]:
+        """Issue a fresh token pair + session and audit the completed login."""
 
         assert user.id is not None
 
@@ -264,7 +294,13 @@ class AuthenticationService:
         user_agent: str | None,
         tenant_id: str,
     ) -> None:
+        """
+        Record a failed login for brute-force / credential-stuffing monitoring.
 
+        Unknown emails are targeted as ``email:<address>`` (no user row
+        exists); known accounts as ``user:<id>``. The attempted email is the
+        point of the event â€” it is what an incident response would search on.
+        """
         await self.audit_service.log(
             action="auth.login.failed",
             target=f"user:{user_id}" if user_id is not None else f"email:{email}",
@@ -429,6 +465,7 @@ class AuthenticationService:
         }
 
     async def _create_system_roles(self, tenant_id: uuid.UUID) -> dict[str, Role]:
+        """Provision the platform-defined system roles for a tenant."""
         roles: dict[str, Role] = {}
         for name, permissions in SYSTEM_ROLE_DEFINITIONS:
             role = await self.role_repo.create(
@@ -444,6 +481,8 @@ class AuthenticationService:
 
 
 class TokenService:
+    """Manages JWT token lifecycle â€” creation, refresh, revocation."""
+
     def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
         self.session_repo = session_repo
         self.audit_service = audit_service
@@ -455,7 +494,7 @@ class TokenService:
         tenant_id: str,
         session_id: str | None = None,
     ) -> TokenPair:
-
+        """Create an access + refresh token pair."""
         access_token = create_access_token(user_id, tenant_id=tenant_id)
         refresh_token = create_refresh_token(user_id, tenant_id=tenant_id, session_id=session_id)
 
@@ -466,6 +505,7 @@ class TokenService:
         )
 
     async def refresh_tokens(self, refresh_token: str) -> TokenPair:
+        """Validate a refresh token, rotate it, and issue a new pair."""
         payload = verify_jwt(refresh_token)
 
         if payload.get("type") != "refresh":
@@ -519,6 +559,7 @@ class TokenService:
         await self.session_repo.commit()
 
     async def revoke_token(self, refresh_token: str) -> None:
+        """Revoke a refresh token (invalidate the session)."""
         payload = verify_jwt(refresh_token)
         if payload.get("type") != "refresh":
             raise TokenInvalidError("Token is not a refresh token")
@@ -531,6 +572,7 @@ class TokenService:
             await self.session_repo.revoke_session(session.id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
+        """Introspect a token â€” return its claims if valid."""
         try:
             payload = verify_jwt(token)
             return {

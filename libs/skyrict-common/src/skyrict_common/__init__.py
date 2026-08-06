@@ -1,3 +1,5 @@
+"""Skyrict common utilities â€” shared across all services."""
+
 from skyrict_common.exceptions import (
     AuthenticationError,
     AuthorizationError,

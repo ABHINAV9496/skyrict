@@ -1,3 +1,5 @@
+"""Invitation ORM model."""
+
 from __future__ import annotations
 
 import uuid
@@ -11,6 +13,12 @@ from identity.models.base import Base, UUIDPrimaryKeyMixin
 
 
 class InvitationModel(UUIDPrimaryKeyMixin, Base):
+    """
+    SQLAlchemy model for the invitations table.
+
+    Stores single-use, expiring invite tokens bound to one email.
+    """
+
     __tablename__ = "invitations"
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

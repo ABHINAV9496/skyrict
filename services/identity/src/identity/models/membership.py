@@ -76,7 +76,7 @@ class MembershipModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    user = relationship("UserModel", back_populates="memberships")
+    user = relationship("UserModel", back_populates="memberships", foreign_keys=[user_id])
     tenant = relationship("TenantModel", back_populates="memberships")
     role = relationship("RoleModel")
     invited_by = relationship("UserModel", foreign_keys=[invited_by_user_id])

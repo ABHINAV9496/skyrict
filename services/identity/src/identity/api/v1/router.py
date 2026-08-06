@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from identity.api.v1.health import router as health_router
 from identity.features.auth.router import router as auth_router
+from identity.features.handoffs.router import router as handoffs_router
 from identity.features.invitations.router import router as invitations_router
 from identity.features.mfa.router import router as mfa_router
 from identity.features.organizations.router import router as org_router
@@ -26,6 +27,7 @@ api_router.include_router(permissions_router)
 api_router.include_router(invitations_router)
 api_router.include_router(session_router)
 api_router.include_router(mfa_router)
+api_router.include_router(handoffs_router)
 api_router.include_router(passkey_router)
 api_router.include_router(sso_router)
 api_router.include_router(health_router)

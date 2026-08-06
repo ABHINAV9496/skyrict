@@ -181,3 +181,21 @@ class InvitationAlreadyUsedError(SkyrictError):
 class InvitationEmailMismatchError(SkyrictError):
     message = "Email does not match the invitation"
     code = "INVITATION_EMAIL_MISMATCH"
+
+
+# ---------- Handoff ----------
+
+
+class HandoffTokenNotFoundError(NotFoundError):
+    message = "Handoff token not found"
+    code = "HANDOFF_TOKEN_NOT_FOUND"
+
+
+class HandoffTokenExpiredError(SkyrictError):
+    message = "Handoff token has expired"
+    code = "HANDOFF_TOKEN_EXPIRED"
+
+
+class HandoffTokenAlreadyUsedError(SkyrictError):
+    message = "Handoff token has already been used"
+    code = "HANDOFF_TOKEN_ALREADY_USED"

@@ -217,3 +217,23 @@ class AuditLog:
     prev_hash: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None
+
+
+@dataclass
+class Handoff:
+    """Handoff token entity — single-use, expiring, carries in-flight payload.
+
+    Lets the onboarding wizard and BFF pass control across requests while
+    resuming the exact step: the raw token is returned once on issue, only its
+    SHA-256 hash is stored, and redemption is atomic (marked consumed).
+    """
+
+    purpose: str
+    token_hash: str
+    expires_at: datetime
+    payload: dict[str, Any] = field(default_factory=dict)
+    tenant_id: UUID | None = None
+    created_by_user_id: UUID | None = None
+    consumed_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None

@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_SESSIONS: int = Field(
         default=5, description="max active sessions per user — oldest are evicted"
     )
+    HANDOFF_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30, description="TTL for single-use onboarding handoff tokens"
+    )
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(

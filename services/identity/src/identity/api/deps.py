@@ -38,6 +38,8 @@ from skyrict_common.exceptions import AuthenticationError, MFARequiredError
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.service import AuthenticationService, TokenService
+    from identity.features.handoffs.repository import HandoffRepository
+    from identity.features.handoffs.service import HandoffService
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
     from identity.features.memberships.service import MembershipService
@@ -207,6 +209,21 @@ def get_session_service(
     from identity.features.sessions.service import SessionService
 
     return SessionService(session_repo, audit_service)
+
+
+def get_handoff_repo(db: AsyncSession = Depends(get_db)) -> HandoffRepository:
+    from identity.features.handoffs.repository import HandoffRepository
+
+    return HandoffRepository(db)
+
+
+def get_handoff_service(
+    handoff_repo: HandoffRepository = Depends(get_handoff_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> HandoffService:
+    from identity.features.handoffs.service import HandoffService
+
+    return HandoffService(handoff_repo, audit_service)
 
 
 def get_token_service(

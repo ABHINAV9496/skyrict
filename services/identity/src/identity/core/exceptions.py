@@ -20,6 +20,9 @@ from skyrict_common.exceptions import (
     AuthorizationError,
     ConflictError,
     EmailNotVerifiedError,
+    HandoffTokenAlreadyUsedError,
+    HandoffTokenExpiredError,
+    HandoffTokenNotFoundError,
     InvalidPasswordError,
     InvitationAlreadyUsedError,
     InvitationEmailMismatchError,
@@ -52,6 +55,9 @@ __all__ = [
     "AuthorizationError",
     "ConflictError",
     "EmailNotVerifiedError",
+    "HandoffTokenAlreadyUsedError",
+    "HandoffTokenExpiredError",
+    "HandoffTokenNotFoundError",
     "InvalidPasswordError",
     "InvitationAlreadyUsedError",
     "InvitationEmailMismatchError",
@@ -128,6 +134,9 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     InvitationExpiredError: (400, f"{_PROBLEM_BASE}/invitation-expired"),
     InvitationEmailMismatchError: (400, f"{_PROBLEM_BASE}/invitation-email-mismatch"),
     InvitationAlreadyUsedError: (409, f"{_PROBLEM_BASE}/invitation-already-used"),
+    HandoffTokenExpiredError: (400, f"{_PROBLEM_BASE}/handoff-token-expired"),
+    HandoffTokenNotFoundError: (404, f"{_PROBLEM_BASE}/handoff-token-not-found"),
+    HandoffTokenAlreadyUsedError: (409, f"{_PROBLEM_BASE}/handoff-token-already-used"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

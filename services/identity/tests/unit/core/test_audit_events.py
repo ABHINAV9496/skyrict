@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import identity.features.auth.router as auth_router
 import identity.features.auth.service as auth_service
+import identity.features.handoffs.service as handoff_service
 import identity.features.mfa.service as mfa_service
 from identity.core.audit_events import (
     ALL_AUDIT_EVENTS,
@@ -107,6 +108,11 @@ class TestActionStringsUsedInServices:
         assert MFA_DISABLED in src
         assert MFA_RESET in src
         assert MFA_VERIFY_BACKUP_CODE_USED in src
+
+    def test_handoff_service_action_strings_are_catalogued(self):
+        src = self._read_source(handoff_service)
+        assert "HANDOFF_ISSUED" in src
+        assert "HANDOFF_REDEEMED" in src
 
     def test_catalog_contains_no_future_orphans(self):
         # Events declared for surfaces still under construction must be

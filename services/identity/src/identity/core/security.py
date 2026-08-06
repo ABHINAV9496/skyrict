@@ -55,19 +55,18 @@ class TokenClaims(TypedDict):
 
 
 _ph = PasswordHasher(
-    time_cost=3,
-    memory_cost=65536,
-    parallelism=4,
-    hash_len=32,
-    salt_len=16,
+    time_cost=3,  # number of iterations
+    memory_cost=65536,  # 64 MB
+    parallelism=4,  # threads
+    hash_len=32,  # output length
+    salt_len=16,  # salt length
 )
 
 
 def hash_password(password: str) -> str:
-    """
-    Hash a plaintext password with Argon2id.
+    """Hash a plaintext password with Argon2id.
 
-    Uses a random salt per call â€” hashes for the same password always differ.
+    Uses a random salt per call — hashes for the same password always differ.
     """
     return _ph.hash(password)
 
@@ -142,12 +141,11 @@ def create_access_token(
     extra_claims: dict[str, Any] | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """
-    Create a signed RS256 access token.
+    """Create a signed RS256 access token.
 
     Args:
         subject: User ID (sub claim).
-        tenant_id: Tenant ID (tenant_id claim) â€” always included.
+        tenant_id: Tenant ID (tenant_id claim) — always included.
         extra_claims: Additional claims to embed.
         expires_delta: Override default expiry.
     """
@@ -203,11 +201,10 @@ def hash_invitation_token(token: str) -> str:
 
 
 def verify_jwt(token: str) -> TokenClaims:
-    """
-    Decode and VERIFY a JWT â€” the ONE AND ONLY verification path.
+    """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
 
     Security guarantees:
-      - RS256 only (asymmetric â€” public key verifies, private key signs)
+      - RS256 only (asymmetric — public key verifies, private key signs)
       - Algorithm whitelist rejects "none" and header-driven attacks
       - Issuer and audience are validated
       - Expiry (exp) and not-before (nbf) are checked

@@ -1,5 +1,4 @@
-"""
-Domain entities â€” pure Python dataclasses, no framework dependencies.
+"""Domain entities — pure Python dataclasses, no framework dependencies.
 
 These represent the core business objects of the identity domain.
 Services operate on these, not on ORM models directly.
@@ -117,7 +116,7 @@ class UserRole:
 
 @dataclass
 class Invitation:
-    """Invitation entity â€” single-use, expiring invite token."""
+    """Invitation entity — single-use, expiring invite token."""
 
     tenant_id: UUID
     email: str
@@ -133,7 +132,7 @@ class Invitation:
 
 @dataclass
 class AuditLog:
-    """Audit log entry entity â€” hash-chained, append-only."""
+    """Audit log entry entity — hash-chained, append-only."""
 
     tenant_id: UUID
     action: str

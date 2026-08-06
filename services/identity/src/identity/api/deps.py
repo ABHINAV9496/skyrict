@@ -1,5 +1,4 @@
-"""
-FastAPI dependency injection â€” get_db, get_current_user, require_permission.
+"""FastAPI dependency injection — get_db, get_current_user, require_permission.
 
 The api layer is the sole composition point: feature services and repositories
 are wired together here and nowhere else. Feature imports stay inside the
@@ -78,11 +77,10 @@ async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: 
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Yield an async database session; commit on success, roll back on error.
+    """Yield an async database session; commit on success, roll back on error.
 
     Without the commit, every write made by a route handler (user registration,
-    audit logs, session revocation) is rolled back when the session closes â€”
+    audit logs, session revocation) is rolled back when the session closes —
     registration was returning tokens for a user that never persisted.
     """
     async with async_session_factory() as session:
@@ -98,10 +96,9 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    Extract and verify JWT from Authorization header, return user claims.
+    """Extract and verify JWT from Authorization header, return user claims.
 
-    Uses security.verify_jwt() â€” the ONE AND ONLY decode path.
+    Uses security.verify_jwt() — the ONE AND ONLY decode path.
     The tenant is consumed from TenantContext (resolved once by the middleware)
     and the JWT-vs-routed cross-check is enforced again here as defense in
     depth, so a token can never be used against a different tenant even if a
@@ -141,7 +138,7 @@ async def get_current_user(
 
 
 def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]]]:
-    """Dependency factory â€” returns a dependency that checks a specific permission."""
+    """Dependency factory — returns a dependency that checks a specific permission."""
 
     async def _check(
         current_user: dict[str, Any] = Depends(get_current_user),
@@ -199,7 +196,7 @@ def get_token_service(
 
 
 def get_email_service() -> EmailService:
-    """Email transport â€” log-based until a real provider is wired."""
+    """Email transport — log-based until a real provider is wired."""
     return LogEmailService()
 
 

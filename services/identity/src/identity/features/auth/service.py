@@ -1,5 +1,4 @@
-"""
-Authentication feature services â€” login/register and the token lifecycle.
+"""Authentication feature services — login/register and the token lifecycle.
 
 ``AuthenticationService`` authenticates users, self-service provisions new
 tenants, and verifies emails; ``TokenService`` owns the JWT lifecycle (create,
@@ -7,7 +6,7 @@ refresh, revoke, introspect). Both live in this feature because they model the
 same domain.
 
 The tenant is resolved ONCE by the middleware (Host subdomain in production,
-X-Tenant-Slug in dev) and consumed from TenantContext â€” except self-service
+X-Tenant-Slug in dev) and consumed from TenantContext — except self-service
 registration, which runs without a routed tenant (the request bypasses tenant
 resolution via SKIP_AUTH_PATHS) and provisions its own.
 """
@@ -122,8 +121,7 @@ class AuthenticationService:
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
     ) -> dict[str, Any]:
-        """
-        Authenticate a user and return a token pair (plus MFA posture).
+        """Authenticate a user and return a token pair (plus MFA posture).
 
         Anti-enumeration contract (ADR-004): every failure mode raises the
         SAME :class:`AuthenticationError` with the same message, and every
@@ -133,7 +131,7 @@ class AuthenticationService:
         attempts are audited for brute-force / credential-stuffing monitoring.
 
         Raises:
-            AuthenticationError: For any failed authentication â€” unknown
+            AuthenticationError: For any failed authentication — unknown
                 email, disabled or unverified account, or wrong password.
         """
         tenant_id = TenantContext.get()
@@ -294,12 +292,11 @@ class AuthenticationService:
         user_agent: str | None,
         tenant_id: str,
     ) -> None:
-        """
-        Record a failed login for brute-force / credential-stuffing monitoring.
+        """Record a failed login for brute-force / credential-stuffing monitoring.
 
         Unknown emails are targeted as ``email:<address>`` (no user row
         exists); known accounts as ``user:<id>``. The attempted email is the
-        point of the event â€” it is what an incident response would search on.
+        point of the event — it is what an incident response would search on.
         """
         await self.audit_service.log(
             action="auth.login.failed",
@@ -481,7 +478,7 @@ class AuthenticationService:
 
 
 class TokenService:
-    """Manages JWT token lifecycle â€” creation, refresh, revocation."""
+    """Manages JWT token lifecycle — creation, refresh, revocation."""
 
     def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
         self.session_repo = session_repo
@@ -572,7 +569,7 @@ class TokenService:
             await self.session_repo.revoke_session(session.id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
-        """Introspect a token â€” return its claims if valid."""
+        """Introspect a token — return its claims if valid."""
         try:
             payload = verify_jwt(token)
             return {

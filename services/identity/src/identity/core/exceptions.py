@@ -84,12 +84,11 @@ logger = structlog.get_logger("identity.exceptions")
 
 
 class StartupError(RuntimeError):
-    """
-    A required dependency failed startup verification.
+    """A required dependency failed startup verification.
 
     Raised from the application lifespan so the process refuses to boot
     (fail-fast) instead of serving traffic with a dead database, an
-    unreachable Redis, or unusable JWT keys. NOT a SkyrictError â€” it is
+    unreachable Redis, or unusable JWT keys. NOT a SkyrictError — it is
     never mapped to an HTTP response; the orchestrator sees the non-zero
     exit and restarts the pod.
     """
@@ -197,8 +196,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    Catch-all for unhandled exceptions â€” NEVER leak internals.
+    """Catch-all for unhandled exceptions — NEVER leak internals.
 
     Logs full traceback for debugging, returns sanitized 500 to the client.
     """
@@ -210,7 +208,7 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
         request_id=request_id,
         path=request.url.path,
         method=request.method,
-        exc_info=True,
+        exc_info=True,  # full traceback in logs
     )
 
     return JSONResponse(

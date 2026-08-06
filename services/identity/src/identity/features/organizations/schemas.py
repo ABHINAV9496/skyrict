@@ -1,4 +1,4 @@
-"""Organization (tenant) schemas â€” requests and responses."""
+"""Organization (tenant) schemas — requests and responses."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class TenantUpdateRequest(BaseModel):
 
 
 class TenantSettingsUpdateRequest(BaseModel):
-    """PATCH /tenants/{id}/settings â€” tenant security policy."""
+    """PATCH /organizations/{id}/settings — tenant security policy."""
 
     mfa_required_for_all_members: bool = Field(
         ...,

@@ -1,4 +1,4 @@
-"""Invitation service â€” create, accept, and expire invite tokens."""
+"""Invitation service — create, accept, and expire invite tokens."""
 
 from __future__ import annotations
 

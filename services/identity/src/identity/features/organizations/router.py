@@ -1,4 +1,4 @@
-"""Organization endpoints â€” tenant CRUD and security settings."""
+"""Organization endpoints — tenant CRUD and security settings."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
+# Security-settings endpoints live under /organizations/{id}/settings and
+# require settings:read / settings:write.
 _require_settings_read = require_permission("settings:read")
 _require_settings_write = require_permission("settings:write")
 

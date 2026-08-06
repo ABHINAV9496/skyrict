@@ -52,7 +52,7 @@ class RateLimiter:
             if count == 1:
                 await client.expire(rl_key, window_seconds + 1)
             return count <= limit
-        except Exception as exc:
+        except Exception as exc:  # fail-open on any Redis error
             if settings.RATE_LIMIT_FAIL_CLOSED:
                 logger.warning("rate_limit_fail_closed", key=key, error=str(exc))
                 raise RateLimitUnavailableError() from exc

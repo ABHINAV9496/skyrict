@@ -1,5 +1,4 @@
-"""
-Unit tests for security utilities â€” JWT (RS256) and password hashing (Argon2id).
+"""Unit tests for security utilities — JWT (RS256) and password hashing (Argon2id).
 
 Includes adversarial tests: expired / wrong-issuer / wrong-audience / future-nbf
 tokens, alg:none forgery, HS256 algorithm-confusion with the public key, tokens
@@ -52,7 +51,7 @@ def _valid_claims(**overrides) -> dict:
 
 
 def _sign(payload: dict, private_key_pem: str, algorithm: str = "RS256") -> str:
-    """Sign claims with python-jose â€” used to build adversarial tokens."""
+    """Sign claims with python-jose — used to build adversarial tokens."""
     return jose_jwt.encode(payload, private_key_pem, algorithm=algorithm)
 
 
@@ -88,11 +87,10 @@ def _bare_token(header: dict, payload: dict, signature: str = "") -> str:
 
 
 def _hmac_token(payload: dict, secret: str) -> str:
-    """
-    Manually sign an HS256 token with an HMAC secret.
+    """Manually sign an HS256 token with an HMAC secret.
 
     python-jose's cryptography backend refuses to construct an HMAC key from an
-    asymmetric PEM, so this builds the token directly â€” reproducing the real
+    asymmetric PEM, so this builds the token directly — reproducing the real
     algorithm-confusion attack where the attacker uses the public key as the
     HMAC secret.
     """
@@ -131,7 +129,7 @@ class TestPasswordHashing:
     def test_different_hashes_for_same_password(self):
         h1 = hash_password("SamePassword!1")
         h2 = hash_password("SamePassword!1")
-        assert h1 != h2
+        assert h1 != h2  # Argon2id uses a random salt per call
 
     def test_verify_password_empty_string(self):
         hashed = hash_password("Password123!")
@@ -337,7 +335,7 @@ class TestVerifyJwtKeysUsable:
     ):
         monkeypatch.setattr(settings, "jwt_private_key", rsa_private_key)
         monkeypatch.setattr(settings, "jwt_public_key", rsa_public_key)
-        verify_jwt_keys_usable()
+        verify_jwt_keys_usable()  # must not raise
 
     def test_garbage_private_key_rejected(
         self, monkeypatch: pytest.MonkeyPatch, rsa_public_key: str

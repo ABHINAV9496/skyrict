@@ -1,4 +1,4 @@
-"""Auth endpoints â€” login, onboarding wizard, refresh, logout, introspect."""
+"""Auth endpoints — login, onboarding wizard, refresh, logout, introspect."""
 
 from __future__ import annotations
 
@@ -72,11 +72,10 @@ async def login(
     authn: AuthenticationService = Depends(get_authn_service),
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[AuthResponse]:
-    """
-    Authenticate a user and return tokens.
+    """Authenticate a user and return tokens.
 
-    Rate-limited per (source IP, account) â€” ``RATE_LIMIT_LOGIN`` attempts per
-    ``RATE_LIMIT_WINDOW_SECONDS`` â€” to blunt brute-force and credential-
+    Rate-limited per (source IP, account) — ``RATE_LIMIT_LOGIN`` attempts per
+    ``RATE_LIMIT_WINDOW_SECONDS`` — to blunt brute-force and credential-
     stuffing against the highest-value endpoint. The limiter fails open when
     Redis is unavailable so a Redis outage never becomes a login outage.
     """
@@ -336,6 +335,6 @@ async def introspect_token(
     body: TokenRefreshRequest,
     token_svc: TokenService = Depends(get_token_service),
 ) -> ResponseEnvelope[dict[str, Any]]:
-    """Introspect a token â€” return its claims if active."""
+    """Introspect a token — return its claims if active."""
     result = await token_svc.introspect(body.refresh_token)
     return ResponseEnvelope(data=result)

@@ -1,4 +1,4 @@
-"""Authentication schemas â€” requests, responses, and token payloads."""
+"""Authentication schemas — requests, responses, and token payloads."""
 
 from __future__ import annotations
 
@@ -45,13 +45,13 @@ class TokenPayloadSchema(BaseModel):
 
     sub: str
     tenant_id: str
-    type: str
+    type: str  # "access" or "refresh"
     exp: int
     iat: int
 
 
 class TokenIntrospectionResponse(BaseModel):
-    """POST /auth/introspect â€” token introspection."""
+    """POST /auth/introspect — token introspection."""
 
     active: bool
     sub: str | None = None
@@ -129,7 +129,7 @@ class VerifyCodeRequest(_CamelModel):
 
 
 class VerifyCodeResponse(_CamelModel):
-    """Result of an OTP check â€” never reveals whether the email has an account."""
+    """Result of an OTP check — never reveals whether the email has an account."""
 
     status: Literal["ok", "invalid", "expired"]
     verification_token: str | None = Field(default=None, description="Opaque single-use token")
@@ -185,7 +185,7 @@ class BillingAddress(_CamelModel):
 
 
 class CreateOrganizationRequest(_CamelModel):
-    """POST /auth/signup/organization â€” final wizard step, provisions the tenant."""
+    """POST /auth/signup/organization — final wizard step, provisions the tenant."""
 
     email: EmailStr
     verification_token: str
@@ -200,7 +200,7 @@ class CreateOrganizationRequest(_CamelModel):
 
 
 class CreateOrganizationResponse(_CamelModel):
-    """Response after the organization is provisioned â€” MFA setup is mandatory."""
+    """Response after the organization is provisioned — MFA setup is mandatory."""
 
     status: Literal["ok"] = "ok"
     mfa_required: bool = True

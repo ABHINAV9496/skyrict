@@ -1,22 +1,21 @@
-"""
-Application configuration â€” pydantic-settings, env-driven, fail-fast on missing secrets.
+"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
 
 Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly â€” everything routes through the ``settings`` object.
+call os.getenv() directly — everything routes through the ``settings`` object.
 """
 
 from __future__ import annotations
 
 import enum
 import sys
-from pathlib import Path  # noqa: TC003
+from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
-    """Deployment environments â€” exactly four, no ad-hoc values."""
+    """Deployment environments — exactly four, no ad-hoc values."""
 
     DEV = "dev"
     TEST = "test"
@@ -25,11 +24,10 @@ class Environment(enum.StrEnum):
 
 
 class Settings(BaseSettings):
-    """
-    All configuration loaded from environment variables.
+    """All configuration loaded from environment variables.
 
     Prefix: IDENTITY_ (set via .env or shell environment).
-    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults â€”
+    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults —
     the process refuses to start if they are missing.
     """
 
@@ -88,6 +86,7 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Password policy ---
     PASSWORD_MIN_LENGTH: int = Field(default=12, description="minimum password length")
     PASSWORD_REQUIRE_UPPERCASE: bool = Field(default=True)
     PASSWORD_REQUIRE_LOWERCASE: bool = Field(default=True)
@@ -292,4 +291,4 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()  # type: ignore[call-arg]  # pydantic-settings populates from env

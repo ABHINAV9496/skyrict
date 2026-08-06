@@ -1,4 +1,4 @@
-"""Invitation endpoints â€” create, accept, and expire invitations."""
+"""Invitation endpoints — create, accept, and expire invitations."""
 
 from __future__ import annotations
 

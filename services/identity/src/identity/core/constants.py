@@ -1,5 +1,4 @@
-"""
-Application-wide constants â€” single source of truth for magic values.
+"""Application-wide constants — single source of truth for magic values.
 
 Services, schemas, and configs import from here instead of hardcoding strings.
 """

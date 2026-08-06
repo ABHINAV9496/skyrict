@@ -22,8 +22,6 @@ from identity.core.audit_events import (
     AUTH_PASSWORD_CHANGED,
     AUTH_PASSWORD_RESET_COMPLETED,
     AUTH_PASSWORD_RESET_REQUESTED,
-    AUTH_REFRESH_REUSE_DETECTED,
-    AUTH_REFRESH_SUCCESS,
     AUTH_REGISTER_SUCCESS,
     CATALOG,
     HANDOFF_ISSUED,
@@ -93,8 +91,9 @@ class TestActionStringsUsedInServices:
         assert AUTH_LOGIN_FAILED in src
         assert AUTH_LOGIN_MFA_CHALLENGED in src
         assert AUTH_REGISTER_SUCCESS in src
-        assert AUTH_REFRESH_SUCCESS in src
-        assert AUTH_REFRESH_REUSE_DETECTED in src
+        # Refresh events are referenced through their catalogued constants.
+        assert "AUTH_REFRESH_SUCCESS" in src
+        assert "AUTH_REFRESH_REUSE_DETECTED" in src
 
     def test_auth_router_action_strings_are_catalogued(self):
         src = self._read_source(auth_router)

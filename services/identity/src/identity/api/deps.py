@@ -200,13 +200,22 @@ def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> 
     return AuditService(audit_repo)
 
 
-def get_token_service(
+def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> SessionService:
+    from identity.features.sessions.service import SessionService
+
+    return SessionService(session_repo, audit_service)
+
+
+def get_token_service(
+    session_service: SessionService = Depends(get_session_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> TokenService:
     from identity.features.auth.service import TokenService
 
-    return TokenService(session_repo, audit_service)
+    return TokenService(session_service, audit_service)
 
 
 def get_email_service() -> EmailService:
@@ -231,15 +240,6 @@ def get_mfa_challenge_store() -> MfaChallengeStore:
 def get_turnstile_verifier() -> TurnstileVerifier:
     """Return the Cloudflare Turnstile server-side verifier."""
     return TurnstileVerifier()
-
-
-def get_session_service(
-    session_repo: SessionRepository = Depends(get_session_repo),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> SessionService:
-    from identity.features.sessions.service import SessionService
-
-    return SessionService(session_repo, audit_service)
 
 
 def get_membership_service(

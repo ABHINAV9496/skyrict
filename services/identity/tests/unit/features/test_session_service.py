@@ -13,7 +13,6 @@ from identity.core.audit_events import (
     SESSION_REVOKED_ALL,
 )
 from identity.core.config import settings
-from identity.core.state_machine import InvalidTransitionError
 from identity.domain.entities import Session, SessionStatus
 from identity.features.sessions.service import SessionService
 from skyrict_common.exceptions import SessionNotFoundError
@@ -324,14 +323,14 @@ class TestRevokeSession:
 
         assert repo.revoked == []
 
-    async def test_revoking_a_revoked_session_fails_state_machine(self) -> None:
+    async def test_revoking_a_terminated_session_raises_not_found(self) -> None:
         user_id = uuid.uuid4()
         session = _active_session(user_id)
         session.status = SessionStatus.REVOKED
         repo = FakeSessionRepo([session])
         service = SessionService(repo, FakeAuditService())
 
-        with pytest.raises(InvalidTransitionError):
+        with pytest.raises(SessionNotFoundError):
             await service.revoke_session(user_id, session.id)
 
         assert repo.revoked == []
@@ -402,3 +401,65 @@ class TestCommit:
         await service.commit()
 
         assert repo.committed is True
+
+
+class TestRotateSession:
+    async def test_rotates_hash_in_place_preserving_family(self) -> None:
+        user_id = uuid.uuid4()
+        family_id = uuid.uuid4()
+        session = _active_session(user_id, family_id=family_id)
+        repo = FakeSessionRepo([session])
+        service = SessionService(repo, FakeAuditService())
+        new_hash = "rotated-hash"
+
+        rotated = await service.rotate_session(
+            session.id, refresh_token_hash=new_hash, expires_at=datetime.now(UTC)
+        )
+
+        assert rotated is not None
+        assert rotated.refresh_token_hash == new_hash
+        assert rotated.token_family_id == family_id
+        assert rotated.status is SessionStatus.ACTIVE
+
+    async def test_noop_when_session_missing(self) -> None:
+        service = _service()
+
+        assert (
+            await service.rotate_session(
+                uuid.uuid4(), refresh_token_hash="h", expires_at=datetime.now(UTC)
+            )
+            is None
+        )
+
+    async def test_does_not_rotate_a_revoked_session(self) -> None:
+        user_id = uuid.uuid4()
+        session = _active_session(user_id)
+        session.status = SessionStatus.REVOKED
+        repo = FakeSessionRepo([session])
+        service = SessionService(repo, FakeAuditService())
+
+        result = await service.rotate_session(
+            session.id, refresh_token_hash="new-hash", expires_at=datetime.now(UTC)
+        )
+
+        assert result is not None
+        assert result.status is SessionStatus.REVOKED
+        assert result.refresh_token_hash == "h"
+
+
+class TestRevokeFamily:
+    async def test_revokes_every_session_in_the_family(self) -> None:
+        user_id = uuid.uuid4()
+        family_id = uuid.uuid4()
+        first = _active_session(user_id, family_id=family_id)
+        second = _active_session(user_id, family_id=family_id)
+        other = _active_session(user_id, family_id=uuid.uuid4())
+        repo = FakeSessionRepo([first, second, other])
+        service = SessionService(repo, FakeAuditService())
+
+        await service.revoke_family(family_id)
+
+        assert repo.revoked_families == [family_id]
+        assert first.status is SessionStatus.REVOKED
+        assert second.status is SessionStatus.REVOKED
+        assert other.status is SessionStatus.ACTIVE

@@ -122,9 +122,17 @@ class SessionService:
         return any(_same_device(session, user_agent, ip_address) for session in sessions)
 
     async def revoke_session(self, user_id: str | uuid.UUID, session_id: str | uuid.UUID) -> None:
-        """Revoke a specific session (active -> revoked)."""
+        """Revoke a specific session (active -> revoked).
+
+        Missing, foreign, and already-terminated sessions all surface as
+        ``SessionNotFoundError`` (404) so double-revoke stays idempotent.
+        """
         session = await self.session_repo.get_by_id(session_id)
-        if not session or session.user_id != uuid.UUID(str(user_id)):
+        if (
+            not session
+            or session.user_id != uuid.UUID(str(user_id))
+            or session.status is not SessionStatus.ACTIVE
+        ):
             raise SessionNotFoundError()
         SESSION_STATE_MACHINE.transition(session.status.value, SessionStatus.REVOKED.value)
         await self.session_repo.revoke_session(session_id)
@@ -134,6 +142,30 @@ class SessionService:
             user_id=str(user_id),
             tenant_id=str(session.tenant_id),
         )
+
+    async def rotate_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        refresh_token_hash: str,
+        expires_at: datetime,
+    ) -> Session | None:
+        """Rotate a session's refresh hash in place, preserving its token family."""
+        session = await self.session_repo.get_by_id(session_id)
+        if session is None:
+            return None
+        if session.status is SessionStatus.ACTIVE:
+            await self.session_repo.rotate(
+                session_id,
+                refresh_token_hash=refresh_token_hash,
+                expires_at=expires_at,
+            )
+            return await self.session_repo.get_by_id(session_id)
+        return session
+
+    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
+        """Revoke every active session sharing a token family (reuse chain-kill)."""
+        await self.session_repo.revoke_family(family_id)
 
     async def revoke_all_sessions(self, user_id: str | uuid.UUID) -> None:
         """Revoke all sessions for a user (force logout everywhere)."""

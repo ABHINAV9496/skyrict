@@ -1,22 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { demoSessionKey } from "@/config";
+import { useSession } from "@/lib/auth/session";
 
 function AuthAwareCta() {
-  const [hasSession, setHasSession] = useState(false);
-
-  useEffect(() => {
-    setHasSession(Boolean(localStorage.getItem(demoSessionKey)));
-  }, []);
+  const { status } = useSession();
 
   return (
     <Button size="lg" asChild>
-      <Link href={hasSession ? "/dashboard/agents" : "/register"}>
-        {hasSession ? "Open your workspace" : "Create your account"}
+      <Link href={status === "authenticated" ? "/dashboard/agents" : "/register"}>
+        {status === "authenticated"
+          ? "Open your workspace"
+          : "Create your account"}
       </Link>
     </Button>
   );

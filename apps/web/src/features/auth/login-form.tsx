@@ -4,14 +4,15 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Lock, Mail, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-import { demoSessionKey } from "@/config";
 import { loginEmailPassword, verifyMfa } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { OtpInput } from "@/lib/auth/OtpInput";
+import { TrustIndicator } from "@/lib/auth/TrustIndicator";
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -21,6 +22,7 @@ const credentialsSchema = z.object({
 type CredentialsValues = z.infer<typeof credentialsSchema>;
 
 function LoginForm() {
+  const router = useRouter();
   const [step, setStep] = useState<"credentials" | "mfa" | "success">(
     "credentials",
   );
@@ -41,22 +43,30 @@ function LoginForm() {
 
   async function onSubmitCredentials(values: CredentialsValues) {
     setGenericError(undefined);
-    const result = await loginEmailPassword(values);
-    if (result.status === "mfa_required") {
-      setMfaToken(result.mfaToken);
+    try {
+      const result = await loginEmailPassword(values);
+      if (result.status === "mfa_challenge") {
+        setMfaToken(result.mfaToken);
+        setSessionEmail(result.user.email);
+        setMfaCode("");
+        setMfaError(false);
+        setStep("mfa");
+        return;
+      }
       setSessionEmail(values.email);
-      setStep("mfa");
-      return;
-    }
-    if (result.status === "email_unverified") {
+      if (result.status === "mfa_setup") {
+        const next = new URLSearchParams({ email: values.email.trim() });
+        router.push(`/setup-mfa?${next.toString()}`);
+        return;
+      }
+      setStep("success");
+    } catch (err) {
       setGenericError(
-        "This account hasn't been verified yet. Check your inbox for the verification link.",
+        err instanceof Error
+          ? err.message
+          : "Unable to sign in. Check your credentials and try again.",
       );
-      return;
     }
-    setSessionEmail(values.email);
-    localStorage.setItem(demoSessionKey, "1");
-    setStep("success");
   }
 
   async function onSubmitMfa() {
@@ -67,7 +77,6 @@ function LoginForm() {
     setMfaError(false);
     const result = await verifyMfa({ code: mfaCode, mfaToken });
     if (result.status === "ok") {
-      localStorage.setItem(demoSessionKey, "1");
       setStep("success");
     } else {
       setMfaError(true);
@@ -86,8 +95,7 @@ function LoginForm() {
             You&apos;re signed in
           </h2>
           <p className="text-sm text-muted-foreground">
-            Welcome back{sessionEmail ? `, ${sessionEmail}` : ""}
-            {". This is a simulated sign-in \n the real API hasn't been wired yet."}
+            Welcome back{sessionEmail ? `, ${sessionEmail}` : ""}.
           </p>
         </div>
         <div className="space-y-2">
@@ -179,26 +187,16 @@ function LoginForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      <div className="space-y-1.5">
-        <AuthInput
-          label="Password"
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          placeholder={"\n"}
-          icon={Lock}
-          error={errors.password?.message}
-          {...register("password")}
-        />
-        <div className="flex justify-end pt-0.5">
-          <Link
-            href="/forgot-password"
-            className="text-sm text-primary underline-offset-4 hover:underline"
-          >
-            Forgot password?
-          </Link>
-        </div>
-      </div>
+      <AuthInput
+        label="Password"
+        id="password"
+        type="password"
+        autoComplete="current-password"
+        placeholder={"\n"}
+        icon={Lock}
+        error={errors.password?.message}
+        {...register("password")}
+      />
       {genericError ? (
         <div
           role="alert"
@@ -210,10 +208,7 @@ function LoginForm() {
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Sign in
       </AuthButton>
-      <p className="flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
-        <KeyRound aria-hidden="true" className="size-3.5" />
-        Argon2id hashing · TOTP available on your account
-      </p>
+      <TrustIndicator />
     </form>
   );
 }

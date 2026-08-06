@@ -4,7 +4,6 @@ import { useState } from "react";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
-import { demoSessionKey } from "@/config";
 import { verifyMfa } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
@@ -24,13 +23,15 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
     event.preventDefault();
     if (!codeReady) return;
     setError(false);
+    if (!mfaToken) {
+      setError(true);
+      return;
+    }
     const result = await verifyMfa({
       code: useBackup ? backupCode : code,
-      mfaToken: mfaToken ?? "demo-mfa-token",
-      isBackupCode: useBackup,
+      mfaToken: mfaToken,
     });
     if (result.status === "ok") {
-      localStorage.setItem(demoSessionKey, "1");
       setDone(true);
     } else {
       setError(true);
@@ -50,7 +51,7 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
             Verified
           </h2>
           <p className="text-sm text-muted-foreground">
-            {"Two-factor authentication passed. This is a simulated check \n the real API hasn't been wired yet."}
+            Two-factor authentication passed. You&apos;re all set.
           </p>
         </div>
         <Link href="/dashboard/agents" className="block">

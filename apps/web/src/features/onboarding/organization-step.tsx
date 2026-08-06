@@ -16,9 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { demoSessionKey } from "@/config";
 import { countries, industries } from "@/config/onboarding";
-import { checkWorkspaceSlug, createOrganization } from "@/lib/api/auth-api";
+import {
+  checkWorkspaceSlug,
+  createOrganization,
+  loginEmailPassword,
+} from "@/lib/api/auth-api";
+import { consumeWizardCredentials } from "@/lib/auth/wizard-session";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { ProvisioningScreen } from "@/features/onboarding/provisioning-screen";
@@ -153,7 +157,6 @@ function OrganizationStep({
   }, [workspaceSlug]);
 
   function handleCompleteProvisioning() {
-    localStorage.setItem(demoSessionKey, "true");
     const next = new URLSearchParams({ email });
     router.push(`/setup-mfa?${next.toString()}`);
   }
@@ -167,25 +170,44 @@ function OrganizationStep({
       });
       return;
     }
-    await createOrganization({
-      email,
-      verificationToken: vt,
-      planId: plan,
-      companyName: values.companyName,
-      industry: values.industry,
-      workspaceSlug: values.workspaceSlug,
-      ownerFullName: values.ownerFullName,
-      phoneCountry: values.phoneCountry,
-      phoneNumber: values.phoneNumber,
-      address: {
-        country: values.addressCountry,
-        addressLine1: values.addressLine1,
-        addressLine2: values.addressLine2 || undefined,
-        city: values.city,
-        state: values.state,
-        postalCode: values.postalCode,
-      },
-    });
+    try {
+      await createOrganization({
+        email,
+        verificationToken: vt,
+        planId: plan,
+        companyName: values.companyName,
+        industry: values.industry,
+        workspaceSlug: values.workspaceSlug,
+        ownerFullName: values.ownerFullName,
+        phoneCountry: values.phoneCountry,
+        phoneNumber: values.phoneNumber,
+        address: {
+          country: values.addressCountry,
+          addressLine1: values.addressLine1,
+          addressLine2: values.addressLine2 || undefined,
+          city: values.city,
+          state: values.state,
+          postalCode: values.postalCode,
+        },
+      });
+
+      const credentials = consumeWizardCredentials();
+      if (credentials) {
+        const login = await loginEmailPassword(credentials);
+        if (login.status !== "mfa_setup") {
+          throw new Error("Your workspace was created, but we couldn't start your session.");
+        }
+      }
+    } catch (err) {
+      setError("root", {
+        type: "manual",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not create your workspace. Please try again.",
+      });
+      return;
+    }
     setProvisioning(true);
   }
 
@@ -436,6 +458,15 @@ function OrganizationStep({
         I&apos;m authorized to set up this organization and make billing decisions
         on its behalf.
       </CheckboxRow>
+
+      {errors.root ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          {errors.root.message}
+        </div>
+      ) : null}
 
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Create my workspace

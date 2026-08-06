@@ -49,7 +49,7 @@ export default async function SetupMfaPage({
         </p>
       </div>
 
-      <MfaSetupStep email={email} />
+      <MfaSetupStep />
     </div>
   );
 }

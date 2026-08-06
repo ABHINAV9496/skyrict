@@ -11,14 +11,14 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
-import { demoSessionKey } from "@/config";
 import { confirmMfaSetup, setupMfa, type MfaSetup } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 import { cn } from "@/lib/utils";
 
-function MfaSetupStep({ email }: { email: string }) {
+function MfaSetupStep() {
   const router = useRouter();
   const [setup, setSetup] = useState<MfaSetup>();
   const [code, setCode] = useState("");
@@ -30,13 +30,23 @@ function MfaSetupStep({ email }: { email: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setupMfa({ email }).then((result) => {
-      if (!cancelled) setSetup(result);
-    });
+    setupMfa()
+      .then((result) => {
+        if (!cancelled) setSetup(result);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not start MFA setup. Try again.",
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [email]);
+  }, []);
 
   async function copySecret() {
     if (!setup) return;
@@ -53,7 +63,7 @@ function MfaSetupStep({ email }: { email: string }) {
     }
     setConfirming(true);
     setError(undefined);
-    const result = await confirmMfaSetup({ code, secret: setup.secret });
+    const result = await confirmMfaSetup({ code });
     setConfirming(false);
     if (result.status === "ok") {
       setConfirmed(true);
@@ -64,11 +74,24 @@ function MfaSetupStep({ email }: { email: string }) {
   }
 
   function finish() {
-    localStorage.setItem(demoSessionKey, "true");
     router.push("/dashboard/agents");
   }
 
   if (!setup) {
+    if (error) {
+      return (
+        <div className="space-y-4 py-8 text-center">
+          <p className="text-sm font-medium text-destructive">{error}</p>
+          <AuthButton
+            type="button"
+            className="w-full"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </AuthButton>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
         <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
@@ -100,16 +123,14 @@ function MfaSetupStep({ email }: { email: string }) {
               <QrCode aria-hidden="true" className="size-4 text-primary" />
               Step 1 · Scan with your authenticator app
             </p>
-            <div className="mx-auto mt-4 flex size-40 items-center justify-center rounded-xl border-2 border-dashed border-border bg-card">
-              <div className="space-y-2 text-center">
-                <QrCode
-                  aria-hidden="true"
-                  className="mx-auto size-8 text-muted-foreground/50"
-                />
-                <p className="px-4 text-xs text-muted-foreground">
-                  Your QR code appears here once connected
-                </p>
-              </div>
+            <div className="mx-auto mt-4 flex size-40 items-center justify-center rounded-xl border border-border bg-white p-2">
+              <QRCodeSVG
+                value={setup.otpauthUri}
+                size={144}
+                level="M"
+                marginSize={0}
+                aria-label="QR code to scan with your authenticator app"
+              />
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">
               Or add this key manually:
@@ -152,8 +173,8 @@ function MfaSetupStep({ email }: { email: string }) {
               </p>
             ) : (
               <p className="text-center text-xs text-muted-foreground">
-                Demo code:{" "}
-                <span className="font-mono text-primary">123456</span>
+                Open your authenticator app and scan the code to generate a
+                6-digit code.
               </p>
             )}
             <AuthButton

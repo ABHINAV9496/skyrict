@@ -9,6 +9,7 @@ import { KeyRound } from "lucide-react";
 
 import { CaptchaChallenge } from "@/components/onboarding/captcha-challenge";
 import { completeSecurityStep } from "@/lib/api/auth-api";
+import { setWizardCredentials } from "@/lib/auth/wizard-session";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { PasswordField } from "@/lib/auth/PasswordField";
@@ -68,6 +69,7 @@ function SecurityStep({
       verificationToken: vt,
       password: values.password,
     }).then(() => {
+      setWizardCredentials({ email, password: values.password });
       const next = new URLSearchParams({ email, vt });
       router.push(`/register/plan?${next.toString()}`);
     });

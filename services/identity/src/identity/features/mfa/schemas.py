@@ -36,6 +36,19 @@ class MFAVerifyResponse(BaseModel):
     )
 
 
+class MFABackupCodesResponse(BaseModel):
+    """POST /mfa/backup-codes — freshly generated one-time backup codes.
+
+    Returned in plaintext exactly once; only Argon2id hashes are persisted.
+    Generating a new set invalidates every previously issued code.
+    """
+
+    backup_codes: list[str] = Field(
+        ...,
+        description="10 fresh one-time backup codes (shown once; previous codes are invalidated)",
+    )
+
+
 class MFADisableRequest(BaseModel):
     """POST /mfa/disable — password confirmation required."""
 

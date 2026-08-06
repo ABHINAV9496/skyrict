@@ -168,6 +168,27 @@ class MFAService:
         )
         return method
 
+    async def rotate_backup_codes(self, user_id: uuid.UUID) -> list[str]:
+        """Generate a fresh set of backup codes, invalidating all previous ones.
+
+        Unlike :meth:`setup_totp` this does NOT touch the TOTP secret, so an
+        already-enrolled authenticator keeps working. The new codes are
+        returned in plaintext exactly once; only Argon2id hashes are stored.
+        """
+        user = await self.user_repo.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError()
+
+        codes, hashes = generate_backup_codes()
+        await self.user_repo.update_mfa(user_id, mfa_backup_codes=hashes)
+        await self.audit_service.log(
+            action="mfa.backup_codes.rotated",
+            target=f"user:{user.id}",
+            user_id=str(user.id),
+            details={"count": len(codes)},
+        )
+        return codes
+
     async def disable_mfa(self, user_id: uuid.UUID, password: str) -> None:
         """Disable MFA after password confirmation."""
         user = await self.user_repo.get_by_id(user_id)

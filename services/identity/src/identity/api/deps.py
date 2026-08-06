@@ -257,6 +257,7 @@ def get_authn_service(
     audit_service: AuditService = Depends(get_audit_service),
     email_service: EmailService = Depends(get_email_service),
     session_service: SessionService = Depends(get_session_service),
+    membership_service: MembershipService = Depends(get_membership_service),
     verification_store: VerificationStore = Depends(get_verification_store),
     turnstile: TurnstileVerifier = Depends(get_turnstile_verifier),
 ) -> AuthenticationService:
@@ -270,6 +271,7 @@ def get_authn_service(
         audit_service,
         email_service,
         session_service,
+        membership_service,
         verification_store=verification_store,
         turnstile=turnstile,
     )

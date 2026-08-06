@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -15,7 +16,7 @@ from identity.core.constants import (
 )
 from identity.core.security import hash_password
 from identity.core.tenant_context import TenantContext
-from identity.domain.entities import Role, Session, Tenant, User
+from identity.domain.entities import Membership, MembershipStatus, Role, Session, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.schemas import (
     BillingAddress,
@@ -288,6 +289,31 @@ class FakeSessionService:
         return session
 
 
+class FakeMembershipService:
+    def __init__(self) -> None:
+        self.active: list[Membership] = []
+
+    async def create_active(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID | None = None,
+        invited_email: str | None = None,
+    ) -> Membership:
+        membership = Membership(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID(str(tenant_id)),
+            user_id=uuid.UUID(str(user_id)),
+            invited_email=invited_email.strip().lower() if invited_email else None,
+            role_id=uuid.UUID(str(role_id)) if role_id is not None else None,
+            status=MembershipStatus.ACTIVE,
+            joined_at=datetime.now(UTC),
+        )
+        self.active.append(membership)
+        return membership
+
+
 class FakeChallengeStore:
     def __init__(self) -> None:
         self.challenges: dict[str, dict[str, str]] = {}
@@ -409,6 +435,7 @@ class _Harness:
         self.audit_svc = FakeAuditService()
         self.email_svc = FakeEmailService()
         self.session_svc = FakeSessionService(prior_device=prior_device)
+        self.membership_svc = FakeMembershipService()
         self.verification_store = verification_store or FakeVerificationStore()
         self.turnstile = turnstile or FakeTurnstile()
         self.challenge_store = FakeChallengeStore()
@@ -420,6 +447,7 @@ class _Harness:
             self.audit_svc,
             self.email_svc,
             self.session_svc,
+            self.membership_svc,
             self.verification_store,
             self.turnstile,
             mfa_challenge_store=self.challenge_store,
@@ -857,6 +885,13 @@ class TestWizard:
         assert harness.role_repo.grants == [
             (str(user.id), str(owner_role.id), str(tenant.id), str(tenant.id))
         ]
+
+        assert len(harness.membership_svc.active) == 1
+        membership = harness.membership_svc.active[0]
+        assert membership.user_id == user.id
+        assert membership.tenant_id == tenant.id
+        assert membership.role_id == owner_role.id
+        assert membership.status == MembershipStatus.ACTIVE
 
         assert await harness.verification_store.get_verification_token(vt) is None
         assert harness.audit_svc.events == [

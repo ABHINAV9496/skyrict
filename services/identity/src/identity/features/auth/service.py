@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         CreateOrganizationRequest,
         LoginRequest,
     )
+    from identity.features.memberships.service import MembershipService
     from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.sessions.ports import SessionRepositoryPort
@@ -106,6 +107,7 @@ class AuthenticationService:
         audit_service: AuditService,
         email_service: EmailService,
         session_service: SessionService,
+        membership_service: MembershipService,
         verification_store: VerificationStore | None = None,
         turnstile: TurnstileVerifier | None = None,
         mfa_challenge_store: MfaChallengeStore | None = None,
@@ -117,6 +119,7 @@ class AuthenticationService:
         self.audit_service = audit_service
         self.email_service = email_service
         self.session_service = session_service
+        self.membership_service = membership_service
         self.verification_store = verification_store or VerificationStore()
         self.turnstile = turnstile or TurnstileVerifier()
         self.mfa_challenge_store = mfa_challenge_store or MfaChallengeStore()
@@ -434,6 +437,13 @@ class AuthenticationService:
             role_id=owner_role.id,
             tenant_id=tenant_id,
             scope_id=tenant_id,
+        )
+
+        await self.membership_service.create_active(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            role_id=owner_role.id,
+            invited_email=request.email,
         )
 
         await self.audit_service.log(

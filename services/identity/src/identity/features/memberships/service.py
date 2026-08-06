@@ -54,6 +54,36 @@ class MembershipService:
             )
         )
 
+    async def create_active(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID | None = None,
+        invited_email: str | None = None,
+    ) -> Membership:
+        """Create an ACTIVE membership for a real user.
+
+        Used by registration (tenant owner) and by the legacy accept path
+        (invitations that predate migration 0009 have no linked membership).
+        """
+        tenant_id_uuid = uuid.UUID(str(tenant_id))
+        user_id_uuid = uuid.UUID(str(user_id))
+        existing = await self.membership_repo.get_by_user(user_id_uuid, tenant_id_uuid)
+        if existing is not None:
+            raise ValidationError("User is already a member of this organization")
+
+        return await self.membership_repo.create(
+            Membership(
+                tenant_id=tenant_id_uuid,
+                user_id=user_id_uuid,
+                invited_email=invited_email.strip().lower() if invited_email else None,
+                status=MembershipStatus.ACTIVE,
+                role_id=uuid.UUID(str(role_id)) if role_id is not None else None,
+                joined_at=datetime.now(UTC),
+            )
+        )
+
     async def activate(
         self,
         *,

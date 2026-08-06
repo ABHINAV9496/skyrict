@@ -11,9 +11,14 @@ const nextConfig = {
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Referrer-Policy", value: "no-referrer" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "X-DNS-Prefetch-Control", value: "on" },
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+          },
           ...(process.env.NODE_ENV === "production"
             ? [
                 {
@@ -23,14 +28,6 @@ const nextConfig = {
               ]
             : []),
         ],
-      },
-    ];
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/v1/:path*",
-        destination: `${process.env.API_PROXY_TARGET ?? "http://localhost:8000"}/api/v1/:path*`,
       },
     ];
   },

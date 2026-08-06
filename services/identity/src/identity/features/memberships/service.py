@@ -1,0 +1,119 @@
+"""Membership service — lifecycle operations driven by the state machine."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from identity.core.state_machine import StateMachine
+from identity.domain.entities import Membership, MembershipStatus
+from skyrict_common.exceptions import NotFoundError, ValidationError
+
+if TYPE_CHECKING:
+    from identity.features.memberships.ports import MembershipRepositoryPort
+
+# invited -> active -> (suspended <-> active)
+MEMBERSHIP_TRANSITIONS: dict[str, frozenset[str]] = {
+    MembershipStatus.INVITED.value: frozenset({MembershipStatus.ACTIVE.value}),
+    MembershipStatus.ACTIVE.value: frozenset({MembershipStatus.SUSPENDED.value}),
+    MembershipStatus.SUSPENDED.value: frozenset({MembershipStatus.ACTIVE.value}),
+}
+
+membership_state_machine = StateMachine(MEMBERSHIP_TRANSITIONS, entity="membership")
+
+
+class MembershipService:
+    def __init__(self, membership_repo: MembershipRepositoryPort) -> None:
+        self.membership_repo = membership_repo
+
+    async def create_invited(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        email: str,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+    ) -> Membership:
+        """Create an INVITED membership, reserving the email in the tenant."""
+        tenant_id_uuid = uuid.UUID(str(tenant_id))
+        normalized_email = email.strip().lower()
+
+        existing = await self.membership_repo.get_by_email(tenant_id_uuid, normalized_email)
+        if existing is not None:
+            raise ValidationError("This email is already a member or invited in this organization")
+
+        return await self.membership_repo.create(
+            Membership(
+                tenant_id=tenant_id_uuid,
+                invited_email=normalized_email,
+                status=MembershipStatus.INVITED,
+                role_id=uuid.UUID(str(role_id)),
+                invited_by_user_id=uuid.UUID(str(invited_by_user_id)),
+                invited_at=datetime.now(UTC),
+            )
+        )
+
+    async def activate(
+        self,
+        *,
+        membership_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+    ) -> Membership:
+        """Flip an INVITED membership to ACTIVE once the user materializes."""
+        membership = await self._get(membership_id)
+        membership_state_machine.transition(membership.status.value, MembershipStatus.ACTIVE.value)
+        return await self.membership_repo.set_user(
+            membership_id, user_id, joined_at=datetime.now(UTC)
+        )
+
+    async def suspend(self, *, membership_id: str | uuid.UUID) -> Membership:
+        """Suspend an ACTIVE membership."""
+        membership = await self._get(membership_id)
+        membership_state_machine.transition(
+            membership.status.value, MembershipStatus.SUSPENDED.value
+        )
+        return await self.membership_repo.update_status(
+            membership_id,
+            status=MembershipStatus.SUSPENDED,
+            suspended_at=datetime.now(UTC),
+        )
+
+    async def reinstate(self, *, membership_id: str | uuid.UUID) -> Membership:
+        """Reactivate a SUSPENDED membership."""
+        membership = await self._get(membership_id)
+        membership_state_machine.transition(membership.status.value, MembershipStatus.ACTIVE.value)
+        return await self.membership_repo.update_status(
+            membership_id,
+            status=MembershipStatus.ACTIVE,
+            suspended_at=None,
+        )
+
+    async def get_by_id(self, membership_id: str | uuid.UUID) -> Membership:
+        return await self._get(membership_id)
+
+    async def get_by_email(self, tenant_id: str | uuid.UUID, email: str) -> Membership | None:
+        return await self.membership_repo.get_by_email(tenant_id, email)
+
+    async def get_by_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> Membership | None:
+        return await self.membership_repo.get_by_user(user_id, tenant_id)
+
+    async def list_members(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        status: MembershipStatus | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[Membership]:
+        return await self.membership_repo.list_by_tenant(
+            tenant_id, status=status, offset=offset, limit=limit
+        )
+
+    async def _get(self, membership_id: str | uuid.UUID) -> Membership:
+        membership = await self.membership_repo.get_by_id(membership_id)
+        if membership is None:
+            raise NotFoundError("Membership not found")
+        return membership

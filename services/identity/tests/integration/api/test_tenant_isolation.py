@@ -283,7 +283,7 @@ class TestTenantIsolation:
         body = response.json()
         assert body["type"].endswith("/tenant-mismatch")
         assert body["status"] == 401
-
+        # The detail must not leak internal data (e.g. tenant IDs).
         assert "globex" not in body["detail"].lower()
 
 
@@ -312,6 +312,9 @@ class TestTenantResolution:
         assert body["status"] == 403
 
     async def test_invalid_token_rejected_by_route_dependency(self, client: AsyncClient) -> None:
+        # The middleware leaves unverifiable tokens alone (it never decodes
+        # without verification); the route dependency produces the canonical
+        # 401 problem response.
         response = await client.get(
             "/api/v1/users/me",
             headers={"X-Tenant-Slug": "acme", "Authorization": "Bearer not-a-jwt"},
@@ -329,13 +332,16 @@ class TestContextLifecycle:
         integration_db: dict[str, str],
         acme_access_token: str,
     ) -> None:
-
+        # First request resolves acme and succeeds.
         first = await client.get(
             "/api/v1/users/me",
             headers={"X-Tenant-Slug": "acme", "Authorization": f"Bearer {acme_access_token}"},
         )
         assert first.status_code == 200
 
+        # The context must be fully cleared: a follow-up request without a
+        # routable tenant is rejected as unresolved — it must NOT inherit the
+        # previous request's tenant.
         second = await client.get("/api/v1/users/me")
         assert second.status_code == 400
         assert second.json()["type"].endswith("/tenant-context-missing")
@@ -348,7 +354,7 @@ class TestContextLifecycle:
         )
         assert response.status_code == 404
         assert response.headers["X-Request-ID"] == "trace-abc-123"
-
+        # Middleware errors carry the same instance (request_id) per RFC 7807.
         assert response.json()["instance"] == "trace-abc-123"
 
     async def test_generated_request_id_present(self, client: AsyncClient) -> None:
@@ -371,6 +377,7 @@ class TestTokenBinding:
         login_token = creds["token"]
         reg_tenant_id = tenant["tenant_id"]
 
+        # Remove only the rows this test created (tenant cascades).
         async with async_session_factory() as session:
             await session.execute(delete(TenantModel).where(TenantModel.slug == tenant["slug"]))
             await session.commit()

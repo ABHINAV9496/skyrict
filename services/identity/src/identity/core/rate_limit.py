@@ -52,7 +52,7 @@ class RateLimiter:
             if count == 1:
                 await client.expire(rl_key, window_seconds + 1)
             return count <= limit
-        except Exception as exc:  # fail-open on any Redis error
+        except Exception as exc:  # fail-open, or fail-closed when RATE_LIMIT_FAIL_CLOSED
             if settings.RATE_LIMIT_FAIL_CLOSED:
                 logger.warning("rate_limit_fail_closed", key=key, error=str(exc))
                 raise RateLimitUnavailableError() from exc
@@ -62,6 +62,9 @@ class RateLimiter:
     async def enforce(self, *, key: str, limit: int, window_seconds: int) -> None:
         """Raise RateLimitExceededError when the key exceeds the limit."""
         if not await self.is_allowed(key=key, limit=limit, window_seconds=window_seconds):
+            # Generic message shared by every guarded endpoint (register,
+            # login, ...) — never names the endpoint or the key, so it cannot
+            # hint at what the caller was doing or which account was targeted.
             raise RateLimitExceededError("Too many attempts. Try again later.")
 
 

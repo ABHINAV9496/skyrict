@@ -31,7 +31,8 @@ if TYPE_CHECKING:
         PublicKeyTypes,
     )
 
-
+# Algorithms we accept — explicitly whitelisted. Rejects "none" and any
+# header-driven algorithm switching (CVE-2015-2951 / algorithm confusion).
 _ALLOWED_ALGORITHMS = {"RS256"}
 
 
@@ -54,6 +55,13 @@ class TokenClaims(TypedDict):
     session_id: NotRequired[str]
 
 
+# ---------------------------------------------------------------------------
+# Password hashing — Argon2id (OWASP recommended)
+#
+# argon2-cffi is a hard dependency (see pyproject.toml). If it is missing the
+# import fails at startup — there is deliberately NO fallback that silently
+# weakens hashing (e.g. plaintext comparison).
+# ---------------------------------------------------------------------------
 _ph = PasswordHasher(
     time_cost=3,  # number of iterations
     memory_cost=65536,  # 64 MB
@@ -97,6 +105,13 @@ def validate_password_policy(password: str) -> None:
         raise ValidationError("; ".join(errors))
 
 
+# ---------------------------------------------------------------------------
+# MFA secret encryption — Fernet (symmetric) at rest
+#
+# TOTP secrets are as sensitive as passwords: they are encrypted before being
+# written to ``users.mfa_secret`` and decrypted only on read. The key comes
+# from ``settings.MFA_ENCRYPTION_KEY`` (a required, fail-fast setting).
+# ---------------------------------------------------------------------------
 def encrypt_mfa_secret(secret: str) -> str:
     """Encrypt a plaintext TOTP secret for storage at rest."""
     return (
@@ -134,6 +149,9 @@ def mfa_is_required(
     return "tenant_owner" in roles or tenant_requires_all_members
 
 
+# ---------------------------------------------------------------------------
+# JWT — RS256 only
+# ---------------------------------------------------------------------------
 def create_access_token(
     subject: str,
     *,
@@ -218,11 +236,14 @@ def verify_jwt(token: str) -> TokenClaims:
             algorithm is not RS256, or issuer/audience don't match.
     """
     try:
+        # First: check the header's alg BEFORE jose decodes anything.
+        # This catches algorithm confusion attacks at the earliest point.
         unverified_header = jwt.get_unverified_header(token)
         alg = unverified_header.get("alg", "")
         if alg not in _ALLOWED_ALGORITHMS:
             raise TokenInvalidError(f"Token algorithm '{alg}' is not allowed. Expected RS256.")
 
+        # Decode with public key, explicit algorithm whitelist, and claim validation
         payload = jwt.decode(
             token,
             settings.jwt_public_key,
@@ -230,6 +251,9 @@ def verify_jwt(token: str) -> TokenClaims:
             issuer=settings.JWKS_ISSUER,
             audience=settings.JWKS_AUDIENCE,
             options={
+                # python-jose uses one require_* flag per claim (not a "require"
+                # list). Enforce every claim our contract needs so tokens that
+                # omit exp/iat/sub/iss/aud are rejected, not silently accepted.
                 "require_aud": True,
                 "require_iat": True,
                 "require_exp": True,
@@ -246,6 +270,9 @@ def verify_jwt(token: str) -> TokenClaims:
         raise TokenInvalidError(str(exc)) from exc
 
 
+# ---------------------------------------------------------------------------
+# JWT key material — startup validation
+# ---------------------------------------------------------------------------
 def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) -> None:
     """Reject RSA keys below 2048 bits (NIST / PCI-DSS baseline)."""
     if key.key_size < 2048:

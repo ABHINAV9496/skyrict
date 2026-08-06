@@ -65,10 +65,12 @@ class TestOwnerMfaFlow:
             token = login["access_token"]
             headers = {"X-Tenant-Slug": data["tenant_slug"], "Authorization": f"Bearer {token}"}
 
+            # Enforcement gate: authenticated routes are blocked until MFA is on.
             me = await client.get("/api/v1/users/me", headers=headers)
             assert me.status_code == 403
             assert me.json()["type"].endswith("/mfa-required")
 
+            # Enrollment endpoints are exempt from the gate.
             setup = await client.post("/api/v1/mfa/setup", headers=headers)
             assert setup.status_code == 200
             setup_data = setup.json()["data"]
@@ -80,6 +82,7 @@ class TestOwnerMfaFlow:
             assert verify.status_code == 200
             assert verify.json()["data"]["method"] == "totp"
 
+            # Re-login: MFA is now satisfied — no gate, no next step.
             relogin = await _verify_and_login(client, data)
             assert relogin["mfa_required"] is True
             assert relogin["next_step"] == "mfa.verify"
@@ -164,6 +167,7 @@ class TestMemberMfaPolicy:
                 "Authorization": f"Bearer {login['access_token']}",
             }
 
+            # Owner enables MFA and the tenant-wide policy.
             setup = await client.post("/api/v1/mfa/setup", headers=owner_headers)
             setup_data = setup.json()["data"]
             await client.post(
@@ -177,6 +181,7 @@ class TestMemberMfaPolicy:
                 json={"mfa_required_for_all_members": True},
             )
 
+            # Invite and accept a member (not an owner).
             invite_email = f"member-{uuid.uuid4().hex[:8]}@test.com"
             invite = await client.post(
                 "/api/v1/invitations",
@@ -198,6 +203,7 @@ class TestMemberMfaPolicy:
             assert accepted.status_code == 200
             member_id = accepted.json()["data"]["id"]
 
+            # Member login under the enforced policy: forced but not blocked.
             member_login = await client.post(
                 "/api/v1/auth/login",
                 headers={"X-Tenant-Slug": data["tenant_slug"]},
@@ -216,6 +222,7 @@ class TestMemberMfaPolicy:
             assert blocked.status_code == 403
             assert blocked.json()["type"].endswith("/mfa-required")
 
+            # Member enrolls using a backup code.
             member_setup = await client.post("/api/v1/mfa/setup", headers=member_headers)
             assert member_setup.status_code == 200
             member_setup_data = member_setup.json()["data"]
@@ -228,6 +235,7 @@ class TestMemberMfaPolicy:
             assert member_verify.status_code == 200
             assert member_verify.json()["data"]["method"] == "backup_code"
 
+            # Same backup code is single-use: verification now fails.
             replay = await client.post(
                 "/api/v1/mfa/verify",
                 headers=member_headers,
@@ -249,6 +257,7 @@ class TestMemberMfaPolicy:
             }
             assert (await client.get("/api/v1/users/me", headers=member_headers)).status_code == 200
 
+            # Owner-assisted reset clears the member's MFA — forced again.
             reset = await client.post(
                 "/api/v1/mfa/reset",
                 headers=owner_headers,

@@ -46,6 +46,7 @@ class InvitationModel(UUIDPrimaryKeyMixin, Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Relationships
     tenant = relationship("TenantModel", back_populates="invitations")
     created_by = relationship("UserModel", foreign_keys=[created_by_user_id])
     used_by = relationship("UserModel", foreign_keys=[used_by_user_id])

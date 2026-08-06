@@ -47,7 +47,8 @@ if TYPE_CHECKING:
 
 security = HTTPBearer(auto_error=False)
 
-
+# MFA enrollment endpoints are exempt from the enforcement gate so a user who
+# must set up MFA (owner or tenant policy) can actually finish enrollment.
 _MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
 
 
@@ -123,6 +124,7 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise AuthenticationError("Invalid token type")
 
+    # Single source of truth: the routed tenant was resolved by the middleware.
     routed_tenant_id = TenantContext.get()
     cross_check_jwt_tenant(payload.get("tenant_id"), routed_tenant_id)
     TenantContext.set_user_id(payload["sub"])
@@ -160,6 +162,9 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
     return _check
 
 
+# --- Repository deps ---
+
+
 def get_user_repo(db: AsyncSession = Depends(get_db)) -> UserRepository:
     return UserRepository(db)
 
@@ -178,6 +183,9 @@ def get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditRepository:
 
 def get_role_repo(db: AsyncSession = Depends(get_db)) -> RoleRepository:
     return RoleRepository(db)
+
+
+# --- Service deps (feature services imported at call sites) ---
 
 
 def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:

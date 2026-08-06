@@ -178,7 +178,7 @@ class FakeRoleRepo:
 
 
 class FakeTokenService:
-    """TokenService double â€” returns a fixed TokenPair, records call args."""
+    """TokenService double — returns a fixed TokenPair, records call args."""
 
     def __init__(self) -> None:
         self.pairs_created: list[tuple[str, str, str | None]] = []
@@ -191,7 +191,7 @@ class FakeTokenService:
 
 
 class FakeAuditService:
-    """AuditService double â€” records log() calls."""
+    """AuditService double — records log() calls."""
 
     def __init__(self) -> None:
         self.events: list[dict[str, str | None]] = []
@@ -213,7 +213,7 @@ class FakeAuditService:
 
 
 class FakeEmailService:
-    """EmailService double â€” records send_verification calls."""
+    """EmailService double — records send_verification calls."""
 
     def __init__(self) -> None:
         self.sent: list[dict[str, str | None]] = []
@@ -641,7 +641,7 @@ class TestLogin:
         """
         Anti-enumeration invariant: every login failure is indistinguishable.
 
-        Same exception type, same message â€” no account-existence oracle via
+        Same exception type, same message — no account-existence oracle via
         error semantics.
         """
         disabled_user = _make_user(is_active=False)

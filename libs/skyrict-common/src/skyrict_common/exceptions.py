@@ -20,6 +20,9 @@ class SkyrictError(Exception):
         super().__init__(self.message)
 
 
+# ---------- Auth ----------
+
+
 class AuthenticationError(SkyrictError):
     message = "Authentication failed"
     code = "AUTHENTICATION_ERROR"
@@ -70,6 +73,9 @@ class PasskeyError(AuthenticationError):
     code = "PASSKEY_ERROR"
 
 
+# ---------- User ----------
+
+
 class NotFoundError(SkyrictError):
     message = "Resource not found"
     code = "NOT_FOUND"
@@ -100,6 +106,9 @@ class InvalidPasswordError(AuthenticationError):
     code = "INVALID_PASSWORD"
 
 
+# ---------- Tenant / Organization ----------
+
+
 class TenantNotFoundError(NotFoundError):
     message = "Organization not found"
     code = "TENANT_NOT_FOUND"
@@ -120,6 +129,9 @@ class TenantMismatchError(AuthenticationError):
     code = "TENANT_MISMATCH"
 
 
+# ---------- Session ----------
+
+
 class SessionNotFoundError(NotFoundError):
     message = "Session not found"
     code = "SESSION_NOT_FOUND"
@@ -130,9 +142,15 @@ class SessionExpiredError(SkyrictError):
     code = "SESSION_EXPIRED"
 
 
+# ---------- Validation ----------
+
+
 class ValidationError(SkyrictError):
     message = "Validation failed"
     code = "VALIDATION_ERROR"
+
+
+# ---------- Rate Limiting ----------
 
 
 class RateLimitExceededError(SkyrictError):

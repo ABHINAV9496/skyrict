@@ -18,7 +18,7 @@ async def enroll_mfa_if_required(client, slug: str, login_data: dict) -> str:
 
     The enforcement gate re-reads ``mfa_enabled`` from the database on every
     request, so the original access token stays valid once /mfa/verify
-    succeeds â€” no re-login needed.
+    succeeds — no re-login needed.
     """
     token = login_data["access_token"]
     if not login_data.get("mfa_required"):

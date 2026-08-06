@@ -96,7 +96,9 @@ class StartupError(RuntimeError):
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
-
+# Mapping from exception type to HTTP status code and problem type URI.
+# Lookup walks the MRO (exact type wins, base classes provide the generic
+# fallback) so EVERY SkyrictError subclass maps to the correct status.
 _STATUS_MAP: dict[type, tuple[int, str]] = {
     TokenExpiredError: (401, f"{_PROBLEM_BASE}/token-expired"),
     TokenInvalidError: (401, f"{_PROBLEM_BASE}/token-invalid"),
@@ -148,6 +150,7 @@ async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResp
     """Map SkyrictError to an RFC 7807 problem+json response."""
     status_code, problem_type = _status_and_type(exc)
 
+    # RFC 7807 required fields
     body: dict[str, Any] = {
         "type": problem_type,
         "status": status_code,

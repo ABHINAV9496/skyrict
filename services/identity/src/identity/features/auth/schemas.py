@@ -90,6 +90,15 @@ class MfaChallengeVerifyRequest(BaseModel):
     mfa_token: str = Field(..., description="Opaque challenge token from the login response")
 
 
+# ---------------------------------------------------------------------------
+# Onboarding wizard schemas (SKY-30).
+#
+# The wizard is the web app's contract: its TypeScript client speaks camelCase
+# (verificationToken, planId, ...), so these models alias snake_case Python
+# fields to camelCase JSON while keeping idiomatic names in service code.
+# ---------------------------------------------------------------------------
+
+
 class SignupStartRequest(_CamelModel):
     """POST /auth/signup/start"""
 

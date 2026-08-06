@@ -18,6 +18,10 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+# ---------------------------------------------------------------------------
+# Set required env vars BEFORE anything imports identity.core.config
+# (config.py does fail-fast sys.exit on missing vars)
+# ---------------------------------------------------------------------------
 _KEY_DIR = Path(tempfile.mkdtemp(prefix="skyrict-identity-jwt-"))
 _private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 (_KEY_DIR / "private.pem").write_bytes(
@@ -108,6 +112,9 @@ async def client():
     except (ImportError, ModuleNotFoundError) as exc:
         pytest.skip(f"identity application unavailable: {exc}")
 
+    # Do not re-raise server exceptions into the test: ServerErrorMiddleware
+    # always re-raises after emitting its 500 (errors.py), so tests must be
+    # able to inspect the sanitized response (e.g. orphan-rollback checks).
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     try:
         async with (

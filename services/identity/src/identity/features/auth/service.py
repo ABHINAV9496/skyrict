@@ -72,7 +72,10 @@ if TYPE_CHECKING:
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-
+# A valid Argon2id hash of a throwaway value, verified against on the
+# unknown-email path so response TIME is indistinguishable from the
+# wrong-password path (anti-enumeration via the timing side-channel).
+# Computed once at import — the one-time cost is paid at process start.
 _DUMMY_PASSWORD_HASH = hash_password("anti-enumeration-timing-dummy")
 
 
@@ -136,8 +139,12 @@ class AuthenticationService:
         """
         tenant_id = TenantContext.get()
 
+        # Emails are unique per tenant, so lookups are tenant-scoped.
         user = await self.user_repo.get_by_email(tenant_id, request.email)
         if not user:
+            # Dummy verification keeps timing uniform: an unknown email is as
+            # slow as a wrong password, so latency cannot be used to probe
+            # which accounts exist.
             verify_password(request.password, _DUMMY_PASSWORD_HASH)
             await self._log_login_failure(
                 email=request.email,
@@ -158,6 +165,8 @@ class AuthenticationService:
             )
             raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
+        # Account-state gates run AFTER password verification so every failure
+        # path costs exactly one Argon2id — no state oracle via timing either.
         if not user.is_active:
             await self._log_login_failure(
                 email=request.email,
@@ -168,6 +177,7 @@ class AuthenticationService:
             )
             raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
+        # Verification gate: unverified accounts cannot sign in.
         if not user.is_verified:
             await self._log_login_failure(
                 email=request.email,
@@ -203,6 +213,9 @@ class AuthenticationService:
                 "user": user,
             }
 
+        # Forced MFA: tenant owners must always enroll, and other members are
+        # forced when the tenant configures enforcement. The flag clears only
+        # once MFA is actually enabled, so tokens issued now are gated until then.
         roles = await self.role_repo.get_roles_for_user(user.id, tenant_id)
         tenant = await self.tenant_repo.get_by_id(tenant_id)
         mfa_required = mfa_is_required(

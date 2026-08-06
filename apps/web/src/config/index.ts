@@ -44,7 +44,6 @@ export const footerColumns: FooterColumn[] = [
   {
     title: "Company",
     links: [
-      { label: "Sign in", href: "/login" },
       { label: "Create account", href: "/register" },
       { label: "Contact", soon: true },
     ],

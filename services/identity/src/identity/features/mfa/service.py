@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import pyotp
 
 from identity.core.config import settings
+from identity.core.mfa_providers import PROVIDER_BACKUP_CODE, PROVIDER_TOTP
 from identity.core.security import (
     decrypt_mfa_secret,
     encrypt_mfa_secret,
@@ -147,13 +148,14 @@ class MFAService:
     async def enable_mfa(self, user_id: uuid.UUID, code: str) -> str:
         """Verify a code (TOTP or backup code) and enable MFA.
 
-        Returns the verified method (``"totp"`` or ``"backup_code"``) or
-        raises :class:`MFAVerificationError` when neither verifies.
+        Returns the verified provider key (``PROVIDER_TOTP`` or
+        ``PROVIDER_BACKUP_CODE``) or raises :class:`MFAVerificationError`
+        when neither verifies.
         """
         if await self.verify_totp(user_id, code):
-            method = "totp"
+            method = PROVIDER_TOTP
         elif await self.redeem_backup_code(user_id, code):
-            method = "backup_code"
+            method = PROVIDER_BACKUP_CODE
         else:
             raise MFAVerificationError("Invalid MFA code")
 

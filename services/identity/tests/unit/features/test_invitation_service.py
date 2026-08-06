@@ -162,6 +162,16 @@ class FakeEmailService:
         self.sent.append({"to": to, "token": token})
 
 
+class FakeAuditService:
+    """In-memory AuditService double capturing recorded entries."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, object]] = []
+
+    async def log(self, *, action: str, target: str, **kwargs: object) -> None:
+        self.entries.append({"action": action, "target": target, **kwargs})
+
+
 class FakeMembershipService:
     def __init__(self) -> None:
         self.invited: list[Membership] = []
@@ -247,6 +257,11 @@ def repos() -> tuple[
 
 
 @pytest.fixture
+def audit() -> FakeAuditService:
+    return FakeAuditService()
+
+
+@pytest.fixture
 def service(
     repos: tuple[
         FakeInvitationRepo,
@@ -255,14 +270,19 @@ def service(
         FakeEmailService,
         FakeMembershipService,
     ],
+    audit: FakeAuditService,
 ) -> InvitationService:
     inv_repo, user_repo, role_repo, email, membership_service = repos
-    return InvitationService(inv_repo, user_repo, role_repo, email, membership_service)
+    return InvitationService(inv_repo, user_repo, role_repo, email, membership_service, audit)
 
 
 class TestCreateInvitation:
     async def test_creates_invitation_and_sends_email(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         _, _, role_repo, email, membership_service = repos
         inviter_id = uuid.uuid4()
@@ -298,6 +318,12 @@ class TestCreateInvitation:
         assert invited.invited_by_user_id == inviter_id
         assert invitation.membership_id == invited.id
 
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.created"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(inviter_id)
+
     async def test_create_rejects_unknown_role(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
@@ -312,7 +338,11 @@ class TestCreateInvitation:
 
 class TestAcceptInvitation:
     async def test_accept_grants_invitation_role(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         inv_repo, _, role_repo, _, membership_service = repos
 
@@ -350,8 +380,18 @@ class TestAcceptInvitation:
         assert membership_service.active[0].user_id == user.id
         assert membership_service.active[0].status == MembershipStatus.ACTIVE
 
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.accepted"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(user.id)
+
     async def test_accept_activates_linked_membership(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         inv_repo, _, role_repo, _, membership_service = repos
 
@@ -386,6 +426,12 @@ class TestAcceptInvitation:
         assert membership_service.activated == [(pending.id, user.id)]
         assert membership_service.active == []
         assert inv_repo.invitations[invitation.id].used_at is not None
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.accepted"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(user.id)
 
     async def test_accept_missing_invitation_role_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
@@ -525,7 +571,11 @@ class TestAcceptInvitation:
 
 class TestExpireInvitation:
     async def test_expire_marks_as_used(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         inv_repo, *_ = repos
         invitation = await inv_repo.create(
@@ -541,6 +591,11 @@ class TestExpireInvitation:
 
         await service.expire_invitation(invitation.id, tenant_id)
         assert inv_repo.invitations[invitation.id].used_at is not None
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.expired"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
 
     async def test_expire_unknown_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID

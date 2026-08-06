@@ -10,6 +10,8 @@ from __future__ import annotations
 import identity.features.auth.router as auth_router
 import identity.features.auth.service as auth_service
 import identity.features.handoffs.service as handoff_service
+import identity.features.invitations.service as invitation_service
+import identity.features.memberships.service as membership_service
 import identity.features.mfa.service as mfa_service
 from identity.core.audit_events import (
     ALL_AUDIT_EVENTS,
@@ -25,25 +27,13 @@ from identity.core.audit_events import (
     AUTH_PASSWORD_RESET_REQUESTED,
     AUTH_REGISTER_SUCCESS,
     CATALOG,
-    HANDOFF_ISSUED,
-    HANDOFF_REDEEMED,
-    INVITATION_ACCEPTED,
-    INVITATION_CREATED,
-    INVITATION_EXPIRED,
-    MEMBERSHIP_ACTIVATED,
     MEMBERSHIP_LEFT,
-    MEMBERSHIP_REINSTATED,
-    MEMBERSHIP_SUSPENDED,
     MFA_DISABLED,
     MFA_ENABLED,
     MFA_RECOVERY_CODES_REGENERATED,
     MFA_RESET,
     MFA_SETUP_INITIATED,
     MFA_VERIFY_BACKUP_CODE_USED,
-    SESSION_CREATED,
-    SESSION_REVOKED,
-    SESSION_REVOKED_ALL,
-    SESSION_TRUSTED,
 )
 
 _ACTION_KEYS = ("audit_action",)
@@ -114,6 +104,18 @@ class TestActionStringsUsedInServices:
         assert "HANDOFF_ISSUED" in src
         assert "HANDOFF_REDEEMED" in src
 
+    def test_invitation_service_action_strings_are_catalogued(self):
+        src = self._read_source(invitation_service)
+        assert "INVITATION_CREATED" in src
+        assert "INVITATION_ACCEPTED" in src
+        assert "INVITATION_EXPIRED" in src
+
+    def test_membership_service_action_strings_are_catalogued(self):
+        src = self._read_source(membership_service)
+        assert "MEMBERSHIP_ACTIVATED" in src
+        assert "MEMBERSHIP_SUSPENDED" in src
+        assert "MEMBERSHIP_REINSTATED" in src
+
     def test_catalog_contains_no_future_orphans(self):
         # Events declared for surfaces still under construction must be
         # deliberately planned (they will be produced as flows land), so assert
@@ -124,18 +126,6 @@ class TestActionStringsUsedInServices:
             AUTH_PASSWORD_RESET_REQUESTED,
             AUTH_PASSWORD_RESET_COMPLETED,
             MFA_RECOVERY_CODES_REGENERATED,
-            INVITATION_CREATED,
-            INVITATION_ACCEPTED,
-            INVITATION_EXPIRED,
-            MEMBERSHIP_ACTIVATED,
-            MEMBERSHIP_SUSPENDED,
-            MEMBERSHIP_REINSTATED,
             MEMBERSHIP_LEFT,
-            SESSION_CREATED,
-            SESSION_REVOKED,
-            SESSION_REVOKED_ALL,
-            SESSION_TRUSTED,
-            HANDOFF_ISSUED,
-            HANDOFF_REDEEMED,
         }
         assert planned <= ALL_AUDIT_EVENTS

@@ -261,10 +261,11 @@ def get_turnstile_verifier() -> TurnstileVerifier:
 
 def get_membership_service(
     membership_repo: MembershipRepository = Depends(get_membership_repo),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> MembershipService:
     from identity.features.memberships.service import MembershipService
 
-    return MembershipService(membership_repo)
+    return MembershipService(membership_repo, audit_service)
 
 
 def get_authn_service(
@@ -327,6 +328,7 @@ def get_invitation_service(
     role_repo: RoleRepository = Depends(get_role_repo),
     email_service: EmailService = Depends(get_email_service),
     membership_service: MembershipService = Depends(get_membership_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> InvitationService:
     from identity.features.invitations.service import InvitationService
 
@@ -336,6 +338,7 @@ def get_invitation_service(
         role_repo,
         email_service,
         membership_service,
+        audit_service,
     )
 
 

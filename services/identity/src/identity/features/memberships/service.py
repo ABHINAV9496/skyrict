@@ -6,11 +6,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from identity.core.audit_events import (
+    MEMBERSHIP_ACTIVATED,
+    MEMBERSHIP_REINSTATED,
+    MEMBERSHIP_SUSPENDED,
+)
 from identity.core.state_machine import StateMachine
 from identity.domain.entities import Membership, MembershipStatus
 from skyrict_common.exceptions import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
+    from identity.features.audit.service import AuditService
     from identity.features.memberships.ports import MembershipRepositoryPort
 
 # invited -> active -> (suspended <-> active)
@@ -24,8 +30,11 @@ membership_state_machine = StateMachine(MEMBERSHIP_TRANSITIONS, entity="membersh
 
 
 class MembershipService:
-    def __init__(self, membership_repo: MembershipRepositoryPort) -> None:
+    def __init__(
+        self, membership_repo: MembershipRepositoryPort, audit_service: AuditService
+    ) -> None:
         self.membership_repo = membership_repo
+        self.audit_service = audit_service
 
     async def create_invited(
         self,
@@ -73,7 +82,7 @@ class MembershipService:
         if existing is not None:
             raise ValidationError("User is already a member of this organization")
 
-        return await self.membership_repo.create(
+        created = await self.membership_repo.create(
             Membership(
                 tenant_id=tenant_id_uuid,
                 user_id=user_id_uuid,
@@ -83,6 +92,8 @@ class MembershipService:
                 joined_at=datetime.now(UTC),
             )
         )
+        await self._audit_membership(MEMBERSHIP_ACTIVATED, created, user_id=user_id_uuid)
+        return created
 
     async def activate(
         self,
@@ -93,9 +104,11 @@ class MembershipService:
         """Flip an INVITED membership to ACTIVE once the user materializes."""
         membership = await self._get(membership_id)
         membership_state_machine.transition(membership.status.value, MembershipStatus.ACTIVE.value)
-        return await self.membership_repo.set_user(
+        activated = await self.membership_repo.set_user(
             membership_id, user_id, joined_at=datetime.now(UTC)
         )
+        await self._audit_membership(MEMBERSHIP_ACTIVATED, activated, user_id=user_id)
+        return activated
 
     async def suspend(self, *, membership_id: str | uuid.UUID) -> Membership:
         """Suspend an ACTIVE membership."""
@@ -103,21 +116,25 @@ class MembershipService:
         membership_state_machine.transition(
             membership.status.value, MembershipStatus.SUSPENDED.value
         )
-        return await self.membership_repo.update_status(
+        suspended = await self.membership_repo.update_status(
             membership_id,
             status=MembershipStatus.SUSPENDED,
             suspended_at=datetime.now(UTC),
         )
+        await self._audit_membership(MEMBERSHIP_SUSPENDED, suspended)
+        return suspended
 
     async def reinstate(self, *, membership_id: str | uuid.UUID) -> Membership:
         """Reactivate a SUSPENDED membership."""
         membership = await self._get(membership_id)
         membership_state_machine.transition(membership.status.value, MembershipStatus.ACTIVE.value)
-        return await self.membership_repo.update_status(
+        reinstated = await self.membership_repo.update_status(
             membership_id,
             status=MembershipStatus.ACTIVE,
             suspended_at=None,
         )
+        await self._audit_membership(MEMBERSHIP_REINSTATED, reinstated)
+        return reinstated
 
     async def get_by_id(self, membership_id: str | uuid.UUID) -> Membership:
         return await self._get(membership_id)
@@ -147,3 +164,17 @@ class MembershipService:
         if membership is None:
             raise NotFoundError("Membership not found")
         return membership
+
+    async def _audit_membership(
+        self,
+        action: str,
+        membership: Membership,
+        *,
+        user_id: str | uuid.UUID | None = None,
+    ) -> None:
+        await self.audit_service.log(
+            action=action,
+            target=f"membership:{membership.id}",
+            user_id=str(user_id) if user_id is not None else None,
+            tenant_id=str(membership.tenant_id),
+        )

@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from identity.core.audit_events import INVITATION_ACCEPTED, INVITATION_CREATED, INVITATION_EXPIRED
 from identity.core.config import settings
 from identity.core.constants import INVITATION_TOKEN_EXPIRE_DAYS
 from identity.core.email import EmailService
@@ -24,6 +25,7 @@ from skyrict_common.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from identity.features.audit.service import AuditService
     from identity.features.memberships.service import MembershipService
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.users.ports import UserRepositoryPort
@@ -37,12 +39,14 @@ class InvitationService:
         role_repo: RoleRepositoryPort,
         email_service: EmailService,
         membership_service: MembershipService,
+        audit_service: AuditService,
     ) -> None:
         self.invitation_repo = invitation_repo
         self.user_repo = user_repo
         self.role_repo = role_repo
         self.email_service = email_service
         self.membership_service = membership_service
+        self.audit_service = audit_service
 
     async def create_invitation(
         self,
@@ -93,6 +97,14 @@ class InvitationService:
             organization_name=organization_name,
             token=token,
             base_url=settings.EMAIL_VERIFICATION_BASE_URL or None,
+        )
+
+        assert invitation.id is not None
+        await self.audit_service.log(
+            action=INVITATION_CREATED,
+            target=f"invitation:{invitation.id}",
+            user_id=str(created_by_user_id),
+            tenant_id=str(tenant_id),
         )
 
         return invitation, token
@@ -170,6 +182,13 @@ class InvitationService:
 
         await self.invitation_repo.mark_used(invitation.id, user.id)
 
+        await self.audit_service.log(
+            action=INVITATION_ACCEPTED,
+            target=f"invitation:{invitation.id}",
+            user_id=str(user.id),
+            tenant_id=str(tenant_id),
+        )
+
         return user
 
     async def expire_invitation(
@@ -179,3 +198,9 @@ class InvitationService:
             await self.invitation_repo.mark_used(invitation_id, None)
         except NotFoundError as exc:
             raise InvitationNotFoundError("Invitation not found") from exc
+        await self.audit_service.log(
+            action=INVITATION_EXPIRED,
+            target=f"invitation:{invitation_id}",
+            user_id=None,
+            tenant_id=str(tenant_id),
+        )

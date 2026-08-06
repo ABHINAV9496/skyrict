@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 
+class FakeAuditService:
+    """In-memory AuditService double capturing recorded entries."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, object]] = []
+
+    async def log(self, *, action: str, target: str, **kwargs: object) -> None:
+        self.entries.append({"action": action, "target": target, **kwargs})
+
+
 class FakeMembershipRepo:
     def __init__(self) -> None:
         self.memberships: dict[uuid.UUID, Membership] = {}
@@ -104,13 +114,18 @@ def repo() -> FakeMembershipRepo:
 
 
 @pytest.fixture
+def audit() -> FakeAuditService:
+    return FakeAuditService()
+
+
+@pytest.fixture
 def tenant_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
 @pytest.fixture
-def service(repo: FakeMembershipRepo) -> MembershipService:
-    return MembershipService(repo)
+def service(repo: FakeMembershipRepo, audit: FakeAuditService) -> MembershipService:
+    return MembershipService(repo, audit)
 
 
 async def _invite(service: MembershipService, *, email: str, tenant_id: uuid.UUID) -> Membership:
@@ -151,7 +166,11 @@ class TestCreateInvited:
 
 class TestActivate:
     async def test_invited_becomes_active_with_user(
-        self, service: MembershipService, repo: FakeMembershipRepo, tenant_id: uuid.UUID
+        self,
+        service: MembershipService,
+        repo: FakeMembershipRepo,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         membership = await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
         user_id = uuid.uuid4()
@@ -162,6 +181,12 @@ class TestActivate:
         assert activated.joined_at is not None
         assert activated.suspended_at is None
 
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["membership.activated"]
+        assert audit.entries[0]["target"] == f"membership:{membership.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(user_id)
+
     async def test_unknown_membership_raises(self, service: MembershipService) -> None:
         with pytest.raises(NotFoundError):
             await service.activate(membership_id=uuid.uuid4(), user_id=uuid.uuid4())
@@ -169,7 +194,11 @@ class TestActivate:
 
 class TestSuspendReinstate:
     async def test_active_can_be_suspended(
-        self, service: MembershipService, repo: FakeMembershipRepo, tenant_id: uuid.UUID
+        self,
+        service: MembershipService,
+        repo: FakeMembershipRepo,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         membership = await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
         await service.activate(membership_id=membership.id, user_id=uuid.uuid4())
@@ -177,9 +206,15 @@ class TestSuspendReinstate:
         suspended = await service.suspend(membership_id=membership.id)
         assert suspended.status is MembershipStatus.SUSPENDED
         assert suspended.suspended_at is not None
+        assert audit.entries[-1]["action"] == "membership.suspended"
+        assert audit.entries[-1]["target"] == f"membership:{membership.id}"
 
     async def test_suspended_can_be_reinstated(
-        self, service: MembershipService, repo: FakeMembershipRepo, tenant_id: uuid.UUID
+        self,
+        service: MembershipService,
+        repo: FakeMembershipRepo,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
         membership = await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
         await service.activate(membership_id=membership.id, user_id=uuid.uuid4())
@@ -188,6 +223,8 @@ class TestSuspendReinstate:
         reinstated = await service.reinstate(membership_id=membership.id)
         assert reinstated.status is MembershipStatus.ACTIVE
         assert reinstated.suspended_at is None
+        assert audit.entries[-1]["action"] == "membership.reinstated"
+        assert audit.entries[-1]["target"] == f"membership:{membership.id}"
 
     async def test_invited_cannot_be_suspended(
         self, service: MembershipService, tenant_id: uuid.UUID

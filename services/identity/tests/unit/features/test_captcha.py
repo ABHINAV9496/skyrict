@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
+import io
+from pathlib import Path
 
+import pytest
+from PIL import Image
+
+from identity.features.auth.captcha import captcha as captcha_module
 from identity.features.auth.captcha.captcha import (
     CAPTCHA_ALPHABET,
+    CAPTCHA_FONT_SIZE,
+    CAPTCHA_HEIGHT,
     CAPTCHA_LENGTH,
+    CAPTCHA_WIDTH,
     FontManager,
     generate_captcha,
     hash_answer,
@@ -69,9 +77,44 @@ class TestGenerator:
     def test_hash_answer_normalizes_case_and_whitespace(self) -> None:
         assert hash_answer(" abc34 ") == hash_answer("ABC34")
 
+    @pytest.mark.parametrize("style", STYLES)
+    def test_all_styles_are_grayscale_with_expected_size(self, style: str) -> None:
+        captcha = generate_captcha(style=style)
+        image = Image.open(io.BytesIO(captcha.image_png)).convert("RGB")
+        assert image.size == (CAPTCHA_WIDTH, CAPTCHA_HEIGHT)
+        pixels = list(image.getdata())
+        assert all(r == g == b for r, g, b in pixels), f"{style} contains color pixels"
+
+    def test_render_varies_between_challenges_of_same_style(self) -> None:
+        assert generate_captcha(style="classic").image_png != generate_captcha(style="classic").image_png
+
+    def test_background_is_not_blank(self) -> None:
+        captcha = generate_captcha(style="classic")
+        image = Image.open(io.BytesIO(captcha.image_png)).convert("L")
+        assert len(set(image.getdata())) >= 5
+
     def test_font_manager_falls_back_without_bundled_fonts(self, tmp_path) -> None:
         manager = FontManager(fonts_dir=tmp_path)
         assert manager.pick() is not None
+
+    def test_font_coverage_probe_rejects_missing_glyphs(self) -> None:
+        class EmptyFont:
+            def getbbox(self, ch: str) -> tuple[int, int, int, int]:
+                return (0, 0, 0, 0)
+
+        class FullFont:
+            def getbbox(self, ch: str) -> tuple[int, int, int, int]:
+                return (0, 0, 12, 12)
+
+        assert FontManager._covers_alphabet(EmptyFont()) is False
+        assert FontManager._covers_alphabet(FullFont()) is True
+
+    def test_all_bundled_fonts_cover_the_alphabet(self) -> None:
+        fonts_dir = Path(captcha_module.__file__).parent / "fonts"
+        manager = FontManager(fonts_dir=fonts_dir)
+        fonts = manager._load(CAPTCHA_FONT_SIZE)
+        assert len(fonts) >= 15
+        assert all(FontManager._covers_alphabet(font) for font in fonts)
 
 
 class TestStore:

@@ -48,6 +48,7 @@ os.environ.setdefault("IDENTITY_SIGNUP_START_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CODE_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_VERIFY_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CHECK_RATE_LIMIT", "10000")
+os.environ.setdefault("IDENTITY_SIGNUP_CAPTCHA_RATE_LIMIT", "10000")
 
 
 os.environ.setdefault("IDENTITY_RATE_LIMIT_LOGIN_IP", "10000")

@@ -415,6 +415,23 @@ class FakeTurnstile:
         return self.result
 
 
+class FakeCaptchaStore:
+    """CAPTCHA double that accepts every answer unless scripted otherwise."""
+
+    def __init__(self, valid: bool = True) -> None:
+        self.valid = valid
+        self.issued: list[str] = []
+        self.verifications: list[tuple[str, str]] = []
+
+    async def issue(self, answer: str) -> str:
+        self.issued.append(answer)
+        return f"captcha-{len(self.issued)}"
+
+    async def verify(self, captcha_id: str, answer: str) -> bool:
+        self.verifications.append((captcha_id, answer))
+        return self.valid
+
+
 class _Harness:
     """Wires AuthenticationService against in-memory port doubles."""
 
@@ -427,6 +444,7 @@ class _Harness:
         prior_device: bool = True,
         verification_store: FakeVerificationStore | None = None,
         turnstile: FakeTurnstile | None = None,
+        captcha_store: FakeCaptchaStore | None = None,
     ) -> None:
         self.user_repo = FakeUserRepo(users)
         self.tenant_repo = FakeTenantRepo(tenants)
@@ -438,6 +456,7 @@ class _Harness:
         self.membership_svc = FakeMembershipService()
         self.verification_store = verification_store or FakeVerificationStore()
         self.turnstile = turnstile or FakeTurnstile()
+        self.captcha_store = captcha_store or FakeCaptchaStore()
         self.challenge_store = FakeChallengeStore()
         self.service = AuthenticationService(
             self.user_repo,
@@ -451,6 +470,7 @@ class _Harness:
             self.verification_store,
             self.turnstile,
             mfa_challenge_store=self.challenge_store,
+            captcha_store=self.captcha_store,
         )
 
 
@@ -820,21 +840,51 @@ class TestWizard:
 
         with pytest.raises(ValidationError):
             await harness.service.signup_set_password(
-                email="owner@neworg.com", verification_token="vt", password="short"
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="short",
+                captcha_id="cap",
+                captcha_answer="ABCDE",
             )
         with pytest.raises(ValidationError):
             await harness.service.signup_set_password(
-                email="owner@neworg.com", verification_token="vt", password="alllowercase1!"
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="alllowercase1!",
+                captcha_id="cap",
+                captcha_answer="ABCDE",
             )
+
+    async def test_set_password_rejects_invalid_captcha(self) -> None:
+        harness = _Harness(captcha_store=FakeCaptchaStore(valid=False))
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
+
+        with pytest.raises(ValidationError):
+            await harness.service.signup_set_password(
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="ValidPass123!",
+                captcha_id="cap",
+                captcha_answer="WRONG",
+            )
+        assert harness.captcha_store.verifications == [("cap", "WRONG")]
+        payload = await harness.verification_store.get_verification_token("vt")
+        assert payload is not None
+        assert payload["password_hash"] == ""
 
     async def test_set_password_stores_hash(self) -> None:
         harness = _Harness()
         await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
 
         await harness.service.signup_set_password(
-            email="owner@neworg.com", verification_token="vt", password="ValidPass123!"
+            email="owner@neworg.com",
+            verification_token="vt",
+            password="ValidPass123!",
+            captcha_id="cap",
+            captcha_answer="ABCDE",
         )
 
+        assert harness.captcha_store.verifications == [("cap", "ABCDE")]
         payload = await harness.verification_store.get_verification_token("vt")
         assert payload is not None
         assert payload["password_hash"] != "ValidPass123!"
@@ -850,7 +900,11 @@ class TestWizard:
         ]
         assert vt is not None
         await harness.service.signup_set_password(
-            email="owner@neworg.com", verification_token=vt, password="ValidPass123!"
+            email="owner@neworg.com",
+            verification_token=vt,
+            password="ValidPass123!",
+            captcha_id="cap",
+            captcha_answer="ABCDE",
         )
 
         result = await harness.service.signup_create_organization(

@@ -48,15 +48,28 @@ async def wizard_verify_code(client: AsyncClient, *, email: str, code: str) -> s
     return data["verificationToken"]
 
 
+async def wizard_fetch_captcha(client: AsyncClient) -> tuple[str, str]:
+    """Fetch a CAPTCHA challenge; returns (captcha_id, plaintext answer)."""
+    resp = await client.get("/api/v1/auth/signup/captcha")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["captchaId"] and data["image"]
+    assert data["answer"], "test env must return the plaintext answer"
+    return data["captchaId"], data["answer"]
+
+
 async def wizard_set_password(
     client: AsyncClient, *, email: str, verification_token: str, password: str
 ) -> None:
+    captcha_id, answer = await wizard_fetch_captcha(client)
     resp = await client.post(
         "/api/v1/auth/signup/password",
         json={
             "email": email,
             "verificationToken": verification_token,
             "password": password,
+            "captchaId": captcha_id,
+            "captchaAnswer": answer,
         },
     )
     assert resp.status_code == 200, resp.text

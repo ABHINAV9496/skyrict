@@ -166,6 +166,7 @@ class TestIsTenantRequiredPath:
             "/api/v1/auth/signup/send-code",
             "/api/v1/auth/signup/verify-code",
             "/api/v1/auth/signup/password",
+            "/api/v1/auth/signup/captcha",
             "/api/v1/auth/signup/check-email",
             "/api/v1/auth/signup/check-slug",
             "/api/v1/auth/signup/organization",

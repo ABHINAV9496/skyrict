@@ -7,6 +7,7 @@ import {
   backendError,
   callBackend,
   mapUser,
+  resolveTenantSlug,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const mfaToken = typeof body.mfaToken === "string" ? body.mfaToken : "";
+  const mfaToken =
+    (typeof body.mfa_token === "string" && body.mfa_token) ||
+    (typeof body.mfaToken === "string" && body.mfaToken) ||
+    "";
   const code = typeof body.code === "string" ? body.code.trim() : "";
   if (!mfaToken || !code) {
     return NextResponse.json({ error: "MFA token and code are required." }, { status: 400 });
@@ -25,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   const result = await callBackend("/auth/mfa/verify", {
     body: { mfa_token: mfaToken, code },
+    tenantSlug: resolveTenantSlug(request.headers.get("host")),
   });
   if (!result.ok) return backendError(result);
 

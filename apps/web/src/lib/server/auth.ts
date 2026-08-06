@@ -23,11 +23,53 @@ function apiBase(): string {
   return process.env.API_PROXY_TARGET ?? "http://localhost:8000";
 }
 
-/** Tenant slug from the Host header, mirroring the backend TenantResolver. */
-export function resolveTenantSlug(host: string | null | undefined): string {
+export type Surface = "marketing" | "signup" | "signin" | "workspace" | "unknown";
+
+const APEX_HOST = /^([a-z0-9-]+)\.(localhost|skyrict\.com)$/;
+const SIGNIN_HOST = /^([a-z0-9-]+)\.signin\.(localhost|skyrict\.com)$/;
+
+/**
+ * Resolve which of the four subdomain surfaces a Host header maps to.
+ *
+ * The regexes are *parsers*, not gates: hosts that do not match an allowlisted
+ * origin (dev: `*.localhost` + `localhost`; prod: `*.skyrict.com`,
+ * `*.signin.skyrict.com`) resolve to `unknown` and are rejected downstream —
+ * no acme fallback, no env fallback in the production posture.
+ */
+export function hostSurface(
+  host: string | null | undefined,
+): { surface: Surface; slug: string } {
   const value = (host ?? "").trim().toLowerCase().replace(/:\d+$/, "");
-  const match = /^([a-z0-9-]+)\.(?:signin\.)?(?:localhost|skyrict\.com)$/.exec(value);
-  if (match && !RESERVED_SLUGS.has(match[1])) return match[1];
+  if (value === "localhost" || value === "127.0.0.1" || value === "skyrict.com") {
+    return { surface: "marketing", slug: "" };
+  }
+  const signin = SIGNIN_HOST.exec(value);
+  if (signin) {
+    if (RESERVED_SLUGS.has(signin[1])) return { surface: "unknown", slug: "" };
+    return { surface: "signin", slug: signin[1] };
+  }
+  const apex = APEX_HOST.exec(value);
+  if (apex) {
+    const label = apex[1];
+    if (label === "web") return { surface: "marketing", slug: "" };
+    if (label === "signup") return { surface: "signup", slug: "" };
+    if (RESERVED_SLUGS.has(label)) return { surface: "unknown", slug: "" };
+    return { surface: "workspace", slug: label };
+  }
+  return { surface: "unknown", slug: "" };
+}
+
+/**
+ * Tenant slug from the Host header, mirroring the backend TenantResolver.
+ *
+ * The slug always comes from the validated Host. `TENANT_SLUG` is a dev-only
+ * convenience for hitting the app without a tenant subdomain and is never used
+ * in the production posture.
+ */
+export function resolveTenantSlug(host: string | null | undefined): string {
+  const { slug } = hostSurface(host);
+  if (slug) return slug;
+  if (process.env.NODE_ENV === "production") return "";
   return process.env.TENANT_SLUG ?? "";
 }
 

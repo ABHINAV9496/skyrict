@@ -10,6 +10,28 @@ secret that gates the password step); visual distortion uses ``random`` (it
 is purely cosmetic). The plaintext answer never leaves this module except
 through :func:`generate_captcha`, whose caller hashes it before storage —
 the store never sees the raw text.
+
+The renderer recreates the philosophy of classic enterprise CAPTCHA libraries
+(BotDetect / Yahoo / phpBB): pure black & white, high contrast, old-school
+printer/scanner texture, and retro OCR-style typography.
+
+Segmentation resistance comes from the *algorithm*, not from unreadable text:
+
+* every character is rendered independently — random font, stroke, shear,
+  perspective, scale, rotation, baseline and kerning per glyph;
+* the ``overlap`` layout advances glyphs past each other so their separation
+  outlines (in the background color) intersect without the glyph bodies
+  fusing;
+* guide lines are drawn *through* the text, and some characters carry broken
+  strokes (internal cuts), top-edge clipping and partial mask bands;
+* the background is a structured tiled pattern (hatch / grid / plus / scan)
+  plus layered artifacts — dust, dashes, ink blobs, edge fragments, paper
+  grain — drawn both behind and above the characters.
+
+All distortion is lightweight (per-glyph perspective and a small local wave,
+plus a subtle final skew) — no giant warps that destroy the glyphs. Output is
+strictly grayscale. The single rendering pipeline is reused by every style
+preset.
 """
 
 from __future__ import annotations
@@ -24,65 +46,131 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 CAPTCHA_ALPHABET: Final[str] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CAPTCHA_LENGTH: Final[int] = 5
-CAPTCHA_WIDTH: Final[int] = 240
+CAPTCHA_WIDTH: Final[int] = 260
 CAPTCHA_HEIGHT: Final[int] = 64
 CAPTCHA_FONT_SIZE: Final[int] = 42
 
 _STYLE_NAMES: Final[tuple[str, ...]] = ("classic", "outline", "bullet", "chalk", "neon")
 
+# One reusable pipeline; each preset tweaks how the same building blocks are
+# combined. All palettes are pure grays (R == G == B). ``layout`` is either
+# "spaced" (measured gap, no contact) or "overlap" (glyphs advance past each
+# other; the background-color stroke keeps them distinct). ``cuts_chance`` is
+# the per-glyph probability of broken strokes; ``local_wave`` enables the
+# small per-glyph sine warp.
 _STYLES: Final[dict[str, dict[str, object]]] = {
-    "classic": {
+    "classic": {  # Wave — hatch paper, sine warp, guide lines, mask band
         "bg": (247, 247, 245),
-        "fg": (38, 38, 38),
+        "fg": (22, 22, 22),
         "stroke": 0,
         "stroke_fill": None,
         "angle_min": -14,
         "angle_max": 14,
+        "layout": "spaced",
+        "gap_min": 4,
+        "gap_max": 7,
+        "jitter": 4,
+        "background": "hatch",
+        "guide_lines": 2,
+        "mask_band": True,
+        "cuts_chance": 0.35,
+        "local_wave": True,
+        "halo": False,
+        "jail_bars": False,
+        "ink_blobs": False,
     },
-    "outline": {
-        "bg": (246, 246, 246),
+    "outline": {  # Halo — outlined glyphs on a clean white halo over a grid
+        "bg": (255, 255, 255),
         "fg": (255, 255, 255),
-        "stroke": 2,
-        "stroke_fill": (35, 35, 35),
+        "stroke": 3,
+        "stroke_fill": (20, 20, 20),
         "angle_min": -12,
         "angle_max": 12,
+        "layout": "spaced",
+        "gap_min": 5,
+        "gap_max": 8,
+        "jitter": 3,
+        "background": "grid",
+        "guide_lines": 1,
+        "mask_band": False,
+        "cuts_chance": 0.15,
+        "local_wave": False,
+        "halo": True,
+        "jail_bars": False,
+        "ink_blobs": False,
     },
-    "bullet": {
-        "bg": (250, 250, 250),
-        "fg": (30, 30, 30),
+    "bullet": {  # Overlap — glyphs intersect via separation outlines + lines
+        "bg": (255, 255, 255),
+        "fg": (15, 15, 15),
+        "stroke": 1,
+        "stroke_fill": (255, 255, 255),
+        "angle_min": -11,
+        "angle_max": 11,
+        "layout": "overlap",
+        "overlap_min": 3,
+        "overlap_max": 7,
+        "jitter": 4,
+        "background": "plus",
+        "guide_lines": 3,
+        "mask_band": False,
+        "cuts_chance": 0.5,
+        "local_wave": True,
+        "halo": False,
+        "jail_bars": False,
+        "ink_blobs": True,
+    },
+    "chalk": {  # Jail — scan paper, characters masked behind horizontal bars
+        "bg": (205, 205, 205),
+        "fg": (15, 15, 15),
         "stroke": 0,
         "stroke_fill": None,
         "angle_min": -10,
         "angle_max": 10,
+        "layout": "spaced",
+        "gap_min": 4,
+        "gap_max": 7,
+        "jitter": 4,
+        "background": "scan",
+        "guide_lines": 2,
+        "mask_band": True,
+        "cuts_chance": 0.3,
+        "local_wave": False,
+        "halo": False,
+        "jail_bars": True,
+        "ink_blobs": True,
     },
-    "chalk": {
-        "bg": (34, 40, 34),
-        "fg": (238, 238, 228),
+    "neon": {  # Vertigo-flavoured inverted — zoom-y glyphs on dark pixel noise
+        "bg": (8, 8, 8),
+        "fg": (235, 235, 235),
         "stroke": 0,
         "stroke_fill": None,
-        "angle_min": -8,
-        "angle_max": 8,
-    },
-    "neon": {
-        "bg": (10, 10, 18),
-        "fg": (80, 255, 220),
-        "stroke": 0,
-        "stroke_fill": None,
-        "angle_min": -12,
-        "angle_max": 12,
+        "angle_min": -16,
+        "angle_max": 16,
+        "layout": "spaced",
+        "gap_min": 5,
+        "gap_max": 8,
+        "jitter": 4,
+        "background": "grid",
+        "guide_lines": 1,
+        "mask_band": False,
+        "cuts_chance": 0.3,
+        "local_wave": True,
+        "halo": False,
+        "jail_bars": False,
+        "ink_blobs": False,
     },
 }
 
-_BULLET_COLORS: Final[tuple[tuple[int, int, int], ...]] = (
-    (255, 200, 200),
-    (200, 230, 255),
-    (220, 255, 210),
-    (255, 240, 200),
-    (235, 215, 255),
+# Bundled fonts that read as legible at CAPTCHA size. The ornate scripts,
+# blackletter and distressed hand-written faces ship with the package but are
+# excluded from the random pick — they read as damaged glyphs rather than
+# OCR-averse type.
+_EXCLUDED_FONTS: Final[frozenset[str]] = frozenset(
+    {"OLDENGL.TTF", "MATURASC.TTF", "VINERITC.TTF", "CHILLER.TTF", "HATTEN.TTF"}
 )
 
 
@@ -111,7 +199,9 @@ class FontManager:
 
     Font files ship inside this package (``fonts/*.ttf``) so they travel with
     the source and the wheel. Fonts are loaded lazily on first use — never
-    re-read from disk per request.
+    re-read from disk per request. Each font must cover the whole challenge
+    alphabet; fonts with missing glyphs (e.g. scripts without digits) are
+    skipped so a random pick can never produce a "tofu" box.
     """
 
     def __init__(
@@ -122,34 +212,61 @@ class FontManager:
     ) -> None:
         self._fonts_dir = fonts_dir if fonts_dir is not None else Path(__file__).parent / "fonts"
         self._size = size
-        self._fonts: tuple[ImageFont.FreeTypeFont, ...] = ()
+        self._fonts_by_size: dict[int, tuple[ImageFont.FreeTypeFont, ...]] = {}
 
-    def pick(self) -> ImageFont.FreeTypeFont:
-        """Return a random cached font, loading the set on first call."""
-        if not self._fonts:
-            paths = sorted(self._fonts_dir.glob("*.ttf"))
-            if paths:
-                self._fonts = tuple(
-                    ImageFont.truetype(str(path), size=self._size) for path in paths
-                )
-            else:
-                # Last-resort fallback keeps the endpoint alive even when no
-                # font shipped with the deployment.
-                self._fonts = (self._default_font(),)
-        return secrets.choice(self._fonts)
+    def pick(self, size: int | None = None) -> ImageFont.FreeTypeFont:
+        """Return a random cached font at ``size`` (defaults to the manager size)."""
+        font_size = size if size is not None else self._size
+        fonts = self._fonts_by_size.get(font_size)
+        if fonts is None:
+            fonts = self._load(font_size)
+            self._fonts_by_size[font_size] = fonts
+        return secrets.choice(fonts)
+
+    def _load(self, size: int) -> tuple[ImageFont.FreeTypeFont, ...]:
+        fonts: list[ImageFont.FreeTypeFont] = []
+        for path in sorted(self._fonts_dir.glob("*.ttf")):
+            if path.name.upper() in _EXCLUDED_FONTS:
+                continue
+            try:
+                font = ImageFont.truetype(str(path), size=size)
+            except OSError:
+                continue
+            if self._covers_alphabet(font):
+                fonts.append(font)
+        if fonts:
+            return tuple(fonts)
+        # Last-resort fallback keeps the endpoint alive even when no font
+        # shipped with the deployment.
+        return (self._default_font(size),)
 
     @staticmethod
-    def _default_font() -> ImageFont.FreeTypeFont:
+    def _covers_alphabet(font: ImageFont.FreeTypeFont) -> bool:
+        for ch in CAPTCHA_ALPHABET:
+            left, top, right, bottom = font.getbbox(ch)
+            if right <= left or bottom <= top:
+                return False
+        return True
+
+    @staticmethod
+    def _default_font(size: int = CAPTCHA_FONT_SIZE) -> ImageFont.FreeTypeFont:
         try:
-            return ImageFont.load_default(size=40)  # type: ignore[call-overload]
+            return ImageFont.load_default(size=size)  # type: ignore[call-overload]
         except (TypeError, ValueError):
             return ImageFont.load_default()  # type: ignore[return-value]
 
 
 class NoiseEngine:
-    """Visual noise layered on top of the rendered text (anti-OCR, human-OK)."""
+    """Reusable layered noise primitives — drawn behind and above the text."""
 
-    def add_lines(self, image: Image.Image, *, count: int, color: tuple[int, int, int]) -> None:
+    def add_lines(
+        self,
+        image: Image.Image,
+        *,
+        count: int,
+        color: tuple[int, int, int],
+        width: int = 1,
+    ) -> None:
         draw = ImageDraw.Draw(image)
         for _ in range(count):
             draw.line(
@@ -160,59 +277,141 @@ class NoiseEngine:
                     random.randint(0, image.height),
                 ),
                 fill=color,
-                width=1,
+                width=width,
             )
 
-    def add_dots(
+    def add_broken_lines(
         self,
         image: Image.Image,
         *,
         count: int,
         color: tuple[int, int, int],
-        radius: int = 1,
+        width: int = 1,
     ) -> None:
+        """Thin lines split into 2-3 dashed segments with gaps (scanner streaks)."""
         draw = ImageDraw.Draw(image)
         for _ in range(count):
-            x = random.randint(0, image.width)
-            y = random.randint(0, image.height)
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+            x1 = random.randint(0, image.width)
+            y1 = random.randint(0, image.height)
+            x2 = random.randint(0, image.width)
+            y2 = random.randint(0, image.height)
+            for _ in range(random.randint(2, 3)):
+                t0 = random.uniform(0.0, 0.4)
+                t1 = t0 + random.uniform(0.25, 0.45)
+                sx = x1 + (x2 - x1) * t0
+                sy = y1 + (y2 - y1) * t0
+                ex = x1 + (x2 - x1) * t1
+                ey = y1 + (y2 - y1) * t1
+                draw.line((sx, sy, ex, ey), fill=color, width=width)
 
-    def add_grain(self, image: Image.Image, *, sigma: int = 12, alpha: float = 0.2) -> Image.Image:
-        noise = Image.effect_noise(image.size, sigma).convert("RGB")
-        return Image.blend(image, noise, alpha)
-
-    def add_wave(
-        self,
-        image: Image.Image,
-        *,
-        amplitude: int = 2,
-        period: int = 36,
-        phase: float | None = None,
-    ) -> None:
-        phase = random.uniform(0, 2 * math.pi) if phase is None else phase
-        for x in range(image.width):
-            dy = int(amplitude * math.sin(2 * math.pi * x / period + phase))
-            if dy == 0:
-                continue
-            column = image.crop((x, 0, x + 1, image.height))
-            image.paste(column, (x, max(0, dy)))
-
-    def add_speckles(
+    def add_guide_lines(
         self,
         image: Image.Image,
         *,
         count: int,
         color: tuple[int, int, int],
+        width: int = 1,
     ) -> None:
+        """Full-width lines crossing the text area (BotDetect signature)."""
+        draw = ImageDraw.Draw(image)
+        for _ in range(count):
+            y = random.randint(8, image.height - 8)
+            x0 = random.randint(-12, 4)
+            x1 = image.width + random.randint(-4, 12)
+            draw.line((x0, y, x1, y + random.randint(-4, 4)), fill=color, width=width)
+
+    def add_dashes(
+        self,
+        image: Image.Image,
+        *,
+        count: int,
+        color: tuple[int, int, int],
+        width: int = 1,
+    ) -> None:
+        """Short mostly-horizontal scratches (printer artifacts)."""
         draw = ImageDraw.Draw(image)
         for _ in range(count):
             x = random.randint(0, image.width)
             y = random.randint(0, image.height)
-            length = random.randint(3, 9)
-            angle = random.uniform(0, 2 * math.pi)
+            length = random.randint(4, 14)
+            angle = random.uniform(-0.35, 0.35)
             dx = math.cos(angle) * length
             dy = math.sin(angle) * length
-            draw.line((x, y, x + dx, y + dy), fill=color, width=1)
+            draw.line((x, y, x + dx, y + dy), fill=color, width=width)
+
+    def add_edge_fragments(
+        self,
+        image: Image.Image,
+        *,
+        count: int,
+        color: tuple[int, int, int],
+        width: int = 1,
+    ) -> None:
+        """Short strokes hugging the borders — photocopy edge artifacts."""
+        draw = ImageDraw.Draw(image)
+        for _ in range(count):
+            edge = random.choice(("top", "bottom", "left", "right"))
+            length = random.randint(6, 18)
+            if edge == "top":
+                x = random.randint(0, image.width)
+                draw.line((x, 0, x + random.randint(-2, 2), length), fill=color, width=width)
+            elif edge == "bottom":
+                x = random.randint(0, image.width)
+                y = image.height - 1
+                draw.line((x, y, x + random.randint(-2, 2), y - length), fill=color, width=width)
+            elif edge == "left":
+                y = random.randint(0, image.height)
+                draw.line((0, y, length, y + random.randint(-2, 2)), fill=color, width=width)
+            else:
+                y = random.randint(0, image.height)
+                x = image.width - 1
+                draw.line((x, y, x - length, y + random.randint(-2, 2)), fill=color, width=width)
+
+    def add_ink_blobs(
+        self,
+        image: Image.Image,
+        *,
+        count: int,
+        color: tuple[int, int, int],
+    ) -> None:
+        """Small solid blotches — photocopy toner artifacts."""
+        draw = ImageDraw.Draw(image)
+        for _ in range(count):
+            x = random.randint(0, image.width)
+            y = random.randint(0, image.height)
+            rx = random.randint(2, 5)
+            ry = random.randint(2, 4)
+            draw.ellipse((x - rx, y - ry, x + rx, y + ry), fill=color)
+
+    def add_dust(
+        self,
+        image: Image.Image,
+        *,
+        count: int,
+        color: tuple[int, int, int],
+    ) -> None:
+        draw = ImageDraw.Draw(image)
+        for _ in range(count):
+            draw.point(
+                (random.randint(0, image.width - 1), random.randint(0, image.height - 1)),
+                fill=color,
+            )
+
+    def add_scanlines(
+        self,
+        image: Image.Image,
+        *,
+        color: tuple[int, int, int],
+        spacing: int,
+        width: int = 1,
+    ) -> None:
+        draw = ImageDraw.Draw(image)
+        for y in range(spacing, image.height, spacing):
+            draw.line((0, y, image.width, y), fill=color, width=width)
+
+    def add_grain(self, image: Image.Image, *, sigma: int = 10, alpha: float = 0.08) -> Image.Image:
+        noise = Image.effect_noise(image.size, sigma).convert("RGB")
+        return Image.blend(image, noise, alpha)
 
 
 class RandomTextGenerator:
@@ -220,6 +419,49 @@ class RandomTextGenerator:
 
     def generate(self) -> str:
         return "".join(secrets.choice(CAPTCHA_ALPHABET) for _ in range(CAPTCHA_LENGTH))
+
+
+def _glyph_perspective(layer: Image.Image, *, spread: int = 2) -> Image.Image:
+    """Small per-character perspective: corners wander a few pixels."""
+    width, height = layer.size
+    dst = (
+        random.randint(0, spread),
+        random.randint(0, spread),
+        width - random.randint(0, spread),
+        random.randint(0, spread),
+        width - random.randint(0, spread),
+        height - random.randint(0, spread),
+        random.randint(0, spread),
+        height - random.randint(0, spread),
+    )
+    return layer.transform(layer.size, Image.QUAD, dst, resample=Image.BICUBIC)
+
+
+def _apply_cuts(layer: Image.Image, cuts: list[tuple[int, int, int, int]]) -> None:
+    """Erase short segments across a glyph — broken strokes / internal cuts."""
+    if not cuts:
+        return
+    mask = Image.new("L", layer.size, 0)
+    draw = ImageDraw.Draw(mask)
+    for x1, y1, x2, y2 in cuts:
+        draw.line((x1, y1, x2, y2), fill=255, width=2)
+    layer.paste(Image.new("RGBA", layer.size, (0, 0, 0, 0)), (0, 0), mask)
+
+
+def _gen_cuts(width: int, height: int) -> list[tuple[int, int, int, int]]:
+    cuts: list[tuple[int, int, int, int]] = []
+    for _ in range(random.randint(1, 2)):
+        if random.random() < 0.6:  # horizontal cut
+            y = random.randint(int(height * 0.3), int(height * 0.7))
+            x0 = random.randint(2, max(3, width // 3))
+            span = random.randint(max(3, width // 4), max(4, width - x0))
+            cuts.append((x0, y, min(width - 2, x0 + span), y))
+        else:  # vertical cut
+            x = random.randint(int(width * 0.3), int(width * 0.7))
+            y0 = random.randint(2, max(3, height // 3))
+            span = random.randint(max(3, height // 4), max(4, height - y0))
+            cuts.append((x, y0, x, min(height - 2, y0 + span)))
+    return cuts
 
 
 def _render_character(
@@ -230,10 +472,18 @@ def _render_character(
     stroke_width: int,
     stroke_fill: tuple[int, int, int] | None,
     angle: float,
+    scale_x: float,
+    scale_y: float,
+    shear: float,
+    perspective: bool,
+    wave: bool,
+    cuts: bool,
 ) -> Image.Image:
     left, top, right, bottom = font.getbbox(ch)
-    pad = stroke_width * 2 + 10
-    layer = Image.new("RGBA", (right - left + pad, bottom - top + pad), (0, 0, 0, 0))
+    pad = stroke_width * 2 + 12
+    width = right - left + pad
+    height = bottom - top + pad
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     draw.text(
         (pad // 2 - left, pad // 2 - top),
@@ -243,76 +493,255 @@ def _render_character(
         stroke_width=stroke_width,
         stroke_fill=stroke_fill,
     )
-    return layer.rotate(angle, resample=Image.BICUBIC, expand=True)
+    if perspective:
+        layer = _glyph_perspective(layer)
+    if shear:
+        layer = layer.transform(
+            layer.size, Image.AFFINE, (1, shear, 0, 0, 1, 0), resample=Image.BICUBIC
+        )
+    if scale_x != 1.0 or scale_y != 1.0:
+        new_width = max(1, round(layer.width * scale_x))
+        new_height = max(1, round(layer.height * scale_y))
+        layer = layer.resize((new_width, new_height), Image.BICUBIC)
+    if wave:
+        _wave_shift(layer, axis="y", amplitude=random.randint(1, 2), period=random.randint(18, 30))
+    layer = layer.rotate(angle, resample=Image.BICUBIC, expand=True)
+    if cuts:
+        _apply_cuts(layer, _gen_cuts(layer.width, layer.height))
+    max_width = CAPTCHA_WIDTH // CAPTCHA_LENGTH
+    max_height = CAPTCHA_HEIGHT - 12
+    if layer.width > max_width or layer.height > max_height:
+        factor = min(max_width / layer.width, max_height / layer.height)
+        layer = layer.resize(
+            (max(1, round(layer.width * factor)), max(1, round(layer.height * factor))),
+            Image.BICUBIC,
+        )
+    return layer
 
 
-def _draw_bullet(image: Image.Image, index: int, char_slot: int) -> None:
-    color = secrets.choice(_BULLET_COLORS)
-    radius = random.randint(11, 15)
-    cx = index * char_slot + char_slot // 2
-    cy = CAPTCHA_HEIGHT // 2 + random.randint(-5, 5)
-    ImageDraw.Draw(image).ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=color)
+def _wave_shift(image: Image.Image, *, axis: str, amplitude: int, period: int) -> None:
+    """Sine-warp an image along one axis, wrapping so nothing is lost."""
+    phase = random.uniform(0, 2 * math.pi)
+    if axis == "y":
+        for x in range(image.width):
+            dy = int(amplitude * math.sin(2 * math.pi * x / period + phase))
+            if dy == 0:
+                continue
+            column = image.crop((x, 0, x + 1, image.height))
+            image.paste(column, (x, dy % image.height))
+    else:
+        for y in range(image.height):
+            dx = int(amplitude * math.sin(2 * math.pi * y / period + phase))
+            if dx == 0:
+                continue
+            row = image.crop((0, y, image.width, y + 1))
+            image.paste(row, (dx % image.width, y))
+
+
+def _scan_skew(image: Image.Image, bg: tuple[int, int, int]) -> Image.Image:
+    """Subtle parallelogram tilt, like a slightly crooked scan (lightweight)."""
+    skew = random.uniform(-0.035, 0.035)
+    if abs(skew) < 0.01:
+        return image
+    return image.transform(
+        image.size,
+        Image.AFFINE,
+        (1, skew, 0, skew, 1, 0),
+        resample=Image.BICUBIC,
+        fillcolor=bg,
+    )
+
+
+def _pattern_color(bg: tuple[int, int, int]) -> tuple[int, int, int]:
+    dark = sum(bg) // 3 < 128
+    return (42, 42, 42) if dark else (206, 206, 206)
+
+
+def _pattern_hatch(image: Image.Image, *, step: int, color: tuple[int, int, int]) -> None:
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    for i in range(-height, width + height, step):
+        draw.line((i, 0, i + height, height), fill=color, width=1)
+
+
+def _pattern_grid(image: Image.Image, *, step: int, color: tuple[int, int, int]) -> None:
+    draw = ImageDraw.Draw(image)
+    for x in range(0, image.width, step):
+        draw.line((x, 0, x, image.height), fill=color, width=1)
+    for y in range(0, image.height, step):
+        draw.line((0, y, image.width, y), fill=color, width=1)
+
+
+def _pattern_plus(image: Image.Image, *, step: int, color: tuple[int, int, int]) -> None:
+    draw = ImageDraw.Draw(image)
+    for x in range(step // 2, image.width, step):
+        for y in range(step // 2, image.height, step):
+            draw.line((x - 2, y, x + 2, y), fill=color, width=1)
+            draw.line((x, y - 2, x, y + 2), fill=color, width=1)
+
+
+def _pattern_scan(image: Image.Image, *, step: int, color: tuple[int, int, int]) -> None:
+    for y in range(step, image.height, step):
+        ImageDraw.Draw(image).line((0, y, image.width, y), fill=color, width=1)
+
+
+def _paint_background(image: Image.Image, cfg: dict[str, object]) -> Image.Image:
+    color = _pattern_color(cfg["bg"])  # type: ignore[arg-type]
+    preset = cfg["background"]
+    if preset == "hatch":
+        _pattern_hatch(image, step=9, color=color)
+        image = noise_engine.add_grain(image, sigma=8, alpha=0.06)
+    elif preset == "grid":
+        _pattern_grid(image, step=8, color=color)
+    elif preset == "plus":
+        _pattern_plus(image, step=10, color=color)
+    elif preset == "scan":
+        _pattern_scan(image, step=8, color=color)
+        image = noise_engine.add_grain(image, sigma=10, alpha=0.07)
+    return image
+
+
+def _line_color(cfg: dict[str, object], *, behind: bool = False) -> tuple[int, int, int]:
+    dark = sum(cfg["bg"]) // 3 < 128  # type: ignore[arg-type]
+    if dark:
+        return (85, 85, 85) if behind else (165, 165, 165)
+    return (150, 150, 150) if behind else (115, 115, 115)
+
+
+def _draw_halo(
+    layer: Image.Image, x: int, y: int, width: int, height: int, bg: tuple[int, int, int]
+) -> None:
+    pad = 4
+    ImageDraw.Draw(layer).rounded_rectangle(
+        (x - pad, y - pad, x + width + pad, y + height + pad), radius=6, fill=bg
+    )
+
+
+def _add_jail_bars(image: Image.Image, color: tuple[int, int, int]) -> None:
+    draw = ImageDraw.Draw(image)
+    for i in range(3):
+        y = 8 + i * 18 + random.randint(-3, 3)
+        draw.line(
+            (random.randint(-6, 6), y, image.width + random.randint(-6, 6), y), fill=color, width=3
+        )
+
+
+def _add_mask_band(image: Image.Image, bg: tuple[int, int, int]) -> None:
+    y0 = random.randint(12, image.height - 24)
+    band_height = random.randint(8, 14)
+    region = image.crop((0, y0, image.width, y0 + band_height))
+    fill = Image.new("RGB", region.size, bg)
+    region = Image.blend(region, fill, 0.45)
+    image.paste(region, (0, y0))
+
+
+def _layout(
+    glyphs: list[Image.Image],
+    cfg: dict[str, object],
+    width: int,
+    height: int,
+) -> list[tuple[int, int]]:
+    if cfg["layout"] == "overlap":
+        overlaps = [random.randint(cfg["overlap_min"], cfg["overlap_max"]) for _ in glyphs]  # type: ignore[operator]
+        total = sum(g.width - o for g, o in zip(glyphs, overlaps, strict=False)) + overlaps[-1]
+        margin = max(8, (width - total) // 2)
+        x = margin
+        xs = [margin]
+        for g, o in zip(glyphs[:-1], overlaps[:-1], strict=False):
+            x += g.width - o
+            xs.append(x)
+    else:
+        gaps = [random.randint(cfg["gap_min"], cfg["gap_max"]) for _ in glyphs]  # type: ignore[operator]
+        total = sum(g.width for g in glyphs) + sum(gaps) - gaps[-1]
+        margin = max(8, (width - total) // 2)
+        x = margin
+        xs = []
+        for g, gap in zip(glyphs, gaps, strict=False):
+            xs.append(x)
+            x += g.width + gap
+
+    baseline = height - 10
+    ys = []
+    for glyph in glyphs:
+        y = baseline - glyph.height + random.randint(-cfg["jitter"], cfg["jitter"])  # type: ignore[operator]
+        y = max(2, min(y, height - 2 - glyph.height))
+        ys.append(y)
+    return list(zip(xs, ys, strict=False))
 
 
 font_manager = FontManager()
+noise_engine = NoiseEngine()
+text_generator = RandomTextGenerator()
 
 
 def _render(text: str, style: str) -> Image.Image:
     cfg = _STYLES[style]
-    image = Image.new("RGB", (CAPTCHA_WIDTH, CAPTCHA_HEIGHT), cfg["bg"])
-    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    font = font_manager.pick()
-    char_slot = CAPTCHA_WIDTH // len(text)
-    for index, ch in enumerate(text):
-        if style == "bullet":
-            _draw_bullet(image, index, char_slot)
-        char_image = _render_character(
-            ch,
-            font,
-            fill=cfg["fg"],
-            stroke_width=cfg["stroke"],
-            stroke_fill=cfg["stroke_fill"],
-            angle=random.uniform(cfg["angle_min"], cfg["angle_max"]),
+    width, height = CAPTCHA_WIDTH, CAPTCHA_HEIGHT
+    font_size = CAPTCHA_FONT_SIZE
+
+    image = Image.new("RGB", (width, height), cfg["bg"])  # type: ignore[arg-type]
+    image = _paint_background(image, cfg)
+
+    if cfg["guide_lines"]:  # one broken line behind the text
+        noise_engine.add_broken_lines(image, count=1, color=_line_color(cfg, behind=True))
+
+    glyphs: list[Image.Image] = []
+    for ch in text:
+        cuts_chance = cfg["cuts_chance"]  # type: ignore[typeddict-item]
+        glyphs.append(
+            _render_character(
+                ch,
+                font_manager.pick(size=font_size),
+                fill=cfg["fg"],  # type: ignore[arg-type]
+                stroke_width=cfg["stroke"],  # type: ignore[arg-type]
+                stroke_fill=cfg["stroke_fill"],  # type: ignore[arg-type]
+                angle=random.uniform(cfg["angle_min"], cfg["angle_max"]),  # type: ignore[operator]
+                scale_x=random.uniform(0.94, 1.1),
+                scale_y=random.uniform(0.94, 1.1),
+                shear=random.uniform(-0.08, 0.08),
+                perspective=random.random() < 0.6,
+                wave=bool(cfg["local_wave"]) and random.random() < 0.4,
+                cuts=random.random() < cuts_chance,
+            )
         )
-        upper = max(2, CAPTCHA_HEIGHT - char_image.height - 2)
-        y = random.randint(2, upper)
-        x = index * char_slot + (char_slot - char_image.width) // 2 + random.randint(-3, 3)
-        layer.alpha_composite(char_image, (x, y))
+
+    total_width = sum(g.width for g in glyphs)
+    if total_width > width - 20:
+        factor = (width - 20) / total_width
+        glyphs = [
+            g.resize(
+                (max(1, round(g.width * factor)), max(1, round(g.height * factor))),
+                Image.BICUBIC,
+            )
+            for g in glyphs
+        ]
+
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    for glyph, (x, y) in zip(glyphs, _layout(glyphs, cfg, width, height), strict=False):
+        x = max(2, min(x, width - 2 - glyph.width))
+        if cfg["halo"]:
+            _draw_halo(layer, x, y, glyph.width, glyph.height, cfg["bg"])  # type: ignore[arg-type]
+        layer.alpha_composite(glyph, (x, y))
     image.paste(layer, (0, 0), layer)
-    return _apply_noise(image, style)
 
+    if cfg["guide_lines"]:
+        noise_engine.add_guide_lines(image, count=cfg["guide_lines"], color=_line_color(cfg))  # type: ignore[arg-type]
+    if cfg["jail_bars"]:
+        _add_jail_bars(image, cfg["fg"])  # type: ignore[arg-type]
+    if cfg["mask_band"]:
+        _add_mask_band(image, cfg["bg"])  # type: ignore[arg-type]
 
-noise_engine = NoiseEngine()
-
-
-def _apply_noise(image: Image.Image, style: str) -> Image.Image:
+    dark = sum(cfg["bg"]) // 3 < 128  # type: ignore[arg-type]
     noise = noise_engine
-    if style == "classic":
-        noise.add_lines(image, count=3, color=(110, 110, 110))
-        noise.add_dots(image, count=30, color=(150, 150, 150))
-        noise.add_wave(image, amplitude=2)
-        return image
-    if style == "outline":
-        noise.add_lines(image, count=2, color=(205, 205, 205))
-        noise.add_dots(image, count=18, color=(215, 215, 215))
-        return image
-    if style == "bullet":
-        noise.add_speckles(image, count=14, color=(80, 80, 80))
-        noise.add_dots(image, count=14, color=(190, 190, 190))
-        return image
-    if style == "chalk":
-        image = noise.add_grain(image, sigma=12, alpha=0.2)
-        noise.add_lines(image, count=4, color=(95, 115, 100))
-        noise.add_dots(image, count=50, color=(130, 150, 130))
-        return image
-    glow = image.filter(ImageFilter.GaussianBlur(radius=3))
-    image = ImageChops.screen(image, glow)
-    noise.add_speckles(image, count=10, color=(90, 90, 140))
-    noise.add_dots(image, count=12, color=(120, 120, 180))
-    return image
+    if cfg["ink_blobs"]:
+        noise.add_ink_blobs(image, count=2, color=(200, 200, 200) if dark else (70, 70, 70))
+    noise.add_dust(image, count=24, color=(150, 150, 150) if dark else (120, 120, 120))
+    noise.add_dashes(image, count=6, color=(130, 130, 130) if dark else (140, 140, 140))
+    noise.add_edge_fragments(image, count=3, color=(150, 150, 150) if dark else (130, 130, 130))
 
-
-text_generator = RandomTextGenerator()
+    if style in ("classic", "neon"):
+        _wave_shift(image, axis="y", amplitude=random.randint(1, 2), period=random.randint(50, 80))
+    return _scan_skew(image, cfg["bg"]).convert("L").convert("RGB")  # type: ignore[arg-type]
 
 
 def generate_captcha(style: str | None = None) -> RenderedCaptcha:

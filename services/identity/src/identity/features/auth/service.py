@@ -345,7 +345,9 @@ class AuthenticationService:
         return {
             "status": "ok",
             "resend_in": settings.OTP_RESEND_COOLDOWN_SECONDS,
-            "code": code if settings.ENVIRONMENT != Environment.PRODUCTION else None,
+            # Plaintext code only in TEST so integration tests can drive the
+            # wizard; dev/staging/production deliver it solely via email.
+            "code": code if settings.ENVIRONMENT == Environment.TEST else None,
         }
 
     async def signup_verify_code(self, *, email: str, code: str) -> dict[str, Any]:

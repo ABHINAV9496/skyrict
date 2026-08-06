@@ -1,5 +1,3 @@
-export const demoSessionKey = "skyrict.demo.session";
-
 export const site = {
   name: "Skyrict",
   tagline: "AI Business Operating System",

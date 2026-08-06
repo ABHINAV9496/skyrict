@@ -79,6 +79,7 @@ SKIP_AUTH_PATHS = frozenset(
         f"{API_V1_PREFIX}/auth/signup/send-code",
         f"{API_V1_PREFIX}/auth/signup/verify-code",
         f"{API_V1_PREFIX}/auth/signup/password",
+        f"{API_V1_PREFIX}/auth/signup/captcha",
         f"{API_V1_PREFIX}/auth/signup/check-email",
         f"{API_V1_PREFIX}/auth/signup/check-slug",
         f"{API_V1_PREFIX}/auth/signup/organization",
@@ -138,6 +139,7 @@ SIGNUP_CODE_LIMIT_KEY = "signup_code"
 SIGNUP_CODE_IP_LIMIT_KEY = "signup_code_ip"
 SIGNUP_VERIFY_LIMIT_KEY = "signup_verify"
 SIGNUP_CHECK_LIMIT_KEY = "signup_check_ip"
+SIGNUP_CAPTCHA_LIMIT_KEY = "signup_captcha_ip"
 
 # ---------------------------------------------------------------------------
 # Default system roles (single source of truth)

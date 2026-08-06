@@ -195,6 +195,15 @@ class Settings(BaseSettings):
     SIGNUP_CHECK_RATE_LIMIT: int = Field(
         default=60, description="max /signup/check-email|check-slug calls per IP per window"
     )
+    CAPTCHA_TTL_SECONDS: int = Field(
+        default=300, description="text CAPTCHA challenge TTL (seconds)"
+    )
+    CAPTCHA_MAX_ATTEMPTS: int = Field(
+        default=5, description="max verify attempts before a challenge is revoked"
+    )
+    SIGNUP_CAPTCHA_RATE_LIMIT: int = Field(
+        default=30, description="max /signup/captcha issues per IP per window"
+    )
     # --- MFA (CRITICAL — no default) ---
     MFA_ENCRYPTION_KEY: str = Field(
         ...,

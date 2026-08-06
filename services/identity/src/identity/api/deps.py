@@ -37,6 +37,7 @@ from skyrict_common.exceptions import AuthenticationError, MFARequiredError
 
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
+    from identity.features.auth.captcha.captcha_store import CaptchaStore
     from identity.features.auth.service import AuthenticationService, TokenService
     from identity.features.handoffs.repository import HandoffRepository
     from identity.features.handoffs.service import HandoffService
@@ -263,6 +264,13 @@ def get_verification_store() -> VerificationStore:
     return VerificationStore()
 
 
+def get_captcha_store() -> CaptchaStore:
+    """Return the Redis-backed text-CAPTCHA challenge store."""
+    from identity.features.auth.captcha.captcha_store import CaptchaStore
+
+    return CaptchaStore()
+
+
 def get_mfa_challenge_store() -> MfaChallengeStore:
     return MfaChallengeStore()
 
@@ -299,6 +307,7 @@ def get_authn_service(
     membership_service: MembershipService = Depends(get_membership_service),
     verification_store: VerificationStore = Depends(get_verification_store),
     turnstile: TurnstileVerifier = Depends(get_turnstile_verifier),
+    captcha_store: CaptchaStore = Depends(get_captcha_store),
 ) -> AuthenticationService:
     from identity.features.auth.service import AuthenticationService
 
@@ -313,6 +322,7 @@ def get_authn_service(
         membership_service,
         verification_store=verification_store,
         turnstile=turnstile,
+        captcha_store=captcha_store,
     )
 
 

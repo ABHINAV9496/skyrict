@@ -13,6 +13,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { RESERVED_SLUGS } from "@/lib/auth/reserved-slugs";
+
 export const SESSION_COOKIE = "skyrict_session";
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
@@ -21,12 +23,12 @@ function apiBase(): string {
   return process.env.API_PROXY_TARGET ?? "http://localhost:8000";
 }
 
-/** Dev/prod tenant slug from the Host header, mirroring the backend middleware. */
+/** Tenant slug from the Host header, mirroring the backend TenantResolver. */
 export function resolveTenantSlug(host: string | null | undefined): string {
   const value = (host ?? "").trim().toLowerCase().replace(/:\d+$/, "");
-  const match = /^([a-z0-9-]+)\.localhost$/.exec(value);
-  if (match) return match[1];
-  return process.env.TENANT_SLUG ?? "acme";
+  const match = /^([a-z0-9-]+)\.(?:signin\.)?(?:localhost|skyrict\.com)$/.exec(value);
+  if (match && !RESERVED_SLUGS.has(match[1])) return match[1];
+  return process.env.TENANT_SLUG ?? "";
 }
 
 /**

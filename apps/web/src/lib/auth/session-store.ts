@@ -5,6 +5,8 @@
  * module variable and is re-hydrated on page load via /api/auth/session.
  */
 
+import { RESERVED_SLUGS } from "@/lib/auth/reserved-slugs";
+
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null): void {
@@ -15,11 +17,13 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-/** Tenant slug for API calls: derived from the host (acme.localhost -> acme). */
+/** Tenant slug for API calls: derived from the host, else NEXT_PUBLIC_TENANT_SLUG. */
 export function getTenantSlug(): string {
   if (typeof window !== "undefined") {
-    const match = /^([a-z0-9-]+)\.localhost$/.exec(window.location.hostname);
-    if (match) return match[1];
+    const match = /^([a-z0-9-]+)\.(?:signin\.)?(?:localhost|skyrict\.com)$/.exec(
+      window.location.hostname,
+    );
+    if (match && !RESERVED_SLUGS.has(match[1])) return match[1];
   }
-  return process.env.NEXT_PUBLIC_TENANT_SLUG ?? "acme";
+  return process.env.NEXT_PUBLIC_TENANT_SLUG ?? "";
 }

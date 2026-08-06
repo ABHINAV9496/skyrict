@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
+    MAX_CONCURRENT_SESSIONS: int = Field(
+        default=5, description="max active sessions per user — oldest are evicted"
+    )
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(

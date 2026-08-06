@@ -11,6 +11,7 @@ from identity.core.audit_events import (
     SESSION_CREATED,
     SESSION_REVOKED,
     SESSION_REVOKED_ALL,
+    SESSION_TRUSTED,
 )
 from identity.core.config import settings
 from identity.domain.entities import Session, SessionStatus
@@ -54,13 +55,17 @@ class FakeSessionRepo:
 
     async def get_active_by_user(self, user_id: str | uuid.UUID) -> list[Session]:
         now = datetime.now(UTC)
-        return [
-            session
-            for session in self.sessions.values()
-            if session.user_id == uuid.UUID(str(user_id))
-            and session.status is SessionStatus.ACTIVE
-            and session.expires_at > now
-        ]
+        return sorted(
+            (
+                session
+                for session in self.sessions.values()
+                if session.user_id == uuid.UUID(str(user_id))
+                and session.status is SessionStatus.ACTIVE
+                and session.expires_at > now
+            ),
+            key=lambda s: s.created_at,
+            reverse=True,
+        )
 
     async def get_active_by_family(self, family_id: str | uuid.UUID) -> list[Session]:
         now = datetime.now(UTC)
@@ -463,3 +468,91 @@ class TestRevokeFamily:
         assert first.status is SessionStatus.REVOKED
         assert second.status is SessionStatus.REVOKED
         assert other.status is SessionStatus.ACTIVE
+
+
+class TestMarkTrusted:
+    async def test_marks_owned_active_session_trusted(self) -> None:
+        user_id = uuid.uuid4()
+        session = _active_session(user_id)
+        repo = FakeSessionRepo([session])
+        audit = FakeAuditService()
+        service = SessionService(repo, audit)
+
+        await service.mark_trusted(user_id, session.id, is_trusted=True)
+
+        assert session.is_trusted is True
+        assert audit.entries[0]["action"] == SESSION_TRUSTED
+        assert audit.entries[0]["target"] == f"session:{session.id}"
+
+    async def test_untrusting_does_not_audit(self) -> None:
+        user_id = uuid.uuid4()
+        session = _active_session(user_id)
+        session.is_trusted = True
+        repo = FakeSessionRepo([session])
+        audit = FakeAuditService()
+        service = SessionService(repo, audit)
+
+        await service.mark_trusted(user_id, session.id, is_trusted=False)
+
+        assert session.is_trusted is False
+        assert audit.entries == []
+
+    async def test_raises_for_foreign_or_terminated_session(self) -> None:
+        user_id = uuid.uuid4()
+        foreign = _active_session(uuid.uuid4())
+        terminated = _active_session(user_id)
+        terminated.status = SessionStatus.REVOKED
+        repo = FakeSessionRepo([foreign, terminated])
+        service = SessionService(repo, FakeAuditService())
+
+        with pytest.raises(SessionNotFoundError):
+            await service.mark_trusted(user_id, foreign.id, is_trusted=True)
+        with pytest.raises(SessionNotFoundError):
+            await service.mark_trusted(user_id, terminated.id, is_trusted=True)
+
+
+class TestSessionCap:
+    async def test_evicts_oldest_sessions_beyond_the_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "MAX_CONCURRENT_SESSIONS", 2)
+        user_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        repo = FakeSessionRepo()
+        audit = FakeAuditService()
+        service = SessionService(repo, audit)
+
+        first = await service.create_session(
+            user_id=user_id, tenant_id=tenant_id, refresh_token_hash="a"
+        )
+        second = await service.create_session(
+            user_id=user_id, tenant_id=tenant_id, refresh_token_hash="b"
+        )
+        third = await service.create_session(
+            user_id=user_id, tenant_id=tenant_id, refresh_token_hash="c"
+        )
+
+        assert first.status is SessionStatus.REVOKED
+        assert second.status is SessionStatus.ACTIVE
+        assert third.status is SessionStatus.ACTIVE
+        evictions = [
+            entry
+            for entry in audit.entries
+            if entry["action"] == SESSION_REVOKED
+            and entry.get("details") == {"reason": "session_cap_evicted"}
+        ]
+        assert [entry["target"] for entry in evictions] == [f"session:{first.id}"]
+
+    async def test_no_eviction_under_the_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "MAX_CONCURRENT_SESSIONS", 5)
+        user_id, tenant_id = uuid.uuid4(), uuid.uuid4()
+        repo = FakeSessionRepo()
+        service = SessionService(repo, FakeAuditService())
+
+        for i in range(3):
+            await service.create_session(
+                user_id=user_id, tenant_id=tenant_id, refresh_token_hash=f"h{i}"
+            )
+
+        sessions = await service.list_user_sessions(user_id)
+        assert len(sessions) == 3
+        assert all(s.status is SessionStatus.ACTIVE for s in sessions)

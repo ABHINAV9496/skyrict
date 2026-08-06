@@ -8,7 +8,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_current_user, get_session_service
-from identity.features.sessions.schemas import SessionListResponse, SessionResponse
+from identity.features.sessions.schemas import (
+    SessionListResponse,
+    SessionResponse,
+    SessionTrustRequest,
+)
 from identity.features.sessions.service import SessionService
 from skyrict_common.schemas import ResponseEnvelope
 
@@ -39,6 +43,18 @@ async def revoke_session(
     """Revoke a specific session."""
     await session_svc.revoke_session(current_user["user_id"], session_id)
     return ResponseEnvelope(message="Session revoked")
+
+
+@router.patch("/{session_id}/trusted")
+async def trust_session(
+    session_id: UUID,
+    body: SessionTrustRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+    session_svc: SessionService = Depends(get_session_service),
+) -> ResponseEnvelope[None]:
+    """Mark a session as a recognized (trusted) device."""
+    await session_svc.mark_trusted(current_user["user_id"], session_id, is_trusted=body.is_trusted)
+    return ResponseEnvelope(message="Session trust updated")
 
 
 @router.delete("")

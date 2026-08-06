@@ -16,6 +16,7 @@ from identity.core.audit_events import (
     SESSION_CREATED,
     SESSION_REVOKED,
     SESSION_REVOKED_ALL,
+    SESSION_TRUSTED,
 )
 from identity.core.config import settings
 from identity.core.state_machine import StateMachine
@@ -101,7 +102,25 @@ class SessionService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        await self._enforce_session_cap(user_id, tenant_id)
         return created
+
+    async def _enforce_session_cap(self, user_id: uuid.UUID, tenant_id: uuid.UUID) -> None:
+        """Evict the oldest sessions once the per-user active-session cap is exceeded."""
+        cap = settings.MAX_CONCURRENT_SESSIONS
+        if cap <= 0:
+            return
+        active = await self.session_repo.get_active_by_user(user_id)
+        for stale in active[cap:]:
+            assert stale.id is not None
+            await self.session_repo.revoke_session(stale.id)
+            await self.audit_service.log(
+                action=SESSION_REVOKED,
+                target=f"session:{stale.id}",
+                user_id=str(user_id),
+                tenant_id=str(tenant_id),
+                details={"reason": "session_cap_evicted"},
+            )
 
     async def list_user_sessions(self, user_id: str | uuid.UUID) -> list[Session]:
         """List all active, unexpired sessions for a user."""
@@ -166,6 +185,34 @@ class SessionService:
     async def revoke_family(self, family_id: str | uuid.UUID) -> None:
         """Revoke every active session sharing a token family (reuse chain-kill)."""
         await self.session_repo.revoke_family(family_id)
+
+    async def mark_trusted(
+        self,
+        user_id: str | uuid.UUID,
+        session_id: str | uuid.UUID,
+        *,
+        is_trusted: bool,
+    ) -> None:
+        """Mark a session as a recognized (trusted) device.
+
+        Missing, foreign, and already-terminated sessions surface as
+        ``SessionNotFoundError`` (404), mirroring revocation semantics.
+        """
+        session = await self.session_repo.get_by_id(session_id)
+        if (
+            not session
+            or session.user_id != uuid.UUID(str(user_id))
+            or session.status is not SessionStatus.ACTIVE
+        ):
+            raise SessionNotFoundError()
+        await self.session_repo.set_trusted(session_id, is_trusted)
+        if is_trusted:
+            await self.audit_service.log(
+                action=SESSION_TRUSTED,
+                target=f"session:{session_id}",
+                user_id=str(user_id),
+                tenant_id=str(session.tenant_id),
+            )
 
     async def revoke_all_sessions(self, user_id: str | uuid.UUID) -> None:
         """Revoke all sessions for a user (force logout everywhere)."""

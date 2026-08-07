@@ -18,7 +18,6 @@ function VerifyStep({ email }: { email: string }) {
   const [error, setError] = useState<string>();
   const [resendIn, setResendIn] = useState(RESEND_SECONDS);
   const [resending, setResending] = useState(false);
-  const [devCode, setDevCode] = useState<string>();
   const [sendError, setSendError] = useState<string>();
   const verifyingRef = useRef(false);
 
@@ -27,7 +26,6 @@ function VerifyStep({ email }: { email: string }) {
     try {
       const result = await requestVerificationCode({ email });
       setResendIn(result.resendIn);
-      setDevCode(result.code ?? undefined);
     } catch (err) {
       setSendError(
         err instanceof Error ? err.message : "Could not send the code. Try again.",
@@ -107,14 +105,6 @@ function VerifyStep({ email }: { email: string }) {
           <p className="font-medium text-foreground">Code sent to {email}</p>
           <p className="text-xs text-muted-foreground">
             Enter the 6-digit code below.
-            {devCode ? (
-              <>
-                {" Dev code: "}
-                <span className="font-mono font-medium text-primary">
-                  {devCode}
-                </span>
-              </>
-            ) : null}
           </p>
         </div>
       </div>

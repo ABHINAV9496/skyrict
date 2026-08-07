@@ -1,48 +1,101 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Check,
   Copy,
+  Download,
   KeyRound,
   LoaderCircle,
   QrCode,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
-import { demoSessionKey } from "@/config";
-import { confirmMfaSetup, setupMfa, type MfaSetup } from "@/lib/api/auth-api";
+import {
+  completeHandoff,
+  confirmMfaSetup,
+  regenerateBackupCodes,
+  setupMfa,
+  type MfaSetup,
+} from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 import { cn } from "@/lib/utils";
 
-function MfaSetupStep({ email }: { email: string }) {
-  const router = useRouter();
+function MfaSetupStep() {
   const [setup, setSetup] = useState<MfaSetup>();
   const [code, setCode] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [handingOff, setHandingOff] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [codesCopied, setCodesCopied] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string>();
+  const [regenerated, setRegenerated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setupMfa({ email }).then((result) => {
-      if (!cancelled) setSetup(result);
-    });
+    setupMfa()
+      .then((result) => {
+        if (!cancelled) setSetup(result);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not start MFA setup. Try again.",
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [email]);
+  }, []);
 
   async function copySecret() {
     if (!setup) return;
     await navigator.clipboard.writeText(setup.secret);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function copyCodes() {
+    if (!setup || setup.backupCodes.length === 0) return;
+    await navigator.clipboard.writeText(setup.backupCodes.join("\n"));
+    setCodesCopied(true);
+    setTimeout(() => setCodesCopied(false), 1500);
+  }
+
+  function downloadCodes() {
+    if (!setup || setup.backupCodes.length === 0) return;
+    const body = [
+      "Skyrict recovery codes",
+      "Workspace owner sign-in backup.",
+      "Store this file in a safe place. Each code works exactly once.",
+      "Do not share these codes. Anyone with a code can sign in as you.",
+      "",
+      ...setup.backupCodes,
+      "",
+      "If you use a code, remember to download the updated list later.",
+    ].join("\n");
+    const url = URL.createObjectURL(
+      new Blob([body], { type: "text/plain;charset=utf-8" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "skyrict-recovery-codes.txt";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function confirm() {
@@ -53,7 +106,7 @@ function MfaSetupStep({ email }: { email: string }) {
     }
     setConfirming(true);
     setError(undefined);
-    const result = await confirmMfaSetup({ code, secret: setup.secret });
+    const result = await confirmMfaSetup({ code });
     setConfirming(false);
     if (result.status === "ok") {
       setConfirmed(true);
@@ -63,12 +116,50 @@ function MfaSetupStep({ email }: { email: string }) {
     }
   }
 
+  async function regenerate() {
+    if (!setup) return;
+    setRegenerating(true);
+    setRegenerateError(undefined);
+    try {
+      const result = await regenerateBackupCodes();
+      setSetup({ ...setup, backupCodes: result.backupCodes });
+      setAcknowledged(false);
+      setCodesCopied(false);
+      setRegenerated(true);
+    } catch (err: unknown) {
+      setRegenerateError(
+        err instanceof Error ? err.message : "Could not regenerate codes. Try again.",
+      );
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   function finish() {
-    localStorage.setItem(demoSessionKey, "true");
-    router.push("/dashboard/agents");
+    setHandingOff(true);
+    void completeHandoff("/").catch((err: unknown) => {
+      setHandingOff(false);
+      setError(
+        err instanceof Error ? err.message : "Could not open your workspace.",
+      );
+    });
   }
 
   if (!setup) {
+    if (error) {
+      return (
+        <div className="space-y-4 py-8 text-center">
+          <p className="text-sm font-medium text-destructive">{error}</p>
+          <AuthButton
+            type="button"
+            className="w-full"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </AuthButton>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
         <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
@@ -100,16 +191,14 @@ function MfaSetupStep({ email }: { email: string }) {
               <QrCode aria-hidden="true" className="size-4 text-primary" />
               Step 1 · Scan with your authenticator app
             </p>
-            <div className="mx-auto mt-4 flex size-40 items-center justify-center rounded-xl border-2 border-dashed border-border bg-card">
-              <div className="space-y-2 text-center">
-                <QrCode
-                  aria-hidden="true"
-                  className="mx-auto size-8 text-muted-foreground/50"
-                />
-                <p className="px-4 text-xs text-muted-foreground">
-                  Your QR code appears here once connected
-                </p>
-              </div>
+            <div className="mx-auto mt-4 flex size-40 items-center justify-center rounded-xl border border-border bg-white p-2">
+              <QRCodeSVG
+                value={setup.otpauthUri}
+                size={144}
+                level="M"
+                marginSize={0}
+                aria-label="QR code to scan with your authenticator app"
+              />
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">
               Or add this key manually:
@@ -152,8 +241,8 @@ function MfaSetupStep({ email }: { email: string }) {
               </p>
             ) : (
               <p className="text-center text-xs text-muted-foreground">
-                Demo code:{" "}
-                <span className="font-mono text-primary">123456</span>
+                Open your authenticator app and scan the code to generate a
+                6-digit code.
               </p>
             )}
             <AuthButton
@@ -184,6 +273,30 @@ function MfaSetupStep({ email }: { email: string }) {
               Store these in a safe place. Each works once to sign in if you
               lose your authenticator app.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyCodes}
+                aria-label="Copy recovery codes"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                {codesCopied ? (
+                  <Check aria-hidden="true" className="size-3.5 text-primary" />
+                ) : (
+                  <Copy aria-hidden="true" className="size-3.5" />
+                )}
+                {codesCopied ? "Copied" : "Copy all"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadCodes}
+                aria-label="Download recovery codes"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                <Download aria-hidden="true" className="size-3.5" />
+                Download
+              </button>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-1.5">
               {setup.backupCodes.map((backupCode) => (
                 <code
@@ -193,6 +306,48 @@ function MfaSetupStep({ email }: { email: string }) {
                   {backupCode}
                 </code>
               ))}
+            </div>
+            {regenerated ? (
+              <p className="mt-3 text-center text-xs font-medium text-primary">
+                New codes generated. Save them and delete the old list.
+              </p>
+            ) : null}
+            {regenerateError ? (
+              <p className="mt-3 text-center text-xs font-medium text-destructive">
+                {regenerateError}
+              </p>
+            ) : null}
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmingRegenerate) {
+                    setConfirmingRegenerate(false);
+                    void regenerate();
+                  } else {
+                    setConfirmingRegenerate(true);
+                  }
+                }}
+                disabled={regenerating}
+                aria-label="Regenerate recovery codes"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  confirmingRegenerate
+                    ? "border-destructive/60 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                    : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted",
+                )}
+              >
+                {regenerating ? (
+                  <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw aria-hidden="true" className="size-3.5" />
+                )}
+                {regenerating
+                  ? "Regenerating…"
+                  : confirmingRegenerate
+                    ? "Regenerate anyway?"
+                    : "Regenerate"}
+              </button>
             </div>
           </div>
 
@@ -222,14 +377,15 @@ function MfaSetupStep({ email }: { email: string }) {
             I&apos;ve saved my recovery codes somewhere safe.
           </button>
 
-          <AuthButton
-            type="button"
-            className="w-full"
-            disabled={!acknowledged}
-            onClick={finish}
-          >
-            Finish setup
-          </AuthButton>
+            <AuthButton
+              type="button"
+              className="w-full"
+              loading={handingOff}
+              disabled={!acknowledged}
+              onClick={finish}
+            >
+              {handingOff ? "Opening your workspace…" : "Finish setup"}
+            </AuthButton>
         </div>
       )}
     </div>

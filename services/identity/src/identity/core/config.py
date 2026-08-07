@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
+    MAX_CONCURRENT_SESSIONS: int = Field(
+        default=5, description="max active sessions per user — oldest are evicted"
+    )
+    HANDOFF_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30, description="TTL for single-use onboarding handoff tokens"
+    )
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
@@ -131,6 +137,30 @@ class Settings(BaseSettings):
         description="base URL for verification links, e.g. https://app.skyrict.io/verify-email",
     )
 
+    # --- Email delivery (SMTP) ---
+    EMAIL_SMTP_HOST: str = Field(
+        default="",
+        description=(
+            "SMTP relay host for transactional email. Empty selects the "
+            "log-only transport (dev/test default). Dev: 'mailhog' or "
+            "'localhost' for the MailHog container."
+        ),
+    )
+    EMAIL_SMTP_PORT: int = Field(default=1025, description="SMTP relay port")
+    EMAIL_SMTP_USERNAME: str = Field(
+        default="", description="SMTP auth username (optional, MailHog needs none)"
+    )
+    EMAIL_SMTP_PASSWORD: str = Field(
+        default="", description="SMTP auth password (optional, MailHog needs none)"
+    )
+    EMAIL_SMTP_USE_TLS: bool = Field(
+        default=False, description="enable STARTTLS when connecting to the relay"
+    )
+    EMAIL_FROM_ADDR: str = Field(
+        default="Skyrict <no-reply@skyrict.dev>",
+        description="From address for transactional email",
+    )
+
     # --- Onboarding wizard (SKY-30) ---
     TURNSTILE_SITE_KEY: str = Field(
         default="",
@@ -165,6 +195,15 @@ class Settings(BaseSettings):
     SIGNUP_CHECK_RATE_LIMIT: int = Field(
         default=60, description="max /signup/check-email|check-slug calls per IP per window"
     )
+    CAPTCHA_TTL_SECONDS: int = Field(
+        default=300, description="text CAPTCHA challenge TTL (seconds)"
+    )
+    CAPTCHA_MAX_ATTEMPTS: int = Field(
+        default=5, description="max verify attempts before a challenge is revoked"
+    )
+    SIGNUP_CAPTCHA_RATE_LIMIT: int = Field(
+        default=30, description="max /signup/captcha issues per IP per window"
+    )
     # --- MFA (CRITICAL — no default) ---
     MFA_ENCRYPTION_KEY: str = Field(
         ...,
@@ -190,6 +229,25 @@ class Settings(BaseSettings):
             "coarse per-IP/per-token limit on MFA challenge verifies; the "
             "stricter per-challenge MFA_CHALLENGE_MAX_ATTEMPTS binds first"
         ),
+    )
+    MFA_ENROLL_MAX_ATTEMPTS: int = Field(
+        default=5,
+        description=(
+            "max failed setup-confirmation verifies (POST /mfa/verify) before "
+            "the user is locked out for MFA_ENROLL_LOCKOUT_SECONDS"
+        ),
+    )
+    MFA_ENROLL_LOCKOUT_SECONDS: int = Field(
+        default=300,
+        description="lockout window for failed MFA enrollment verifies (seconds)",
+    )
+    RATE_LIMIT_MFA_ENROLL: int = Field(
+        default=20,
+        description="coarse per-IP/per-user limit on MFA enrollment verifies",
+    )
+    RATE_LIMIT_MFA_BACKUP_CODES: int = Field(
+        default=3,
+        description="max backup-code regenerations per user per window",
     )
 
     # --- Derived (loaded from files at validation time) ---

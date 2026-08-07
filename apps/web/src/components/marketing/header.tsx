@@ -45,9 +45,6 @@ function Header() {
           ))}
         </nav>
         <div className="hidden items-center gap-2 md:flex">
-          <Button variant="ghost" asChild>
-            <Link href="/login">Log in</Link>
-          </Button>
           <Button asChild>
             <Link href="/register">Get started</Link>
           </Button>
@@ -81,11 +78,6 @@ function Header() {
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3">
-            <Button variant="ghost" asChild>
-              <Link href="/login" onClick={() => setOpen(false)}>
-                Log in
-              </Link>
-            </Button>
             <Button asChild>
               <Link href="/register" onClick={() => setOpen(false)}>
                 Get started

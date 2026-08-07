@@ -16,9 +16,11 @@ from __future__ import annotations
 import hmac
 import re
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from identity.core.audit_events import AUTH_REFRESH_REUSE_DETECTED, AUTH_REFRESH_SUCCESS
 from identity.core.config import Environment, settings
 from identity.core.constants import (
     LOGIN_FAILED_MESSAGE,
@@ -39,8 +41,9 @@ from identity.core.security import (
 )
 from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
-from identity.domain.entities import Role, Tenant, User
+from identity.domain.entities import Role, Session, SessionStatus, Tenant, User
 from identity.domain.value_objects import TokenPair
+from identity.features.auth.captcha.captcha_store import CaptchaStore
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.verification_store import (
     VerificationStore,
@@ -51,6 +54,7 @@ from identity.features.auth.verification_store import (
 from skyrict_common.exceptions import (
     AuthenticationError,
     ConflictError,
+    SessionNotFoundError,
     TokenExpiredError,
     TokenInvalidError,
     TokenReuseDetectedError,
@@ -64,9 +68,9 @@ if TYPE_CHECKING:
         CreateOrganizationRequest,
         LoginRequest,
     )
+    from identity.features.memberships.service import MembershipService
     from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
-    from identity.features.sessions.ports import SessionRepositoryPort
     from identity.features.sessions.service import SessionService
     from identity.features.users.ports import UserRepositoryPort
 
@@ -106,9 +110,11 @@ class AuthenticationService:
         audit_service: AuditService,
         email_service: EmailService,
         session_service: SessionService,
+        membership_service: MembershipService,
         verification_store: VerificationStore | None = None,
         turnstile: TurnstileVerifier | None = None,
         mfa_challenge_store: MfaChallengeStore | None = None,
+        captcha_store: CaptchaStore | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.tenant_repo = tenant_repo
@@ -117,9 +123,11 @@ class AuthenticationService:
         self.audit_service = audit_service
         self.email_service = email_service
         self.session_service = session_service
+        self.membership_service = membership_service
         self.verification_store = verification_store or VerificationStore()
         self.turnstile = turnstile or TurnstileVerifier()
         self.mfa_challenge_store = mfa_challenge_store or MfaChallengeStore()
+        self.captcha_store = captcha_store or CaptchaStore()
 
     async def login(
         self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
@@ -340,7 +348,9 @@ class AuthenticationService:
         return {
             "status": "ok",
             "resend_in": settings.OTP_RESEND_COOLDOWN_SECONDS,
-            "code": code if settings.ENVIRONMENT != Environment.PRODUCTION else None,
+            # Plaintext code only in TEST so integration tests can drive the
+            # wizard; dev/staging/production deliver it solely via email.
+            "code": code if settings.ENVIRONMENT == Environment.TEST else None,
         }
 
     async def signup_verify_code(self, *, email: str, code: str) -> dict[str, Any]:
@@ -359,9 +369,17 @@ class AuthenticationService:
         return {"status": "ok", "verification_token": token}
 
     async def signup_set_password(
-        self, *, email: str, verification_token: str, password: str
+        self,
+        *,
+        email: str,
+        verification_token: str,
+        password: str,
+        captcha_id: str,
+        captcha_answer: str,
     ) -> dict[str, Any]:
         _validate_wizard_password(password)
+        if not await self.captcha_store.verify(captcha_id, captcha_answer):
+            raise ValidationError("Unable to verify the security code. Try again.")
         await self._require_verification_token(verification_token, email)
         await self.verification_store.update_verification_token_password(
             verification_token, hash_password(password)
@@ -436,6 +454,13 @@ class AuthenticationService:
             scope_id=tenant_id,
         )
 
+        await self.membership_service.create_active(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            role_id=owner_role.id,
+            invited_email=request.email,
+        )
+
         await self.audit_service.log(
             action="auth.register.success",
             target=f"user:{user.id}",
@@ -491,10 +516,14 @@ class AuthenticationService:
 
 
 class TokenService:
-    """Manages JWT token lifecycle — creation, refresh, revocation."""
+    """Manages JWT token lifecycle — creation, refresh, revocation.
 
-    def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
-        self.session_repo = session_repo
+    Session lifecycle (family tracking, expiry materialization, revocation)
+    is delegated to ``SessionService``; this service owns only token mechanics.
+    """
+
+    def __init__(self, session_service: SessionService, audit_service: AuditService) -> None:
+        self.session_service = session_service
         self.audit_service = audit_service
 
     async def create_token_pair(
@@ -525,48 +554,63 @@ class TokenService:
         tenant_id = payload["tenant_id"]
         session_id = payload.get("session_id")
 
-        session = await self.session_repo.get_by_id(session_id) if session_id else None
+        session = await self.session_service.get_session(session_id) if session_id else None
         if (
             session is None
             or session.user_id != uuid.UUID(user_id)
-            or not session.is_active
+            or session.status is not SessionStatus.ACTIVE
             or session.refresh_token_hash != hash_refresh_token(refresh_token)
         ):
-            await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session_id=session_id)
+            await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session=session)
             raise TokenReuseDetectedError()
 
         assert session.id is not None
         if session.expires_at <= datetime.now(UTC):
-            await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session_id=session_id)
-            raise TokenReuseDetectedError()
+            await self.session_service.expire_session(session.id)
+            raise TokenExpiredError()
 
         tokens = await self.create_token_pair(
             user_id=user_id,
             tenant_id=tenant_id,
             session_id=session_id,
         )
-        await self.session_repo.rotate(
+        rotated = await self.session_service.rotate_session(
             session.id,
             refresh_token_hash=hash_refresh_token(tokens.refresh_token),
             expires_at=datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
+        assert rotated is not None and rotated.id is not None
         await self.audit_service.log(
-            action="auth.refresh.success",
-            target=f"session:{session.id}",
+            action=AUTH_REFRESH_SUCCESS,
+            target=f"session:{rotated.id}",
             user_id=user_id,
             tenant_id=tenant_id,
         )
         return tokens
 
-    async def _handle_reuse(self, *, user_id: str, tenant_id: str, session_id: str | None) -> None:
-        await self.session_repo.revoke_all_for_user(uuid.UUID(user_id))
+    async def _handle_reuse(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str,
+        session: Session | None,
+    ) -> None:
+        """Revoke the token's family (or all the user's sessions when unknown).
+
+        Reuse of a rotated token is the signature of a stolen refresh token, so
+        the whole chain that token belongs to is killed, not just one session.
+        """
+        if session is not None and session.token_family_id is not None:
+            await self.session_service.revoke_family(session.token_family_id)
+        else:
+            await self.session_service.revoke_all_sessions(user_id)
         await self.audit_service.log(
-            action="auth.refresh.reuse_detected",
-            target=f"session:{session_id}",
+            action=AUTH_REFRESH_REUSE_DETECTED,
+            target=f"session:{session.id if session else None}",
             user_id=user_id,
             tenant_id=tenant_id,
         )
-        await self.session_repo.commit()
+        await self.session_service.commit()
 
     async def revoke_token(self, refresh_token: str) -> None:
         """Revoke a refresh token (invalidate the session)."""
@@ -576,10 +620,11 @@ class TokenService:
 
         user_id = payload["sub"]
         session_id = payload.get("session_id")
-        session = await self.session_repo.get_by_id(session_id) if session_id else None
+        session = await self.session_service.get_session(session_id) if session_id else None
         if session is not None and session.user_id == uuid.UUID(user_id):
-            assert session.id is not None
-            await self.session_repo.revoke_session(session.id)
+            # Idempotent logout — already-revoked sessions are fine.
+            with suppress(SessionNotFoundError):
+                await self.session_service.revoke_session(user_id, session.id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
         """Introspect a token — return its claims if valid."""

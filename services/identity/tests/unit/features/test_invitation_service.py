@@ -9,7 +9,7 @@ import pytest
 
 from identity.core.constants import DEFAULT_INVITE_ROLE
 from identity.core.security import hash_invitation_token
-from identity.domain.entities import Invitation, Role, User
+from identity.domain.entities import Invitation, Membership, MembershipStatus, Role, User
 from identity.features.invitations.service import InvitationService
 from skyrict_common.exceptions import (
     InvitationAlreadyUsedError,
@@ -162,29 +162,129 @@ class FakeEmailService:
         self.sent.append({"to": to, "token": token})
 
 
+class FakeAuditService:
+    """In-memory AuditService double capturing recorded entries."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, object]] = []
+
+    async def log(self, *, action: str, target: str, **kwargs: object) -> None:
+        self.entries.append({"action": action, "target": target, **kwargs})
+
+
+class FakeMembershipService:
+    def __init__(self) -> None:
+        self.invited: list[Membership] = []
+        self.activated: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.active: list[Membership] = []
+
+    async def create_invited(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        email: str,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+    ) -> Membership:
+        membership = Membership(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID(str(tenant_id)),
+            invited_email=email.strip().lower(),
+            status=MembershipStatus.INVITED,
+            role_id=uuid.UUID(str(role_id)),
+            invited_by_user_id=uuid.UUID(str(invited_by_user_id)),
+            invited_at=datetime.now(UTC),
+        )
+        self.invited.append(membership)
+        return membership
+
+    async def create_active(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID | None = None,
+        invited_email: str | None = None,
+    ) -> Membership:
+        membership = Membership(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID(str(tenant_id)),
+            user_id=uuid.UUID(str(user_id)),
+            invited_email=invited_email.strip().lower() if invited_email else None,
+            role_id=uuid.UUID(str(role_id)) if role_id is not None else None,
+            status=MembershipStatus.ACTIVE,
+            joined_at=datetime.now(UTC),
+        )
+        self.active.append(membership)
+        return membership
+
+    async def activate(
+        self,
+        *,
+        membership_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+    ) -> Membership:
+        self.activated.append((uuid.UUID(str(membership_id)), uuid.UUID(str(user_id))))
+        membership = next((m for m in self.invited if m.id == uuid.UUID(str(membership_id))), None)
+        if membership is None:
+            raise NotFoundError("Membership not found")
+        membership.status = MembershipStatus.ACTIVE
+        membership.user_id = uuid.UUID(str(user_id))
+        membership.joined_at = datetime.now(UTC)
+        return membership
+
+
 @pytest.fixture
 def tenant_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
 @pytest.fixture
-def repos() -> tuple[FakeInvitationRepo, FakeUserRepo, FakeRoleRepo, FakeEmailService]:
-    return FakeInvitationRepo(), FakeUserRepo(), FakeRoleRepo(), FakeEmailService()
+def repos() -> tuple[
+    FakeInvitationRepo,
+    FakeUserRepo,
+    FakeRoleRepo,
+    FakeEmailService,
+    FakeMembershipService,
+]:
+    return (
+        FakeInvitationRepo(),
+        FakeUserRepo(),
+        FakeRoleRepo(),
+        FakeEmailService(),
+        FakeMembershipService(),
+    )
+
+
+@pytest.fixture
+def audit() -> FakeAuditService:
+    return FakeAuditService()
 
 
 @pytest.fixture
 def service(
-    repos: tuple[FakeInvitationRepo, FakeUserRepo, FakeRoleRepo, FakeEmailService],
+    repos: tuple[
+        FakeInvitationRepo,
+        FakeUserRepo,
+        FakeRoleRepo,
+        FakeEmailService,
+        FakeMembershipService,
+    ],
+    audit: FakeAuditService,
 ) -> InvitationService:
-    inv_repo, user_repo, role_repo, email = repos
-    return InvitationService(inv_repo, user_repo, role_repo, email)
+    inv_repo, user_repo, role_repo, email, membership_service = repos
+    return InvitationService(inv_repo, user_repo, role_repo, email, membership_service, audit)
 
 
 class TestCreateInvitation:
     async def test_creates_invitation_and_sends_email(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
-        _, _, role_repo, email = repos
+        _, _, role_repo, email, membership_service = repos
         inviter_id = uuid.uuid4()
         await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
@@ -210,6 +310,20 @@ class TestCreateInvitation:
         assert len(email.sent) == 1
         assert email.sent[0]["to"] == "new@test.com"
 
+        assert len(membership_service.invited) == 1
+        invited = membership_service.invited[0]
+        assert invited.status == MembershipStatus.INVITED
+        assert invited.invited_email == "new@test.com"
+        assert invited.tenant_id == tenant_id
+        assert invited.invited_by_user_id == inviter_id
+        assert invitation.membership_id == invited.id
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.created"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(inviter_id)
+
     async def test_create_rejects_unknown_role(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
@@ -224,9 +338,13 @@ class TestCreateInvitation:
 
 class TestAcceptInvitation:
     async def test_accept_grants_invitation_role(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
-        inv_repo, _, role_repo, _ = repos
+        inv_repo, _, role_repo, _, membership_service = repos
 
         standard_role = await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
@@ -258,10 +376,67 @@ class TestAcceptInvitation:
         assert role_repo.grants[0]["role_id"] == str(standard_role.id)
         assert inv_repo.invitations[invitation.id].used_at is not None
 
+        assert len(membership_service.active) == 1
+        assert membership_service.active[0].user_id == user.id
+        assert membership_service.active[0].status == MembershipStatus.ACTIVE
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.accepted"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(user.id)
+
+    async def test_accept_activates_linked_membership(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, _, role_repo, _, membership_service = repos
+
+        standard_role = await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        pending = await membership_service.create_invited(
+            tenant_id=tenant_id,
+            email="linked@test.com",
+            role_id=standard_role.id,
+            invited_by_user_id=uuid.uuid4(),
+        )
+        invitation = await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="linked@test.com",
+                token_hash=hash_invitation_token("linked-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+                membership_id=pending.id,
+            )
+        )
+
+        user = await service.accept_invitation(
+            token="linked-token",
+            email="linked@test.com",
+            password="SecurePass123!",
+            full_name="Linked User",
+        )
+
+        assert membership_service.activated == [(pending.id, user.id)]
+        assert membership_service.active == []
+        assert inv_repo.invitations[invitation.id].used_at is not None
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.accepted"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
+        assert audit.entries[0]["user_id"] == str(user.id)
+
     async def test_accept_missing_invitation_role_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        inv_repo, _, _, _ = repos
+        inv_repo, *_ = repos
         await inv_repo.create(
             Invitation(
                 tenant_id=tenant_id,
@@ -284,7 +459,7 @@ class TestAcceptInvitation:
     async def test_accept_expired_token_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        inv_repo, _, _, _ = repos
+        inv_repo, *_ = repos
         await inv_repo.create(
             Invitation(
                 tenant_id=tenant_id,
@@ -307,7 +482,7 @@ class TestAcceptInvitation:
     async def test_accept_already_used_token_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        inv_repo, _, _, _ = repos
+        inv_repo, *_ = repos
         invitation = await inv_repo.create(
             Invitation(
                 tenant_id=tenant_id,
@@ -331,7 +506,7 @@ class TestAcceptInvitation:
     async def test_accept_email_mismatch_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        inv_repo, _, _, _ = repos
+        inv_repo, *_ = repos
         await inv_repo.create(
             Invitation(
                 tenant_id=tenant_id,
@@ -365,7 +540,7 @@ class TestAcceptInvitation:
     async def test_accept_existing_user_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
     ) -> None:
-        inv_repo, user_repo, _, _ = repos
+        inv_repo, user_repo, *_ = repos
         existing_user = User(
             tenant_id=tenant_id,
             email="exists@test.com",
@@ -396,9 +571,13 @@ class TestAcceptInvitation:
 
 class TestExpireInvitation:
     async def test_expire_marks_as_used(
-        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+        self,
+        service: InvitationService,
+        repos: tuple,
+        audit: FakeAuditService,
+        tenant_id: uuid.UUID,
     ) -> None:
-        inv_repo, _, _, _ = repos
+        inv_repo, *_ = repos
         invitation = await inv_repo.create(
             Invitation(
                 tenant_id=tenant_id,
@@ -412,6 +591,11 @@ class TestExpireInvitation:
 
         await service.expire_invitation(invitation.id, tenant_id)
         assert inv_repo.invitations[invitation.id].used_at is not None
+
+        actions = [entry["action"] for entry in audit.entries]
+        assert actions == ["invitation.expired"]
+        assert audit.entries[0]["target"] == f"invitation:{invitation.id}"
+        assert audit.entries[0]["tenant_id"] == str(tenant_id)
 
     async def test_expire_unknown_raises(
         self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID

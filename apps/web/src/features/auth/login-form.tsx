@@ -4,14 +4,18 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+import { LoaderCircle, Lock, Mail, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-import { demoSessionKey } from "@/config";
-import { loginEmailPassword, verifyMfa } from "@/lib/api/auth-api";
+import {
+  completeHandoff,
+  loginEmailPassword,
+  verifyMfa,
+} from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { OtpInput } from "@/lib/auth/OtpInput";
+import { TrustIndicator } from "@/lib/auth/TrustIndicator";
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -20,15 +24,16 @@ const credentialsSchema = z.object({
 
 type CredentialsValues = z.infer<typeof credentialsSchema>;
 
-function LoginForm() {
-  const [step, setStep] = useState<"credentials" | "mfa" | "success">(
-    "credentials",
-  );
+function LoginForm({ initialEmail = "" }: { initialEmail?: string }) {
+  const router = useRouter();
+  const [step, setStep] = useState<"credentials" | "mfa">("credentials");
   const [genericError, setGenericError] = useState<string>();
   const [mfaToken, setMfaToken] = useState<string>();
-  const [sessionEmail, setSessionEmail] = useState<string>();
   const [mfaCode, setMfaCode] = useState("");
+  const [useBackup, setUseBackup] = useState(false);
+  const [backupCode, setBackupCode] = useState("");
   const [mfaError, setMfaError] = useState(false);
+  const [handingOff, setHandingOff] = useState(false);
 
   const {
     register,
@@ -36,73 +41,59 @@ function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm<CredentialsValues>({
     resolver: zodResolver(credentialsSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: initialEmail, password: "" },
   });
+
+  async function finish() {
+    setHandingOff(true);
+    await completeHandoff("/");
+  }
 
   async function onSubmitCredentials(values: CredentialsValues) {
     setGenericError(undefined);
-    const result = await loginEmailPassword(values);
-    if (result.status === "mfa_required") {
-      setMfaToken(result.mfaToken);
-      setSessionEmail(values.email);
-      setStep("mfa");
-      return;
-    }
-    if (result.status === "email_unverified") {
+    try {
+      const result = await loginEmailPassword(values);
+      if (result.status === "mfa_challenge") {
+        setMfaToken(result.mfaToken);
+        setMfaCode("");
+        setBackupCode("");
+        setUseBackup(false);
+        setMfaError(false);
+        setStep("mfa");
+        return;
+      }
+      if (result.status === "mfa_setup") {
+        router.push("/setup-mfa");
+        return;
+      }
+      await finish();
+    } catch (err) {
       setGenericError(
-        "This account hasn't been verified yet. Check your inbox for the verification link.",
+        err instanceof Error
+          ? err.message
+          : "Unable to sign in. Check your credentials and try again.",
       );
-      return;
     }
-    setSessionEmail(values.email);
-    localStorage.setItem(demoSessionKey, "1");
-    setStep("success");
   }
 
   async function onSubmitMfa() {
-    if (mfaCode.length !== 6 || !mfaToken) {
+    const code = useBackup ? backupCode : mfaCode;
+    const ready = useBackup
+      ? /^[a-f0-9]{16}$/.test(code)
+      : code.length === 6;
+    if (!ready || !mfaToken) {
       setMfaError(true);
       return;
     }
     setMfaError(false);
-    const result = await verifyMfa({ code: mfaCode, mfaToken });
+    const result = await verifyMfa({ code, mfaToken });
     if (result.status === "ok") {
-      localStorage.setItem(demoSessionKey, "1");
-      setStep("success");
+      await finish();
     } else {
       setMfaError(true);
       setMfaCode("");
+      setBackupCode("");
     }
-  }
-
-  if (step === "success") {
-    return (
-      <div className="space-y-6 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/20">
-          <CheckCircle2 aria-hidden="true" className="size-6 text-primary" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="font-display text-2xl font-semibold text-foreground">
-            You&apos;re signed in
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Welcome back{sessionEmail ? `, ${sessionEmail}` : ""}
-            {". This is a simulated sign-in \n the real API hasn't been wired yet."}
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Link href="/dashboard/agents" className="block">
-            <AuthButton className="w-full">Continue to workspace</AuthButton>
-          </Link>
-          <Link
-            href="/"
-            className="block text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Back to home
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   if (step === "mfa") {
@@ -117,7 +108,9 @@ function LoginForm() {
               Two-factor check
             </h2>
             <p className="text-sm text-muted-foreground">
-              Enter the 6-digit code from your authenticator app.
+              {useBackup
+                ? "Enter one of your backup codes. Each code works once."
+                : "Enter the 6-digit code from your authenticator app."}
             </p>
           </div>
         </div>
@@ -128,37 +121,78 @@ function LoginForm() {
           }}
           className="space-y-6"
         >
-          <OtpInput
-            value={mfaCode}
-            onChange={setMfaCode}
-            error={mfaError}
-            ariaLabel="Two-factor code"
-          />
+          {useBackup ? (
+            <input
+              value={backupCode}
+              onChange={(event) =>
+                setBackupCode(
+                  event.target.value.replace(/[^a-f0-9]/gi, "").toLowerCase(),
+                )
+              }
+              placeholder="abcdef0123456789"
+              aria-label="Backup code"
+              aria-invalid={mfaError}
+              autoComplete="off"
+              className="h-14 w-full rounded-lg border border-border bg-card px-4 text-center font-mono text-lg lowercase tracking-widest tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+            />
+          ) : (
+            <OtpInput
+              value={mfaCode}
+              onChange={setMfaCode}
+              error={mfaError}
+              ariaLabel="Two-factor code"
+            />
+          )}
           {mfaError ? (
             <p className="text-sm font-medium text-destructive">
-              That code didn&apos;t match. Try again or use a backup code.
+              That code didn&apos;t match. Try again.
             </p>
           ) : null}
           <AuthButton
             type="submit"
             className="w-full"
-            loading={false}
-            disabled={mfaCode.length !== 6}
+            loading={handingOff}
+            disabled={useBackup ? backupCode.length !== 16 : mfaCode.length !== 6}
           >
             Verify code
           </AuthButton>
-          <button
-            type="button"
-            onClick={() => {
-              setStep("credentials");
-              setMfaCode("");
-              setMfaError(false);
-            }}
-            className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Back to sign in
-          </button>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                setUseBackup((value) => !value);
+                setMfaCode("");
+                setBackupCode("");
+                setMfaError(false);
+              }}
+              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              {useBackup ? "Use authenticator code" : "Use a backup code"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("credentials");
+                setMfaCode("");
+                setBackupCode("");
+                setUseBackup(false);
+                setMfaError(false);
+              }}
+              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Back to sign in
+            </button>
+          </div>
         </form>
+      </div>
+    );
+  }
+
+  if (handingOff) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        {"Opening your workspace\n"}
       </div>
     );
   }
@@ -179,26 +213,16 @@ function LoginForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      <div className="space-y-1.5">
-        <AuthInput
-          label="Password"
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          placeholder={"\n"}
-          icon={Lock}
-          error={errors.password?.message}
-          {...register("password")}
-        />
-        <div className="flex justify-end pt-0.5">
-          <Link
-            href="/forgot-password"
-            className="text-sm text-primary underline-offset-4 hover:underline"
-          >
-            Forgot password?
-          </Link>
-        </div>
-      </div>
+      <AuthInput
+        label="Password"
+        id="password"
+        type="password"
+        autoComplete="current-password"
+        placeholder={"\n"}
+        icon={Lock}
+        error={errors.password?.message}
+        {...register("password")}
+      />
       {genericError ? (
         <div
           role="alert"
@@ -210,10 +234,7 @@ function LoginForm() {
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Sign in
       </AuthButton>
-      <p className="flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
-        <KeyRound aria-hidden="true" className="size-3.5" />
-        Argon2id hashing · TOTP available on your account
-      </p>
+      <TrustIndicator />
     </form>
   );
 }

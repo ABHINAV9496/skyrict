@@ -24,7 +24,7 @@ type AccountValues = z.infer<typeof accountSchema>;
 function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
-  const [captchaVisible, setCaptchaVisible] = useState(false);
+  const [captchaVisible, setCaptchaVisible] = useState(true);
   const [captchaValid, setCaptchaValid] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState(false);
@@ -74,7 +74,7 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
     if (!result.available) {
       setError("email", {
         type: "manual",
-        message: "This email is already registered. Try signing in instead.",
+        message: "This email is unavailable.",
       });
       return;
     }
@@ -82,7 +82,7 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
       setCaptchaError(true);
       return;
     }
-    if (env.turnstileSiteKey && !captchaToken) {
+    if (captchaVisible && env.turnstileSiteKey && !captchaToken) {
       setCaptchaError(true);
       return;
     }
@@ -126,7 +126,7 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
         error={
           errors.email?.message ??
           (availability === "taken"
-            ? "This email is already registered. Try signing in instead."
+            ? "This email is unavailable."
             : undefined)
         }
         trailing={
@@ -152,7 +152,11 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
             if (valid) setCaptchaError(false);
           }}
         />
-        {captchaError && captchaVisible ? (
+        {captchaVisible && !captchaValid ? (
+          <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+            Complete the security check to continue.
+          </p>
+        ) : captchaError ? (
           <p className="mt-1.5 text-xs font-medium text-destructive">
             Confirm you&apos;re not a robot to continue.
           </p>
@@ -164,8 +168,13 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
         ) : null}
       </div>
 
-      <AuthButton type="submit" className="w-full" loading={isSubmitting}>
-        Continue
+      <AuthButton
+        type="submit"
+        className="w-full"
+        loading={isSubmitting}
+        disabled={captchaVisible && !captchaValid}
+      >
+        Continue with email
       </AuthButton>
     </form>
   );

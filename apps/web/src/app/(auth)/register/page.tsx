@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { AccountStep } from "@/features/onboarding/account-step";
 
@@ -32,16 +31,6 @@ export default async function RegisterPage({
       </div>
 
       <AccountStep demoCaptcha={params.demoCaptcha === "1"} />
-
-      <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
-        <Link
-          href="/login"
-          className="font-medium text-primary underline-offset-4 hover:underline"
-        >
-          Sign in
-        </Link>
-      </p>
     </div>
   );
 }

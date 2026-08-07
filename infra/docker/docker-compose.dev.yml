@@ -19,6 +19,7 @@ services:
 
   # ---------- Identity Service (dev target — live reload) ----------
   identity:
+    image: skyrict-identity:latest
     build:
       context: ../..
       dockerfile: services/identity/Dockerfile.dev
@@ -35,8 +36,11 @@ services:
       # Inside the compose network the DB/Redis hostnames are the service
       # names, not localhost. These override the host-oriented defaults in
       # services/identity/.env.
-      IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@postgres:5432/skyrict_identity
-      IDENTITY_REDIS_URL: redis://redis:6379/0
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
+      IDENTITY_REDIS_URL: redis://skyrict-redis:6379/0
+      # Outbound email → MailHog container (Web UI: http://localhost:8025).
+      IDENTITY_EMAIL_SMTP_HOST: mailhog
+      IDENTITY_EMAIL_SMTP_PORT: "1025"
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
@@ -49,6 +53,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
@@ -61,7 +67,7 @@ services:
   # service, injecting X-Tenant-Slug so tenant resolution behaves identically
   # to production. See infra/nginx/dev.conf.
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     container_name: skyrict-nginx
     ports:
       # Override the host port if 80 is in use: set NGINX_PORT=8080 in your .env

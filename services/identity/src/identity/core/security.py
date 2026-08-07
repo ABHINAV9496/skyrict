@@ -218,6 +218,11 @@ def hash_invitation_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def hash_handoff_token(token: str) -> str:
+    """Return the SHA-256 hex digest stored for a handoff token."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def verify_jwt(token: str) -> TokenClaims:
     """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
 

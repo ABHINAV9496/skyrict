@@ -93,14 +93,6 @@ function Cta() {
                   >
                     <Link href="/register">Create your account</Link>
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="border-[#114f68] bg-transparent text-[#f4fafd] hover:bg-[#114f68]/40 hover:text-[#f4fafd]"
-                    asChild
-                  >
-                    <Link href="/login">Log in</Link>
-                  </Button>
                 </div>
               </div>
             </div>

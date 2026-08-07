@@ -25,6 +25,57 @@ class ScopeType(Enum):
     TEAM = "team"
 
 
+class MembershipStatus(Enum):
+    """Lifecycle state of a user's membership in a tenant."""
+
+    INVITED = "invited"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+
+
+class SessionStatus(Enum):
+    """Lifecycle state of a user session.
+
+    ``EXPIRED`` is materialized when a session passes its ``expires_at`` and is
+    touched again; queries treat past-expiry rows as expired regardless.
+    """
+
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+@dataclass
+class Membership:
+    """Membership entity — a user's relationship with a tenant.
+
+    ``user_id`` is NULL while the membership is INVITED (no placeholder users:
+    invitations carry the pending relationship, users materialize on accept).
+    ``invited_email`` reserves the email within the tenant. ``role_id`` is the
+    membership's primary role. Lifecycle: invited -> active -> (suspended <->
+    active).
+    """
+
+    tenant_id: UUID
+    invited_email: str | None = None
+    user_id: UUID | None = None
+    status: MembershipStatus = MembershipStatus.ACTIVE
+    role_id: UUID | None = None
+    invited_by_user_id: UUID | None = None
+    invited_at: datetime | None = None
+    joined_at: datetime | None = None
+    suspended_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if self.user_id is None and not self.invited_email:
+            raise ValueError("A membership needs a user_id or an invited_email")
+        if self.user_id is None and self.status is not MembershipStatus.INVITED:
+            raise ValueError("A membership without a user must be INVITED")
+
+
 @dataclass
 class User:
     """User entity."""
@@ -63,7 +114,15 @@ class Tenant:
 
 @dataclass
 class Session:
-    """User session entity."""
+    """User session entity.
+
+    ``status`` is the session lifecycle state (active -> revoked/expired).
+    ``token_family_id`` groups every refresh rotation of one login so reuse
+    detection can revoke the whole family. ``is_trusted`` marks a recognized
+    device (surfaces the SESSION_TRUSTED flow). ``is_active`` is derived and
+    does not consider expiry — expiry is enforced explicitly by queries and
+    the refresh path.
+    """
 
     user_id: UUID
     tenant_id: UUID
@@ -72,12 +131,20 @@ class Session:
     device_info: dict[str, Any] | None = None
     ip_address: str | None = None
     location: str | None = None
-    is_active: bool = True
+    status: SessionStatus = SessionStatus.ACTIVE
+    token_family_id: UUID | None = None
+    is_trusted: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_active_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     revoked_at: datetime | None = None
+    expired_at: datetime | None = None
     id: UUID | None = None
+
+    @property
+    def is_active(self) -> bool:
+        """True while the session is ACTIVE (does not reflect expiry)."""
+        return self.status is SessionStatus.ACTIVE
 
 
 @dataclass
@@ -116,7 +183,11 @@ class UserRole:
 
 @dataclass
 class Invitation:
-    """Invitation entity — single-use, expiring invite token."""
+    """Invitation entity — single-use, expiring invite token.
+
+    ``membership_id`` links the invitation to its INVITED membership, which
+    owns the pending relationship; the user materializes on accept.
+    """
 
     tenant_id: UUID
     email: str
@@ -125,6 +196,7 @@ class Invitation:
     created_by_user_id: UUID
     expires_at: datetime
     id: UUID | None = None
+    membership_id: UUID | None = None
     used_at: datetime | None = None
     used_by_user_id: UUID | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -143,5 +215,25 @@ class AuditLog:
     user_agent: str | None = None
     hash: str = ""
     prev_hash: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    id: UUID | None = None
+
+
+@dataclass
+class Handoff:
+    """Handoff token entity — single-use, expiring, carries in-flight payload.
+
+    Lets the onboarding wizard and BFF pass control across requests while
+    resuming the exact step: the raw token is returned once on issue, only its
+    SHA-256 hash is stored, and redemption is atomic (marked consumed).
+    """
+
+    purpose: str
+    token_hash: str
+    expires_at: datetime
+    payload: dict[str, Any] = field(default_factory=dict)
+    tenant_id: UUID | None = None
+    created_by_user_id: UUID | None = None
+    consumed_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None

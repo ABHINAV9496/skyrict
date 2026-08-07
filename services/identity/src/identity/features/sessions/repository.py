@@ -10,10 +10,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 
 from identity.db.repository import SqlRepository
-from identity.domain.entities import Session
+from identity.domain.entities import Session, SessionStatus
 from identity.models.session import SessionModel
 
 
@@ -27,10 +27,13 @@ def _to_orm(session: Session) -> SessionModel:
         "ip_address": session.ip_address,
         "user_agent": session.user_agent,
         "location": session.location,
-        "is_active": session.is_active,
+        "status": session.status.value,
+        "token_family_id": session.token_family_id,
+        "is_trusted": session.is_trusted,
         "expires_at": session.expires_at,
         "last_active_at": session.last_active_at,
         "revoked_at": session.revoked_at,
+        "expired_at": session.expired_at,
     }
     if session.id is not None:
         model_kwargs["id"] = session.id
@@ -48,11 +51,14 @@ def _from_orm(model: SessionModel) -> Session:
         ip_address=model.ip_address,
         user_agent=model.user_agent,
         location=model.location,
-        is_active=model.is_active,
+        status=SessionStatus(model.status),
+        token_family_id=model.token_family_id,
+        is_trusted=model.is_trusted,
         created_at=model.created_at,
         expires_at=model.expires_at,
         last_active_at=model.last_active_at,
         revoked_at=model.revoked_at,
+        expired_at=model.expired_at,
     )
 
 
@@ -73,10 +79,34 @@ class SessionRepository(SqlRepository):
         return _from_orm(model)
 
     async def get_active_by_user(self, user_id: str | uuid.UUID) -> list[Session]:
-        """Get all active sessions for a user, newest first."""
+        """Get all active, unexpired sessions for a user, newest first."""
+        now = datetime.now(UTC)
         stmt = (
             select(SessionModel)
-            .where(SessionModel.user_id == user_id, SessionModel.is_active == True)  # noqa: E712
+            .where(
+                and_(
+                    SessionModel.user_id == user_id,
+                    SessionModel.status == SessionStatus.ACTIVE.value,
+                    SessionModel.expires_at > now,
+                )
+            )
+            .order_by(SessionModel.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return [_from_orm(model) for model in result.scalars().all()]
+
+    async def get_active_by_family(self, family_id: str | uuid.UUID) -> list[Session]:
+        """Get all active sessions sharing a token family, newest first."""
+        now = datetime.now(UTC)
+        stmt = (
+            select(SessionModel)
+            .where(
+                and_(
+                    SessionModel.token_family_id == family_id,
+                    SessionModel.status == SessionStatus.ACTIVE.value,
+                    SessionModel.expires_at > now,
+                )
+            )
             .order_by(SessionModel.created_at.desc())
         )
         result = await self.session.execute(stmt)
@@ -84,10 +114,31 @@ class SessionRepository(SqlRepository):
 
     async def revoke_all_for_user(self, user_id: str | uuid.UUID) -> None:
         """Revoke all active sessions for a user."""
+        now = datetime.now(UTC)
         stmt = (
             update(SessionModel)
-            .where(SessionModel.user_id == user_id, SessionModel.is_active == True)  # noqa: E712
-            .values(is_active=False, revoked_at=datetime.now(UTC))
+            .where(
+                and_(
+                    SessionModel.user_id == user_id,
+                    SessionModel.status == SessionStatus.ACTIVE.value,
+                )
+            )
+            .values(status=SessionStatus.REVOKED.value, revoked_at=now)
+        )
+        await self.session.execute(stmt)
+
+    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
+        """Revoke every active session in a token family (reuse chain-kill)."""
+        now = datetime.now(UTC)
+        stmt = (
+            update(SessionModel)
+            .where(
+                and_(
+                    SessionModel.token_family_id == family_id,
+                    SessionModel.status == SessionStatus.ACTIVE.value,
+                )
+            )
+            .values(status=SessionStatus.REVOKED.value, revoked_at=now)
         )
         await self.session.execute(stmt)
 
@@ -96,8 +147,25 @@ class SessionRepository(SqlRepository):
         model = await self.session.get(SessionModel, session_id)
         if model is None:
             return
-        model.is_active = False
+        model.status = SessionStatus.REVOKED.value
         model.revoked_at = datetime.now(UTC)
+        await self.session.flush()
+
+    async def set_trusted(self, session_id: str | uuid.UUID, is_trusted: bool) -> None:
+        """Mark a session trusted (or untrusted) on a recognized device."""
+        model = await self.session.get(SessionModel, session_id)
+        if model is None:
+            return
+        model.is_trusted = is_trusted
+        await self.session.flush()
+
+    async def mark_expired(self, session_id: str | uuid.UUID) -> None:
+        """Materialize the ACTIVE -> EXPIRED transition on a past-expiry session."""
+        model = await self.session.get(SessionModel, session_id)
+        if model is None:
+            return
+        model.status = SessionStatus.EXPIRED.value
+        model.expired_at = datetime.now(UTC)
         await self.session.flush()
 
     async def rotate(

@@ -1,11 +1,10 @@
 """Middleware stack — request-id and tenant context.
 
 TenantContextMiddleware is the SINGLE source of truth for tenant resolution:
-it derives the tenant slug from the routing layer (Host subdomain in
-staging/production, X-Tenant-Slug in local dev), verifies the tenant in the
-database, cross-checks it against the verified JWT, and populates
-TenantContext. Downstream code consumes TenantContext instead of re-reading
-headers or parsing the Host again.
+it derives the tenant slug via the centralized ``TenantResolver`` (core),
+verifies the tenant in the database, cross-checks it against the verified
+JWT, and populates TenantContext. Downstream code consumes TenantContext
+instead of re-reading headers or parsing the Host again.
 
 Exceptions raised here are converted to RFC 7807 problem+json responses via
 skyrict_error_handler — exceptions thrown inside Starlette middleware do NOT
@@ -14,7 +13,6 @@ reach the route-level ExceptionMiddleware handlers.
 
 from __future__ import annotations
 
-import re
 import uuid
 
 import structlog
@@ -22,7 +20,6 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from identity.core.config import Environment, settings
 from identity.core.constants import SKIP_AUTH_PATHS
 from identity.core.exceptions import (
     SkyrictError,
@@ -35,15 +32,16 @@ from identity.core.exceptions import (
 )
 from identity.core.security import verify_jwt
 from identity.core.tenant_context import TenantContext
+from identity.core.tenant_resolver import (
+    TenantResolver,  # noqa: F401  # re-exported for existing callers
+    derive_tenant_slug,
+    resolve_tenant_slug_from_host,  # noqa: F401  # re-exported for existing callers
+)
 from identity.db.session import async_session_factory
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.organizations.repository import TenantRepository
 
 logger = structlog.get_logger("identity.middleware")
-
-# Slug grammar matches the nginx routing config (infra/nginx/dev.conf):
-# one label of lowercase letters, digits, and hyphens.
-_TENANT_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 
 
 def is_tenant_required_path(path: str) -> bool:
@@ -54,52 +52,6 @@ def is_tenant_required_path(path: str) -> bool:
     context exists before handlers run.
     """
     return path not in SKIP_AUTH_PATHS
-
-
-def resolve_tenant_slug_from_host(host: str, *, base_domain: str) -> str | None:
-    """Derive the tenant slug from a Host header (staging/production).
-
-    Examples (base_domain="skyrict.com"):
-        acme.skyrict.com       -> "acme"
-        a.b.skyrict.com        -> "a"   (first label, ingress contract)
-        skyrict.com            -> None  (apex is not a tenant subdomain)
-        acme.skyrict.com:443   -> "acme"  (port stripped)
-
-    Returns None when the host is not a tenant subdomain of base_domain or the
-    first label is not a valid slug.
-    """
-    base = base_domain.strip().lower().lstrip(".")
-    host_l = (host or "").strip().lower()
-    if not base or not host_l:
-        return None
-    if ":" in host_l:
-        # Strip any port before suffix matching (Host: acme.skyrict.com:443).
-        host_l = host_l.rsplit(":", 1)[0]
-    if not host_l.endswith(f".{base}"):
-        return None
-    label = host_l[: -(len(base) + 1)].split(".", 1)[0]
-    if not label or not _TENANT_SLUG_RE.fullmatch(label):
-        return None
-    return label
-
-
-def derive_tenant_slug(request: Request) -> str | None:
-    """Return the routed tenant slug for this request, or None if unresolvable.
-
-    Staging/production: derived from the Host subdomain. A client-supplied
-    X-Tenant-Slug is NEVER trusted here — the header is spoofable end-to-end.
-
-    Dev/test: taken from the X-Tenant-Slug header injected by nginx
-    (infra/nginx/dev.conf), which always overwrites client input.
-    """
-    if settings.ENVIRONMENT in (Environment.STAGING, Environment.PRODUCTION):
-        return resolve_tenant_slug_from_host(
-            request.headers.get("host", ""), base_domain=settings.BASE_DOMAIN
-        )
-    slug = (request.headers.get("X-Tenant-Slug") or "").strip().lower()
-    if not slug or not _TENANT_SLUG_RE.fullmatch(slug):
-        return None
-    return slug
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):

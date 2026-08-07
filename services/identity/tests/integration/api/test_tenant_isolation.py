@@ -264,7 +264,7 @@ class TestTenantIsolation:
     ) -> None:
         response = await client.get(
             "/api/v1/users/me",
-            headers={"X-Tenant-Slug": "acme", "Authorization": f"Bearer {acme_access_token}"},
+            headers={"X-Tenant-Slug": "olympus", "Authorization": f"Bearer {acme_access_token}"},
         )
         assert response.status_code == 200
         assert response.json()["data"]["email"] == "alice@acme.io"
@@ -317,7 +317,7 @@ class TestTenantResolution:
         # 401 problem response.
         response = await client.get(
             "/api/v1/users/me",
-            headers={"X-Tenant-Slug": "acme", "Authorization": "Bearer not-a-jwt"},
+            headers={"X-Tenant-Slug": "olympus", "Authorization": "Bearer not-a-jwt"},
         )
         assert response.status_code == 401
         assert response.json()["type"].endswith("/token-invalid")
@@ -332,10 +332,10 @@ class TestContextLifecycle:
         integration_db: dict[str, str],
         acme_access_token: str,
     ) -> None:
-        # First request resolves acme and succeeds.
+        # First request resolves olympus and succeeds.
         first = await client.get(
             "/api/v1/users/me",
-            headers={"X-Tenant-Slug": "acme", "Authorization": f"Bearer {acme_access_token}"},
+            headers={"X-Tenant-Slug": "olympus", "Authorization": f"Bearer {acme_access_token}"},
         )
         assert first.status_code == 200
 

@@ -79,6 +79,7 @@ SKIP_AUTH_PATHS = frozenset(
         f"{API_V1_PREFIX}/auth/signup/send-code",
         f"{API_V1_PREFIX}/auth/signup/verify-code",
         f"{API_V1_PREFIX}/auth/signup/password",
+        f"{API_V1_PREFIX}/auth/signup/captcha",
         f"{API_V1_PREFIX}/auth/signup/check-email",
         f"{API_V1_PREFIX}/auth/signup/check-slug",
         f"{API_V1_PREFIX}/auth/signup/organization",
@@ -94,9 +95,35 @@ SKIP_AUTH_PATHS = frozenset(
 #
 # Platform-owned workspace slugs and email addresses are never available for
 # self-service. The check-email / check-slug endpoints treat them as taken.
+#
+# The set covers every platform hostname that must never be a tenant
+# subdomain: marketing (web, www), auth surfaces (signup, signin, app, auth,
+# login), API/infra (api, docs, status, mail, support, help, blog), tooling
+# (dev, test, staging), the placeholder demo tenant (acme), and the apex brand
+# (skyrict). The tenant resolver returns None for these so platform hosts are
+# never looked up as tenants.
 # ---------------------------------------------------------------------------
 RESERVED_SLUGS = frozenset(
-    {"admin", "api", "app", "auth", "billing", "demo", "support", "www", "skyrict"}
+    {
+        "admin",
+        "api",
+        "app",
+        "blog",
+        "docs",
+        "dev",
+        "help",
+        "mail",
+        "signin",
+        "signup",
+        "staging",
+        "status",
+        "support",
+        "test",
+        "web",
+        "www",
+        "acme",
+        "skyrict",
+    }
 )
 RESERVED_EMAILS = frozenset(
     {
@@ -112,6 +139,7 @@ SIGNUP_CODE_LIMIT_KEY = "signup_code"
 SIGNUP_CODE_IP_LIMIT_KEY = "signup_code_ip"
 SIGNUP_VERIFY_LIMIT_KEY = "signup_verify"
 SIGNUP_CHECK_LIMIT_KEY = "signup_check_ip"
+SIGNUP_CAPTCHA_LIMIT_KEY = "signup_captcha_ip"
 
 # ---------------------------------------------------------------------------
 # Default system roles (single source of truth)

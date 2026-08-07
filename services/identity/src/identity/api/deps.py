@@ -28,6 +28,7 @@ from identity.features.audit.repository import AuditRepository
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.auth.verification_store import VerificationStore
+from identity.features.memberships.repository import MembershipRepository
 from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
 from identity.features.sessions.repository import SessionRepository
@@ -36,9 +37,14 @@ from skyrict_common.exceptions import AuthenticationError, MFARequiredError
 
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
+    from identity.features.auth.captcha.captcha_store import CaptchaStore
     from identity.features.auth.service import AuthenticationService, TokenService
+    from identity.features.handoffs.repository import HandoffRepository
+    from identity.features.handoffs.service import HandoffService
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
+    from identity.features.memberships.service import MembershipService
+    from identity.features.mfa.attempt_store import MFAAttemptStore
     from identity.features.mfa.service import MFAService
     from identity.features.organizations.service import TenantService
     from identity.features.roles.service import RoleManagementService
@@ -173,6 +179,10 @@ def get_tenant_repo(db: AsyncSession = Depends(get_db)) -> TenantRepository:
     return TenantRepository(db)
 
 
+def get_membership_repo(db: AsyncSession = Depends(get_db)) -> MembershipRepository:
+    return MembershipRepository(db)
+
+
 def get_session_repo(db: AsyncSession = Depends(get_db)) -> SessionRepository:
     return SessionRepository(db)
 
@@ -194,17 +204,53 @@ def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> 
     return AuditService(audit_repo)
 
 
-def get_token_service(
+def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> SessionService:
+    from identity.features.sessions.service import SessionService
+
+    return SessionService(session_repo, audit_service)
+
+
+def get_handoff_repo(db: AsyncSession = Depends(get_db)) -> HandoffRepository:
+    from identity.features.handoffs.repository import HandoffRepository
+
+    return HandoffRepository(db)
+
+
+def get_handoff_service(
+    handoff_repo: HandoffRepository = Depends(get_handoff_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> HandoffService:
+    from identity.features.handoffs.service import HandoffService
+
+    return HandoffService(handoff_repo, audit_service)
+
+
+def get_token_service(
+    session_service: SessionService = Depends(get_session_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> TokenService:
     from identity.features.auth.service import TokenService
 
-    return TokenService(session_repo, audit_service)
+    return TokenService(session_service, audit_service)
 
 
 def get_email_service() -> EmailService:
-    """Email transport — log-based until a real provider is wired."""
+    """Email transport — SMTP when configured, log-only otherwise."""
+    from identity.core.config import settings
+    from identity.core.email import SmtpEmailService
+
+    if settings.EMAIL_SMTP_HOST.strip():
+        return SmtpEmailService(
+            host=settings.EMAIL_SMTP_HOST,
+            port=settings.EMAIL_SMTP_PORT,
+            from_addr=settings.EMAIL_FROM_ADDR,
+            username=settings.EMAIL_SMTP_USERNAME,
+            password=settings.EMAIL_SMTP_PASSWORD,
+            use_tls=settings.EMAIL_SMTP_USE_TLS,
+        )
     return LogEmailService()
 
 
@@ -218,8 +264,22 @@ def get_verification_store() -> VerificationStore:
     return VerificationStore()
 
 
+def get_captcha_store() -> CaptchaStore:
+    """Return the Redis-backed text-CAPTCHA challenge store."""
+    from identity.features.auth.captcha.captcha_store import CaptchaStore
+
+    return CaptchaStore()
+
+
 def get_mfa_challenge_store() -> MfaChallengeStore:
     return MfaChallengeStore()
+
+
+def get_mfa_attempt_store() -> MFAAttemptStore:
+    """Return the Redis-backed MFA enrollment failed-attempt store."""
+    from identity.features.mfa.attempt_store import MFAAttemptStore
+
+    return MFAAttemptStore()
 
 
 def get_turnstile_verifier() -> TurnstileVerifier:
@@ -227,12 +287,13 @@ def get_turnstile_verifier() -> TurnstileVerifier:
     return TurnstileVerifier()
 
 
-def get_session_service(
-    session_repo: SessionRepository = Depends(get_session_repo),
-) -> SessionService:
-    from identity.features.sessions.service import SessionService
+def get_membership_service(
+    membership_repo: MembershipRepository = Depends(get_membership_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> MembershipService:
+    from identity.features.memberships.service import MembershipService
 
-    return SessionService(session_repo)
+    return MembershipService(membership_repo, audit_service)
 
 
 def get_authn_service(
@@ -243,8 +304,10 @@ def get_authn_service(
     audit_service: AuditService = Depends(get_audit_service),
     email_service: EmailService = Depends(get_email_service),
     session_service: SessionService = Depends(get_session_service),
+    membership_service: MembershipService = Depends(get_membership_service),
     verification_store: VerificationStore = Depends(get_verification_store),
     turnstile: TurnstileVerifier = Depends(get_turnstile_verifier),
+    captcha_store: CaptchaStore = Depends(get_captcha_store),
 ) -> AuthenticationService:
     from identity.features.auth.service import AuthenticationService
 
@@ -256,8 +319,10 @@ def get_authn_service(
         audit_service,
         email_service,
         session_service,
+        membership_service,
         verification_store=verification_store,
         turnstile=turnstile,
+        captcha_store=captcha_store,
     )
 
 
@@ -292,10 +357,19 @@ def get_invitation_service(
     user_repo: UserRepository = Depends(get_user_repo),
     role_repo: RoleRepository = Depends(get_role_repo),
     email_service: EmailService = Depends(get_email_service),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> InvitationService:
     from identity.features.invitations.service import InvitationService
 
-    return InvitationService(invitation_repo, user_repo, role_repo, email_service)
+    return InvitationService(
+        invitation_repo,
+        user_repo,
+        role_repo,
+        email_service,
+        membership_service,
+        audit_service,
+    )
 
 
 def get_mfa_service(

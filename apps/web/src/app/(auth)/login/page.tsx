@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { LoginForm } from "@/features/auth/login-form";
 
@@ -8,7 +7,14 @@ export const metadata: Metadata = {
   description: "Sign in to your Skyrict workspace.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  const params = await searchParams;
+  const email = params.email?.trim() ?? "";
+
   return (
     <div className="space-y-8">
       <div className="space-y-2">
@@ -23,17 +29,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <LoginForm />
-
-      <p className="text-center text-sm text-muted-foreground">
-        New to Skyrict?{" "}
-        <Link
-          href="/register"
-          className="font-medium text-primary underline-offset-4 hover:underline"
-        >
-          Create an account
-        </Link>
-      </p>
+      <LoginForm initialEmail={email} />
     </div>
   );
 }

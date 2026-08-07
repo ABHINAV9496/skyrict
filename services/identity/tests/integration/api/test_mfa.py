@@ -10,6 +10,8 @@ Proves the end-to-end contract over real Postgres:
     enrollment + gate to ordinary members.
   - Backup codes enroll a user and are single-use.
   - Owner-assisted reset clears a member's MFA (forcing re-enrollment).
+  - Rotating backup codes invalidates the previous set but keeps the TOTP
+    secret; enrollment verification locks out after repeated failures.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import pyotp
 import pytest
 from sqlalchemy import delete
 
+from identity.core.config import settings
 from identity.db.session import async_session_factory
 from identity.models.tenant import TenantModel
 from tests.integration.api.mfa_helpers import mfa_challenge_login
@@ -317,5 +320,105 @@ class TestMemberNotForcedWithoutPolicy:
             assert member_login.status_code == 200
             assert member_login.json()["data"]["mfa_required"] is False
             assert member_login.json()["data"]["next_step"] is None
+        finally:
+            await _cleanup_tenant(data["tenant_slug"])
+
+
+class TestBackupCodeRotation:
+    async def test_rotate_invalidates_old_codes_and_keeps_totp_secret(self, client) -> None:
+        data = await _register_org(client)
+        try:
+            login = await _verify_and_login(client, data)
+            headers = {
+                "X-Tenant-Slug": data["tenant_slug"],
+                "Authorization": f"Bearer {login['access_token']}",
+            }
+
+            setup = await client.post("/api/v1/mfa/setup", headers=headers)
+            assert setup.status_code == 200
+            setup_data = setup.json()["data"]
+            totp_secret = setup_data["secret"]
+            old_backup = setup_data["backup_codes"][0]
+
+            # Enroll via TOTP so the original backup codes stay unused.
+            verify = await client.post(
+                "/api/v1/mfa/verify",
+                headers=headers,
+                json={"code": pyotp.TOTP(totp_secret).now()},
+            )
+            assert verify.status_code == 200
+            assert verify.json()["data"]["method"] == "totp"
+
+            # Rotate: 10 fresh codes, none matching the previous set.
+            rotated = await client.post("/api/v1/mfa/backup-codes", headers=headers)
+            assert rotated.status_code == 200, rotated.text
+            new_codes = rotated.json()["data"]["backup_codes"]
+            assert len(new_codes) == 10
+            assert old_backup not in new_codes
+            new_backup = new_codes[0]
+
+            # The old backup code no longer signs in at the login challenge.
+            old_login = await client.post(
+                "/api/v1/auth/login",
+                headers={"X-Tenant-Slug": data["tenant_slug"]},
+                json={"email": data["email"], "password": "TestPassword123!"},
+            )
+            assert old_login.status_code == 200
+            old_challenge = old_login.json()["data"]
+            rejected = await client.post(
+                "/api/v1/auth/mfa/verify",
+                headers={"X-Tenant-Slug": data["tenant_slug"]},
+                json={"mfa_token": old_challenge["mfa_token"], "code": old_backup},
+            )
+            assert rejected.status_code == 401
+
+            # The fresh backup code works and completes the challenge.
+            redeemed = await mfa_challenge_login(
+                client,
+                slug=data["tenant_slug"],
+                email=data["email"],
+                password="TestPassword123!",
+                code=new_backup,
+            )
+            assert redeemed["access_token"] is not None
+            assert redeemed["mfa_token"] is None
+
+            # The TOTP secret is untouched — TOTP still signs in.
+            totp_redeemed = await mfa_challenge_login(
+                client,
+                slug=data["tenant_slug"],
+                email=data["email"],
+                password="TestPassword123!",
+                code=pyotp.TOTP(totp_secret).now(),
+            )
+            assert totp_redeemed["access_token"] is not None
+        finally:
+            await _cleanup_tenant(data["tenant_slug"])
+
+
+class TestMfaEnrollmentLockout:
+    async def test_verify_locks_out_after_max_failed_attempts(self, client) -> None:
+        data = await _register_org(client)
+        try:
+            login = await _verify_and_login(client, data)
+            headers = {
+                "X-Tenant-Slug": data["tenant_slug"],
+                "Authorization": f"Bearer {login['access_token']}",
+            }
+            setup = await client.post("/api/v1/mfa/setup", headers=headers)
+            assert setup.status_code == 200
+
+            for _ in range(settings.MFA_ENROLL_MAX_ATTEMPTS):
+                wrong = await client.post(
+                    "/api/v1/mfa/verify", headers=headers, json={"code": "000000"}
+                )
+                assert wrong.status_code == 403
+                assert wrong.json()["type"].endswith("/mfa-verification-error")
+
+            locked = await client.post(
+                "/api/v1/mfa/verify", headers=headers, json={"code": "000000"}
+            )
+            assert locked.status_code == 429
+            assert locked.json()["type"].endswith("/rate-limit-exceeded")
         finally:
             await _cleanup_tenant(data["tenant_slug"])

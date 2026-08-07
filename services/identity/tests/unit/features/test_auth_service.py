@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -15,7 +16,7 @@ from identity.core.constants import (
 )
 from identity.core.security import hash_password
 from identity.core.tenant_context import TenantContext
-from identity.domain.entities import Role, Session, Tenant, User
+from identity.domain.entities import Membership, MembershipStatus, Role, Session, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.schemas import (
     BillingAddress,
@@ -288,6 +289,31 @@ class FakeSessionService:
         return session
 
 
+class FakeMembershipService:
+    def __init__(self) -> None:
+        self.active: list[Membership] = []
+
+    async def create_active(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+        role_id: str | uuid.UUID | None = None,
+        invited_email: str | None = None,
+    ) -> Membership:
+        membership = Membership(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID(str(tenant_id)),
+            user_id=uuid.UUID(str(user_id)),
+            invited_email=invited_email.strip().lower() if invited_email else None,
+            role_id=uuid.UUID(str(role_id)) if role_id is not None else None,
+            status=MembershipStatus.ACTIVE,
+            joined_at=datetime.now(UTC),
+        )
+        self.active.append(membership)
+        return membership
+
+
 class FakeChallengeStore:
     def __init__(self) -> None:
         self.challenges: dict[str, dict[str, str]] = {}
@@ -389,6 +415,23 @@ class FakeTurnstile:
         return self.result
 
 
+class FakeCaptchaStore:
+    """CAPTCHA double that accepts every answer unless scripted otherwise."""
+
+    def __init__(self, valid: bool = True) -> None:
+        self.valid = valid
+        self.issued: list[str] = []
+        self.verifications: list[tuple[str, str]] = []
+
+    async def issue(self, answer: str) -> str:
+        self.issued.append(answer)
+        return f"captcha-{len(self.issued)}"
+
+    async def verify(self, captcha_id: str, answer: str) -> bool:
+        self.verifications.append((captcha_id, answer))
+        return self.valid
+
+
 class _Harness:
     """Wires AuthenticationService against in-memory port doubles."""
 
@@ -401,6 +444,7 @@ class _Harness:
         prior_device: bool = True,
         verification_store: FakeVerificationStore | None = None,
         turnstile: FakeTurnstile | None = None,
+        captcha_store: FakeCaptchaStore | None = None,
     ) -> None:
         self.user_repo = FakeUserRepo(users)
         self.tenant_repo = FakeTenantRepo(tenants)
@@ -409,8 +453,10 @@ class _Harness:
         self.audit_svc = FakeAuditService()
         self.email_svc = FakeEmailService()
         self.session_svc = FakeSessionService(prior_device=prior_device)
+        self.membership_svc = FakeMembershipService()
         self.verification_store = verification_store or FakeVerificationStore()
         self.turnstile = turnstile or FakeTurnstile()
+        self.captcha_store = captcha_store or FakeCaptchaStore()
         self.challenge_store = FakeChallengeStore()
         self.service = AuthenticationService(
             self.user_repo,
@@ -420,9 +466,11 @@ class _Harness:
             self.audit_svc,
             self.email_svc,
             self.session_svc,
+            self.membership_svc,
             self.verification_store,
             self.turnstile,
             mfa_challenge_store=self.challenge_store,
+            captcha_store=self.captcha_store,
         )
 
 
@@ -792,21 +840,51 @@ class TestWizard:
 
         with pytest.raises(ValidationError):
             await harness.service.signup_set_password(
-                email="owner@neworg.com", verification_token="vt", password="short"
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="short",
+                captcha_id="cap",
+                captcha_answer="ABCDE",
             )
         with pytest.raises(ValidationError):
             await harness.service.signup_set_password(
-                email="owner@neworg.com", verification_token="vt", password="alllowercase1!"
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="alllowercase1!",
+                captcha_id="cap",
+                captcha_answer="ABCDE",
             )
+
+    async def test_set_password_rejects_invalid_captcha(self) -> None:
+        harness = _Harness(captcha_store=FakeCaptchaStore(valid=False))
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
+
+        with pytest.raises(ValidationError):
+            await harness.service.signup_set_password(
+                email="owner@neworg.com",
+                verification_token="vt",
+                password="ValidPass123!",
+                captcha_id="cap",
+                captcha_answer="WRONG",
+            )
+        assert harness.captcha_store.verifications == [("cap", "WRONG")]
+        payload = await harness.verification_store.get_verification_token("vt")
+        assert payload is not None
+        assert payload["password_hash"] == ""
 
     async def test_set_password_stores_hash(self) -> None:
         harness = _Harness()
         await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "")
 
         await harness.service.signup_set_password(
-            email="owner@neworg.com", verification_token="vt", password="ValidPass123!"
+            email="owner@neworg.com",
+            verification_token="vt",
+            password="ValidPass123!",
+            captcha_id="cap",
+            captcha_answer="ABCDE",
         )
 
+        assert harness.captcha_store.verifications == [("cap", "ABCDE")]
         payload = await harness.verification_store.get_verification_token("vt")
         assert payload is not None
         assert payload["password_hash"] != "ValidPass123!"
@@ -822,7 +900,11 @@ class TestWizard:
         ]
         assert vt is not None
         await harness.service.signup_set_password(
-            email="owner@neworg.com", verification_token=vt, password="ValidPass123!"
+            email="owner@neworg.com",
+            verification_token=vt,
+            password="ValidPass123!",
+            captcha_id="cap",
+            captcha_answer="ABCDE",
         )
 
         result = await harness.service.signup_create_organization(
@@ -857,6 +939,13 @@ class TestWizard:
         assert harness.role_repo.grants == [
             (str(user.id), str(owner_role.id), str(tenant.id), str(tenant.id))
         ]
+
+        assert len(harness.membership_svc.active) == 1
+        membership = harness.membership_svc.active[0]
+        assert membership.user_id == user.id
+        assert membership.tenant_id == tenant.id
+        assert membership.role_id == owner_role.id
+        assert membership.status == MembershipStatus.ACTIVE
 
         assert await harness.verification_store.get_verification_token(vt) is None
         assert harness.audit_svc.events == [

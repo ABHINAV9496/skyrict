@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { demoSessionKey } from "@/config";
 import { countries, industries } from "@/config/onboarding";
 import { checkWorkspaceSlug, createOrganization } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
@@ -71,8 +69,8 @@ function OrganizationStep({
   vt: string;
   plan: string;
 }) {
-  const router = useRouter();
   const [provisioning, setProvisioning] = useState(false);
+  const [createdSlug, setCreatedSlug] = useState<string>();
   const slugTouched = useRef(false);
   const [slugAvailability, setSlugAvailability] = useState<
     "idle" | "checking" | "available" | "taken"
@@ -153,9 +151,13 @@ function OrganizationStep({
   }, [workspaceSlug]);
 
   function handleCompleteProvisioning() {
-    localStorage.setItem(demoSessionKey, "true");
-    const next = new URLSearchParams({ email });
-    router.push(`/setup-mfa?${next.toString()}`);
+    if (!createdSlug) return;
+    const { protocol, hostname, port } = window.location;
+    const apex = hostname.split(".").slice(1).join(".") || hostname;
+    const target = `${protocol}//${createdSlug}.signin.${apex}${
+      port ? `:${port}` : ""
+    }/signin?email=${encodeURIComponent(email)}`;
+    window.location.assign(target);
   }
 
   async function onSubmit(values: OrganizationValues) {
@@ -167,25 +169,37 @@ function OrganizationStep({
       });
       return;
     }
-    await createOrganization({
-      email,
-      verificationToken: vt,
-      planId: plan,
-      companyName: values.companyName,
-      industry: values.industry,
-      workspaceSlug: values.workspaceSlug,
-      ownerFullName: values.ownerFullName,
-      phoneCountry: values.phoneCountry,
-      phoneNumber: values.phoneNumber,
-      address: {
-        country: values.addressCountry,
-        addressLine1: values.addressLine1,
-        addressLine2: values.addressLine2 || undefined,
-        city: values.city,
-        state: values.state,
-        postalCode: values.postalCode,
-      },
-    });
+    try {
+      const result = await createOrganization({
+        email,
+        verificationToken: vt,
+        planId: plan,
+        companyName: values.companyName,
+        industry: values.industry,
+        workspaceSlug: values.workspaceSlug,
+        ownerFullName: values.ownerFullName,
+        phoneCountry: values.phoneCountry,
+        phoneNumber: values.phoneNumber,
+        address: {
+          country: values.addressCountry,
+          addressLine1: values.addressLine1,
+          addressLine2: values.addressLine2 || undefined,
+          city: values.city,
+          state: values.state,
+          postalCode: values.postalCode,
+        },
+      });
+      setCreatedSlug(result.tenantSlug);
+    } catch (err) {
+      setError("root", {
+        type: "manual",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not create your workspace. Please try again.",
+      });
+      return;
+    }
     setProvisioning(true);
   }
 
@@ -436,6 +450,15 @@ function OrganizationStep({
         I&apos;m authorized to set up this organization and make billing decisions
         on its behalf.
       </CheckboxRow>
+
+      {errors.root ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          {errors.root.message}
+        </div>
+      ) : null}
 
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Create my workspace

@@ -36,6 +36,7 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # Relationships
     users = relationship("UserModel", back_populates="tenant", lazy="selectin")
+    memberships = relationship("MembershipModel", back_populates="tenant", lazy="selectin")
     roles = relationship("RoleModel", back_populates="tenant", lazy="selectin")
     user_roles = relationship("UserRoleModel", back_populates="tenant", lazy="selectin")
     sessions = relationship("SessionModel", back_populates="tenant", lazy="selectin")

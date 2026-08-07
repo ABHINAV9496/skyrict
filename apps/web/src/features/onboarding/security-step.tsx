@@ -7,8 +7,12 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyRound } from "lucide-react";
 
-import { CaptchaChallenge } from "@/components/onboarding/captcha-challenge";
-import { completeSecurityStep } from "@/lib/api/auth-api";
+import {
+  CaptchaChallenge,
+  type CaptchaValue,
+} from "@/components/onboarding/captcha-challenge";
+import { ApiError, completeSecurityStep } from "@/lib/api/auth-api";
+import { setWizardCredentials } from "@/lib/auth/wizard-session";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { PasswordField } from "@/lib/auth/PasswordField";
@@ -43,8 +47,10 @@ function SecurityStep({
 }) {
   const router = useRouter();
 
-  const [captchaValid, setCaptchaValid] = useState(false);
+  const [captcha, setCaptcha] = useState<CaptchaValue | null>(null);
   const [captchaError, setCaptchaError] = useState(false);
+  const [captchaRevision, setCaptchaRevision] = useState(0);
+  const [submitError, setSubmitError] = useState("");
 
   const {
     register,
@@ -59,18 +65,32 @@ function SecurityStep({
   const password = watch("password");
 
   function onSubmit(values: SecurityValues) {
-    if (!captchaValid) {
+    if (!captcha) {
       setCaptchaError(true);
       return;
     }
+    setSubmitError("");
     completeSecurityStep({
       email,
       verificationToken: vt,
       password: values.password,
-    }).then(() => {
-      const next = new URLSearchParams({ email, vt });
-      router.push(`/register/plan?${next.toString()}`);
-    });
+      captchaId: captcha.captchaId,
+      captchaAnswer: captcha.answer,
+    })
+      .then(() => {
+        setWizardCredentials({ email, password: values.password });
+        const next = new URLSearchParams({ email, vt });
+        router.push(`/register/plan?${next.toString()}`);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && (error.status === 422 || error.status === 401)) {
+          setCaptchaError(true);
+          setCaptchaRevision((revision) => revision + 1);
+        }
+        setSubmitError(
+          error instanceof ApiError ? error.message : "Something went wrong. Try again.",
+        );
+      });
   }
 
   return (
@@ -101,10 +121,12 @@ function SecurityStep({
 
       <div className="space-y-1.5 pt-1">
         <CaptchaChallenge
-          onValidChange={(valid) => {
-            setCaptchaValid(valid);
-            if (valid) setCaptchaError(false);
+          revision={captchaRevision}
+          onCaptchaChange={(value) => {
+            setCaptcha(value);
+            if (value) setCaptchaError(false);
           }}
+          onError={(failed) => setCaptchaError(failed)}
         />
         {captchaError ? (
           <p className="text-xs font-medium text-destructive">
@@ -112,6 +134,10 @@ function SecurityStep({
           </p>
         ) : null}
       </div>
+
+      {submitError ? (
+        <p className="text-xs font-medium text-destructive">{submitError}</p>
+      ) : null}
 
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Continue

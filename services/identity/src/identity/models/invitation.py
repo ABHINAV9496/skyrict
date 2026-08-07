@@ -36,6 +36,11 @@ class InvitationModel(UUIDPrimaryKeyMixin, Base):
         nullable=False,
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    membership_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -48,5 +53,6 @@ class InvitationModel(UUIDPrimaryKeyMixin, Base):
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="invitations")
+    membership = relationship("MembershipModel", foreign_keys=[membership_id])
     created_by = relationship("UserModel", foreign_keys=[created_by_user_id])
     used_by = relationship("UserModel", foreign_keys=[used_by_user_id])

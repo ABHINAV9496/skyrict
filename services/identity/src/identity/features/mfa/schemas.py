@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from identity.core.mfa_providers import PROVIDER_TOTP, available_provider_keys
+
 
 class MFASetupResponse(BaseModel):
     """POST /mfa/setup — TOTP secret, otpauth URI, and one-time backup codes.
@@ -28,7 +30,23 @@ class MFAVerifyResponse(BaseModel):
     """Result of MFA verification during setup/enablement."""
 
     verified: bool = True
-    method: str = Field(..., description='Verified method: "totp" or "backup_code"')
+    method: str = Field(
+        ...,
+        description=f"Verified provider key: {PROVIDER_TOTP!r} or {available_provider_keys()!r}",
+    )
+
+
+class MFABackupCodesResponse(BaseModel):
+    """POST /mfa/backup-codes — freshly generated one-time backup codes.
+
+    Returned in plaintext exactly once; only Argon2id hashes are persisted.
+    Generating a new set invalidates every previously issued code.
+    """
+
+    backup_codes: list[str] = Field(
+        ...,
+        description="10 fresh one-time backup codes (shown once; previous codes are invalidated)",
+    )
 
 
 class MFADisableRequest(BaseModel):

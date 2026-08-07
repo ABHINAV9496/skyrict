@@ -1,5 +1,3 @@
-export const demoSessionKey = "skyrict.demo.session";
-
 export const site = {
   name: "Skyrict",
   tagline: "AI Business Operating System",
@@ -46,7 +44,6 @@ export const footerColumns: FooterColumn[] = [
   {
     title: "Company",
     links: [
-      { label: "Sign in", href: "/login" },
       { label: "Create account", href: "/register" },
       { label: "Contact", soon: true },
     ],

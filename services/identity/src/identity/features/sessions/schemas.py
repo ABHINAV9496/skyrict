@@ -16,7 +16,8 @@ class SessionResponse(BaseModel):
     tenant_id: UUID
     ip_address: str | None = None
     user_agent: str | None = None
-    is_active: bool
+    status: str
+    is_trusted: bool = False
     created_at: datetime
     last_active_at: datetime
     expires_at: datetime | None = None
@@ -41,3 +42,9 @@ class SessionRevokeAllRequest(BaseModel):
     """POST /sessions/revoke-all — revoke all sessions except current."""
 
     except_current: bool = True
+
+
+class SessionTrustRequest(BaseModel):
+    """PATCH /sessions/{session_id}/trusted — mark a device as recognized."""
+
+    is_trusted: bool

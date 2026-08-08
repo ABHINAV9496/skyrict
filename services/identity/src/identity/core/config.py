@@ -161,6 +161,35 @@ class Settings(BaseSettings):
         description="From address for transactional email",
     )
 
+    # --- Security alert email ---
+    GEOIP_DB_PATH: str = Field(
+        default="",
+        description=(
+            "Path to a MaxMind GeoLite2-City.mmdb database. Empty disables "
+            "geolocation — new-login emails then show only the masked IP. "
+            "Download with scripts/geolite2/download-geolite2.py."
+        ),
+    )
+    SECURITY_CONSOLE_BASE_URL: str = Field(
+        default="",
+        description=(
+            "Base origin (no trailing slash, no path) for security-action "
+            "links in alert emails. May be a literal base or contain a "
+            "{slug} placeholder, e.g. 'https://{slug}.skyrict.com'. Empty "
+            "auto-derives per environment: https://{slug}.{BASE_DOMAIN} in "
+            "staging/production, http://{slug}.localhost:3000 in dev/test. "
+            "Buttons are omitted when no base can be resolved."
+        ),
+    )
+    SECURITY_CONSOLE_DEV_PORT: int = Field(
+        default=3000,
+        description="port used in auto-derived alert URLs for dev/test (apex: localhost)",
+    )
+    SECURITY_SUPPORT_EMAIL: str = Field(
+        default="security@skyrict.dev",
+        description="Support contact shown in the footer of security alert emails",
+    )
+
     # --- Onboarding wizard (SKY-30) ---
     TURNSTILE_SITE_KEY: str = Field(
         default="",

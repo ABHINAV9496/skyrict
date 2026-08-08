@@ -25,9 +25,7 @@ depends_on = None
 
 def upgrade() -> None:
     """Create the memberships table with enum, backfill, and RLS."""
-    membership_status = postgresql.ENUM(
-        "invited", "active", "suspended", name="membership_status"
-    )
+    membership_status = postgresql.ENUM("invited", "active", "suspended", name="membership_status")
 
     op.create_table(
         "memberships",

@@ -41,6 +41,46 @@ function refreshAccessToken(): Promise<boolean> {
   return refreshPromise;
 }
 
+interface HydratedSession {
+  accessToken: string;
+  user: Record<string, unknown> | null;
+}
+
+let sessionPromise: Promise<HydratedSession | null> | null = null;
+
+/**
+ * Restore the in-memory access token from the httpOnly session cookie via
+ * /api/auth/session, single-flight. Every consumer (SessionProvider and the
+ * authenticated /api/v1 client) shares one request so that exactly one
+ * server-side refresh-token rotation happens per page load — concurrent
+ * rotations from the same token would be flagged as reuse and revoke the
+ * whole token family.
+ */
+export function ensureSession(): Promise<HydratedSession | null> {
+  if (getAccessToken()) {
+    return Promise.resolve({ accessToken: getAccessToken() as string, user: null });
+  }
+  if (!sessionPromise) {
+    sessionPromise = fetch("/api/auth/session", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          authenticated?: boolean;
+          accessToken?: string | null;
+          user?: Record<string, unknown> | null;
+        };
+        if (response.ok && payload.authenticated && payload.accessToken) {
+          setAccessToken(payload.accessToken);
+          return { accessToken: payload.accessToken, user: payload.user ?? null };
+        }
+        return null;
+      })
+      .finally(() => {
+        sessionPromise = null;
+      });
+  }
+  return sessionPromise;
+}
+
 async function toResult<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as {
     data?: T | null;
@@ -68,13 +108,30 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   let response = await fetch(path, { ...options, headers });
 
-  if (response.status === 401 && token) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      headers.set("Authorization", `Bearer ${getAccessToken() ?? ""}`);
-      response = await fetch(path, { ...options, headers });
+  // A 401 means the access token is missing (fresh page load on the workspace
+  // origin, where the token only lives in memory) or stale. Hydrate/refresh
+  // silently through the BFF — the refresh token lives in an httpOnly cookie —
+  // then retry once. If the refresh itself fails the session is gone and the
+  // caller surfaces the 401. Both recovery paths are single-flight so exactly
+  // one server-side token rotation happens at a time.
+  if (response.status === 401) {
+    if (token) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        const fresh = getAccessToken();
+        headers.set("Authorization", `Bearer ${fresh ?? ""}`);
+        response = await fetch(path, { ...options, headers });
+      } else {
+        setAccessToken(null);
+      }
     } else {
-      setAccessToken(null);
+      const session = await ensureSession();
+      if (session) {
+        headers.set("Authorization", `Bearer ${session.accessToken}`);
+        response = await fetch(path, { ...options, headers });
+      } else {
+        setAccessToken(null);
+      }
     }
   }
 

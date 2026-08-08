@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { AuthUser } from "@/lib/api/auth-api";
+import { ensureSession } from "@/lib/api/http";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 export type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -30,15 +31,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const restore = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/session", { cache: "no-store" });
-      const payload = (await response.json().catch(() => ({}))) as {
-        authenticated?: boolean;
-        accessToken?: string | null;
-        user?: AuthUser | null;
-      };
-      if (response.ok && payload.authenticated && payload.accessToken) {
-        setAccessToken(payload.accessToken);
-        setUser(payload.user ?? null);
+      // Single-flight with the /api/v1 client: exactly one server-side token
+      // rotation per page load, so parallel hydrations never race the refresh
+      // token (a reuse would revoke the whole token family).
+      const session = await ensureSession();
+      if (session) {
+        setAccessToken(session.accessToken);
+        setUser((session.user as AuthUser | null) ?? null);
         setStatus("authenticated");
       } else {
         setAccessToken(null);

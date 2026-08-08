@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 security = HTTPBearer(auto_error=False)
 
 # MFA enrollment endpoints are exempt from the enforcement gate so a user who
-# must set up MFA (owner or tenant policy) can actually finish enrollment.
+# must set up MFA (mandatory for everyone) can actually finish enrollment.
 _MFA_EXEMPT_PATHS = frozenset({"/api/v1/mfa/setup", "/api/v1/mfa/verify"})
 
 
@@ -63,23 +63,15 @@ async def _enforce_mfa_enrollment(*, db: AsyncSession, user_id: str, tenant_id: 
     Block authenticated calls while forced MFA is not yet set up.
 
     Raises:
-        MFARequiredError: When MFA is mandatory for this account (tenant owner
-            or tenant-level policy) but not yet enabled.
+        MFARequiredError: When MFA is mandatory for this account (mandatory
+            for everyone) but not yet enabled.
     """
     from identity.core.security import mfa_is_required
 
     user = await UserRepository(db).get_by_id(user_id)
     if user is None:
         return
-    roles = await RoleRepository(db).get_roles_for_user(user_id, tenant_id)
-    tenant = await TenantRepository(db).get_by_id(tenant_id)
-    if mfa_is_required(
-        roles=roles,
-        mfa_enabled=user.mfa_enabled,
-        tenant_requires_all_members=(
-            tenant.mfa_required_for_all_members if tenant is not None else False
-        ),
-    ):
+    if mfa_is_required(mfa_enabled=user.mfa_enabled):
         raise MFARequiredError()
 
 
@@ -112,9 +104,9 @@ async def get_current_user(
     route is reached without going through the middleware.
 
     Enforces the MFA gate on every authenticated route except the enrollment
-    endpoints (``/api/v1/mfa/setup``, ``/api/v1/mfa/verify``): accounts that
-    must enroll (tenant owner or tenant policy) get 403 MFARequiredError until
-    MFA is enabled.
+    endpoints (``/api/v1/mfa/setup``, ``/api/v1/mfa/verify``): accounts without
+    MFA enabled (mandatory for everyone) get 403 MFARequiredError until MFA is
+    enabled.
 
     Raises:
         AuthenticationError: If no token, token is invalid, or token is expired.

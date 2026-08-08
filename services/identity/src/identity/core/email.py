@@ -159,7 +159,7 @@ class SmtpEmailService:
             )
             html = (
                 f"<p>Hi {full_name},</p><p>Please verify your email address by "
-                f"clicking the link below:</p><p><a href=\"{link}\">Verify "
+                f'clicking the link below:</p><p><a href="{link}">Verify '
                 f"email</a></p>"
             )
         else:
@@ -191,7 +191,7 @@ class SmtpEmailService:
             html = (
                 f"<p>{inviter_name} invited you to "
                 f"<strong>{organization_name}</strong>.</p>"
-                f"<p><a href=\"{link}\">Accept invitation</a></p>"
+                f'<p><a href="{link}">Accept invitation</a></p>'
             )
         else:
             text = (
@@ -203,9 +203,7 @@ class SmtpEmailService:
                 f"<strong>{organization_name}</strong>.</p>"
                 f"<p>Your invitation token is <strong>{token}</strong>.</p>"
             )
-        await self._deliver(
-            to, f"{inviter_name} invited you to {organization_name}", text, html
-        )
+        await self._deliver(to, f"{inviter_name} invited you to {organization_name}", text, html)
 
     async def send_security_alert(
         self,

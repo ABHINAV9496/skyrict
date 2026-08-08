@@ -69,6 +69,10 @@ os.environ["IDENTITY_DEBUG"] = "false"
 # Tests must use the log-only email transport regardless of the dev container's
 # SMTP config, so delivery side effects never depend on MailHog being up.
 os.environ["IDENTITY_EMAIL_SMTP_HOST"] = ""
+# Tests must bypass the real Turnstile gate regardless of the dev .env's secret:
+# with an empty secret the verifier always passes in the TEST environment, which
+# mirrors how integration tests drive the wizard's email step (plaintext code).
+os.environ["IDENTITY_TURNSTILE_SECRET_KEY"] = ""
 os.environ.setdefault(
     "IDENTITY_MFA_ENCRYPTION_KEY",
     Fernet.generate_key().decode("utf-8"),

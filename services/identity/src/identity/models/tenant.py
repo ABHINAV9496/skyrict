@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, String, false, true
+from sqlalchemy import Boolean, CheckConstraint, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,9 +30,6 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
     billing_address: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    mfa_required_for_all_members: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false()
-    )
 
     # Relationships
     users = relationship("UserModel", back_populates="tenant", lazy="selectin")

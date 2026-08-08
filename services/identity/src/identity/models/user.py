@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, false, true
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import ARRAY, TEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +43,9 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     phone_country: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
     mfa_backup_codes: Mapped[list[str | None] | None] = mapped_column(ARRAY(TEXT), nullable=True)
+    onboarding_dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     tenant = relationship("TenantModel", back_populates="users")

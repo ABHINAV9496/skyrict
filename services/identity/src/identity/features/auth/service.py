@@ -221,18 +221,10 @@ class AuthenticationService:
                 "user": user,
             }
 
-        # Forced MFA: tenant owners must always enroll, and other members are
-        # forced when the tenant configures enforcement. The flag clears only
-        # once MFA is actually enabled, so tokens issued now are gated until then.
-        roles = await self.role_repo.get_roles_for_user(user.id, tenant_id)
-        tenant = await self.tenant_repo.get_by_id(tenant_id)
-        mfa_required = mfa_is_required(
-            roles=roles,
-            mfa_enabled=False,
-            tenant_requires_all_members=(
-                tenant.mfa_required_for_all_members if tenant is not None else False
-            ),
-        )
+        # Forced MFA: every account without MFA enabled must enroll, regardless
+        # of role or tenant policy. The flag clears only once MFA is actually
+        # enabled, so tokens issued now are gated until then.
+        mfa_required = mfa_is_required(mfa_enabled=False)
 
         result = await self.complete_authenticated_login(
             user=user,
@@ -621,7 +613,7 @@ class TokenService:
         user_id = payload["sub"]
         session_id = payload.get("session_id")
         session = await self.session_service.get_session(session_id) if session_id else None
-        if session is not None and session.user_id == uuid.UUID(user_id):
+        if session is not None and session.id is not None and session.user_id == uuid.UUID(user_id):
             # Idempotent logout — already-revoked sessions are fine.
             with suppress(SessionNotFoundError):
                 await self.session_service.revoke_session(user_id, session.id)

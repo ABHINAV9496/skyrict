@@ -139,6 +139,10 @@ async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str]
                 full_name="Alice Acme",
                 is_active=True,
                 is_verified=True,
+                # MFA is mandatory for every account; this fixture stands in for
+                # an established user who has already completed enrollment so
+                # isolation tests exercise routing, not the MFA gate.
+                mfa_enabled=True,
             )
             session.add(row)
             await session.flush()

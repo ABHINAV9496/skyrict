@@ -1,13 +1,16 @@
-"""Security-console URL derivation for alert emails — tenant + environment aware.
+"""Console/signin URL derivation for transactional email — tenant + environment aware.
 
-The workspace surface lives on ``{tenant_slug}.{apex}``, so action buttons in
-security-alert emails must resolve to the *tenant's* console, not a shared one.
-Resolution order (see ``Settings.SECURITY_CONSOLE_BASE_URL``):
+The workspace surface lives on ``{tenant_slug}.{apex}`` and the signin surface
+on ``{tenant_slug}.signin.{apex}``, so links in email must resolve to the
+*tenant's* surfaces, not a shared one. Resolution order (see
+``Settings.SECURITY_CONSOLE_BASE_URL``):
 
 1. Explicit override — a literal base, or one containing a ``{slug}``
-   placeholder that is substituted with the tenant slug.
-2. Staging/production: ``https://{slug}.{BASE_DOMAIN}``.
-3. Dev/test: ``http://{slug}.localhost:{SECURITY_CONSOLE_DEV_PORT}``.
+   placeholder that is substituted with the tenant slug (console only).
+2. Staging/production: ``https://{slug}.{BASE_DOMAIN}`` (console) /
+   ``https://{slug}.signin.{BASE_DOMAIN}`` (signin).
+3. Dev/test: ``http://{slug}.localhost:{SECURITY_CONSOLE_DEV_PORT}`` (and
+   ``http://{slug}.signin.localhost:{port}`` for signin).
 
 Returns ``None`` when no tenant slug or base can be resolved — callers then
 omit the action buttons rather than emit a dead link.
@@ -16,6 +19,20 @@ omit the action buttons rather than emit a dead link.
 from __future__ import annotations
 
 from identity.core.config import Environment, settings
+
+
+def _env_origin(*, tenant_slug: str, signin: bool) -> str | None:
+    """Environment-derived origin (no override, no path) for a tenant surface."""
+    surface = ".signin" if signin else ""
+    label = f"{tenant_slug}{surface}"
+
+    if settings.ENVIRONMENT in (Environment.STAGING, Environment.PRODUCTION):
+        apex = settings.BASE_DOMAIN.strip()
+        if not apex:
+            return None
+        return f"https://{label}.{apex}"
+
+    return f"http://{label}.localhost:{settings.SECURITY_CONSOLE_DEV_PORT}"
 
 
 def security_console_base_url(*, tenant_slug: str | None) -> str | None:
@@ -27,10 +44,11 @@ def security_console_base_url(*, tenant_slug: str | None) -> str | None:
     if override:
         return override.format(slug=tenant_slug) if "{slug}" in override else override
 
-    if settings.ENVIRONMENT in (Environment.STAGING, Environment.PRODUCTION):
-        apex = settings.BASE_DOMAIN.strip()
-        if not apex:
-            return None
-        return f"https://{tenant_slug}.{apex}"
+    return _env_origin(tenant_slug=tenant_slug, signin=False)
 
-    return f"http://{tenant_slug}.localhost:{settings.SECURITY_CONSOLE_DEV_PORT}"
+
+def security_console_signin_origin(*, tenant_slug: str | None) -> str | None:
+    """Absolute signin-surface origin (no path) for a tenant, e.g. invite links."""
+    if not tenant_slug:
+        return None
+    return _env_origin(tenant_slug=tenant_slug, signin=True)

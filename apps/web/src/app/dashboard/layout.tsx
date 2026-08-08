@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { signinUrl } from "@/lib/server/urls";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { SESSION_COOKIE } from "@/lib/server/auth";
+import { signinUrl } from "@/lib/server/urls";
 
 export default async function DashboardLayout({
   children,
@@ -14,12 +15,5 @@ export default async function DashboardLayout({
     redirect(await signinUrl("Your session could not be established. Please sign in again."));
   }
 
-  return (
-    <div>
-      <nav>
-        <span>Skyrict Dashboard</span>
-      </nav>
-      <main>{children}</main>
-    </div>
-  );
+  return <DashboardShell>{children}</DashboardShell>;
 }

@@ -1,8 +1,13 @@
+import { Bot } from "lucide-react";
+
+import { PageHeader } from "@/components/dashboard/page-header";
+
 export default function AgentsPage() {
   return (
-    <main>
-      <h1>AI Agents</h1>
-      <p>Autonomous intelligence agents</p>
-    </main>
+    <PageHeader
+      title="AI Agents"
+      description="Autonomous intelligence agents that reason across your business and the market."
+      icon={Bot}
+    />
   );
 }

@@ -75,6 +75,13 @@ function TurnstileWidget({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
 
+  // Hold the latest callback in a ref so the widget renders exactly once per
+  // siteKey. Parent re-renders (e.g. typing in the email field) recreate the
+  // inline onTokenChange arrow; without this the effect would tear down and
+  // re-render the Turnstile iframe on every keystroke, resetting the token.
+  const onTokenChangeRef = useRef(onTokenChange);
+  onTokenChangeRef.current = onTokenChange;
+
   useEffect(() => {
     let cancelled = false;
     let widgetId: string | undefined;
@@ -85,9 +92,9 @@ function TurnstileWidget({
         widgetId = api.render(containerRef.current, {
           sitekey: siteKey,
           theme: "auto",
-          callback: (token) => onTokenChange(token),
-          "expired-callback": () => onTokenChange(null),
-          "error-callback": () => onTokenChange(null),
+          callback: (token) => onTokenChangeRef.current(token),
+          "expired-callback": () => onTokenChangeRef.current(null),
+          "error-callback": () => onTokenChangeRef.current(null),
         });
         widgetIdRef.current = widgetId;
         setLoading(false);
@@ -104,7 +111,7 @@ function TurnstileWidget({
         window.turnstile.remove(widgetId);
       }
     };
-  }, [siteKey, onTokenChange]);
+  }, [siteKey]);
 
   if (error) {
     return (

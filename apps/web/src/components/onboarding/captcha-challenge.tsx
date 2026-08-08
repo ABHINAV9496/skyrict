@@ -44,7 +44,10 @@ function CaptchaChallenge({
 
   useEffect(() => {
     loadCaptcha();
-  }, [loadCaptcha, revision]);
+    // Only refresh when the parent explicitly bumps `revision` (e.g. after a
+    // failed submit). Parent re-renders while typing must not reset the image.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision]);
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const next = event.target.value;

@@ -35,6 +35,16 @@ async def update_my_profile(
     return ResponseEnvelope(data=UserResponse.model_validate(user), message="Profile updated")
 
 
+@router.post("/me/onboarding/dismiss", response_model=ResponseEnvelope[UserResponse])
+async def dismiss_onboarding(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    user_svc: UserService = Depends(get_user_service),
+) -> ResponseEnvelope[UserResponse]:
+    """Dismiss the onboarding wizard for the current user."""
+    user = await user_svc.dismiss_onboarding(current_user["user_id"])
+    return ResponseEnvelope(data=UserResponse.model_validate(user), message="Onboarding dismissed")
+
+
 @router.post("/me/password")
 async def change_password(
     body: ChangePasswordRequest,

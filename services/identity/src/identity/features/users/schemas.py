@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_verified: bool
     mfa_enabled: bool
+    onboarding_dismissed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

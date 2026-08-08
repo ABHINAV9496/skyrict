@@ -10,6 +10,7 @@ from PIL import Image
 
 from identity.features.auth.captcha import captcha as captcha_module
 from identity.features.auth.captcha.captcha import (
+    _EXCLUDED_FONTS,
     CAPTCHA_ALPHABET,
     CAPTCHA_FONT_SIZE,
     CAPTCHA_HEIGHT,
@@ -86,7 +87,10 @@ class TestGenerator:
         assert all(r == g == b for r, g, b in pixels), f"{style} contains color pixels"
 
     def test_render_varies_between_challenges_of_same_style(self) -> None:
-        assert generate_captcha(style="classic").image_png != generate_captcha(style="classic").image_png
+        assert (
+            generate_captcha(style="classic").image_png
+            != generate_captcha(style="classic").image_png
+        )
 
     def test_background_is_not_blank(self) -> None:
         captcha = generate_captcha(style="classic")
@@ -113,7 +117,15 @@ class TestGenerator:
         fonts_dir = Path(captcha_module.__file__).parent / "fonts"
         manager = FontManager(fonts_dir=fonts_dir)
         fonts = manager._load(CAPTCHA_FONT_SIZE)
-        assert len(fonts) >= 15
+        bundled_usable = {
+            p.name.upper()
+            for p in fonts_dir.iterdir()
+            if p.suffix.lower() == ".ttf" and p.name.upper() not in _EXCLUDED_FONTS
+        }
+        # Enough variety for an unpredictable pick, and no bundled font may be
+        # silently dropped (load failure or missing glyphs).
+        assert len(fonts) >= 10
+        assert len(fonts) == len(bundled_usable)
         assert all(FontManager._covers_alphabet(font) for font in fonts)
 
 

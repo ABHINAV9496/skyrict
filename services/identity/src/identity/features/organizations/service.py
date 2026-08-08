@@ -16,10 +16,7 @@ if TYPE_CHECKING:
     import uuid
 
     from identity.features.organizations.ports import TenantRepositoryPort
-    from identity.features.organizations.schemas import (
-        TenantCreateRequest,
-        TenantSettingsUpdateRequest,
-    )
+    from identity.features.organizations.schemas import TenantCreateRequest
 
 
 class TenantService:
@@ -42,16 +39,3 @@ class TenantService:
 
         tenant = Tenant(name=body.name, slug=body.slug)
         return await self.tenant_repo.create(tenant)
-
-    async def update_settings(
-        self, tenant_id: str | uuid.UUID, body: TenantSettingsUpdateRequest
-    ) -> Tenant:
-        """Update tenant security settings.
-
-        Raises:
-            TenantNotFoundError: If the tenant does not exist.
-        """
-        return await self.tenant_repo.update_settings(
-            tenant_id,
-            mfa_required_for_all_members=body.mfa_required_for_all_members,
-        )

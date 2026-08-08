@@ -35,3 +35,17 @@ class InvitationResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class InvitationSummaryResponse(BaseModel):
+    """Invitation list item — never exposes the plaintext token."""
+
+    id: UUID
+    email: EmailStr
+    role_name: str
+    expires_at: datetime
+    used_at: datetime | None
+    used_by_user_id: UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

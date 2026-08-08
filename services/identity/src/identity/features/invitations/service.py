@@ -57,6 +57,7 @@ class InvitationService:
         created_by_user_id: str | uuid.UUID,
         inviter_name: str = "",
         organization_name: str = "",
+        base_url: str | None = None,
     ) -> tuple[Invitation, str]:
 
         role = await self.role_repo.get_by_name(tenant_id, role_name)
@@ -96,7 +97,7 @@ class InvitationService:
             inviter_name=inviter_name,
             organization_name=organization_name,
             token=token,
-            base_url=settings.EMAIL_VERIFICATION_BASE_URL or None,
+            base_url=base_url or settings.EMAIL_VERIFICATION_BASE_URL or None,
         )
 
         assert invitation.id is not None
@@ -108,6 +109,12 @@ class InvitationService:
         )
 
         return invitation, token
+
+    async def list_invitations(
+        self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
+    ) -> list[Invitation]:
+        """List invitations for a tenant, newest first."""
+        return await self.invitation_repo.list_by_tenant(tenant_id, offset=offset, limit=limit)
 
     async def accept_invitation(
         self,

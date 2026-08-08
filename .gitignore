@@ -99,6 +99,9 @@ service-account*.json
 # Local dev-only files
 .dev/
 
+# Local runtime data (GeoLite2 DB etc. — see scripts/geolite2)
+.local/
+
 # ---------- Docker ----------
 docker-compose.override.yml
 docker-compose.override.yaml

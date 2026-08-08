@@ -45,6 +45,7 @@ services:
       # Outbound email → MailHog container (Web UI: http://localhost:8025).
       IDENTITY_EMAIL_SMTP_HOST: mailhog
       IDENTITY_EMAIL_SMTP_PORT: "1025"
+      # Security-alert CTAs auto-derive as http://{slug}.localhost:3000 in dev.
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src

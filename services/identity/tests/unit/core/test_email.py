@@ -10,6 +10,7 @@ import structlog
 
 import identity.core.email as email_mod
 from identity.core.email import LogEmailService, SmtpEmailService
+from identity.core.email_templates import SecurityAlert
 from identity.core.logging import configure_identity_logging
 
 
@@ -127,3 +128,67 @@ async def test_log_service_logs_otp_code(capsys) -> None:
     assert parsed["event"] == "email.otp.sent"
     assert parsed["otp_code"] == "112233"
     assert parsed["to"] == "dave@test.com"
+
+
+async def test_smtp_service_sends_security_alert_with_html(monkeypatch) -> None:
+    fake = FakeSMTP()
+    monkeypatch.setattr(smtplib, "SMTP", lambda *a, **k: fake)
+
+    await _service().send_security_alert(
+        alert=SecurityAlert(
+            to="erin@test.com",
+            full_name="Erin User",
+            event_type="new_device",
+            ip_address="203.0.113.***",
+            location="Bengaluru, Karnataka, India",
+            browser="Chrome 126",
+            os="Windows 11",
+            device="Unknown (Desktop)",
+            auth_method="Password + MFA",
+            session_id_masked="3f9a2c1d••••",
+            date_time="Aug 8, 2026 at 2:07 PM UTC",
+        )
+    )
+
+    assert len(fake.sent) == 1
+    message = fake.sent[0]
+    assert message["To"] == "erin@test.com"
+    assert message["Subject"] == "New login detected on your Skyrict account"
+
+    plain = message.get_body(preferencelist=("plain",))
+    assert plain is not None
+    assert "New login detected" in plain.get_content()
+
+    html = message.get_body(preferencelist=("html",))
+    assert html is not None
+    body = html.get_content()
+    assert "<!DOCTYPE html>" in body
+    assert "New login detected" in body
+    assert "203.0.113.***" in body
+
+
+async def test_log_service_logs_security_alert_details(capsys) -> None:
+    configure_identity_logging(log_level="INFO", json_output=True)
+    email_mod.logger = structlog.get_logger("identity.email")
+
+    await LogEmailService().send_security_alert(
+        alert=SecurityAlert(
+            to="erin@test.com",
+            full_name="Erin User",
+            event_type="new_device",
+            ip_address="203.0.113.***",
+            location="Bengaluru, Karnataka, India",
+            browser="Chrome 126",
+            os="Windows 11",
+            device="Unknown (Desktop)",
+            auth_method="Password + MFA",
+            session_id_masked="3f9a2c1d••••",
+            date_time="Aug 8, 2026 at 2:07 PM UTC",
+        )
+    )
+
+    parsed = _capture_json_line(capsys)
+    assert parsed["event"] == "email.security_alert.sent"
+    assert parsed["ip_address"] == "203.0.113.***"
+    assert parsed["location"] == "Bengaluru, Karnataka, India"
+    assert parsed["browser"] == "Chrome 126"

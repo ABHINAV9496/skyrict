@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -64,6 +64,15 @@ function SecurityStep({
 
   const password = watch("password");
 
+  const handleCaptchaChange = useCallback((value: CaptchaValue | null) => {
+    setCaptcha(value);
+    if (value) setCaptchaError(false);
+  }, []);
+
+  const handleCaptchaError = useCallback((failed: boolean) => {
+    setCaptchaError(failed);
+  }, []);
+
   function onSubmit(values: SecurityValues) {
     if (!captcha) {
       setCaptchaError(true);
@@ -100,7 +109,7 @@ function SecurityStep({
           label="Password"
           id="password"
           autoComplete="new-password"
-          placeholder="12+ characters"
+          placeholder="Password"
           icon={KeyRound}
           error={errors.password?.message}
           {...register("password")}
@@ -122,11 +131,8 @@ function SecurityStep({
       <div className="space-y-1.5 pt-1">
         <CaptchaChallenge
           revision={captchaRevision}
-          onCaptchaChange={(value) => {
-            setCaptcha(value);
-            if (value) setCaptchaError(false);
-          }}
-          onError={(failed) => setCaptchaError(failed)}
+          onCaptchaChange={handleCaptchaChange}
+          onError={handleCaptchaError}
         />
         {captchaError ? (
           <p className="text-xs font-medium text-destructive">

@@ -15,7 +15,6 @@ import {
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { OtpInput } from "@/lib/auth/OtpInput";
-import { TrustIndicator } from "@/lib/auth/TrustIndicator";
 
 const credentialsSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -24,10 +23,18 @@ const credentialsSchema = z.object({
 
 type CredentialsValues = z.infer<typeof credentialsSchema>;
 
-function LoginForm({ initialEmail = "" }: { initialEmail?: string }) {
+function LoginForm({
+  initialEmail = "",
+  initialError = "",
+}: {
+  initialEmail?: string;
+  initialError?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<"credentials" | "mfa">("credentials");
-  const [genericError, setGenericError] = useState<string>();
+  const [genericError, setGenericError] = useState<string | undefined>(
+    initialError,
+  );
   const [mfaToken, setMfaToken] = useState<string>();
   const [mfaCode, setMfaCode] = useState("");
   const [useBackup, setUseBackup] = useState(false);
@@ -208,7 +215,7 @@ function LoginForm({ initialEmail = "" }: { initialEmail?: string }) {
         id="email"
         type="email"
         autoComplete="email"
-        placeholder="you@company.com"
+        placeholder="Email"
         icon={Mail}
         error={errors.email?.message}
         {...register("email")}
@@ -218,7 +225,7 @@ function LoginForm({ initialEmail = "" }: { initialEmail?: string }) {
         id="password"
         type="password"
         autoComplete="current-password"
-        placeholder={"\n"}
+        placeholder="Password"
         icon={Lock}
         error={errors.password?.message}
         {...register("password")}
@@ -234,7 +241,6 @@ function LoginForm({ initialEmail = "" }: { initialEmail?: string }) {
       <AuthButton type="submit" className="w-full" loading={isSubmitting}>
         Sign in
       </AuthButton>
-      <TrustIndicator />
     </form>
   );
 }

@@ -26,7 +26,11 @@ def _as_int(value: object) -> int:
     try:
         if isinstance(value, bytes):
             return int(value.decode("utf-8"))
-        return int(value)  # type: ignore[arg-type]
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            return int(value)
+        return 0
     except (TypeError, ValueError):
         return 0
 

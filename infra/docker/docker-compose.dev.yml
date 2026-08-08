@@ -5,6 +5,10 @@ services:
   postgres:
     ports:
       - "5432:5432"
+      # Second host publish so host-run tests / the E2E script can reach the
+      # container Postgres even when a native Postgres already owns host 5432
+      # (common on Windows dev boxes).
+      - "5433:5432"
     environment:
       POSTGRES_PASSWORD: skyrict
 

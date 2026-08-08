@@ -42,6 +42,12 @@ class FakeTenantRepo:
         self.created.append(tenant)
         return tenant
 
+    async def mark_onboarding_complete(self, tenant_id: str | uuid.UUID) -> Tenant:
+        tenant = await self.get_by_id(tenant_id)
+        if tenant is None:
+            raise TenantNotFoundError("Organization not found")
+        return tenant
+
 
 class TestGetOrganization:
     async def test_returns_tenant_when_found(self) -> None:
@@ -80,3 +86,20 @@ class TestCreateOrganization:
         assert tenant.id is not None
         assert tenant.is_active is True
         assert repo.created == [tenant]
+
+
+class TestCompleteOnboarding:
+    async def test_delegates_to_repo_and_returns_tenant(self) -> None:
+        tenant = Tenant(name="Acme", slug="acme")
+        repo = FakeTenantRepo([tenant])
+        service = TenantService(repo)
+
+        completed = await service.complete_onboarding(str(tenant.id))
+
+        assert completed is tenant
+
+    async def test_raises_when_missing(self) -> None:
+        service = TenantService(FakeTenantRepo())
+
+        with pytest.raises(TenantNotFoundError):
+            await service.complete_onboarding(uuid.uuid4())

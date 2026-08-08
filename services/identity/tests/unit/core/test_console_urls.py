@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from identity.core.config import Environment, settings
-from identity.core.console_urls import security_console_base_url
+from identity.core.console_urls import security_console_base_url, security_console_signin_origin
 
 
 @pytest.mark.parametrize("slug", ["acme", "my-org", None])
@@ -68,3 +68,26 @@ def test_override_with_slug_placeholder(monkeypatch) -> None:
     monkeypatch.setattr(settings, "BASE_DOMAIN", "skyrict.com")
 
     assert security_console_base_url(tenant_slug="acme") == "https://acme.skyrict.io"
+
+
+def test_signin_origin_dev(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
+    monkeypatch.setattr(settings, "SECURITY_CONSOLE_DEV_PORT", 3000)
+    monkeypatch.setattr(settings, "BASE_DOMAIN", "")
+
+    assert security_console_signin_origin(tenant_slug="acme") == "http://acme.signin.localhost:3000"
+    assert security_console_signin_origin(tenant_slug=None) is None
+
+
+def test_signin_origin_prod(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "ENVIRONMENT", Environment.PRODUCTION)
+    monkeypatch.setattr(settings, "BASE_DOMAIN", "skyrict.com")
+
+    assert security_console_signin_origin(tenant_slug="acme") == "https://acme.signin.skyrict.com"
+
+
+def test_signin_origin_prod_without_base_domain_returns_none(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "ENVIRONMENT", Environment.PRODUCTION)
+    monkeypatch.setattr(settings, "BASE_DOMAIN", "")
+
+    assert security_console_signin_origin(tenant_slug="acme") is None

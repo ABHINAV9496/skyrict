@@ -10,7 +10,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const hasSession = Boolean((await cookies()).get(SESSION_COOKIE)?.value);
-  if (!hasSession) redirect(await signinUrl());
+  if (!hasSession) {
+    redirect(await signinUrl("Your session could not be established. Please sign in again."));
+  }
 
   return (
     <div>

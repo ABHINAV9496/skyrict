@@ -30,6 +30,7 @@ class TenantResponse(BaseModel):
     slug: str
     is_active: bool
     plan_tier: str
+    onboarding_completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

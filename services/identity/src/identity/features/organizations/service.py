@@ -39,3 +39,7 @@ class TenantService:
 
         tenant = Tenant(name=body.name, slug=body.slug)
         return await self.tenant_repo.create(tenant)
+
+    async def complete_onboarding(self, tenant_id: str | uuid.UUID) -> Tenant:
+        """Record that the organization completed the onboarding wizard."""
+        return await self.tenant_repo.mark_onboarding_complete(tenant_id)

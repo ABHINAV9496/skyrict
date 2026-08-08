@@ -26,6 +26,19 @@ async def get_my_organization(
     return ResponseEnvelope(data=TenantResponse.model_validate(tenant))
 
 
+@router.post("/me/onboarding/complete", response_model=ResponseEnvelope[TenantResponse])
+async def complete_onboarding(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    tenant_svc: TenantService = Depends(get_tenant_service),
+    tenant_id: str = Depends(get_current_tenant),
+) -> ResponseEnvelope[TenantResponse]:
+    """Mark the current organization's onboarding wizard as complete."""
+    tenant = await tenant_svc.complete_onboarding(tenant_id)
+    return ResponseEnvelope(
+        data=TenantResponse.model_validate(tenant), message="Onboarding completed"
+    )
+
+
 @router.post("", response_model=ResponseEnvelope[TenantResponse])
 async def create_organization(
     body: TenantCreateRequest,

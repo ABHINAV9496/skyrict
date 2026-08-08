@@ -1,0 +1,16 @@
+{
+  "name": "Skyrict",
+  "short_name": "Skyrict",
+  "description": "Skyrict pairs a scoped ERP with live market signals, and puts AI agents on top of the synthesis.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4fafd",
+  "theme_color": "#87ceeb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

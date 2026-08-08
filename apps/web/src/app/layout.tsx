@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 
 import { Providers } from "@/app/providers";
+import { site } from "@/config";
 import "@/styles/globals.css";
 
 const inter = Inter({
@@ -20,12 +21,39 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(site.url),
   title: {
-    default: "Skyrict — AI Business Operating System",
-    template: "%s · Skyrict",
+    default: `${site.name} — AI Business Operating System`,
+    template: `%s · ${site.name}`,
   },
-  description:
-    "Skyrict connects what's happening inside your business with what's happening in the market — and lets AI agents act on the synthesis.",
+  description: site.description,
+  keywords: [
+    "Skyrict",
+    "AI business operating system",
+    "business intelligence platform",
+    "AI agents for business",
+    "ERP analytics",
+    "market intelligence",
+    "demand planning software",
+  ],
+  authors: [{ name: site.name }],
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    siteName: site.name,
+    title: `${site.name} — AI Business Operating System`,
+    description: site.description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${site.name} — AI Business Operating System`,
+    description: site.description,
+  },
 };
 
 export default function RootLayout({

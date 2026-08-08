@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
-from identity.api.deps import get_roles_service, require_permission
+from identity.api.deps import get_current_user, get_role_repo, get_roles_service, require_permission
 from identity.core.permissions import PERMISSION_MODULES
 from identity.core.tenant_context import TenantContext
 from identity.domain.entities import ScopeType
+from identity.features.roles.repository import RoleRepository
 from identity.features.roles.schemas import (
+    MyRolesResponse,
     PermissionCatalogResponse,
     PermissionModule,
     PermissionResponse,
@@ -69,6 +71,22 @@ async def list_roles(
     roles = await roles_service.list_roles(TenantContext.get())
     return ResponseEnvelope(
         data=[RoleResponse.model_validate(role) for role in roles],
+        message="Roles retrieved",
+    )
+
+
+@router.get("/me", response_model=ResponseEnvelope[MyRolesResponse])
+async def get_my_roles(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    role_repo: RoleRepository = Depends(get_role_repo),
+) -> ResponseEnvelope[MyRolesResponse]:
+    """Return the current user's roles and effective permissions in this tenant."""
+    user_id = current_user["user_id"]
+    tenant_id = current_user["tenant_id"]
+    roles = await role_repo.get_roles_for_user(user_id, tenant_id)
+    permissions = await role_repo.get_permissions_for_user(user_id, tenant_id)
+    return ResponseEnvelope(
+        data=MyRolesResponse(roles=roles, permissions=sorted(permissions)),
         message="Roles retrieved",
     )
 

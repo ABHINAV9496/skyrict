@@ -1,9 +1,17 @@
 // TEMP-PREVIEW: brand panel commented out to preview the auth page without the
 // left content side. Restore by uncommenting the two lines below.
 // import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Logo } from "@/components/brand/logo";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function AuthLayout({
   children,

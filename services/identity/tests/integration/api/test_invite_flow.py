@@ -18,6 +18,7 @@ from sqlalchemy import delete
 from identity.db.session import async_session_factory
 from identity.models.invitation import InvitationModel
 from identity.models.tenant import TenantModel
+from tests.integration.api.mfa_helpers import enroll_mfa_if_required
 from tests.integration.api.wizard import provision_tenant, wizard_login
 
 if TYPE_CHECKING:
@@ -223,7 +224,11 @@ class TestInvitationFlow:
             json={"email": invite_email, "password": "InviteePass123!"},
         )
         assert invitee_login.status_code == 200
-        invitee_token = invitee_login.json()["data"]["access_token"]
+        # MFA is mandatory for every account: the invitee must enroll before
+        # any authenticated route succeeds, mirroring the real client flow.
+        invitee_token = await enroll_mfa_if_required(
+            client, slug=tenant["slug"], login_data=invitee_login.json()["data"]
+        )
         invitee_headers = {
             "X-Tenant-Slug": tenant["slug"],
             "Authorization": f"Bearer {invitee_token}",

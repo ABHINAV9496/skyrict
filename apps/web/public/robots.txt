@@ -1,0 +1,23 @@
+User-Agent: *
+Allow: /
+Allow: /terms
+Allow: /privacy
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /agents
+Disallow: /erp
+Disallow: /intelligence
+Disallow: /members
+Disallow: /login
+Disallow: /register
+Disallow: /signin
+Disallow: /signup
+Disallow: /setup-mfa
+Disallow: /mfa/
+Disallow: /invite
+Disallow: /forgot-password
+Disallow: /reset-password
+
+Host: https://skyrict.com
+Sitemap: https://skyrict.com/sitemap.xml

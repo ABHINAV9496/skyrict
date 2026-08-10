@@ -10,6 +10,7 @@ RLS additionally enforces it.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -35,6 +36,7 @@ def _to_orm(user: User) -> UserModel:
         "phone_country": user.phone_country,
         "phone_number": user.phone_number,
         "mfa_backup_codes": user.mfa_backup_codes or None,
+        "onboarding_dismissed_at": user.onboarding_dismissed_at,
     }
     if user.id is not None:
         model_kwargs["id"] = user.id
@@ -56,6 +58,7 @@ def _from_orm(model: UserModel) -> User:
         phone_country=model.phone_country,
         phone_number=model.phone_number,
         mfa_backup_codes=list(model.mfa_backup_codes) if model.mfa_backup_codes else [],
+        onboarding_dismissed_at=model.onboarding_dismissed_at,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -166,6 +169,17 @@ class UserRepository(SqlRepository):
         if model is None:
             raise UserNotFoundError("User not found")
         model.is_verified = True
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def dismiss_onboarding(self, user_id: str | uuid.UUID) -> User:
+        """Stamp onboarding_dismissed_at (idempotent) and flush."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        if model.onboarding_dismissed_at is None:
+            model.onboarding_dismissed_at = datetime.now(UTC)
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

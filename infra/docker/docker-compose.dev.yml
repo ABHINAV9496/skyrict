@@ -5,6 +5,10 @@ services:
   postgres:
     ports:
       - "5432:5432"
+      # Second host publish so host-run tests / the E2E script can reach the
+      # container Postgres even when a native Postgres already owns host 5432
+      # (common on Windows dev boxes).
+      - "5433:5432"
     environment:
       POSTGRES_PASSWORD: skyrict
 
@@ -41,6 +45,7 @@ services:
       # Outbound email → MailHog container (Web UI: http://localhost:8025).
       IDENTITY_EMAIL_SMTP_HOST: mailhog
       IDENTITY_EMAIL_SMTP_PORT: "1025"
+      # Security-alert CTAs auto-derive as http://{slug}.localhost:3000 in dev.
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src

@@ -1,5 +1,17 @@
-import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
+// TEMP-PREVIEW: brand panel commented out to preview the auth page without the
+// left content side. Restore by uncommenting the two lines below.
+// import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
+import type { Metadata } from "next";
+import Link from "next/link";
+
 import { Logo } from "@/components/brand/logo";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function AuthLayout({
   children,
@@ -7,13 +19,15 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative grid min-h-dvh bg-card lg:h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:grid-rows-1 lg:overflow-hidden">
+    <div className="relative grid min-h-dvh bg-card lg:h-dvh lg:grid-rows-1 lg:overflow-hidden">
+      {/* TEMP-PREVIEW: left brand panel hidden. Restore by uncommenting.
       <div className="min-h-0 overflow-hidden">
         <AuthBrandPanel />
       </div>
+      */}
 
       <main className="flex min-h-0 flex-col px-6 py-10 lg:overflow-y-auto">
-        <div className="flex justify-center lg:hidden">
+        <div className="mt-8 flex justify-center">
           <Logo className="text-foreground" />
         </div>
 
@@ -22,10 +36,23 @@ export default function AuthLayout({
         </div>
 
         <footer className="mx-auto w-full max-w-sm pb-2 text-center">
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Skyrict — AI Business Operating
-            System
-          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/terms"
+              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Terms of Service
+            </Link>
+            <span aria-hidden="true" className="text-muted-foreground/40">
+              ·
+            </span>
+            <Link
+              href="/privacy"
+              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Privacy Policy
+            </Link>
+          </div>
         </footer>
       </main>
     </div>

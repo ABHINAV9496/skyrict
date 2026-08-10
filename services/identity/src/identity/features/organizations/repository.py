@@ -7,14 +7,15 @@ domain entities (``identity.domain.entities.Tenant``).
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 
-from identity.core.exceptions import TenantNotFoundError
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Tenant
 from identity.models.tenant import TenantModel
+from skyrict_common.exceptions import TenantNotFoundError
 
 
 def _to_orm(tenant: Tenant) -> TenantModel:
@@ -26,7 +27,7 @@ def _to_orm(tenant: Tenant) -> TenantModel:
         "is_active": tenant.is_active,
         "industry": tenant.industry,
         "billing_address": tenant.billing_address,
-        "mfa_required_for_all_members": tenant.mfa_required_for_all_members,
+        "onboarding_completed_at": tenant.onboarding_completed_at,
     }
     if tenant.id is not None:
         model_kwargs["id"] = tenant.id
@@ -43,7 +44,7 @@ def _from_orm(model: TenantModel) -> Tenant:
         plan_tier=model.plan_tier,
         industry=model.industry,
         billing_address=model.billing_address,
-        mfa_required_for_all_members=model.mfa_required_for_all_members,
+        onboarding_completed_at=model.onboarding_completed_at,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -77,14 +78,13 @@ class TenantRepository(SqlRepository):
         await self.session.refresh(model)
         return _from_orm(model)
 
-    async def update_settings(
-        self, tenant_id: str | uuid.UUID, *, mfa_required_for_all_members: bool
-    ) -> Tenant:
-        """Update tenant security settings and flush."""
+    async def mark_onboarding_complete(self, tenant_id: str | uuid.UUID) -> Tenant:
+        """Stamp onboarding_completed_at (idempotent) and flush."""
         model = await self.session.get(TenantModel, tenant_id)
         if model is None:
             raise TenantNotFoundError("Organization not found")
-        model.mfa_required_for_all_members = mfa_required_for_all_members
+        if model.onboarding_completed_at is None:
+            model.onboarding_completed_at = datetime.now(UTC)
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

@@ -75,6 +75,12 @@ class FakeUserRepo:
         user.password_hash = password_hash
         return user
 
+    async def dismiss_onboarding(self, user_id: str | uuid.UUID) -> User:
+        user = await self.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError()
+        return user
+
 
 class FakeRoleRepo:
     """In-memory RoleRepositoryPort double, including the permission-resolution,
@@ -269,6 +275,23 @@ class TestChangePassword:
             await service.change_password(str(user.id), "WrongPass1!", "NewPass1!")
 
         assert verify_password("OldPass1!", user.password_hash)
+
+
+class TestDismissOnboarding:
+    async def test_delegates_to_repo_and_returns_user(self) -> None:
+        user = _make_user()
+        repo = FakeUserRepo([user])
+        service = UserService(repo)
+
+        dismissed = await service.dismiss_onboarding(str(user.id))
+
+        assert dismissed is user
+
+    async def test_raises_when_missing(self) -> None:
+        service = UserService(FakeUserRepo())
+
+        with pytest.raises(UserNotFoundError):
+            await service.dismiss_onboarding(uuid.uuid4())
 
 
 class TestAuthorizationService:

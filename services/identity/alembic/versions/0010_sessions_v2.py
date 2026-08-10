@@ -34,9 +34,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "sessions",
-        sa.Column(
-            "is_trusted", sa.Boolean(), nullable=False, server_default=sa.text("false")
-        ),
+        sa.Column("is_trusted", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
     op.add_column(
         "sessions",
@@ -68,13 +66,9 @@ def downgrade() -> None:
     """Restore is_active from status and drop the v2 columns."""
     op.add_column(
         "sessions",
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
-        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
     )
-    op.execute(
-        "UPDATE sessions SET is_active = (status = 'active') WHERE status <> 'active'"
-    )
+    op.execute("UPDATE sessions SET is_active = (status = 'active') WHERE status <> 'active'")
     op.drop_index("ix_sessions_token_family_id", table_name="sessions")
     op.drop_index("ix_sessions_status", table_name="sessions")
     op.drop_column("sessions", "expired_at")

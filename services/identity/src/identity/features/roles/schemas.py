@@ -29,6 +29,13 @@ class RoleResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MyRolesResponse(BaseModel):
+    """The authenticated user's roles and effective permissions in a tenant."""
+
+    roles: list[str]
+    permissions: list[str]
+
+
 class PermissionResponse(BaseModel):
     """Single permission in the catalog."""
 

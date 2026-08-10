@@ -41,6 +41,10 @@ class UserService:
             email=body.email,
         )
 
+    async def dismiss_onboarding(self, user_id: str | uuid.UUID) -> User:
+        """Record that the user dismissed the onboarding wizard."""
+        return await self.user_repo.dismiss_onboarding(user_id)
+
     async def change_password(
         self, user_id: str | uuid.UUID, current_password: str, new_password: str
     ) -> None:

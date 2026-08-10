@@ -31,6 +31,12 @@ const AUTH_PATHS = [
   "/reset-password",
 ];
 
+const LEGAL_PATHS = ["/terms", "/privacy"];
+
+function isLegalPath(pathname: string): boolean {
+  return LEGAL_PATHS.includes(pathname);
+}
+
 function isAuthPath(pathname: string): boolean {
   return (
     AUTH_PATHS.includes(pathname) ||
@@ -88,7 +94,7 @@ export function middleware(request: NextRequest) {
       if (pathname === "/signup") {
         return NextResponse.rewrite(new URL("/register", request.url));
       }
-      if (isAuthPath(pathname)) {
+      if (isAuthPath(pathname) || isLegalPath(pathname)) {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/signup", request.url));
@@ -97,7 +103,7 @@ export function middleware(request: NextRequest) {
       if (pathname === "/signin") {
         return NextResponse.rewrite(new URL("/login", request.url));
       }
-      if (pathname === "/setup-mfa" || pathname === "/mfa/verify") {
+      if (pathname === "/setup-mfa" || pathname === "/mfa/verify" || isLegalPath(pathname)) {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/signin", request.url));

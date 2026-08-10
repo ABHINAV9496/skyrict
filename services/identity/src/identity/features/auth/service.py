@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from identity.core.audit_events import AUTH_REFRESH_REUSE_DETECTED, AUTH_REFRESH_SUCCESS
 from identity.core.config import Environment, settings
+from identity.core.console_urls import security_console_base_url
 from identity.core.constants import (
     LOGIN_FAILED_MESSAGE,
     RESERVED_EMAILS,
@@ -29,6 +30,8 @@ from identity.core.constants import (
     SYSTEM_ROLE_DEFINITIONS,
 )
 from identity.core.email import EmailService
+from identity.core.email_templates import SecurityAlert
+from identity.core.geolocation import format_location, geoip, mask_ip
 from identity.core.security import (
     create_access_token,
     create_refresh_token,
@@ -41,6 +44,7 @@ from identity.core.security import (
 )
 from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
+from identity.core.user_agent import parse_user_agent
 from identity.domain.entities import Role, Session, SessionStatus, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.features.auth.captcha.captcha_store import CaptchaStore
@@ -221,18 +225,10 @@ class AuthenticationService:
                 "user": user,
             }
 
-        # Forced MFA: tenant owners must always enroll, and other members are
-        # forced when the tenant configures enforcement. The flag clears only
-        # once MFA is actually enabled, so tokens issued now are gated until then.
-        roles = await self.role_repo.get_roles_for_user(user.id, tenant_id)
-        tenant = await self.tenant_repo.get_by_id(tenant_id)
-        mfa_required = mfa_is_required(
-            roles=roles,
-            mfa_enabled=False,
-            tenant_requires_all_members=(
-                tenant.mfa_required_for_all_members if tenant is not None else False
-            ),
-        )
+        # Forced MFA: every account without MFA enabled must enroll, regardless
+        # of role or tenant policy. The flag clears only once MFA is actually
+        # enabled, so tokens issued now are gated until then.
+        mfa_required = mfa_is_required(mfa_enabled=False)
 
         result = await self.complete_authenticated_login(
             user=user,
@@ -264,6 +260,18 @@ class AuthenticationService:
             session_id=str(session_id),
         )
 
+        device = parse_user_agent(user_agent)
+        location = geoip.lookup(ip_address)
+        device_info = {
+            "browser": device.browser,
+            "browser_version": device.browser_version,
+            "os": device.os,
+            "os_version": device.os_version,
+            "device": device.device,
+            "device_type": device.device_type,
+            "user_agent": user_agent,
+        }
+
         new_device = not await self.session_service.has_prior_device(
             user.id,
             user_agent=user_agent,
@@ -276,6 +284,8 @@ class AuthenticationService:
             refresh_token_hash=hash_refresh_token(tokens.refresh_token),
             user_agent=user_agent,
             ip_address=ip_address,
+            device_info=device_info,
+            location=format_location(location),
         )
 
         await self.audit_service.log(
@@ -286,12 +296,30 @@ class AuthenticationService:
             user_agent=user_agent,
         )
         if new_device:
+            tenant = await self.tenant_repo.get_by_id(tenant_id)
+            base = security_console_base_url(tenant_slug=tenant.slug if tenant else None)
             await self.email_service.send_security_alert(
-                to=user.email,
-                full_name=user.full_name,
-                event_type="new_device",
-                ip_address=ip_address,
-                user_agent=user_agent,
+                alert=SecurityAlert(
+                    to=user.email,
+                    full_name=user.full_name,
+                    event_type="new_device",
+                    ip_address=mask_ip(ip_address),
+                    location=format_location(location),
+                    browser=" ".join(p for p in (device.browser, device.browser_version) if p)
+                    or "Unknown",
+                    os=" ".join(p for p in (device.os, device.os_version) if p) or "Unknown",
+                    device=f"{device.device} ({device.device_type})",
+                    auth_method=(
+                        "Password + MFA"
+                        if audit_action == "auth.login.mfa_verified"
+                        else "Password"
+                    ),
+                    session_id_masked=f"{str(session_id)[:8]}••••",
+                    date_time=datetime.now(UTC).strftime("%b %d, %Y at %I:%M %p UTC"),
+                    review_url=f"{base}/settings/security" if base else None,
+                    secure_url=f"{base}/settings/security/password" if base else None,
+                    support_email=settings.SECURITY_SUPPORT_EMAIL,
+                )
             )
 
         return {
@@ -621,7 +649,7 @@ class TokenService:
         user_id = payload["sub"]
         session_id = payload.get("session_id")
         session = await self.session_service.get_session(session_id) if session_id else None
-        if session is not None and session.user_id == uuid.UUID(user_id):
+        if session is not None and session.id is not None and session.user_id == uuid.UUID(user_id):
             # Idempotent logout — already-revoked sessions are fine.
             with suppress(SessionNotFoundError):
                 await self.session_service.revoke_session(user_id, session.id)

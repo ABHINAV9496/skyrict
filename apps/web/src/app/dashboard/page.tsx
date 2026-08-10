@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { Bot, Boxes, Sparkles } from "lucide-react";
 
+import IdentityStatusCard from "@/app/dashboard/identity-status";
+
 const sections = [
   {
-    href: "/agents",
+    href: "/dashboard/agents",
     title: "AI Agents",
     description: "Autonomous intelligence agents",
     icon: Bot,
   },
   {
-    href: "/erp",
+    href: "/dashboard/erp",
     title: "ERP",
     description: "Enterprise resource planning",
     icon: Boxes,
   },
   {
-    href: "/intelligence",
+    href: "/dashboard/intelligence",
     title: "Intelligence",
     description: "Analytics and insights",
     icon: Sparkles,
@@ -54,6 +56,8 @@ export default function DashboardHomePage() {
           </Link>
         ))}
       </div>
+
+      <IdentityStatusCard />
     </main>
   );
 }

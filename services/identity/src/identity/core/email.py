@@ -20,6 +20,12 @@ from typing import Protocol
 
 import structlog
 
+from identity.core.email_templates import (
+    SecurityAlert,
+    render_security_alert_html,
+    render_security_alert_text,
+)
+
 logger = structlog.get_logger("identity.email")
 
 
@@ -42,15 +48,7 @@ class EmailService(Protocol):
         base_url: str | None = None,
     ) -> None: ...
 
-    async def send_security_alert(
-        self,
-        *,
-        to: str,
-        full_name: str,
-        event_type: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> None: ...
+    async def send_security_alert(self, *, alert: SecurityAlert) -> None: ...
 
 
 class LogEmailService:
@@ -89,22 +87,19 @@ class LogEmailService:
             base_url=base_url,
         )
 
-    async def send_security_alert(
-        self,
-        *,
-        to: str,
-        full_name: str,
-        event_type: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> None:
+    async def send_security_alert(self, *, alert: SecurityAlert) -> None:
         logger.info(
             "email.security_alert.sent",
-            to=to,
-            full_name=full_name,
-            event_type=event_type,
-            ip_address=ip_address,
-            user_agent=user_agent,
+            to=alert.to,
+            full_name=alert.full_name,
+            event_type=alert.event_type,
+            ip_address=alert.ip_address,
+            location=alert.location,
+            browser=alert.browser,
+            os=alert.os,
+            device=alert.device,
+            auth_method=alert.auth_method,
+            session_id_masked=alert.session_id_masked,
         )
 
 
@@ -159,7 +154,7 @@ class SmtpEmailService:
             )
             html = (
                 f"<p>Hi {full_name},</p><p>Please verify your email address by "
-                f"clicking the link below:</p><p><a href=\"{link}\">Verify "
+                f'clicking the link below:</p><p><a href="{link}">Verify '
                 f"email</a></p>"
             )
         else:
@@ -191,7 +186,7 @@ class SmtpEmailService:
             html = (
                 f"<p>{inviter_name} invited you to "
                 f"<strong>{organization_name}</strong>.</p>"
-                f"<p><a href=\"{link}\">Accept invitation</a></p>"
+                f'<p><a href="{link}">Accept invitation</a></p>'
             )
         else:
             text = (
@@ -203,38 +198,16 @@ class SmtpEmailService:
                 f"<strong>{organization_name}</strong>.</p>"
                 f"<p>Your invitation token is <strong>{token}</strong>.</p>"
             )
-        await self._deliver(
-            to, f"{inviter_name} invited you to {organization_name}", text, html
-        )
+        await self._deliver(to, f"{inviter_name} invited you to {organization_name}", text, html)
 
-    async def send_security_alert(
-        self,
-        *,
-        to: str,
-        full_name: str,
-        event_type: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> None:
-        details = ""
-        if ip_address or user_agent:
-            parts = []
-            if ip_address:
-                parts.append(f"IP address: {ip_address}")
-            if user_agent:
-                parts.append(f"Device: {user_agent}")
-            details = "\n\n" + "\n".join(parts)
-        text = (
-            f"Hi {full_name},\n\nA security event was detected on your "
-            f"account: {event_type}.{details}\n\n"
-            "If this wasn't you, change your password immediately."
-        )
-        html = (
-            f"<p>Hi {full_name},</p><p>A security event was detected on your "
-            f"account: <strong>{event_type}</strong>.</p>{details.replace(chr(10), '<br>')}"
-            "<p>If this wasn't you, change your password immediately.</p>"
-        )
-        await self._deliver(to, f"Security alert: {event_type}", text, html)
+    async def send_security_alert(self, *, alert: SecurityAlert) -> None:
+        text = render_security_alert_text(alert)
+        html = render_security_alert_html(alert)
+        if alert.event_type == "new_device":
+            subject = f"New login detected on your {alert.app_name} account"
+        else:
+            subject = f"Security alert: {alert.event_type}"
+        await self._deliver(alert.to, subject, text, html)
 
     async def _deliver(self, to: str, subject: str, text: str, html: str | None) -> None:
         message = EmailMessage()

@@ -27,9 +27,7 @@ def upgrade() -> None:
         "handoff_tokens",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("purpose", sa.String(length=64), nullable=False),
-        sa.Column(
-            "token_hash", sa.String(length=64), nullable=False
-        ),
+        sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column(
             "payload",
             postgresql.JSONB(astext_type=sa.Text()),
@@ -50,8 +48,12 @@ def upgrade() -> None:
         ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_handoff_tokens_token_hash", "handoff_tokens", ["token_hash"], unique=True)
     op.create_index("ix_handoff_tokens_purpose", "handoff_tokens", ["purpose"])

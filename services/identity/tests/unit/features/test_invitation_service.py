@@ -602,3 +602,34 @@ class TestExpireInvitation:
     ) -> None:
         with pytest.raises(InvitationNotFoundError):
             await service.expire_invitation(uuid.uuid4(), tenant_id)
+
+
+class TestListInvitations:
+    async def test_returns_only_this_tenant_invitations(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, *_ = repos
+        other_tenant_id = uuid.uuid4()
+
+        def _make(tenant: uuid.UUID, email: str) -> Invitation:
+            return Invitation(
+                tenant_id=tenant,
+                email=email,
+                token_hash=hash_invitation_token(email),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+
+        own = _make(tenant_id, "own@test.com")
+        other = _make(other_tenant_id, "other@test.com")
+        await inv_repo.create(own)
+        await inv_repo.create(other)
+
+        result = await service.list_invitations(tenant_id)
+
+        assert result == [own]
+        assert other not in result

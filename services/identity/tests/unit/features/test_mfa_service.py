@@ -322,28 +322,8 @@ class TestResetMfaByOwner:
 
 
 class TestMfaIsRequired:
-    async def test_owner_always_forced(self) -> None:
-        assert (
-            mfa_is_required(
-                roles=["tenant_owner"], mfa_enabled=False, tenant_requires_all_members=False
-            )
-            is True
-        )
+    async def test_disabled_mfa_always_required(self) -> None:
+        assert mfa_is_required(mfa_enabled=False) is True
 
-    async def test_enabled_never_required(self) -> None:
-        assert (
-            mfa_is_required(
-                roles=["tenant_owner"], mfa_enabled=True, tenant_requires_all_members=True
-            )
-            is False
-        )
-
-    async def test_member_only_forced_when_tenant_enforces(self) -> None:
-        assert (
-            mfa_is_required(roles=["viewer"], mfa_enabled=False, tenant_requires_all_members=True)
-            is True
-        )
-        assert (
-            mfa_is_required(roles=["viewer"], mfa_enabled=False, tenant_requires_all_members=False)
-            is False
-        )
+    async def test_enabled_mfa_never_required(self) -> None:
+        assert mfa_is_required(mfa_enabled=True) is False

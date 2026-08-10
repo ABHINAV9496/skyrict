@@ -36,7 +36,7 @@ web.localhost (no Log in) → Get started → signup.localhost/signup
     ├─ registered email → "This email is unavailable."  <- stop, no sign-in hint
     └─ new email → OTP (email verification, silent, no "verified" screen)
          wizard: Plan → Set password (owner) → Organization (creates tenant,
-                 mfa_required_for_all_members=true, owner session)
+                 owner session)
          → signup.localhost/setup-mfa (QR + confirm code + backup codes)
          → handoff (POST body) → {slug}.localhost/api/auth/handoff → 307
          → URL bar: {slug}.localhost/dashboard
@@ -122,7 +122,7 @@ Owner (Members page) sends invite → email link signup.localhost/invite#t=<sing
 ### Phase 1 — Backend (`services/identity`)
 - `signup_verify_code`: new → `onboarding` + token; existing → `status:"unavailable"`.
 - Keep `signup_set_password` (owner password set **before** org — gate at `service.py:511`); keep password auth; login = `POST /auth/login` + PR #47 `POST /auth/mfa/verify` (no new passwordless-login endpoint).
-- `signup_create_organization`: set `mfa_required_for_all_members=true`; return owner session/tokens.
+- `signup_create_organization`: create tenant; return owner session/tokens (MFA is mandatory for every account — no tenant-level opt-out flag).
 - **Server-side password strength** for owner + member (Medium).
 - Invite: `InvitationAcceptRequest` drops `email` (server derives), password min 12; `accept_invitation` returns session tokens (MFA-pending); new `POST /invitations/resolve` (rate-limited, generic errors); `send_invitation` → fragment link + `SIGNUP_BASE_URL` setting; role from stored invite; TTL + single-use + revoke-on-change.
 - New `POST /auth/handoff` (single-use via `GETDEL`, 120s, tenant-bound, destination embedded, SKIP_AUTH_PATHS, Redis store mirroring `MfaChallengeStore`); redemption rate-limited.

@@ -130,23 +130,16 @@ def decrypt_mfa_secret(encrypted_secret: str) -> str:
     )
 
 
-def mfa_is_required(
-    *,
-    roles: list[str],
-    mfa_enabled: bool,
-    tenant_requires_all_members: bool,
-) -> bool:
+def mfa_is_required(*, mfa_enabled: bool) -> bool:
     """
     Return whether MFA must be set up before this account can be used.
 
-    Tenant owners are always forced; other members are forced only when the
-    tenant configures ``mfa_required_for_all_members``. The one source of truth
-    used by both login (``mfa_required``/``next_step``) and the request-time
-    enforcement gate, so the two can never disagree.
+    MFA is mandatory for every account in every tenant — there is no role
+    exemption and no tenant-level opt-out. The one source of truth used by both
+    login (``mfa_required``/``next_step``) and the request-time enforcement
+    gate, so the two can never disagree.
     """
-    if mfa_enabled:
-        return False
-    return "tenant_owner" in roles or tenant_requires_all_members
+    return not mfa_enabled
 
 
 # ---------------------------------------------------------------------------

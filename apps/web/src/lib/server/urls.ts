@@ -31,12 +31,15 @@ async function originParts(): Promise<OriginParts> {
 }
 
 /** Absolute `{slug}.signin.{apex}/signin` URL for the current tenant. */
-export async function signinUrl(): Promise<string> {
+export async function signinUrl(error?: string): Promise<string> {
   const { proto, port, apex, host } = await originParts();
   const { surface, slug } = hostSurface(host);
-  if (surface === "signin") return `${proto}://${host}/signin`;
   const tenant = slug || resolveTenantSlug(host) || "app";
-  return `${proto}://${tenant}.signin.${apex}${port}/signin`;
+  const base =
+    surface === "signin"
+      ? `${proto}://${host}/signin`
+      : `${proto}://${tenant}.signin.${apex}${port}/signin`;
+  return error ? `${base}?error=${encodeURIComponent(error)}` : base;
 }
 
 /** Absolute `{slug}.{apex}` origin for the current tenant. */

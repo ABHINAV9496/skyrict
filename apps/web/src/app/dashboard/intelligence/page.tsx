@@ -1,8 +1,13 @@
+import { Sparkles } from "lucide-react";
+
+import { PageHeader } from "@/components/dashboard/page-header";
+
 export default function IntelligencePage() {
   return (
-    <main>
-      <h1>Market Intelligence</h1>
-      <p>External signals, trends, and competitor analysis</p>
-    </main>
+    <PageHeader
+      title="Market Intelligence"
+      description="External signals, trends, and competitor analysis from across the market."
+      icon={Sparkles}
+    />
   );
 }

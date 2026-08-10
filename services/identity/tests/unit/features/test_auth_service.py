@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 
-from identity.core.config import settings
+from identity.core.config import Environment, settings
 from identity.core.constants import (
     LOGIN_FAILED_MESSAGE,
     RESERVED_EMAILS,
@@ -32,6 +33,9 @@ from skyrict_common.exceptions import (
     UserNotFoundError,
     ValidationError,
 )
+
+if TYPE_CHECKING:
+    from identity.core.email_templates import SecurityAlert
 
 
 class FakeUserRepo:
@@ -227,22 +231,22 @@ class FakeEmailService:
     async def send_otp(self, *, to: str, code: str) -> None:
         self.sent.append({"to": to, "code": code})
 
-    async def send_security_alert(
-        self,
-        *,
-        to: str,
-        full_name: str,
-        event_type: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> None:
+    async def send_security_alert(self, *, alert: SecurityAlert) -> None:
         self.sent.append(
             {
-                "to": to,
-                "full_name": full_name,
-                "event_type": event_type,
-                "ip_address": ip_address,
-                "user_agent": user_agent,
+                "to": alert.to,
+                "full_name": alert.full_name,
+                "event_type": alert.event_type,
+                "ip_address": alert.ip_address,
+                "location": alert.location,
+                "browser": alert.browser,
+                "os": alert.os,
+                "device": alert.device,
+                "auth_method": alert.auth_method,
+                "session_id_masked": alert.session_id_masked,
+                "date_time": alert.date_time,
+                "review_url": alert.review_url,
+                "secure_url": alert.secure_url,
             }
         )
 
@@ -513,8 +517,8 @@ class TestLogin:
         assert result["access_token"] == "access-token"
         assert result["refresh_token"] == "refresh-token"
         assert result["token_type"] == "Bearer"
-        assert result["mfa_required"] is False
-        assert result["next_step"] is None
+        assert result["mfa_required"] is True
+        assert result["next_step"] == "mfa.setup"
         assert result["user"] is user
         user_id, created_tenant, session_id = harness.token_svc.pairs_created[0]
         assert (user_id, created_tenant) == (str(user.id), tenant_ctx)
@@ -540,18 +544,66 @@ class TestLogin:
         await harness.service.login(
             LoginRequest(email=user.email, password="Password1!"),
             ip_address="203.0.113.7",
-            user_agent="Mozilla/5.0 (X11; Linux x86_64)",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            ),
         )
 
-        assert harness.email_svc.sent == [
-            {
-                "to": user.email,
-                "full_name": "Test User",
-                "event_type": "new_device",
-                "ip_address": "203.0.113.7",
-                "user_agent": "Mozilla/5.0 (X11; Linux x86_64)",
-            }
-        ]
+        assert len(harness.email_svc.sent) == 1
+        alert = harness.email_svc.sent[0]
+        assert alert["to"] == user.email
+        assert alert["full_name"] == "Test User"
+        assert alert["event_type"] == "new_device"
+        assert alert["ip_address"] == "203.0.113.***"
+        assert alert["auth_method"] == "Password"
+        assert alert["browser"].startswith("Chrome")
+        assert alert["os"].startswith("Windows")
+        assert alert["session_id_masked"].endswith("••••")
+        assert len(alert["session_id_masked"]) == 12
+        assert alert["date_time"]
+        assert alert["review_url"] is None
+        assert alert["secure_url"] is None
+
+    async def test_new_device_alert_urls_are_tenant_scoped(
+        self, tenant_ctx: str, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "ENVIRONMENT", Environment.DEV)
+        monkeypatch.setattr(settings, "SECURITY_CONSOLE_BASE_URL", "")
+        monkeypatch.setattr(settings, "SECURITY_CONSOLE_DEV_PORT", 3000)
+        monkeypatch.setattr(settings, "BASE_DOMAIN", "")
+        tenant_id = uuid.UUID(tenant_ctx)
+        user = _make_user(tenant_id=tenant_id)
+        tenant = Tenant(id=tenant_id, name="Acme Corp", slug="acme")
+        harness = _Harness(users=[user], tenants=[tenant], prior_device=False)
+
+        await harness.service.login(
+            LoginRequest(email=user.email, password="Password1!"),
+            ip_address="203.0.113.7",
+            user_agent="",
+        )
+
+        assert len(harness.email_svc.sent) == 1
+        alert = harness.email_svc.sent[0]
+        assert alert["review_url"] == "http://acme.localhost:3000/settings/security"
+        assert alert["secure_url"] == "http://acme.localhost:3000/settings/security/password"
+
+    async def test_new_device_alert_masks_ip_and_unknowns(self, tenant_ctx: str) -> None:
+        user = _make_user()
+        harness = _Harness(users=[user], prior_device=False)
+
+        await harness.service.login(
+            LoginRequest(email=user.email, password="Password1!"),
+            ip_address=None,
+            user_agent="",
+        )
+
+        assert len(harness.email_svc.sent) == 1
+        alert = harness.email_svc.sent[0]
+        assert alert["ip_address"] == "Unknown"
+        assert alert["location"] == "Unknown"
+        assert alert["browser"] == "Unknown"
+        assert alert["os"] == "Unknown"
 
     async def test_unverified_user_raises(self, tenant_ctx: str) -> None:
         user = _make_user(is_verified=False)
@@ -600,35 +652,14 @@ class TestLogin:
             }
         ]
 
-    async def test_member_under_enforced_policy_requires_mfa(self, tenant_ctx: str) -> None:
+    async def test_member_without_mfa_requires_mfa(self, tenant_ctx: str) -> None:
         user = _make_user()
-        tenant = Tenant(
-            id=uuid.UUID(tenant_ctx),
-            name="Acme",
-            slug="acme",
-            mfa_required_for_all_members=True,
-        )
-        harness = _Harness(users=[user], tenants=[tenant])
+        harness = _Harness(users=[user])
 
         result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
 
         assert result["mfa_required"] is True
         assert result["next_step"] == "mfa.setup"
-
-    async def test_member_without_enforced_policy_not_required(self, tenant_ctx: str) -> None:
-        user = _make_user()
-        tenant = Tenant(
-            id=uuid.UUID(tenant_ctx),
-            name="Acme",
-            slug="acme",
-            mfa_required_for_all_members=False,
-        )
-        harness = _Harness(users=[user], tenants=[tenant])
-
-        result = await harness.service.login(LoginRequest(email=user.email, password="Password1!"))
-
-        assert result["mfa_required"] is False
-        assert result["next_step"] is None
 
     async def test_unknown_email_raises(self, tenant_ctx: str) -> None:
         harness = _Harness()

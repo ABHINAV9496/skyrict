@@ -22,21 +22,6 @@ class TenantUpdateRequest(BaseModel):
     plan: str | None = None
 
 
-class TenantSettingsUpdateRequest(BaseModel):
-    """PATCH /organizations/{id}/settings — tenant security policy."""
-
-    mfa_required_for_all_members: bool = Field(
-        ...,
-        description="When true, every non-owner member must set up MFA to sign in",
-    )
-
-
-class TenantSettingsResponse(BaseModel):
-    mfa_required_for_all_members: bool
-
-    model_config = {"from_attributes": True}
-
-
 class TenantResponse(BaseModel):
     """Tenant data returned in API responses."""
 
@@ -45,7 +30,7 @@ class TenantResponse(BaseModel):
     slug: str
     is_active: bool
     plan_tier: str
-    mfa_required_for_all_members: bool = False
+    onboarding_completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

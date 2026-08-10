@@ -10,10 +10,11 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string }>;
+  searchParams: Promise<{ email?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const email = params.email?.trim() ?? "";
+  const error = params.error?.trim() ?? "";
 
   return (
     <div className="space-y-8">
@@ -29,7 +30,7 @@ export default async function LoginPage({
         </p>
       </div>
 
-      <LoginForm initialEmail={email} />
+      <LoginForm initialEmail={email} initialError={error} />
     </div>
   );
 }

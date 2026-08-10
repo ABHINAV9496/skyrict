@@ -41,7 +41,7 @@ def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
         plan_tier="free",
         industry=None,
         billing_address=None,
-        mfa_required_for_all_members=False,
+        onboarding_completed_at=None,
         created_at=now,
         updated_at=now,
     )
@@ -134,6 +134,17 @@ def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
                 and grant["scope_id"] == uuid.UUID(str(scope_id))
                 for grant in self.grants
             )
+
+        async def get_roles_for_user(self, user_id, tenant_id):
+            names = []
+            for grant in self.grants:
+                if grant["user_id"] == uuid.UUID(str(user_id)) and grant["tenant_id"] == uuid.UUID(
+                    str(tenant_id)
+                ):
+                    role = self.roles.get(grant["role_id"])
+                    if role is not None:
+                        names.append(role.name)
+            return names
 
         async def get_permissions_for_user(self, user_id, tenant_id):
             permissions = set()
@@ -248,6 +259,20 @@ class TestPermissionsCatalog:
         }
         actual_module_keys = {m["key"] for m in modules}
         assert actual_module_keys == expected_module_keys
+
+
+class TestGetMyRoles:
+    async def test_returns_roles_and_permissions_for_current_user(
+        self, http_client: httpx.AsyncClient
+    ) -> None:
+        """GET /roles/me returns the authenticated user's roles and permissions."""
+        response = await http_client.get("/api/v1/roles/me")
+        assert response.status_code == 200
+
+        body = response.json()
+        assert body["message"] == "Roles retrieved"
+        assert body["data"]["roles"] == ["test_admin"]
+        assert body["data"]["permissions"] == ["roles:write"]
 
 
 class TestRoleCreateDoD:

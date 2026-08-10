@@ -405,13 +405,6 @@ export async function regenerateBackupCodes(): Promise<{ backupCodes: string[] }
 // Handoff (auth origin → workspace origin)
 // ---------------------------------------------------------------------------
 
-function safeRedirect(path: string): boolean {
-  if (path.includes("//") || path.includes("..") || path.includes(":") || path.includes("\\")) {
-    return false;
-  }
-  return path === "/" || /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*$/.test(path);
-}
-
 /**
  * Complete a finished auth flow: mint a single-use handoff token on the auth
  * origin, POST it (body only) to the workspace origin's /api/auth/handoff to
@@ -425,35 +418,22 @@ export async function completeHandoff(redirect = "/"): Promise<void> {
     redirect: string;
   }>("/api/auth/handoff/mint", { redirect });
 
-  let res: Response;
-  try {
-    res = await fetch(new URL("/api/auth/handoff", mint.workspaceUrl), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: mint.token }),
-      cache: "no-store",
-    });
-  } catch {
-    throw new ApiError(0, "Could not reach your workspace. Try again.");
-  }
-
-  const payload = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    redirect?: string;
-    error?: string;
-  };
-  if (!res.ok || !payload.ok) {
-    throw new ApiError(
-      res.status ?? 0,
-      payload.error ?? "Could not complete sign-in. Try again.",
-    );
-  }
-
-  const target =
-    typeof payload.redirect === "string" && safeRedirect(payload.redirect)
-      ? payload.redirect
-      : "/";
-  window.location.assign(new URL(target, mint.workspaceUrl).toString());
+  // Redeem via a top-level form POST navigation, not fetch. The workspace
+  // origin sets the host-scoped session cookie during a first-party navigation
+  // and 302s to the redirect target — no CORS, no third-party-cookie blocking.
+  // (A cross-site fetch would drop the Set-Cookie under Chrome's third-party
+  // cookie blocking, bouncing the user straight back to signin.)
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = new URL("/api/auth/handoff", mint.workspaceUrl).toString();
+  form.style.display = "none";
+  const tokenInput = document.createElement("input");
+  tokenInput.type = "hidden";
+  tokenInput.name = "token";
+  tokenInput.value = mint.token;
+  form.appendChild(tokenInput);
+  document.body.appendChild(form);
+  form.submit();
 }
 
 export async function confirmMfaSetup(input: {

@@ -74,31 +74,31 @@ def _detail_row(icon: str, label: str, value: str) -> str:
     """One labelled row in the login-details card."""
     return (
         f'<tr><td width="34" valign="top" style="padding:10px 0;border-bottom:1px solid #eef3f6">'
-        f'{_icon(icon, color="#9fb6c6")}</td>'
+        f"{_icon(icon, color='#9fb6c6')}</td>"
         f'<td width="132" valign="top" style="padding:10px 12px 10px 4px;border-bottom:1px solid #eef3f6;'
-        f'font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;'
+        f"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;"
         f'line-height:20px;color:#8798a5">{label}</td>'
         f'<td valign="top" style="padding:10px 0;border-bottom:1px solid #eef3f6;'
-        f'font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;'
+        f"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;"
         f'line-height:20px;color:#0a2f3e;font-weight:600">{_esc(value)}</td></tr>'
     )
 
 
 def _advice_step(number: int, title: str, body: str) -> str:
     return (
-        '<tr>'
+        "<tr>"
         f'<td width="30" valign="top" style="padding:8px 0">'
         f'<table role="presentation" cellpadding="0" cellspacing="0" border="0">'
         f'<tr><td width="26" height="26" align="center" valign="middle" '
         f'style="width:26px;height:26px;border-radius:50%;background:#eaf6fc;'
-        f'font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+        f"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
         f'font-size:12px;font-weight:700;color:#14708f">{number}</td></tr></table></td>'
         f'<td valign="top" style="padding:8px 0 8px 8px">'
         f'<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
         f'font-size:13px;line-height:18px;color:#0a2f3e;font-weight:600">{_esc(title)}</div>'
         f'<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
         f'font-size:12px;line-height:18px;color:#5b6b77;margin-top:2px">{_esc(body)}</div>'
-        f'</td></tr>'
+        f"</td></tr>"
     )
 
 
@@ -113,8 +113,8 @@ def _button(href: str, label: str, *, primary: bool) -> str:
         f'background:{bg};border:1px solid {border}">'
         f'<a href="{_esc(href)}" target="_blank" '
         f'style="display:inline-block;padding:12px 26px;border-radius:8px;'
-        f'font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
-        f'font-size:14px;font-weight:600;line-height:20px;text-decoration:none;'
+        f"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
+        f"font-size:14px;font-weight:600;line-height:20px;text-decoration:none;"
         f'color:{fg}">{_esc(label)}</a></td></tr></table>'
     )
 
@@ -128,7 +128,7 @@ def _logo_block() -> str:
         'style="display:block">'
         '<defs><linearGradient id="skym" x1="0" y1="0" x2="1" y2="1">'
         '<stop offset="0%" stop-color="#aedef1"/><stop offset="100%" stop-color="#4cb6e1"/>'
-        '</linearGradient></defs>'
+        "</linearGradient></defs>"
         '<rect width="32" height="32" rx="9" fill="url(#skym)"/>'
         '<g stroke="#0a2f3e" stroke-width="2.6" stroke-linecap="round">'
         '<path d="M9 22v-4"/><path d="M14 22v-8"/><path d="M19 22V11"/><path d="M24 22v-13"/>'
@@ -136,7 +136,7 @@ def _logo_block() -> str:
         '</td><td style="padding-left:10px">'
         '<span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
         'font-size:19px;font-weight:700;letter-spacing:-0.2px;color:#0a2f3e">Skyrict</span>'
-        '</td></tr></table>'
+        "</td></tr></table>"
     )
 
 
@@ -295,10 +295,26 @@ def render_security_alert_html(alert: SecurityAlert) -> str:
     primary, secondary = _action_buttons(alert)
 
     advice = (
-        _advice_step(1, "Change your password", "Use a strong, unique password and update it from your account security settings.")
-        + _advice_step(2, "Review active sessions", "Sign out of any sessions you don't recognize from your security settings.")
-        + _advice_step(3, "Revoke trusted devices", "Remove devices you no longer use so they can't access your account.")
-        + _advice_step(4, "Enable multi-factor auth", "Add a second verification step to keep your account protected even if your password leaks.")
+        _advice_step(
+            1,
+            "Change your password",
+            "Use a strong, unique password and update it from your account security settings.",
+        )
+        + _advice_step(
+            2,
+            "Review active sessions",
+            "Sign out of any sessions you don't recognize from your security settings.",
+        )
+        + _advice_step(
+            3,
+            "Revoke trusted devices",
+            "Remove devices you no longer use so they can't access your account.",
+        )
+        + _advice_step(
+            4,
+            "Enable multi-factor auth",
+            "Add a second verification step to keep your account protected even if your password leaks.",
+        )
     )
 
     mapping = {
@@ -345,7 +361,6 @@ def render_security_alert_text(alert: SecurityAlert) -> str:
         "active sessions, revoke trusted devices, and enable multi-factor "
         "authentication.",
         "",
-        "This is an automated security notification. For help, contact "
-        f"{alert.support_email}.",
+        f"This is an automated security notification. For help, contact {alert.support_email}.",
     ]
     return "\n".join(lines)

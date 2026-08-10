@@ -64,7 +64,7 @@ def test_html_does_not_leak_python_repr() -> None:
     assert "]" not in html
     assert "''" not in html
     assert "<tr><td" in html  # rows are real table markup, not stringified
-    assert len(html.split("<tr><td width=\"34\"")) == 9  # header + 8 detail rows
+    assert len(html.split('<tr><td width="34"')) == 9  # header + 8 detail rows
 
 
 def test_html_structure_and_actions() -> None:
@@ -98,13 +98,13 @@ def test_html_escapes_user_values() -> None:
         _alert(
             full_name="Alice <img src=x onerror=alert(1)>",
             browser='Chrome"><script>alert(1)</script>',
-            os='<b>Windows</b>',
+            os="<b>Windows</b>",
         )
     )
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
     assert "&lt;b&gt;Windows&lt;/b&gt;" in html
-    assert '<img src=x' not in html
+    assert "<img src=x" not in html
 
 
 def test_unknown_location_renders_gracefully() -> None:

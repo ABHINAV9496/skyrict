@@ -305,11 +305,7 @@ class AuthenticationService:
                     event_type="new_device",
                     ip_address=mask_ip(ip_address),
                     location=format_location(location),
-                    browser=" ".join(
-                        p
-                        for p in (device.browser, device.browser_version)
-                        if p
-                    )
+                    browser=" ".join(p for p in (device.browser, device.browser_version) if p)
                     or "Unknown",
                     os=" ".join(p for p in (device.os, device.os_version) if p) or "Unknown",
                     device=f"{device.device} ({device.device_type})",

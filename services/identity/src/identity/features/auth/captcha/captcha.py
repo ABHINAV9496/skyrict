@@ -553,6 +553,7 @@ def _render_character(
         )
     return layer
 
+
 def _wave_shift(image: Image.Image, *, axis: str, amplitude: int, period: int) -> None:
     """Sine-warp an image along one axis, wrapping so nothing is lost."""
     phase = random.uniform(0, 2 * math.pi)

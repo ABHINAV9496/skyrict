@@ -1,0 +1,9 @@
+# Gitleaks allowlist — see https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+#
+# test_security.py contains an intentionally-malformed `alg:none` JWT fixture
+# ({"alg":"none"}.{"sub":"a"}) used by test_none_algorithm_rejected to verify
+# that python-jose's verify rejects unsigned tokens. The base64 payload is a
+# deliberate test constant, not a credential.
+
+[allowlist]
+paths = ["services/core/tests/unit/core/test_security.py"]

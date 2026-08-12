@@ -1,17 +1,17 @@
 # =============================================================================
-# Skyrict Identity Service — Dev Dockerfile
+# Skyrict Core Service — Dev Dockerfile
 #
 # Local development: dev dependencies, tests, and uvicorn live reload.
-# Used by docker-compose.dev.yml (the `identity` service build).
+# Used by docker-compose.dev.yml (the `core` service build).
 #
-# Production uses services/identity/Dockerfile (non-root, prod deps only).
+# Production uses services/core/Dockerfile (non-root, prod deps only).
 # =============================================================================
 
 FROM python:3.12-slim AS dev
 
 WORKDIR /app
 
-# System deps needed for asyncpg, cryptography (RSA), argon2-cffi
+# System deps needed for asyncpg, cryptography
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
@@ -38,22 +38,22 @@ COPY libs/skyrict-events/README.md libs/skyrict-events/
 COPY libs/skyrict-testing/pyproject.toml libs/skyrict-testing/
 COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 
-# Install all deps (dev group included — pytest, mypy, ruff, testcontainers)
-RUN uv sync --frozen --directory services/identity
+# Install all deps (dev group included — pytest, mypy, ruff)
+RUN uv sync --frozen --directory services/core
 
-# Copy source code (skyrict-common is imported directly by identity at runtime)
-COPY services/identity/src services/identity/src
+# Copy source code (skyrict-common is imported directly by core at runtime)
+COPY services/core/src services/core/src
 COPY libs/skyrict-common/src libs/skyrict-common/src
 
 # Copy tests (dev only — never reaches production)
-COPY services/identity/tests services/identity/tests
+COPY services/core/tests services/core/tests
 
 # Copy alembic config and migrations
-COPY services/identity/alembic services/identity/alembic
-COPY services/identity/alembic.ini services/identity/alembic.ini
+COPY services/core/alembic services/core/alembic
+COPY services/core/alembic.ini services/core/alembic.ini
 
-EXPOSE 8000
+EXPOSE 8001
 
-CMD ["uv", "run", "--directory", "services/identity", \
-     "uvicorn", "identity.main:app", \
-     "--reload", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--directory", "services/core", \
+     "uvicorn", "core.main:app", \
+     "--reload", "--host", "0.0.0.0", "--port", "8001"]

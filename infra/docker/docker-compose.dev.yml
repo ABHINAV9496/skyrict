@@ -67,6 +67,44 @@ services:
       start_period: 15s
       retries: 3
 
+  # ---------- Core Service (dev target — live reload) ----------
+  core:
+    image: skyrict-core:latest
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile.dev
+    container_name: skyrict-core
+    ports:
+      - "8001:8001"
+    env_file:
+      - ../../services/core/.env
+    environment:
+      CORE_ENVIRONMENT: dev
+      CORE_DEBUG: "true"
+      CORE_LOG_LEVEL: DEBUG
+      CORE_LOG_JSON: "false"
+      # Core shares the skyrict_identity Postgres database with identity —
+      # no separate DB container. Inside the compose network the DB hostname
+      # is the service name, not localhost. These override the host-oriented
+      # defaults in services/core/.env.
+      CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
+    volumes:
+      - ../../services/core/src:/app/services/core/src
+      - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
+      # The dev CMD runs from /app/services/core, so the relative key path in
+      # services/core/.env resolves to /app/services/core/.dev/keys.
+      - ../../.dev/keys:/app/services/core/.dev/keys:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
   # ---------- Nginx (local multi-tenant routing) ----------
   # Routes *.localhost subdomains (and a path-based fallback) to the identity
   # service, injecting X-Tenant-Slug so tenant resolution behaves identically

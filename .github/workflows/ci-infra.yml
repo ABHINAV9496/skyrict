@@ -13,12 +13,14 @@ on:
   pull_request:
     branches: [main, dev]
     paths:
-      - "infra/**"
+      - "infra/terraform/**"
+      - "infra/k8s/**"
       - ".github/workflows/ci-infra.yml"
   push:
     branches: [main, dev]
     paths:
-      - "infra/**"
+      - "infra/terraform/**"
+      - "infra/k8s/**"
       - ".github/workflows/ci-infra.yml"
 
 concurrency:

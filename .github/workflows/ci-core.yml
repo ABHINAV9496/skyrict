@@ -1,23 +1,25 @@
-name: CI — Identity Service
+name: CI — Core Service
 
 on:
   push:
     branches: [main, dev]
     paths:
-      - "services/identity/**"
-      - "!services/identity/Dockerfile"
-      - "!services/identity/Dockerfile.dev"
+      - "services/core/**"
       - "libs/skyrict-common/**"
+      - "libs/skyrict-events/**"
+      - "pyproject.toml"
+      - "uv.lock"
   pull_request:
     branches: [main, dev]
     paths:
-      - "services/identity/**"
-      - "!services/identity/Dockerfile"
-      - "!services/identity/Dockerfile.dev"
+      - "services/core/**"
       - "libs/skyrict-common/**"
+      - "libs/skyrict-events/**"
+      - "pyproject.toml"
+      - "uv.lock"
 
 concurrency:
-  group: ci-identity-${{ github.ref }}
+  group: ci-core-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,16 +41,16 @@ jobs:
         run: uv sync --all-packages
 
       - name: Ruff check
-        run: uv run ruff check services/ libs/
+        run: uv run ruff check services/core/ libs/
 
       - name: Ruff format check
-        run: uv run ruff format --check services/ libs/
+        run: uv run ruff format --check services/core/ libs/
 
       - name: Mypy
-        run: uv run mypy services/identity/src/
+        run: uv run mypy services/core/src/
 
       - name: Import Linter
-        run: uv run lint-imports
+        run: uv run lint-imports --config services/core/import-linter.toml
 
   test:
     name: Unit Tests
@@ -68,7 +70,7 @@ jobs:
         run: uv sync --all-packages
 
       - name: Run unit tests
-        run: uv run pytest services/identity/tests/unit/ -v --tb=short
+        run: uv run pytest services/core/tests/unit/ -v --tb=short
 
   build:
     name: Build Check
@@ -87,4 +89,4 @@ jobs:
       - name: Install and verify
         run: |
           uv sync --all-packages
-          uv run python -c "import identity; print(identity.__version__)"
+          uv run python -c "import core; print(core.__version__)"

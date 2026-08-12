@@ -5,16 +5,16 @@ on:
     branches: [main, dev]
     paths:
       - "services/identity/**"
+      - "!services/identity/Dockerfile"
+      - "!services/identity/Dockerfile.dev"
       - "libs/skyrict-common/**"
-      - "pyproject.toml"
-      - "uv.lock"
   pull_request:
     branches: [main, dev]
     paths:
       - "services/identity/**"
+      - "!services/identity/Dockerfile"
+      - "!services/identity/Dockerfile.dev"
       - "libs/skyrict-common/**"
-      - "pyproject.toml"
-      - "uv.lock"
 
 concurrency:
   group: ci-identity-${{ github.ref }}

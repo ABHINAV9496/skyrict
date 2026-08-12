@@ -10,6 +10,34 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  changes:
+    name: Detect changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      identity: ${{ steps.filter.outputs.identity }}
+      core: ${{ steps.filter.outputs.core }}
+      common: ${{ steps.filter.outputs.common }}
+      events: ${{ steps.filter.outputs.events }}
+      testing: ${{ steps.filter.outputs.testing }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            identity:
+              - 'services/identity/**'
+            core:
+              - 'services/core/**'
+            common:
+              - 'libs/skyrict-common/**'
+            events:
+              - 'libs/skyrict-events/**'
+            testing:
+              - 'libs/skyrict-testing/**'
+
   lint:
     name: Lint & Typecheck & Security
     runs-on: ubuntu-latest
@@ -32,17 +60,24 @@ jobs:
         run: uv run bandit -r services/ libs/ -c pyproject.toml
 
   test:
-    name: Tests
+    name: Tests (${{ matrix.package }})
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        package:
-          - services/identity
-          - services/core
-          - libs/skyrict-common
-          - libs/skyrict-events
-          - libs/skyrict-testing
+        include:
+          - package: services/identity
+            flag: identity
+          - package: services/core
+            flag: core
+          - package: libs/skyrict-common
+            flag: common
+          - package: libs/skyrict-events
+            flag: events
+          - package: libs/skyrict-testing
+            flag: testing
+    if: ${{ fromJSON(needs.changes.outputs[matrix.flag]) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

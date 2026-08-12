@@ -9,6 +9,7 @@ import {
 } from "../helpers/backend";
 import { fillOtp } from "../helpers/browser";
 import { normalizeSecret, totp } from "../helpers/crypto";
+import { watchLogin } from "../helpers/diagnostics";
 import { signinUrl } from "../helpers/env";
 
 const LOGIN_FAILED_MESSAGE = "Invalid email or password.";
@@ -89,6 +90,7 @@ test.describe.serial("MFA enrollment and verification", () => {
   });
 
   test("a fresh account must enroll MFA before the workspace opens", async ({ page }) => {
+    const dumpLogin = watchLogin(page);
     await page.goto(
       signinUrl(account.slug, `/signin?email=${encodeURIComponent(account.email)}`),
     );
@@ -98,7 +100,12 @@ test.describe.serial("MFA enrollment and verification", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     // Login reports next_step=mfa.setup and redirects to the enrollment page.
-    await expect(page).toHaveURL(/\/setup-mfa$/, { timeout: 30_000 });
+    try {
+      await expect(page).toHaveURL(/\/setup-mfa$/, { timeout: 30_000 });
+    } catch (error) {
+      console.log(`LOGIN_DIAG login-mfa.spec\n${await dumpLogin()}`);
+      throw error;
+    }
     await expect(page.getByText("Final step")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Protect your account" })).toBeVisible();
     await expect(page.getByText("Mandatory for your security")).toBeVisible();

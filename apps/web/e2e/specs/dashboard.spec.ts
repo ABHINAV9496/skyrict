@@ -8,10 +8,12 @@ import {
 } from "../helpers/backend";
 import { fillOtp } from "../helpers/browser";
 import { totp } from "../helpers/crypto";
+import { watchLogin } from "../helpers/diagnostics";
 import { signinUrl, workspaceUrl } from "../helpers/env";
 
 /** Sign in via the browser and land on the tenant workspace (handoff PRG). */
 async function signInAs(page: Page, account: Account, secret: string) {
+  const dumpLogin = watchLogin(page);
   await page.goto(
     signinUrl(account.slug, `/signin?email=${encodeURIComponent(account.email)}`),
   );
@@ -19,7 +21,12 @@ async function signInAs(page: Page, account: Account, secret: string) {
   await page.locator("#password").fill(account.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Two-factor check" })).toBeVisible();
+  try {
+    await expect(page.getByRole("heading", { name: "Two-factor check" })).toBeVisible();
+  } catch (error) {
+    console.log(`LOGIN_DIAG dashboard.spec\n${await dumpLogin()}`);
+    throw error;
+  }
   await fillOtp(page, "Two-factor code", totp(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
 

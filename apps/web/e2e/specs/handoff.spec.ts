@@ -8,6 +8,7 @@ import {
 } from "../helpers/backend";
 import { fillOtp } from "../helpers/browser";
 import { totp } from "../helpers/crypto";
+import { watchLogin } from "../helpers/diagnostics";
 import { signinUrl, WEB_PORT } from "../helpers/env";
 
 const SESSION_COOKIE = "skyrict_session";
@@ -18,6 +19,7 @@ function signinOrigin(slug: string): string {
 
 /** Sign in via the browser and land on the tenant workspace (handoff PRG). */
 async function signInAs(page: Page, account: Account, secret: string): Promise<void> {
+  const dumpLogin = watchLogin(page);
   await page.goto(
     signinUrl(account.slug, `/signin?email=${encodeURIComponent(account.email)}`),
   );
@@ -25,7 +27,12 @@ async function signInAs(page: Page, account: Account, secret: string): Promise<v
   await page.locator("#password").fill(account.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Two-factor check" })).toBeVisible();
+  try {
+    await expect(page.getByRole("heading", { name: "Two-factor check" })).toBeVisible();
+  } catch (error) {
+    console.log(`LOGIN_DIAG handoff.spec\n${await dumpLogin()}`);
+    throw error;
+  }
   await fillOtp(page, "Two-factor code", totp(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
 

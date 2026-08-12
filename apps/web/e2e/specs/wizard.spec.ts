@@ -6,6 +6,7 @@ import {
   uniqueSlug,
 } from "../helpers/backend";
 import { fillOtp } from "../helpers/browser";
+import { watchLogin } from "../helpers/diagnostics";
 import { marketingUrl, signupUrl, WEB_PORT } from "../helpers/env";
 
 const signupOrigin = new RegExp(`^http://signup\\.localhost:${WEB_PORT}/signup/?$`);
@@ -57,17 +58,19 @@ test.describe("signup wizard", () => {
     const sent = (await (await codeResponse).json()) as { code: string | null };
     expect(sent.code, "plaintext OTP is only present with IDENTITY_ENVIRONMENT=test").toBeTruthy();
     await fillOtp(page, "Verification code", sent.code!);
-    await expect(page).toHaveURL(/\/register\/security\?/);
 
-    // Step 3 — security (password + text captcha).
-    await expect(page.getByRole("heading", { name: "Protect your account" })).toBeVisible();
-    await expect(page.getByText("Step 3 of 5 · Security")).toBeVisible();
-    // The captcha challenge GET fires when the CaptchaChallenge mounts (step 3).
+    // Step 3 — security (password + text captcha). The captcha challenge GET
+    // fires when the CaptchaChallenge mounts (step 3), so register the waiter
+    // BEFORE the step-2 -> step-3 transition to avoid a race with the mount.
     const captchaResponse = page.waitForResponse(
       (res) =>
         res.url().includes("/api/auth/captcha") &&
         res.request().method() === "GET",
     );
+    await expect(page).toHaveURL(/\/register\/security\?/);
+
+    await expect(page.getByRole("heading", { name: "Protect your account" })).toBeVisible();
+    await expect(page.getByText("Step 3 of 5 · Security")).toBeVisible();
     await page.locator("#password").fill(E2E_PASSWORD);
     await page.locator("#confirmPassword").fill(E2E_PASSWORD);
     const captcha = (await (await captchaResponse).json()) as {
@@ -114,9 +117,15 @@ test.describe("signup wizard", () => {
     await expect(page.getByRole("heading", { name: "Sign in to Skyrict" })).toBeVisible();
 
     // Sign in — the fresh account is forced into MFA setup.
+    const dumpLogin = watchLogin(page);
     await page.locator("#password").fill(E2E_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/setup-mfa$/, { timeout: 30_000 });
+    try {
+      await expect(page).toHaveURL(/\/setup-mfa$/, { timeout: 30_000 });
+    } catch (error) {
+      console.log(`LOGIN_DIAG wizard.spec\n${await dumpLogin()}`);
+      throw error;
+    }
     await expect(page.getByText("Final step")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Protect your account" })).toBeVisible();
     await expect(page.getByText("Mandatory for your security")).toBeVisible();

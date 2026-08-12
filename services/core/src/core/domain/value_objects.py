@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from enum import StrEnum
 
 from skyrict_common.exceptions import ValidationError
 
@@ -42,6 +43,25 @@ SUPPORTED_CURRENCIES: frozenset[str] = frozenset(
 
 # Decimal precision/rounding applied by rounded() and arithmetic results.
 _MONEY_QUANTUM = Decimal("0.01")
+
+
+class StockMovementType(StrEnum):
+    """Native PostgreSQL enum backing ``erp_stock_movements.movement_type``.
+
+    The ledger distinguishes the buckets that feed the materialized stock level:
+    ``qty_on_hand`` sums everything EXCEPT ``reservation``/``release``, while
+    ``qty_reserved`` is the net of those two. ``transfer`` is recorded as a
+    dual-row pair (negative at the source warehouse, positive at the
+    destination) sharing one ``(ref_type, ref_id)`` — allowed because the
+    idempotency key also includes ``warehouse_id``.
+    """
+
+    RECEIPT = "receipt"
+    ISSUE = "issue"
+    TRANSFER = "transfer"
+    ADJUSTMENT = "adjustment"
+    RESERVATION = "reservation"
+    RELEASE = "release"
 
 
 def _require_currency(currency: str) -> None:

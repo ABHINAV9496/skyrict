@@ -8,10 +8,16 @@ tenant-scoped RBAC grants without touching SQLAlchemy.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
+
+from core.domain.value_objects import Money
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
+
+    from core.domain.value_objects import StockMovementType
 
 
 @dataclass(frozen=True)
@@ -53,3 +59,77 @@ class CoreUserRole:
     user_id: uuid.UUID
     role_id: uuid.UUID
     scope_id: uuid.UUID | None = field(default=None)
+
+
+@dataclass(frozen=True)
+class Product:
+    """A tenant-scoped sellable/countable item (soft-deletable via ``is_active``).
+
+    Prices are ``Money`` amounts so currency validation happens at construction,
+    and the ORM layer splits them into a Numeric column + currency code.
+    """
+
+    tenant_id: uuid.UUID
+    sku: str
+    name: str
+    category: str | None = None
+    unit: str | None = None
+    cost_price: Money = field(default_factory=lambda: Money.zero("USD"))
+    sell_price: Money = field(default_factory=lambda: Money.zero("USD"))
+    reorder_point: Decimal = Decimal("0")
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Warehouse:
+    """A tenant-scoped storage location (soft-deletable via ``is_active``)."""
+
+    tenant_id: uuid.UUID
+    name: str
+    location: str | None = None
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class StockLevel:
+    """Materialized current stock for one product in one warehouse.
+
+    ``qty_on_hand`` = ledger sum of non-reservation movements; ``qty_reserved``
+    = net of reservation/release movements. The DB CHECK ``0 <= qty_reserved
+    <= qty_on_hand`` makes over-reservation impossible at the constraint level.
+    """
+
+    tenant_id: uuid.UUID
+    product_id: uuid.UUID
+    warehouse_id: uuid.UUID
+    qty_on_hand: Decimal = Decimal("0")
+    qty_reserved: Decimal = Decimal("0")
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class StockMovement:
+    """One immutable ledger entry — insert-only, never updated or deleted.
+
+    ``qty`` is signed (negative for issues/outflows). ``(ref_type, ref_id)``
+    identifies the source document line for idempotency probes; combined with
+    ``warehouse_id`` it is unique per tenant so a transfer pair can share a ref.
+    """
+
+    tenant_id: uuid.UUID
+    product_id: uuid.UUID
+    warehouse_id: uuid.UUID
+    movement_type: StockMovementType
+    qty: Decimal
+    ref_type: str
+    ref_id: str
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None

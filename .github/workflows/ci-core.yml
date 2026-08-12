@@ -1,0 +1,92 @@
+name: CI — Core Service
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "services/core/**"
+      - "libs/skyrict-common/**"
+      - "libs/skyrict-events/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "services/core/**"
+      - "libs/skyrict-common/**"
+      - "libs/skyrict-events/**"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  group: ci-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Ruff check
+        run: uv run ruff check services/core/ libs/
+
+      - name: Ruff format check
+        run: uv run ruff format --check services/core/ libs/
+
+      - name: Mypy
+        run: uv run mypy services/core/src/
+
+      - name: Import Linter
+        run: uv run lint-imports --config services/core/import-linter.toml
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run unit tests
+        run: uv run pytest services/core/tests/unit/ -v --tb=short
+
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and verify
+        run: |
+          uv sync --all-packages
+          uv run python -c "import core; print(core.__version__)"

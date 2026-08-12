@@ -39,6 +39,7 @@ jobs:
       matrix:
         package:
           - services/identity
+          - services/core
           - libs/skyrict-common
           - libs/skyrict-events
           - libs/skyrict-testing

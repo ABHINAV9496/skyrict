@@ -1,4 +1,6 @@
-.PHONY: help setup dev test lint migrate seed clean benchmark format check
+.PHONY: help setup dev test lint migrate seed clean benchmark format check \
+	core-dev test-core test-unit-core test-integration-core test-cov-core \
+	migrate-core migrate-create-core seed-core build-core lint-core
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -10,6 +12,7 @@ setup: ## Install all dependencies and boot infrastructure
 	cd apps/web && pnpm install
 	docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml up -d
 	uv run --directory services/identity alembic upgrade head
+	uv run --directory services/core alembic upgrade head
 
 # ---------- Development ----------
 
@@ -38,6 +41,38 @@ test-integration: ## Run integration tests (requires Docker)
 
 test-cov: ## Run tests with coverage report
 	uv run pytest services/identity/tests/ -v --cov=services/identity/src --cov-report=html --cov-report=term
+
+# ---------- Core Service ----------
+
+core-dev: ## Start the core service in dev mode (live reload, port 8001)
+	uv run --directory services/core core serve --reload
+
+test-core: ## Run all core tests
+	uv run pytest services/core/tests/ -v --tb=short
+
+test-unit-core: ## Run core unit tests only
+	uv run pytest services/core/tests/unit/ -v --tb=short -m unit
+
+test-integration-core: ## Run core integration tests (requires Docker)
+	uv run pytest services/core/tests/integration/ -v --tb=short -m integration
+
+test-cov-core: ## Run core tests with coverage report
+	uv run pytest services/core/tests/ -v --cov=services/core/src --cov-report=html --cov-report=term
+
+migrate-core: ## Run core Alembic migrations (shared DB, alembic_version_core)
+	uv run --directory services/core core migrate
+
+migrate-create-core: ## Create a new core migration (usage: make migrate-create-core MSG="...")
+	uv run --directory services/core alembic revision --autogenerate -m "$(MSG)"
+
+seed-core: ## Verify core reference data seeded by migration 0001
+	uv run --directory services/core core seed
+
+lint-core: ## Lint core only (ruff + mypy + import-linter)
+	uv run ruff check services/core/ libs/
+	uv run ruff format --check services/core/ libs/
+	uv run mypy services/core/src/
+	uv run lint-imports --config services/core/import-linter.toml
 
 # ---------- Linting ----------
 
@@ -76,6 +111,9 @@ seed: ## Load reference data
 build: ## Build identity service Docker image
 	docker build -t skyrict/identity:latest -f services/identity/Dockerfile .
 
+build-core: ## Build core service Docker image
+	docker build -t skyrict/core:latest -f services/core/Dockerfile .
+
 build-web: ## Build frontend
 	cd apps/web && pnpm build
 
@@ -103,4 +141,4 @@ hooks: ## Install git hooks
 
 # ---------- CI ----------
 
-check: lint test ## Run full CI check locally (lint + test)
+check: lint test lint-core test-core ## Run full CI check locally (lint + test + core)

@@ -233,4 +233,4 @@ class MFAService:
             target=f"user:{target_user_id}",
             user_id=str(owner_user_id),
             details={"sensitivity": "high", "target_user": str(target_user_id)},
-        )   
+        )

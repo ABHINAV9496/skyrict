@@ -30,11 +30,9 @@ source_modules = ["core.features"]
 forbidden_modules = ["core.models", "core.db"]
 # Repositories are the ORM gateway: services/routers/schemas must never import
 # SQLAlchemy models or the db layer directly. Persistence stays in repository.py.
+# (When feature repositories land, restore ignore_imports for
+# "core.features.**.repository -> core.models.**" / "-> core.db.**".)
 allow_indirect_imports = true
-ignore_imports = [
-    "core.features.**.repository -> core.models.**",
-    "core.features.**.repository -> core.db.**",
-]
 
 [[tool.importlinter.contracts]]
 name = "Domain is pure"

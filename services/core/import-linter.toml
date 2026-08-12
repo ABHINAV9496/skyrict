@@ -1,0 +1,52 @@
+# Core service import-linter configuration — enforced architecture.
+#
+# Run from the repo root:
+#   uv run import-linter --config services/core/import-linter.toml
+#
+# Mirrors services/identity (root pyproject.toml) but scoped to the core
+# package so the two services' contracts can evolve independently.
+
+[tool.importlinter]
+root_package = "core"
+include_external_packages = false
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Foundations never depend on features or api"
+type = "forbidden"
+source_modules = [
+    "core.core",
+    "core.db",
+    "core.models",
+    "core.domain",
+    "core.events",
+]
+forbidden_modules = ["core.features", "core.api"]
+
+[[tool.importlinter.contracts]]
+name = "Only repositories touch the database layer"
+type = "forbidden"
+source_modules = ["core.features"]
+forbidden_modules = ["core.models", "core.db"]
+# Repositories are the ORM gateway: services/routers/schemas must never import
+# SQLAlchemy models or the db layer directly. Persistence stays in repository.py.
+allow_indirect_imports = true
+ignore_imports = [
+    "core.features.**.repository -> core.models.**",
+    "core.features.**.repository -> core.db.**",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure"
+type = "forbidden"
+source_modules = ["core.domain"]
+forbidden_modules = ["core.models", "core.db", "core.features", "core.api"]
+
+[[tool.importlinter.contracts]]
+name = "API never touches ORM models"
+type = "forbidden"
+source_modules = ["core.api"]
+forbidden_modules = ["core.models"]
+# Direct-import only: api.deps legitimately wires repositories (which touch
+# models) as the composition root, so indirect chains are not flagged.
+allow_indirect_imports = true

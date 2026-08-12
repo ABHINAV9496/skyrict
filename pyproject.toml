@@ -69,9 +69,14 @@ extend-immutable-calls = [
 "services/identity/src/identity/**/models/**" = ["TC001", "TC002", "TC003"]
 "services/identity/src/identity/core/exceptions.py" = ["TC001", "TC002", "TC003"]
 "services/identity/src/identity/core/tenant_context.py" = ["TC001", "TC002", "TC003"]
+"services/core/src/core/api/**" = ["TC001", "TC002", "TC003"]
+"services/core/src/core/features/**" = ["TC001", "TC002", "TC003"]
+"services/core/src/core/**/models/**" = ["TC001", "TC002", "TC003"]
+"services/core/src/core/core/exceptions.py" = ["TC001", "TC002", "TC003"]
+"services/core/src/core/core/tenant_context.py" = ["TC001", "TC002", "TC003"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["skyrict", "identity", "skyrict_common", "skyrict_testing", "skyrict_events"]
+known-first-party = ["skyrict", "identity", "core", "skyrict_common", "skyrict_testing", "skyrict_events"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -87,7 +92,7 @@ target-version = ["py312"]
 [tool.isort]
 profile = "black"
 line_length = 100
-known_first_party = ["skyrict", "identity", "skyrict_common", "skyrict_testing", "skyrict_events"]
+known_first_party = ["skyrict", "identity", "core", "skyrict_common", "skyrict_testing", "skyrict_events"]
 
 # ---------- Bandit (security scanner for CI) ----------
 [tool.bandit]

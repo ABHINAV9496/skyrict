@@ -37,6 +37,8 @@ COPY pyproject.toml uv.lock ./
 # file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
 COPY services/identity/README.md services/identity/
+COPY services/core/pyproject.toml services/core/
+COPY services/core/README.md services/core/
 COPY libs/skyrict-common/pyproject.toml libs/skyrict-common/
 COPY libs/skyrict-common/README.md libs/skyrict-common/
 COPY libs/skyrict-events/pyproject.toml libs/skyrict-events/

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const knownTitles: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/members": "Members",
+  "/dashboard/invite": "Invite team",
   "/dashboard/agents": "AI Agents",
   "/dashboard/erp": "Business Operations",
   "/dashboard/intelligence": "Market Intelligence",

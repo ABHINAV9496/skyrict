@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
+  UserPlus,
   Users,
   Wallet,
   type LucideIcon,
@@ -65,6 +66,13 @@ export const workspaceNavGroups: NavGroup[] = [
 ];
 
 export const workspaceAccountItems: NavItem[] = [
+  {
+    href: "/dashboard/invite",
+    label: "Invite team",
+    icon: UserPlus,
+    permission: "invitations:send",
+    tour: "nav-invite",
+  },
   {
     href: "/dashboard/members",
     label: "Members",

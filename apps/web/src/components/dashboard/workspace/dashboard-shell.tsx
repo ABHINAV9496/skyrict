@@ -42,7 +42,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-background [@supports(height:100dvh)]:h-dvh">
       <AppSidebar
         collapsed={collapsed}
         mobileOpen={mobileOpen}
@@ -51,10 +51,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         navGroups={navGroups}
         accountItems={accountItems}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-6 lg:py-8">{children}</div>
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+          <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 flex-col px-4 py-6 lg:px-6 lg:py-8">
+            {children}
+          </div>
         </main>
       </div>
       <ProductTour />

@@ -5,6 +5,10 @@
 serializes the same envelope and emits it as a structured log line, so every
 producer's call site is identical to the real thing and swapping in the Kafka
 producer later is a one-line change.
+
+Submodules hold domain producers built on this stub: :mod:`finance_events`
+adds the finance money-moment publisher that buffers events and emits them
+only after the request transaction commits.
 """
 
 from __future__ import annotations

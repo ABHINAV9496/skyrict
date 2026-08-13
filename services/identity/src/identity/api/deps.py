@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from identity.features.handoffs.service import HandoffService
     from identity.features.invitations.repository import InvitationRepository
     from identity.features.invitations.service import InvitationService
+    from identity.features.members.service import MemberService
     from identity.features.memberships.service import MembershipService
     from identity.features.mfa.attempt_store import MFAAttemptStore
     from identity.features.mfa.service import MFAService
@@ -330,6 +331,24 @@ def get_user_service(user_repo: UserRepository = Depends(get_user_repo)) -> User
     from identity.features.users.service import UserService
 
     return UserService(user_repo)
+
+
+def get_member_service(
+    user_repo: UserRepository = Depends(get_user_repo),
+    membership_service: MembershipService = Depends(get_membership_service),
+    role_repo: RoleRepository = Depends(get_role_repo),
+    session_service: SessionService = Depends(get_session_service),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> MemberService:
+    from identity.features.members.service import MemberService
+
+    return MemberService(
+        user_repo,
+        membership_service,
+        role_repo,
+        session_service,
+        audit_service,
+    )
 
 
 def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo)) -> TenantService:

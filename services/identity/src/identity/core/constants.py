@@ -68,8 +68,8 @@ LOGIN_FAILED_MESSAGE = "Invalid email or password."
 # These are the REAL mounted paths (the api_router is mounted under /api/v1).
 # Everything else — including /api/v1/auth/login — requires tenant resolution
 # so the tenant is known before route execution. The onboarding wizard paths
-# (/auth/signup/*) and /invitations/accept are self-service (no tenant exists
-# yet), so they bypass tenant resolution.
+# (/auth/signup/*) and /invitations/accept|verify are self-service (no tenant
+# exists yet), so they bypass tenant resolution.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {
@@ -84,6 +84,7 @@ SKIP_AUTH_PATHS = frozenset(
         f"{API_V1_PREFIX}/auth/signup/check-slug",
         f"{API_V1_PREFIX}/auth/signup/organization",
         f"{API_V1_PREFIX}/invitations/accept",
+        f"{API_V1_PREFIX}/invitations/verify",
         "/docs",
         "/openapi.json",
         "/redoc",

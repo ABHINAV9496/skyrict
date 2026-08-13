@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
     from identity.features.auth.captcha.captcha_store import CaptchaStore
     from identity.features.auth.service import AuthenticationService, TokenService
+    from identity.features.avatars.service import AvatarService
+    from identity.features.avatars.storage import AvatarStoragePort
     from identity.features.handoffs.repository import HandoffRepository
     from identity.features.handoffs.service import HandoffService
     from identity.features.invitations.repository import InvitationRepository
@@ -344,23 +346,43 @@ def get_invitation_repo(
     return InvitationRepository(db)
 
 
+def get_avatar_storage() -> AvatarStoragePort:
+    """Return the configured avatar blob-storage backend."""
+    from identity.features.avatars.storage import build_avatar_storage
+
+    return build_avatar_storage()
+
+
+def get_avatar_service(
+    storage: AvatarStoragePort = Depends(get_avatar_storage),
+    user_repo: UserRepository = Depends(get_user_repo),
+) -> AvatarService:
+    from identity.features.avatars.service import AvatarService
+
+    return AvatarService(storage, user_repo)
+
+
 def get_invitation_service(
     invitation_repo: InvitationRepository = Depends(get_invitation_repo),
     user_repo: UserRepository = Depends(get_user_repo),
+    tenant_repo: TenantRepository = Depends(get_tenant_repo),
     role_repo: RoleRepository = Depends(get_role_repo),
     email_service: EmailService = Depends(get_email_service),
     membership_service: MembershipService = Depends(get_membership_service),
     audit_service: AuditService = Depends(get_audit_service),
+    avatar_service: AvatarService = Depends(get_avatar_service),
 ) -> InvitationService:
     from identity.features.invitations.service import InvitationService
 
     return InvitationService(
         invitation_repo,
         user_repo,
+        tenant_repo,
         role_repo,
         email_service,
         membership_service,
         audit_service,
+        avatar_service=avatar_service,
     )
 
 

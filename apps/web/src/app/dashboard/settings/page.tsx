@@ -2,7 +2,8 @@
 
 import { LogOut, Plug, ShieldCheck, SlidersHorizontal, UserRound } from "lucide-react";
 
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
+import { SettingsSkeleton } from "@/components/ui/page-skeletons";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,8 @@ function StatusBadge({ enabled }: { enabled: boolean }) {
 
 export default function SettingsPage() {
   const { user, status, logout } = useSession();
+
+  if (status === "loading") return <SettingsSkeleton />;
 
   return (
     <div className="space-y-6">

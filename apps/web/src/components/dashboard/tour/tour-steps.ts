@@ -2,7 +2,6 @@ import {
   Boxes,
   Bot,
   LayoutDashboard,
-  ListOrdered,
   Settings2,
   Sparkles,
   UserRound,
@@ -34,35 +33,27 @@ export const tourSteps: TourStep[] = [
   },
   {
     target: "card-agents",
-    icon: ListOrdered,
-    title: "Pick a module to start",
-    description:
-      "The Overview is your launchpad. Each card opens a module — this is the first place you'll land every time you sign in.",
-    placement: "bottom",
-  },
-  {
-    target: "nav-agents",
     icon: Bot,
     title: "AI Agents",
     description:
       "Autonomous agents that act inside your workspace on the tasks you hand them — always within the permissions you set.",
-    placement: "right",
+    placement: "bottom",
   },
   {
-    target: "nav-erp",
+    target: "card-erp",
     icon: Boxes,
-    title: "ERP",
+    title: "Business Operations",
     description:
       "Run every department on the same data: CRM, sales, inventory, finance, and HR — connected so nothing is ever out of sync.",
-    placement: "right",
+    placement: "bottom",
   },
   {
-    target: "nav-intelligence",
+    target: "card-intelligence",
     icon: Sparkles,
-    title: "Intelligence",
+    title: "Market Intelligence",
     description:
-      "Analytics and insight across your workspace, so decisions are backed by data, not guesses.",
-    placement: "right",
+      "Market research that turns external signals into decisions — search like you would the web, but for your business.",
+    placement: "bottom",
   },
   {
     target: "nav-members",

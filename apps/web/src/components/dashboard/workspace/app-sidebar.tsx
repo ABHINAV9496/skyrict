@@ -5,22 +5,14 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeft,
   Blocks,
-  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
 
 import { Logo, type LogoMarkTone } from "@/components/brand/logo";
 import type { NavGroup, NavItem } from "@/components/dashboard/workspace/sidebar-config";
-import { useSession } from "@/lib/auth/session";
+import { UserMenu } from "@/components/dashboard/workspace/user-menu";
 import { cn } from "@/lib/utils";
-
-function initialsFor(name: string, email: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length > 1) return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
-  if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
-  return email.slice(0, 2).toUpperCase() || "SK";
-}
 
 /**
  * Compare the active path against an internal `/dashboard/*` href. The public
@@ -135,7 +127,6 @@ export function AppSidebar({
   showBackToOverview = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const { user, logout } = useSession();
 
   return (
     <>
@@ -259,35 +250,9 @@ export function AppSidebar({
 
         <footer
           data-tour="sidebar-profile"
-          className="space-y-2 border-t border-sidebar-border p-3"
+          className="border-t border-sidebar-border p-3"
         >
-          <div
-            className={cn(
-              "flex items-center gap-3",
-              collapsed && "flex-col justify-center",
-            )}
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-              {initialsFor(user?.fullName ?? "", user?.email ?? "")}
-            </div>
-            {!collapsed ? (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {user?.fullName || user?.email || "Account"}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LogOut aria-hidden="true" className="size-4" />
-            </button>
-          </div>
+          <UserMenu collapsed={collapsed} />
         </footer>
       </aside>
     </>

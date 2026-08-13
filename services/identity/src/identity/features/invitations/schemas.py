@@ -18,11 +18,14 @@ class InvitationCreateRequest(BaseModel):
     )
 
 
-class InvitationAcceptRequest(BaseModel):
-    token: str
+class InvitationVerifyResponse(BaseModel):
+    """Token validation for the accept page (shown before account creation)."""
+
+    valid: bool = True
     email: EmailStr
-    password: str = Field(..., min_length=12)
-    full_name: str = Field(..., min_length=1, max_length=256)
+    role_name: str
+    expires_at: datetime
+    organization_name: str | None = None
 
 
 class InvitationResponse(BaseModel):

@@ -26,7 +26,9 @@ from skyrict_common.exceptions import (
 
 if TYPE_CHECKING:
     from identity.features.audit.service import AuditService
+    from identity.features.avatars.service import AvatarService
     from identity.features.memberships.service import MembershipService
+    from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.users.ports import UserRepositoryPort
 
@@ -36,17 +38,22 @@ class InvitationService:
         self,
         invitation_repo: InvitationRepositoryPort,
         user_repo: UserRepositoryPort,
+        tenant_repo: TenantRepositoryPort,
         role_repo: RoleRepositoryPort,
         email_service: EmailService,
         membership_service: MembershipService,
         audit_service: AuditService,
+        *,
+        avatar_service: AvatarService | None = None,
     ) -> None:
         self.invitation_repo = invitation_repo
         self.user_repo = user_repo
+        self.tenant_repo = tenant_repo
         self.role_repo = role_repo
         self.email_service = email_service
         self.membership_service = membership_service
         self.audit_service = audit_service
+        self.avatar_service = avatar_service
 
     async def create_invitation(
         self,
@@ -116,14 +123,18 @@ class InvitationService:
         """List invitations for a tenant, newest first."""
         return await self.invitation_repo.list_by_tenant(tenant_id, offset=offset, limit=limit)
 
-    async def accept_invitation(
-        self,
-        *,
-        token: str,
-        email: str,
-        password: str,
-        full_name: str,
-    ) -> User:
+    async def verify_invitation(self, *, token: str) -> tuple[Invitation, str | None]:
+        """Validate a token before the accept form is shown.
+
+        Returns the invitation and the organization name (or None when the
+        tenant is gone) so the invitee can see who invited them. Raises the
+        standard Invitation* errors for invalid, expired, or used tokens.
+        """
+        invitation = await self._load_valid_invitation(token)
+        tenant = await self.tenant_repo.get_by_id(invitation.tenant_id)
+        return invitation, tenant.name if tenant is not None else None
+
+    async def _load_valid_invitation(self, token: str) -> Invitation:
         invitation = await self.invitation_repo.get_by_token(token)
         if invitation is None:
             raise InvitationNotFoundError("Invalid invitation token")
@@ -133,6 +144,19 @@ class InvitationService:
 
         if invitation.used_at is not None:
             raise InvitationAlreadyUsedError("Invitation has already been used")
+
+        return invitation
+
+    async def accept_invitation(
+        self,
+        *,
+        token: str,
+        email: str,
+        password: str,
+        full_name: str,
+        avatar: bytes | None = None,
+    ) -> User:
+        invitation = await self._load_valid_invitation(token)
 
         if invitation.email.lower() != email.lower():
             raise InvitationEmailMismatchError("Email does not match the invitation")
@@ -160,6 +184,11 @@ class InvitationService:
 
         assert invitation.id is not None
         assert user.id is not None
+
+        if avatar and self.avatar_service is not None:
+            await self.avatar_service.attach_to_user(
+                user_id=str(user.id), tenant_id=str(tenant_id), data=avatar
+            )
 
         role = await self.role_repo.get_by_name(tenant_id, invitation.role_name)
         if role is None or role.id is None:

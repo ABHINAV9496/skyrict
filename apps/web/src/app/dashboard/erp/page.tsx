@@ -1,13 +1,100 @@
-import { Boxes } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  BarChart3,
+  Boxes,
+  Contact,
+  Package,
+  ShoppingCart,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import { reportsKpis } from "@/lib/mock/erp";
+import { cn } from "@/lib/utils";
+
+const quickLinks: {
+  href: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}[] = [
+  { href: "/dashboard/erp/crm", title: "CRM", description: "Contacts, deals, and pipelines.", icon: Contact },
+  { href: "/dashboard/erp/sales", title: "Sales", description: "Orders and invoices.", icon: ShoppingCart },
+  { href: "/dashboard/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
+  { href: "/dashboard/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
+  { href: "/dashboard/erp/hr", title: "HR", description: "People and the team.", icon: Users },
+  { href: "/dashboard/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
+];
 
 export default function ErpPage() {
   return (
-    <PageHeader
-      title="ERP"
-      description="Business operations management — inventory, sales, cash, and orders."
-      icon={Boxes}
-    />
+    <div className="space-y-8">
+      <PageHeader
+        title="Business Operations"
+        description="Operations management — inventory, sales, cash, and orders, all on one source of truth."
+        icon={Boxes}
+      />
+
+      <section className="space-y-4">
+        <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+          At a glance
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {reportsKpis.slice(0, 3).map((kpi) => (
+            <div key={kpi.label} className="rounded-xl border border-border bg-card p-5">
+              <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                {kpi.label}
+              </p>
+              <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-foreground">
+                {kpi.value}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-sm font-medium",
+                  kpi.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+                )}
+              >
+                {kpi.delta}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+          Modules
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {quickLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="group relative flex flex-col rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/40 active:translate-y-0"
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                <link.icon aria-hidden="true" className="size-5" />
+              </div>
+              <h3 className="mt-4 font-display text-base font-semibold text-foreground">
+                {link.title}
+              </h3>
+              <p className="mt-1 flex-1 text-sm leading-relaxed text-muted-foreground">
+                {link.description}
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                Open
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                />
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }

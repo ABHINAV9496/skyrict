@@ -65,9 +65,7 @@ class PayrollEntryModel(Base):
     gross: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     deductions: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     net: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
-    adjustments: Mapped[dict[str, object] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
-    )
+    adjustments: Mapped[dict[str, object] | None] = mapped_column(postgresql.JSONB(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -9,8 +9,8 @@ const knownTitles: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/members": "Members",
   "/dashboard/agents": "AI Agents",
-  "/dashboard/erp": "ERP",
-  "/dashboard/intelligence": "Intelligence",
+  "/dashboard/erp": "Business Operations",
+  "/dashboard/intelligence": "Market Intelligence",
   "/dashboard/settings": "Settings",
   "/dashboard/integrations": "Integrations",
 };

@@ -3,106 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bot,
-  Boxes,
-  LayoutDashboard,
+  ArrowLeft,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Plug,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Users,
-  type LucideIcon,
 } from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
+import type { NavGroup, NavItem } from "@/components/dashboard/sidebar-config";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  soon?: boolean;
-  tour?: string;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-const navGroups: NavGroup[] = [
-  {
-    label: "Workspace",
-    items: [
-      {
-        href: "/dashboard",
-        label: "Overview",
-        icon: LayoutDashboard,
-        tour: "nav-overview",
-      },
-    ],
-  },
-  {
-    label: "Modules",
-    items: [
-      {
-        href: "/dashboard/agents",
-        label: "AI Agents",
-        icon: Bot,
-        tour: "nav-agents",
-      },
-      {
-        href: "/dashboard/erp",
-        label: "ERP",
-        icon: Boxes,
-        tour: "nav-erp",
-      },
-      {
-        href: "/dashboard/intelligence",
-        label: "Intelligence",
-        icon: Sparkles,
-        tour: "nav-intelligence",
-      },
-    ],
-  },
-  {
-    label: "Manage",
-    items: [
-      {
-        href: "/dashboard/roles",
-        label: "Roles",
-        icon: ShieldCheck,
-        tour: "nav-roles",
-      },
-      {
-        href: "/dashboard/integrations",
-        label: "Integrations",
-        icon: Plug,
-        soon: true,
-        tour: "nav-integrations",
-      },
-    ],
-  },
-];
-
-const accountItems: NavItem[] = [
-  {
-    href: "/dashboard/members",
-    label: "Members",
-    icon: Users,
-    tour: "nav-members",
-  },
-  {
-    href: "/dashboard/settings",
-    label: "Settings",
-    icon: SlidersHorizontal,
-    tour: "nav-settings",
-  },
-];
 
 function initialsFor(name: string, email: string): string {
   const parts = name.trim().split(/\s+/);
@@ -117,14 +27,15 @@ function initialsFor(name: string, email: string): string {
  * comparing so the active state tracks the page regardless of which form the
  * browser is showing.
  */
-function isActive(pathname: string, href: string): boolean {
+function isActive(pathname: string, item: NavItem): boolean {
   const normalized =
     pathname === "/"
       ? "/dashboard"
       : pathname.startsWith("/dashboard")
         ? pathname
         : `/dashboard${pathname}`;
-  if (href === "/dashboard") return normalized === "/dashboard";
+  const { href, exact } = item;
+  if (href === "/dashboard" || exact) return normalized === href;
   return normalized === href || normalized.startsWith(`${href}/`);
 }
 
@@ -139,7 +50,7 @@ function SidebarLink({
   pathname: string;
   onCloseMobile: () => void;
 }) {
-  const active = isActive(pathname, item.href);
+  const active = isActive(pathname, item);
   const Icon = item.icon;
 
   if (item.soon) {
@@ -196,11 +107,17 @@ function SidebarLink({
   );
 }
 
-interface AppSidebarProps {
+export interface AppSidebarProps {
   collapsed: boolean;
   mobileOpen: boolean;
   onToggleCollapsed: () => void;
   onCloseMobile: () => void;
+  navGroups: NavGroup[];
+  accountItems: NavItem[];
+  /** Root the sidebar logo lands on (workspace overview vs. a module home). */
+  brandHref?: string;
+  /** Module sidebars render a "Back to overview" link above the footer. */
+  showBackToOverview?: boolean;
 }
 
 export function AppSidebar({
@@ -208,6 +125,10 @@ export function AppSidebar({
   mobileOpen,
   onToggleCollapsed,
   onCloseMobile,
+  navGroups,
+  accountItems,
+  brandHref = "/dashboard",
+  showBackToOverview = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { user, logout } = useSession();
@@ -237,7 +158,7 @@ export function AppSidebar({
           )}
         >
           <Link
-            href="/dashboard"
+            href={brandHref}
             onClick={onCloseMobile}
             aria-label="Skyrict dashboard"
             className={cn("text-sidebar-foreground", collapsed && "hidden")}
@@ -283,17 +204,41 @@ export function AppSidebar({
           ))}
         </nav>
 
-        <div className="space-y-1 border-t border-sidebar-border p-3">
-          {accountItems.map((item) => (
-            <SidebarLink
-              key={item.href}
-              item={item}
-              collapsed={collapsed}
-              pathname={pathname}
-              onCloseMobile={onCloseMobile}
-            />
-          ))}
-        </div>
+        {showBackToOverview ? (
+          <div className="border-t border-sidebar-border p-3">
+            <Link
+              href="/dashboard"
+              onClick={onCloseMobile}
+              data-tour="back-to-overview"
+              title={collapsed ? "Back to overview" : undefined}
+              className={cn(
+                "group flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+                collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
+                "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              <ArrowLeft
+                aria-hidden="true"
+                className="size-[18px] shrink-0 transition-transform group-hover:-translate-x-0.5"
+              />
+              {!collapsed ? <span className="truncate">Back to overview</span> : null}
+            </Link>
+          </div>
+        ) : null}
+
+        {accountItems.length > 0 ? (
+          <div className="space-y-1 border-t border-sidebar-border p-3">
+            {accountItems.map((item) => (
+              <SidebarLink
+                key={item.href}
+                item={item}
+                collapsed={collapsed}
+                pathname={pathname}
+                onCloseMobile={onCloseMobile}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <footer
           data-tour="sidebar-profile"

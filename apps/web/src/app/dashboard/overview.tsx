@@ -156,7 +156,7 @@ export default function OverviewClient() {
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {canInvite ? (
                 <Button asChild>
-                  <Link href="/dashboard/members">
+                  <Link href="/dashboard/invite">
                     <UserPlus aria-hidden="true" className="size-4" />
                     Invite
                   </Link>

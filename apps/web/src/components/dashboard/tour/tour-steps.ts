@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Settings2,
   Sparkles,
+  UserPlus,
   UserRound,
   Users,
   type LucideIcon,
@@ -56,11 +57,20 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
+    target: "nav-invite",
+    icon: UserPlus,
+    title: "Invite team",
+    description:
+      "Send a link that lets new teammates join your workspace. You control the role they land in.",
+    placement: "right",
+    roles: ["tenant_owner"],
+  },
+  {
     target: "nav-members",
     icon: Users,
     title: "Members",
     description:
-      "Invite your team and control who can see and do what with roles and permissions.",
+      "See everyone with access, change their roles, and log suspicious devices out.",
     placement: "right",
     roles: ["tenant_owner"],
   },

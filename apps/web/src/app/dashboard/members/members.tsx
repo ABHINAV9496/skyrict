@@ -1,417 +1,565 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Check, Copy, LoaderCircle, MailPlus, Plus, UserPlus, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { LoaderCircle, Monitor, ShieldCheck, Smartphone, Tablet, Trash2, Users } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
 import {
-  createInvitation,
-  expireInvitation,
-  listInvitations,
+  listMemberSessions,
+  listMembers,
   listRoles,
+  removeMember,
+  revokeAllMemberSessions,
+  revokeMemberSession,
   roleDisplayName,
-  type InvitationCreated,
-  type InvitationSummary,
+  updateMemberRole,
+  type Member,
   type RoleSummary,
+  type SessionInfo,
 } from "@/lib/api/identity-api";
 import { ListSkeleton } from "@/components/ui/page-skeletons";
-import { cn } from "@/lib/utils";
 
 type Status =
   | { state: "loading" }
   | { state: "error"; message: string }
   | {
       state: "ready";
-      invitations: InvitationSummary[];
+      members: Member[];
       roles: RoleSummary[];
       busy: string | null;
     };
 
-function invitationState(item: InvitationSummary): "used" | "expired" | "pending" {
-  if (item.usedAt) return "used";
-  if (item.expiresAt && new Date(item.expiresAt).getTime() < Date.now()) return "expired";
-  return "pending";
-}
-
-function formatInvitedAt(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
+function formatJoinedAt(value: string | null): string {
+  if (!value) return "recently";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "recently";
+  return parsed.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
-function initialsFor(email: string): string {
-  const [local] = email.split("@");
-  const parts = (local ?? "").split(/[._-]/).filter(Boolean);
+function memberInitials(member: Member): string {
+  const parts = member.fullName.trim().split(/\s+/).filter(Boolean);
   if (parts.length > 1) {
-    return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+    return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
   }
-  return (local ?? "").slice(0, 2).toUpperCase() || "SK";
+  if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
+  return member.email.slice(0, 2).toUpperCase() || "SK";
 }
 
-const statusConfig: Record<
-  "used" | "expired" | "pending",
-  { label: string; dot: string; chip: string }
-> = {
-  used: {
-    label: "Joined",
-    dot: "bg-emerald-500",
-    chip: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-  },
-  expired: {
-    label: "Expired",
-    dot: "bg-muted-foreground/50",
-    chip: "bg-muted text-muted-foreground",
-  },
-  pending: {
-    label: "Awaiting",
-    dot: "bg-primary",
-    chip: "bg-primary/10 text-primary",
-  },
-};
+function relativeTime(value: string): string {
+  const elapsed = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+  if (!Number.isFinite(elapsed) || elapsed < 60) return "just now";
+  const minutes = Math.round(elapsed / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
-function StatusBadge({ state }: { state: "used" | "expired" | "pending" }) {
-  const config = statusConfig[state];
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-        config.chip,
-      )}
-    >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", config.dot)} />
-      {config.label}
-    </span>
-  );
+function DeviceIcon({ deviceType }: { deviceType: string | null }) {
+  const type = deviceType?.toLowerCase() ?? "";
+  if (type.includes("mobile") || type.includes("phone")) {
+    return <Smartphone aria-hidden="true" className="size-4 text-primary" />;
+  }
+  if (type.includes("tablet")) {
+    return <Tablet aria-hidden="true" className="size-4 text-primary" />;
+  }
+  return <Monitor aria-hidden="true" className="size-4 text-primary" />;
 }
 
 function SkeletonRows() {
   return <ListSkeleton rows={3} />;
 }
 
-/** `{slug}.signin.{apex}/invite?token=...` link for a freshly created invite. */
-function inviteLink(token: string): string {
-  const hostname = window.location.hostname;
-  const parts = hostname.split(".");
-  const signinHost = `${parts[0]}.signin.${parts.slice(1).join(".")}`;
-  const port = window.location.port ? `:${window.location.port}` : "";
-  return `${window.location.protocol}//${signinHost}${port}/invite?token=${encodeURIComponent(token)}`;
-}
-
 export default function MembersClient() {
-  const router = useRouter();
+  const access = useModuleAccess();
+  const { status: accessStatus, permissions } = access;
+
+  const canChangeRoles =
+    permissions.includes("*") ||
+    (permissions.includes("users:write") && permissions.includes("roles:read"));
+  const canRemove = permissions.includes("*") || permissions.includes("users:delete");
+  const canViewSessions =
+    permissions.includes("*") || permissions.includes("sessions:read");
+  const canRevokeSessions =
+    permissions.includes("*") || permissions.includes("sessions:revoke");
+
   const [status, setStatus] = useState<Status>({ state: "loading" });
-  const [email, setEmail] = useState("");
-  const [roleName, setRoleName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [created, setCreated] = useState<InvitationCreated | null>(null);
+
+  const [pendingRemove, setPendingRemove] = useState<Member | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const [sessionsFor, setSessionsFor] = useState<Member | null>(null);
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [sessionsStatus, setSessionsStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
-      const [invitations, roles] = await Promise.all([listInvitations(), listRoles()]);
-      setStatus({ state: "ready", invitations, roles, busy: null });
+      const members = await listMembers();
+      let roles: RoleSummary[] = [];
+      if (canChangeRoles) {
+        try {
+          roles = await listRoles();
+        } catch {
+          // Roles are optional here: without them the UI falls back to static
+          // role badges instead of the editable dropdown.
+        }
+      }
+      setStatus({ state: "ready", members, roles, busy: null });
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : "Could not load members.";
       setStatus({ state: "error", message });
     }
-  }, []);
+  }, [canChangeRoles]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (accessStatus !== "loading") void load();
+  }, [accessStatus, load]);
 
-  const defaultRole = useMemo(
-    () => (status.state === "ready" && status.roles.length > 0 ? status.roles[0].name : ""),
-    [status],
-  );
-
-  useEffect(() => {
-    setRoleName((current) => current || defaultRole);
-  }, [defaultRole]);
-
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-    setCreated(null);
-    setSubmitting(true);
-    try {
-      const result = await createInvitation(email, roleName);
-      setEmail("");
-      setCreated(result);
-      await load();
-    } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : "The invitation could not be sent.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function onExpire(invitationId: string) {
+  async function onChangeRole(memberId: string, role: string) {
     if (status.state !== "ready") return;
-    setStatus({ ...status, busy: invitationId });
+    setStatus({ ...status, busy: memberId });
     setActionError(null);
     try {
-      await expireInvitation(invitationId);
+      await updateMemberRole(memberId, role);
       await load();
     } catch (error) {
       setActionError(
-        error instanceof ApiError ? error.message : "The invitation could not be expired.",
+        error instanceof ApiError ? error.message : "Could not update the member's role.",
       );
       setStatus((current) => (current.state === "ready" ? { ...current, busy: null } : current));
     }
   }
 
-  async function copyInviteLink(url: string) {
+  async function onRemove() {
+    if (!pendingRemove || status.state !== "ready") return;
+    setRemoving(true);
+    setActionError(null);
     try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard unavailable — the link stays visible for manual copying.
+      await removeMember(pendingRemove.id);
+      setPendingRemove(null);
+      await load();
+    } catch (error) {
+      setActionError(
+        error instanceof ApiError ? error.message : "Could not remove the member.",
+      );
+    } finally {
+      setRemoving(false);
     }
   }
 
-  const createdUrl = created ? inviteLink(created.token) : "";
+  async function openSessions(member: Member) {
+    setSessionsFor(member);
+    setSessions(null);
+    setSessionsStatus("loading");
+    setSessionsError(null);
+    setSessionBusy(null);
+    try {
+      const list = await listMemberSessions(member.id);
+      setSessions(list);
+      setSessionsStatus("ready");
+    } catch (error) {
+      setSessionsStatus("error");
+      setSessionsError(
+        error instanceof ApiError ? error.message : "Could not load this member's sessions.",
+      );
+    }
+  }
+
+  function closeSessions() {
+    if (sessionBusy !== null) return;
+    setSessionsFor(null);
+    setSessions(null);
+  }
+
+  async function onRevokeSession(sessionId: string) {
+    if (!sessionsFor) return;
+    setSessionBusy(sessionId);
+    setSessionsError(null);
+    try {
+      await revokeMemberSession(sessionsFor.id, sessionId);
+      setSessions((current) => (current ?? []).filter((session) => session.id !== sessionId));
+    } catch (error) {
+      setSessionsError(
+        error instanceof ApiError ? error.message : "Could not log out that device.",
+      );
+    } finally {
+      setSessionBusy(null);
+    }
+  }
+
+  async function onRevokeAllSessions() {
+    if (!sessionsFor) return;
+    setSessionBusy("__all__");
+    setSessionsError(null);
+    try {
+      await revokeAllMemberSessions(sessionsFor.id);
+      setSessions([]);
+    } catch (error) {
+      setSessionsError(
+        error instanceof ApiError
+          ? error.message
+          : "Could not log the member out of all devices.",
+      );
+    } finally {
+      setSessionBusy(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Members"
-        description="Invite teammates and keep track of who can access your workspace."
+        description="Manage who has access to this workspace — roles, devices, and access."
         icon={Users}
       />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
-        <section className="rounded-xl border border-border bg-card p-5 lg:sticky lg:top-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <UserPlus aria-hidden="true" className="size-4.5" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-display text-sm font-semibold text-foreground">
-                Invite a member
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                They will get a link to join your workspace.
-              </p>
-            </div>
-          </div>
+      {actionError ? (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+          {actionError}
+        </p>
+      ) : null}
 
-          <form onSubmit={(event) => void onSubmit(event)} className="mt-4 space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="invite-email">Email address</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="teammate@example.com"
-                aria-invalid={formError ? true : undefined}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="invite-role">Role</Label>
-              <Select
-                value={roleName}
-                onValueChange={(value) => {
-                  if (value === "__create_custom_role__") {
-                    router.push("/dashboard/roles");
-                    return;
-                  }
-                  setRoleName(value);
-                }}
+      <section className="rounded-xl border border-border bg-card">
+        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
+            <Users aria-hidden="true" className="size-4 text-primary" />
+            All members
+          </h2>
+          {status.state === "ready" ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+              {status.members.length}
+            </span>
+          ) : null}
+        </header>
+
+        <div className="p-5">
+          {status.state === "loading" ? <SkeletonRows /> : null}
+
+          {status.state === "error" ? (
+            <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+              <p className="text-sm font-medium text-destructive">{status.message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => void load()}
               >
-                <SelectTrigger id="invite-role" className="w-full">
-                  <SelectValue placeholder="Choose a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {status.state === "ready" && status.roles.length > 0
-                    ? status.roles.map((role) => (
-                        <SelectItem key={role.id} value={role.name}>
-                          {roleDisplayName(role.name)}
-                        </SelectItem>
-                      ))
-                    : null}
-                  <SelectSeparator />
-                  <SelectItem value="__create_custom_role__">
-                    <span className="flex items-center gap-2 text-primary">
-                      <Plus aria-hidden="true" className="size-3.5" />
-                      Create custom role
-                    </span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                Try again
+              </Button>
             </div>
-            {formError ? (
-              <p role="alert" className="text-sm font-medium text-destructive">
-                {formError}
-              </p>
-            ) : null}
-            <Button type="submit" className="w-full" disabled={submitting || !roleName}>
-              {submitting ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              ) : (
-                <UserPlus aria-hidden="true" className="size-4" />
-              )}
-              Send invite
-            </Button>
-          </form>
+          ) : null}
 
-          {created ? (
-            <div className="mt-4 space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
-              <p className="text-sm font-medium text-foreground">
-                Invitation sent to {created.email}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {roleDisplayName(created.roleName)} · the link below works once.
-              </p>
-              <div className="flex items-center gap-1.5">
-                <code
-                  title={createdUrl}
-                  className="min-w-0 flex-1 truncate rounded-md border border-border bg-background/70 px-2 py-1 font-mono text-xs text-foreground"
-                >
-                  {createdUrl}
-                </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Copy invite link"
-                  title="Copy invite link"
-                  onClick={() => void copyInviteLink(createdUrl)}
-                >
-                  {copied ? (
-                    <Check aria-hidden="true" className="text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <Copy aria-hidden="true" />
-                  )}
-                </Button>
+          {status.state === "ready" && status.members.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Users aria-hidden="true" className="size-5" />
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Token (shown once):{" "}
-                <code className="break-all font-mono text-foreground">{created.token}</code>
+              <h3 className="mt-3 font-display text-sm font-semibold text-foreground">
+                No members yet
+              </h3>
+              <p className="mt-1 max-w-60 text-xs leading-relaxed text-muted-foreground">
+                Invite your first teammate to start collaborating in this workspace.
               </p>
             </div>
           ) : null}
-        </section>
 
-        <section className="rounded-xl border border-border bg-card">
-          <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-            <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-              <MailPlus aria-hidden="true" className="size-4 text-primary" />
-              Invitations
-            </h2>
-            {status.state === "ready" ? (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
-                {status.invitations.length}
-              </span>
-            ) : null}
-          </header>
+          {status.state === "ready" && status.members.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {status.members.map((member) => {
+                const busy = status.busy === member.id;
+                const isSelf = member.isSelf;
+                const knownRole = status.roles.some(
+                  (role) => role.name === member.roleName,
+                );
+                return (
+                  <li
+                    key={member.id}
+                    className="flex items-center gap-3 py-3.5 transition-colors first:pt-0 last:pb-0"
+                  >
+                    {member.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={member.avatarUrl}
+                        alt=""
+                        className="size-9 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                      />
+                    ) : (
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                        {memberInitials(member)}
+                      </div>
+                    )}
 
-          <div className="p-5">
-            {status.state === "loading" ? <SkeletonRows /> : null}
-
-            {status.state === "error" ? (
-              <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
-                <p className="text-sm font-medium text-destructive">{status.message}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => void load()}
-                >
-                  Try again
-                </Button>
-              </div>
-            ) : null}
-
-            {status.state === "ready" && status.invitations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
-                <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <UserPlus aria-hidden="true" className="size-5" />
-                </div>
-                <h3 className="mt-3 font-display text-sm font-semibold text-foreground">
-                  No invites yet
-                </h3>
-                <p className="mt-1 max-w-60 text-xs leading-relaxed text-muted-foreground">
-                  Invite your first teammate with the panel on the left. They will get a link to
-                  join.
-                </p>
-              </div>
-            ) : null}
-
-            {status.state === "ready" && status.invitations.length > 0 ? (
-              <>
-                {actionError ? (
-                  <p role="alert" className="mb-3 text-sm font-medium text-destructive">
-                    {actionError}
-                  </p>
-                ) : null}
-                <ul className="divide-y divide-border">
-                  {status.invitations.map((item) => {
-                    const state = invitationState(item);
-                    return (
-                      <li
-                        key={item.id}
-                        className="flex items-center gap-3 py-3.5 transition-colors first:pt-0 last:pb-0"
-                      >
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                          {initialsFor(item.email)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {item.email}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {roleDisplayName(item.roleName)} · invited {formatInvitedAt(item.createdAt)}
-                          </p>
-                        </div>
-                        <StatusBadge state={state} />
-                        {state === "pending" ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={status.busy !== null}
-                            onClick={() => void onExpire(item.id)}
-                          >
-                            {status.busy === item.id ? (
-                              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-                            ) : null}
-                            Expire
-                          </Button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {member.fullName || member.email}
+                        </p>
+                        {isSelf ? (
+                          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                            You
+                          </span>
                         ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
+                        {busy ? (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                          />
+                        ) : null}
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {member.email} · joined {formatJoinedAt(member.joinedAt)}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                      {canChangeRoles && !isSelf && knownRole ? (
+                        <Select
+                          value={member.roleName}
+                          onValueChange={(value) => {
+                            if (value !== member.roleName) {
+                              void onChangeRole(member.id, value);
+                            }
+                          }}
+                          disabled={status.busy !== null}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            aria-label={`Change role for ${member.fullName || member.email}`}
+                          >
+                            <ShieldCheck aria-hidden="true" className="size-3.5 text-primary" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {status.roles.map((role) => (
+                              <SelectItem key={role.id} value={role.name}>
+                                {roleDisplayName(role.name)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          <ShieldCheck aria-hidden="true" className="size-3 text-primary" />
+                          {roleDisplayName(member.roleName)}
+                        </span>
+                      )}
+
+                      {canViewSessions ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={status.busy !== null}
+                          onClick={() => void openSessions(member)}
+                        >
+                          <Monitor aria-hidden="true" className="size-3.5" />
+                          Sessions
+                        </Button>
+                      ) : null}
+
+                      {canRemove && !isSelf ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={status.busy !== null}
+                          onClick={() => setPendingRemove(member)}
+                        >
+                          <Trash2 aria-hidden="true" className="size-3.5" />
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      </section>
+
+      <Dialog
+        open={pendingRemove !== null}
+        onOpenChange={(open) => {
+          if (!open && !removing) setPendingRemove(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove member?</DialogTitle>
+            <DialogDescription>
+              {pendingRemove
+                ? `${pendingRemove.fullName || pendingRemove.email} will immediately lose access to this workspace. This cannot be undone.`
+                : "This member will immediately lose access to this workspace. This cannot be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingRemove(null)}
+              disabled={removing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void onRemove()}
+              disabled={removing}
+            >
+              {removing ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+              Remove member
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={sessionsFor !== null}
+        onOpenChange={(open) => {
+          if (!open) closeSessions();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Active sessions</DialogTitle>
+            <DialogDescription>
+              {sessionsFor
+                ? `Devices ${sessionsFor.fullName || sessionsFor.email} is signed in on in this workspace.`
+                : "Devices this member is signed in on in this workspace."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {sessionsStatus === "loading" ? <ListSkeleton rows={2} /> : null}
+
+          {sessionsStatus === "error" ? (
+            <p role="alert" className="text-sm font-medium text-destructive">
+              {sessionsError}
+            </p>
+          ) : null}
+
+          {sessionsStatus === "ready" && (sessions ?? []).length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-8 text-center">
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <ShieldCheck aria-hidden="true" className="size-5" />
+              </div>
+              <h3 className="mt-3 font-display text-sm font-semibold text-foreground">
+                No active sessions
+              </h3>
+              <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
+                {sessionsFor?.isSelf
+                  ? "You are not signed in on any device in this workspace right now."
+                  : "This member is not signed in on any device in this workspace right now."}
+              </p>
+            </div>
+          ) : null}
+
+          {sessionsStatus === "ready" && (sessions ?? []).length > 0 ? (
+            <div className="space-y-2">
+              {sessionsError ? (
+                <p role="alert" className="text-sm font-medium text-destructive">
+                  {sessionsError}
+                </p>
+              ) : null}
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {(sessions ?? []).map((session) => {
+                  const busy = sessionBusy === session.id;
+                  return (
+                    <li
+                      key={session.id}
+                      className="flex items-center gap-3 px-3 py-2.5 first:rounded-t-lg last:rounded-b-lg"
+                    >
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <DeviceIcon deviceType={session.deviceType} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {session.device || "Unknown device"}
+                          </p>
+                          {session.isTrusted ? (
+                            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                              Trusted
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {session.ipAddress ? `${session.ipAddress} · ` : ""}active{" "}
+                          {relativeTime(session.lastActiveAt)}
+                        </p>
+                      </div>
+                      {canRevokeSessions && !sessionsFor?.isSelf ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={sessionBusy !== null}
+                          onClick={() => void onRevokeSession(session.id)}
+                        >
+                          {busy ? (
+                            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                          ) : null}
+                          Log out
+                        </Button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+
+          <DialogFooter showCloseButton>
+            {canRevokeSessions && !sessionsFor?.isSelf ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={sessionBusy !== null}
+                onClick={() => void onRevokeAllSessions()}
+              >
+                {sessionBusy === "__all__" ? (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                ) : null}
+                Log out all devices
+              </Button>
             ) : null}
-          </div>
-        </section>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

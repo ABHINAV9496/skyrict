@@ -232,15 +232,15 @@ export default function RolesClient() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 lg:min-h-0 lg:flex-1">
       <PageHeader
         title="Roles & permissions"
         description="Create custom roles with precise permissions and manage who has them."
         icon={ShieldCheck}
       />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
-        <section className="rounded-xl border border-border bg-card">
+      <div className="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <section className="flex flex-col rounded-xl border border-border bg-card lg:min-h-0 lg:overflow-hidden">
           <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5">
             <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
               <ShieldCheck aria-hidden="true" className="size-4 text-primary" />
@@ -267,7 +267,7 @@ export default function RolesClient() {
             ) : null}
           </header>
 
-          <div className="p-3">
+          <div className="p-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden">
             {status.state === "loading" ? <RoleListSkeleton /> : null}
 
             {status.state === "error" ? (
@@ -344,8 +344,12 @@ export default function RolesClient() {
           </div>
         </section>
 
-        <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card">
-          <form id="role-builder-form" onSubmit={(event) => void onSave(event)}>
+        <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card lg:min-h-0 lg:overflow-hidden">
+          <form
+            id="role-builder-form"
+            onSubmit={(event) => void onSave(event)}
+            className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1"
+          >
             <div className="border-b border-border px-5 py-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="font-display text-sm font-semibold text-foreground">
@@ -426,7 +430,7 @@ export default function RolesClient() {
               ) : null}
             </div>
 
-            <div className="overflow-y-auto p-3 lg:max-h-[calc(100dvh-24rem)]">
+            <div className="p-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden">
               {status.state === "loading" ? <ListSkeleton rows={3} /> : null}
 
               {status.state === "ready" && filteredModules.length === 0 ? (

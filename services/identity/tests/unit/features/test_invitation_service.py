@@ -9,7 +9,7 @@ import pytest
 
 from identity.core.constants import DEFAULT_INVITE_ROLE
 from identity.core.security import hash_invitation_token
-from identity.domain.entities import Invitation, Membership, MembershipStatus, Role, User
+from identity.domain.entities import Invitation, Membership, MembershipStatus, Role, Tenant, User
 from identity.features.invitations.service import InvitationService
 from skyrict_common.exceptions import (
     InvitationAlreadyUsedError,
@@ -234,6 +234,31 @@ class FakeMembershipService:
         return membership
 
 
+class FakeTenantRepo:
+    def __init__(self) -> None:
+        self.tenants: dict[uuid.UUID, Tenant] = {}
+
+    async def get_by_id(self, tenant_id: str | uuid.UUID) -> Tenant | None:
+        return self.tenants.get(uuid.UUID(str(tenant_id)))
+
+
+class FakeAvatarService:
+    def __init__(self) -> None:
+        self.attachments: list[tuple[uuid.UUID, bytes]] = []
+
+    async def attach_to_user(self, *, user_id: str, tenant_id: str, data: bytes) -> None:
+        self.attachments.append((uuid.UUID(user_id), data))
+
+    async def upload(self, **kwargs: object) -> User:
+        raise NotImplementedError
+
+    async def remove(self, **kwargs: object) -> User:
+        raise NotImplementedError
+
+    async def fetch(self, **kwargs: object) -> bytes | None:
+        raise NotImplementedError
+
+
 @pytest.fixture
 def tenant_id() -> uuid.UUID:
     return uuid.uuid4()
@@ -243,6 +268,7 @@ def tenant_id() -> uuid.UUID:
 def repos() -> tuple[
     FakeInvitationRepo,
     FakeUserRepo,
+    FakeTenantRepo,
     FakeRoleRepo,
     FakeEmailService,
     FakeMembershipService,
@@ -250,6 +276,7 @@ def repos() -> tuple[
     return (
         FakeInvitationRepo(),
         FakeUserRepo(),
+        FakeTenantRepo(),
         FakeRoleRepo(),
         FakeEmailService(),
         FakeMembershipService(),
@@ -266,14 +293,24 @@ def service(
     repos: tuple[
         FakeInvitationRepo,
         FakeUserRepo,
+        FakeTenantRepo,
         FakeRoleRepo,
         FakeEmailService,
         FakeMembershipService,
     ],
     audit: FakeAuditService,
 ) -> InvitationService:
-    inv_repo, user_repo, role_repo, email, membership_service = repos
-    return InvitationService(inv_repo, user_repo, role_repo, email, membership_service, audit)
+    inv_repo, user_repo, tenant_repo, role_repo, email, membership_service = repos
+    return InvitationService(
+        inv_repo,
+        user_repo,
+        tenant_repo,
+        role_repo,
+        email,
+        membership_service,
+        audit,
+        avatar_service=FakeAvatarService(),
+    )
 
 
 class TestCreateInvitation:
@@ -284,7 +321,7 @@ class TestCreateInvitation:
         audit: FakeAuditService,
         tenant_id: uuid.UUID,
     ) -> None:
-        _, _, role_repo, email, membership_service = repos
+        _, _, _, role_repo, email, membership_service = repos
         inviter_id = uuid.uuid4()
         await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
@@ -344,7 +381,7 @@ class TestAcceptInvitation:
         audit: FakeAuditService,
         tenant_id: uuid.UUID,
     ) -> None:
-        inv_repo, _, role_repo, _, membership_service = repos
+        inv_repo, _, _, role_repo, _, membership_service = repos
 
         standard_role = await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
@@ -393,7 +430,7 @@ class TestAcceptInvitation:
         audit: FakeAuditService,
         tenant_id: uuid.UUID,
     ) -> None:
-        inv_repo, _, role_repo, _, membership_service = repos
+        inv_repo, _, _, role_repo, _, membership_service = repos
 
         standard_role = await role_repo.create(
             Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
@@ -567,6 +604,158 @@ class TestAcceptInvitation:
                 password="SecurePass123!",
                 full_name="Existing User",
             )
+
+    async def test_accept_attaches_optional_avatar(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, _, _, role_repo, _, _ = repos
+        avatar_service = service.avatar_service
+        assert avatar_service is not None
+
+        await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="avatar@test.com",
+                token_hash=hash_invitation_token("avatar-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+        user = await service.accept_invitation(
+            token="avatar-token",
+            email="avatar@test.com",
+            password="SecurePass123!",
+            full_name="Avatar User",
+            avatar=b"\x89PNG\r\n\x1a\nfake-image-bytes",
+        )
+
+        assert len(avatar_service.attachments) == 1
+        attached_user_id, attached_bytes = avatar_service.attachments[0]
+        assert attached_user_id == user.id
+        assert attached_bytes == b"\x89PNG\r\n\x1a\nfake-image-bytes"
+
+    async def test_accept_without_avatar_skips_avatar_service(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, _, _, role_repo, _, _ = repos
+        avatar_service = service.avatar_service
+        assert avatar_service is not None
+
+        await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="noavatar@test.com",
+                token_hash=hash_invitation_token("noavatar-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+        await service.accept_invitation(
+            token="noavatar-token",
+            email="noavatar@test.com",
+            password="SecurePass123!",
+            full_name="No Avatar",
+        )
+
+        assert avatar_service.attachments == []
+
+
+class TestVerifyInvitation:
+    async def test_verify_returns_invitation_and_org_name(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, _, tenant_repo, *_ = repos
+        tenant_repo.tenants[tenant_id] = Tenant(id=tenant_id, name="Acme Corp", slug="acme")
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="verify@test.com",
+                token_hash=hash_invitation_token("verify-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+        invitation, org_name = await service.verify_invitation(token="verify-token")
+
+        assert invitation.email == "verify@test.com"
+        assert org_name == "Acme Corp"
+
+    async def test_verify_missing_tenant_returns_none_org_name(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, _, _, *_ = repos
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="orphan@test.com",
+                token_hash=hash_invitation_token("orphan-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+
+        _, org_name = await service.verify_invitation(token="orphan-token")
+
+        assert org_name is None
+
+    async def test_verify_expired_token_raises(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, *_ = repos
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="verify-expired@test.com",
+                token_hash=hash_invitation_token("verify-expired-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) - timedelta(days=1),
+            )
+        )
+
+        with pytest.raises(InvitationExpiredError):
+            await service.verify_invitation(token="verify-expired-token")
+
+    async def test_verify_used_token_raises(
+        self, service: InvitationService, repos: tuple, tenant_id: uuid.UUID
+    ) -> None:
+        inv_repo, *_ = repos
+        invitation = await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="verify-used@test.com",
+                token_hash=hash_invitation_token("verify-used-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=uuid.uuid4(),
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+        await inv_repo.mark_used(invitation.id, uuid.uuid4())
+
+        with pytest.raises(InvitationAlreadyUsedError):
+            await service.verify_invitation(token="verify-used-token")
+
+    async def test_verify_unknown_token_raises(
+        self, service: InvitationService
+    ) -> None:
+        with pytest.raises(InvitationNotFoundError):
+            await service.verify_invitation(token="no-such-token")
 
 
 class TestExpireInvitation:

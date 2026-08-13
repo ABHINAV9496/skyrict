@@ -67,7 +67,7 @@ class TestInvitationFlow:
         accept_resp = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
@@ -106,7 +106,7 @@ class TestInvitationFlow:
         accept_resp = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_token,
                 "email": invite_email,
                 "password": "InviteePass123!",
@@ -134,7 +134,7 @@ class TestInvitationFlow:
         first_accept = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
@@ -146,7 +146,7 @@ class TestInvitationFlow:
         second_accept = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_data["token"],
                 "email": invite_email,
                 "password": "InviteePass123!",
@@ -174,7 +174,7 @@ class TestInvitationFlow:
         accept_resp = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_data["token"],
                 "email": "wrong-email@test.com",
                 "password": "InviteePass123!",
@@ -209,7 +209,7 @@ class TestInvitationFlow:
         accept_resp = await client.post(
             "/api/v1/invitations/accept",
             headers={"X-Tenant-Slug": tenant["slug"]},
-            json={
+            data={
                 "token": invite_token,
                 "email": invite_email,
                 "password": "InviteePass123!",

@@ -184,6 +184,8 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.finance.write",
             "erp.hr.read",
             "erp.hr.write",
+            "agents:read",
+            "intelligence:read",
             "billing.manage",
             "invitations:send",
         ),

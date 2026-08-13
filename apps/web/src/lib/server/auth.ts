@@ -19,7 +19,7 @@ export const SESSION_COOKIE = "skyrict_session";
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-function apiBase(target?: string): string {
+export function apiBase(target?: string): string {
   if (target === "core") {
     return process.env.CORE_PROXY_TARGET ?? "http://localhost:8001";
   }
@@ -157,6 +157,7 @@ export function mapUser(raw: Record<string, unknown> | null | undefined) {
     isVerified: Boolean(raw.is_verified ?? raw.isVerified),
     mfaEnabled: Boolean(raw.mfa_enabled ?? raw.mfaEnabled),
     createdAt: String(raw.created_at ?? raw.createdAt ?? ""),
+    avatarUrl: String(raw.avatar_url ?? raw.avatarUrl ?? ""),
   };
 }
 

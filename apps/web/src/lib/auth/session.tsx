@@ -20,10 +20,28 @@ interface SessionContextValue {
   user: AuthUser | null;
   /** Re-hydrate the in-memory access token + profile from the BFF. */
   restore: () => Promise<void>;
+  /** Replace the in-memory profile (e.g. after an avatar change). */
+  updateUser: (user: AuthUser) => void;
   logout: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+
+/**
+ * Absolute `{slug}.signin.{apex}:{port}/signin` URL for the current origin,
+ * mirroring the middleware's cross-surface routing. Falls back to the current
+ * origin's `/signin` when there is no tenant label (dev without a subdomain).
+ */
+function browserSigninUrl(): string {
+  const { protocol, hostname, port } = window.location;
+  const host = hostname.toLowerCase();
+  const portSuffix = port ? `:${port}` : "";
+  if (host.includes(".signin.")) return `${protocol}//${host}${portSuffix}/signin`;
+  const apex = host.split(".").slice(1).join(".");
+  if (!apex) return `${protocol}//${host}${portSuffix}/signin`;
+  const slug = host.split(".")[0];
+  return `${protocol}//${slug}.signin.${apex}${portSuffix}/signin`;
+}
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
@@ -68,11 +86,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     setUser(null);
     setStatus("unauthenticated");
+    // Leave the workspace origin immediately so the user lands on the tenant's
+    // signin surface instead of lingering on a page with no session.
+    window.location.assign(browserSigninUrl());
+  }, []);
+
+  const updateUser = useCallback((next: AuthUser) => {
+    setUser(next);
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, restore, logout }),
-    [status, user, restore, logout],
+    () => ({ status, user, restore, updateUser, logout }),
+    [status, user, restore, updateUser, logout],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

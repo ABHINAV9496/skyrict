@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
- * Authenticated BFF proxy for the identity service's /api/v1/* endpoints.
+ * Authenticated BFF proxy for internal services' /api/v1/* endpoints.
  *
  * The browser talks to these same-origin handlers instead of the backend:
  * (a) the tenant slug is always derived server-side from the Host header (the
@@ -31,6 +31,8 @@ async function proxy(request: NextRequest) {
   const authorization = request.headers.get("authorization");
 
   const path = `/${request.nextUrl.pathname.replace(/^\/api\/v1\//, "")}${request.nextUrl.search}`;
+  const segment = path.split("/")[1];
+  const target = ["crm", "sales", "inventory"].includes(segment) ? "core" : "identity";
   const body =
     SAFE_METHODS.has(request.method.toUpperCase()) || !request.body
       ? undefined
@@ -43,6 +45,7 @@ async function proxy(request: NextRequest) {
     token: authorization?.toLowerCase().startsWith("bearer ")
       ? authorization.slice("Bearer ".length)
       : null,
+    target,
   });
 
   if (result.status === 0) {

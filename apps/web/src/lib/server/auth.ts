@@ -19,7 +19,10 @@ export const SESSION_COOKIE = "skyrict_session";
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-function apiBase(): string {
+function apiBase(target?: string): string {
+  if (target === "core") {
+    return process.env.CORE_PROXY_TARGET ?? "http://localhost:8001";
+  }
   return process.env.API_PROXY_TARGET ?? "http://localhost:8000";
 }
 
@@ -103,6 +106,7 @@ interface BackendCallOptions {
   body?: unknown;
   token?: string | null;
   tenantSlug?: string | null;
+  target?: "identity" | "core";
 }
 
 interface BackendCallResult {
@@ -112,7 +116,7 @@ interface BackendCallResult {
   payload: Record<string, unknown>;
 }
 
-/** Proxy a call to the identity service, forwarding tenant + bearer context. */
+/** Proxy a call to an internal backend, forwarding tenant + bearer context. */
 export async function callBackend(
   path: string,
   options: BackendCallOptions = {},
@@ -123,7 +127,7 @@ export async function callBackend(
 
   let response: Response;
   try {
-    response = await fetch(`${apiBase()}/api/v1${path}`, {
+    response = await fetch(`${apiBase(options.target)}/api/v1${path}`, {
       method: options.method ?? "POST",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { ShellRouter } from "@/components/dashboard/shell-router";
 import { SESSION_COOKIE } from "@/lib/server/auth";
 import { signinUrl } from "@/lib/server/urls";
 
@@ -23,5 +23,5 @@ export default async function DashboardLayout({
     redirect(await signinUrl("Your session could not be established. Please sign in again."));
   }
 
-  return <DashboardShell>{children}</DashboardShell>;
+  return <ShellRouter>{children}</ShellRouter>;
 }

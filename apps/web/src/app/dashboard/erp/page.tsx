@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
-  Boxes,
+  Blocks,
   Contact,
   Package,
   ShoppingCart,
@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { reportsKpis } from "@/lib/mock/erp";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ export default function ErpPage() {
       <PageHeader
         title="Business Operations"
         description="Operations management — inventory, sales, cash, and orders, all on one source of truth."
-        icon={Boxes}
+        icon={Blocks}
       />
 
       <section className="space-y-4">

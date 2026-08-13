@@ -32,15 +32,15 @@ forbidden_modules = ["core.models", "core.db"]
 # shared declarative Base/mixins from core.models.base (identity convention —
 # no db/base.py), so importing core.models.** from features/**/models/** is
 # allowed. Repositories and everything else under core.features stay forbidden.
-ignore_imports = ["core.features.**.models.** -> core.models.**"]
+ignore_imports = [
+    "core.features.**.models.** -> core.models.**",
+    "core.features.inventory.models.** -> core.models.base",
+]
 # Repositories are the ORM gateway: services/routers/schemas must never import
 # SQLAlchemy models or the db layer directly. Persistence stays in repository.py.
 # Feature ORM models live under core.features.<module>.models and legitimately
 # need the shared declarative Base/mixins from core.models.base.
 allow_indirect_imports = true
-ignore_imports = [
-    "core.features.inventory.models.** -> core.models.base",
-]
 
 [[tool.importlinter.contracts]]
 name = "Domain is pure"

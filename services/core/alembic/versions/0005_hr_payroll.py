@@ -31,13 +31,12 @@ NOTES:
   ``erp_compensation.currency`` — currency is validated via Money at the
   service layer (spec §3.2).
 
-NUMBERING GATE: this file is ``revision = "0005"`` but 0002_inventory /
-0003_crm_sales / 0004_finance do not exist yet. ``down_revision = "0001"`` is
-a DRAFT PLACEHOLDER — before this branch merges, 0002-0004 must land first and
-``down_revision`` must be rewired to "0004" so the core chain stays linear.
+NUMBERING GATE: 0002_inventory has landed; 0003_crm_sales / 0004_finance do
+not exist yet. ``down_revision = "0002"`` keeps the core chain linear; rewire
+to "0004" when 0003/0004 land.
 
 Revision ID: 0005
-Revises: 0001
+Revises: 0002
 Create Date: 2026-08-13
 """
 
@@ -50,7 +49,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0005"
-down_revision = "0001"  # DRAFT PLACEHOLDER — rewire to "0004" before merge
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 

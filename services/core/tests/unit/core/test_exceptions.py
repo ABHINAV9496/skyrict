@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from core.core.exceptions import _status_and_type
 from skyrict_common.exceptions import (
+    ConflictError,
     TenantContextMissingError,
     TenantDisabledError,
     TenantMismatchError,
@@ -38,3 +39,10 @@ class TestTenantErrorMapping:
         status, problem_type = _status_and_type(TenantDisabledError("disabled"))
         assert status == 403
         assert problem_type.endswith("/tenant-disabled")
+
+
+class TestConflictMapping:
+    def test_conflict_is_409(self) -> None:
+        status, problem_type = _status_and_type(ConflictError("conflict"))
+        assert status == 409
+        assert problem_type.endswith("/conflict")

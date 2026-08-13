@@ -58,6 +58,10 @@ ERP_FINANCE_READ = "erp.finance.read"
 ERP_FINANCE_WRITE = "erp.finance.write"
 ERP_HR_READ = "erp.hr.read"
 ERP_HR_WRITE = "erp.hr.write"
+ERP_HR_APPROVE = "erp.hr.approve"
+ERP_PAYROLL_READ = "erp.payroll.read"
+ERP_PAYROLL_WRITE = "erp.payroll.write"
+ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 
 # Billing
 BILLING_MANAGE = "billing.manage"
@@ -96,6 +100,10 @@ CATALOG: tuple[str, ...] = (
     ERP_FINANCE_WRITE,
     ERP_HR_READ,
     ERP_HR_WRITE,
+    ERP_HR_APPROVE,
+    ERP_PAYROLL_READ,
+    ERP_PAYROLL_WRITE,
+    ERP_PAYROLL_APPROVE,
     BILLING_MANAGE,
     INVITATIONS_SEND,
 )
@@ -119,7 +127,12 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         (ERP_INVENTORY_READ, ERP_INVENTORY_WRITE, ERP_INVENTORY_APPROVE),
     ),
     ("erp_finance", "ERP Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE)),
-    ("erp_hr", "ERP HR", (ERP_HR_READ, ERP_HR_WRITE)),
+    ("erp_hr", "ERP HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
+    (
+        "erp_payroll",
+        "ERP Payroll",
+        (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
+    ),
     ("billing", "Billing", (BILLING_MANAGE,)),
     ("invitations", "User invitations", (INVITATIONS_SEND,)),
 )
@@ -150,6 +163,7 @@ __all__ = [
     "ERP_CRM_WRITE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
+    "ERP_HR_APPROVE",
     "ERP_HR_READ",
     "ERP_HR_WRITE",
     "ERP_INVENTORY_APPROVE",
@@ -157,6 +171,9 @@ __all__ = [
     "ERP_INVENTORY_WRITE",
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
+    "ERP_PAYROLL_APPROVE",
+    "ERP_PAYROLL_READ",
+    "ERP_PAYROLL_WRITE",
     "ERP_PURCHASE_APPROVE",
     "ERP_SALES_APPROVE",
     "ERP_SALES_READ",

@@ -31,6 +31,16 @@ export interface RoleSummary {
   createdAt: string;
 }
 
+export interface Member {
+  id: string;
+  email: string;
+  fullName: string;
+  roleName: string;
+  joinedAt: string | null;
+  avatarUrl: string | null;
+  isSelf: boolean;
+}
+
 export interface Permission {
   key: string;
   description: string;
@@ -59,6 +69,16 @@ interface RolePayload {
   permissions?: unknown;
   is_system_role?: unknown;
   created_at?: unknown;
+}
+
+interface MemberPayload {
+  id?: unknown;
+  email?: unknown;
+  full_name?: unknown;
+  role_name?: unknown;
+  joined_at?: unknown;
+  avatar_url?: unknown;
+  is_self?: unknown;
 }
 
 function mapInvitation(raw: InvitationPayload): InvitationSummary {
@@ -196,6 +216,115 @@ export async function deleteRole(roleId: string): Promise<void> {
 export async function listRoles(): Promise<RoleSummary[]> {
   const items = await apiFetch<RolePayload[]>("/api/v1/roles");
   return (items ?? []).map(mapRole);
+}
+
+function mapMember(payload: MemberPayload): Member {
+  return {
+    id: typeof payload.id === "string" ? payload.id : "",
+    email: typeof payload.email === "string" ? payload.email : "",
+    fullName: typeof payload.full_name === "string" ? payload.full_name : "",
+    roleName: typeof payload.role_name === "string" ? payload.role_name : "",
+    joinedAt:
+      typeof payload.joined_at === "string" || payload.joined_at === null
+        ? payload.joined_at
+        : null,
+    avatarUrl:
+      typeof payload.avatar_url === "string" ? payload.avatar_url : null,
+    isSelf: payload.is_self === true,
+  };
+}
+
+export async function listMembers(): Promise<Member[]> {
+  const items = await apiFetch<MemberPayload[]>("/api/v1/members");
+  return (items ?? []).map(mapMember);
+}
+
+export async function updateMemberRole(
+  memberId: string,
+  roleName: string,
+): Promise<Member> {
+  const raw = await apiFetch<MemberPayload>(`/api/v1/members/${memberId}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role_name: roleName }),
+  });
+  return mapMember(raw ?? {});
+}
+
+export async function removeMember(memberId: string): Promise<void> {
+  await apiFetch<null>(`/api/v1/members/${memberId}`, { method: "DELETE" });
+}
+
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  status: string;
+  isTrusted: boolean;
+  createdAt: string;
+  lastActiveAt: string;
+  expiresAt: string | null;
+  device: string | null;
+  deviceType: string | null;
+}
+
+interface SessionPayload {
+  id?: unknown;
+  user_agent?: unknown;
+  ip_address?: unknown;
+  status?: unknown;
+  is_trusted?: unknown;
+  created_at?: unknown;
+  last_active_at?: unknown;
+  expires_at?: unknown;
+  device?: unknown;
+  device_type?: unknown;
+}
+
+function mapSession(payload: SessionPayload): SessionInfo {
+  return {
+    id: typeof payload.id === "string" ? payload.id : "",
+    userAgent: typeof payload.user_agent === "string" ? payload.user_agent : null,
+    ipAddress: typeof payload.ip_address === "string" ? payload.ip_address : null,
+    status: typeof payload.status === "string" ? payload.status : "active",
+    isTrusted: payload.is_trusted === true,
+    createdAt:
+      typeof payload.created_at === "string" ? payload.created_at : new Date().toISOString(),
+    lastActiveAt:
+      typeof payload.last_active_at === "string"
+        ? payload.last_active_at
+        : new Date().toISOString(),
+    expiresAt:
+      typeof payload.expires_at === "string" || payload.expires_at === null
+        ? payload.expires_at
+        : null,
+    device: typeof payload.device === "string" ? payload.device : null,
+    deviceType: typeof payload.device_type === "string" ? payload.device_type : null,
+  };
+}
+
+/** List a member's active sessions in this workspace (admin/auditor surface). */
+export async function listMemberSessions(memberId: string): Promise<SessionInfo[]> {
+  const raw = await apiFetch<{ sessions?: SessionPayload[] }>(
+    `/api/v1/members/${memberId}/sessions`,
+  );
+  return Array.isArray(raw?.sessions) ? raw.sessions.map(mapSession) : [];
+}
+
+/** Log a member out of a single device. */
+export async function revokeMemberSession(
+  memberId: string,
+  sessionId: string,
+): Promise<void> {
+  await apiFetch<null>(`/api/v1/members/${memberId}/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+}
+
+/** Log a member out of every device in this workspace. */
+export async function revokeAllMemberSessions(memberId: string): Promise<void> {
+  await apiFetch<null>(`/api/v1/members/${memberId}/sessions`, {
+    method: "DELETE",
+  });
 }
 
 export interface MyRoles {

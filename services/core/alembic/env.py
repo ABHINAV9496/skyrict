@@ -22,6 +22,15 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 from core.core.config import settings
+from core.features.finance.models import (  # noqa: F401
+    ErpChartOfAccountModel,
+    ErpFiscalPeriodModel,
+    ErpInvoiceLineModel,
+    ErpInvoiceModel,
+    ErpJournalEntryModel,
+    ErpJournalLineModel,
+    ErpPaymentModel,
+)
 
 # Feature ORM models — imported for autogenerate/``target_metadata`` so the full
 # schema is reflected. Models share the same ``core.models.base`` Base; import

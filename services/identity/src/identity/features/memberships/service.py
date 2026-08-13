@@ -147,6 +147,15 @@ class MembershipService:
     ) -> Membership | None:
         return await self.membership_repo.get_by_user(user_id, tenant_id)
 
+    async def update_role(
+        self,
+        *,
+        membership_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+    ) -> Membership:
+        """Swap the membership's primary role (kept in sync with the grant)."""
+        return await self.membership_repo.update_role(membership_id, role_id)
+
     async def list_members(
         self,
         tenant_id: str | uuid.UUID,

@@ -46,6 +46,18 @@ SETTINGS_WRITE = "settings:write"
 ERP_INVOICE_READ = "erp.invoice.read"
 ERP_INVOICE_APPROVE = "erp.invoice.approve"
 ERP_PURCHASE_APPROVE = "erp.purchase.approve"
+ERP_CRM_READ = "erp.crm.read"
+ERP_CRM_WRITE = "erp.crm.write"
+ERP_SALES_READ = "erp.sales.read"
+ERP_SALES_WRITE = "erp.sales.write"
+ERP_SALES_APPROVE = "erp.sales.approve"
+ERP_INVENTORY_READ = "erp.inventory.read"
+ERP_INVENTORY_WRITE = "erp.inventory.write"
+ERP_INVENTORY_APPROVE = "erp.inventory.approve"
+ERP_FINANCE_READ = "erp.finance.read"
+ERP_FINANCE_WRITE = "erp.finance.write"
+ERP_HR_READ = "erp.hr.read"
+ERP_HR_WRITE = "erp.hr.write"
 
 # Billing
 BILLING_MANAGE = "billing.manage"
@@ -72,6 +84,18 @@ CATALOG: tuple[str, ...] = (
     ERP_INVOICE_READ,
     ERP_INVOICE_APPROVE,
     ERP_PURCHASE_APPROVE,
+    ERP_CRM_READ,
+    ERP_CRM_WRITE,
+    ERP_SALES_READ,
+    ERP_SALES_WRITE,
+    ERP_SALES_APPROVE,
+    ERP_INVENTORY_READ,
+    ERP_INVENTORY_WRITE,
+    ERP_INVENTORY_APPROVE,
+    ERP_FINANCE_READ,
+    ERP_FINANCE_WRITE,
+    ERP_HR_READ,
+    ERP_HR_WRITE,
     BILLING_MANAGE,
     INVITATIONS_SEND,
 )
@@ -87,6 +111,15 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("security", "Security configuration", (MFA_MANAGE, SSO_MANAGE)),
     ("settings", "Organization settings", (SETTINGS_READ, SETTINGS_WRITE)),
     ("erp", "ERP", (ERP_INVOICE_READ, ERP_INVOICE_APPROVE, ERP_PURCHASE_APPROVE)),
+    ("erp_crm", "ERP CRM", (ERP_CRM_READ, ERP_CRM_WRITE)),
+    ("erp_sales", "ERP Sales", (ERP_SALES_READ, ERP_SALES_WRITE, ERP_SALES_APPROVE)),
+    (
+        "erp_inventory",
+        "ERP Inventory",
+        (ERP_INVENTORY_READ, ERP_INVENTORY_WRITE, ERP_INVENTORY_APPROVE),
+    ),
+    ("erp_finance", "ERP Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE)),
+    ("erp_hr", "ERP HR", (ERP_HR_READ, ERP_HR_WRITE)),
     ("billing", "Billing", (BILLING_MANAGE,)),
     ("invitations", "User invitations", (INVITATIONS_SEND,)),
 )
@@ -113,9 +146,21 @@ __all__ = [
     "AUDIT_READ",
     "BILLING_MANAGE",
     "CATALOG",
+    "ERP_CRM_READ",
+    "ERP_CRM_WRITE",
+    "ERP_FINANCE_READ",
+    "ERP_FINANCE_WRITE",
+    "ERP_HR_READ",
+    "ERP_HR_WRITE",
+    "ERP_INVENTORY_APPROVE",
+    "ERP_INVENTORY_READ",
+    "ERP_INVENTORY_WRITE",
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
     "ERP_PURCHASE_APPROVE",
+    "ERP_SALES_APPROVE",
+    "ERP_SALES_READ",
+    "ERP_SALES_WRITE",
     "INVITATIONS_SEND",
     "MFA_MANAGE",
     "PERMISSION_MODULES",

@@ -133,3 +133,41 @@ class StockMovement:
     ref_id: str
     id: uuid.UUID | None = None
     created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ErpSequence:
+    """A per-tenant monotonic counter for one document numbering sequence.
+
+    Services claim the next value via ``SequenceRepository.next_value`` (a
+    row-locking ``UPDATE ... SET current_value = current_value + 1 RETURNING``),
+    so consecutive numbers are race-safe and never reused.
+    """
+
+    tenant_id: uuid.UUID
+    entity: str
+    current_value: int = 0
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AuditLogEntry:
+    """One immutable core (ERP) audit event in the tenant's hash chain.
+
+    ``hash`` / ``prev_hash`` are computed by the DB trigger on INSERT and are
+    ``None`` until then. Append-only: never update or delete.
+    """
+
+    tenant_id: uuid.UUID
+    action: str
+    target: str
+    actor_user_id: uuid.UUID | None = None
+    details: dict | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    id: uuid.UUID | None = None
+    hash: str | None = None
+    prev_hash: str | None = None
+    created_at: datetime | None = None

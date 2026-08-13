@@ -1,4 +1,4 @@
-"""Database seeding — per-tenant HR/Payroll defaults (HR-DATA-001).
+"""Database seeding — per-tenant HR/Payroll defaults (HR-DATA-001) and core RBAC roles.
 
 Global reference data (currencies, permissions) is seeded by migration 0001;
 the per-tenant defaults that CANNOT live in a migration (they are tenant-scoped
@@ -7,14 +7,17 @@ decisions) live here and are applied at tenant provisioning time:
   - the leave-type catalogue defaults: annual (accrual, 20 days/yr), sick and
     unpaid (non-accrual ledger-only types);
   - the single ``erp_payroll_settings`` row per tenant (default currency from
-    settings, zero PF/tax rates, nearest rounding).
+    settings, zero PF/tax rates, nearest rounding);
+  - the five system roles in ``core_roles`` (ERP grants per the HR & Payroll
+    design doc section 2.4) — the role catalog ``require_permission`` resolves
+    through ``core_user_roles``.
 
-EMP-/PR- record-numbering seeds are deliberately NOT here: there is no
-``erp_sequences`` table in HR-DATA-001 scope and a naive counter would race
-under concurrency. Numbering lands in the HR service ticket with a locking
-mechanism (advisory lock or a Postgres sequence).
+EMP-/PR- record-numbering seeds are deliberately NOT here: ``erp_sequences``
+now exists (migration 0006) but the per-tenant counter seed rows land with the
+HR service ticket, which owns the numbering scheme.
 
-Idempotent: safe to re-run — existing rows are left untouched.
+Idempotent: safe to re-run — existing rows are left untouched (system-role
+permits are appended, never removed).
 """
 
 from __future__ import annotations
@@ -27,10 +30,20 @@ import structlog
 from sqlalchemy import select
 
 from core.core.config import settings
+from core.core.permissions import (
+    ERP_HR_APPROVE,
+    ERP_HR_READ,
+    ERP_HR_WRITE,
+    ERP_PAYROLL_APPROVE,
+    ERP_PAYROLL_READ,
+    ERP_PAYROLL_WRITE,
+    WILDCARD,
+)
 from core.db.session import async_session_factory
 from core.features.hr.models.leave_type import LeaveTypeModel
 from core.features.payroll.models.payroll_run import PayrollRounding
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
+from core.models.core_role import CoreRoleModel
 
 if TYPE_CHECKING:
     import uuid
@@ -109,4 +122,66 @@ async def seed_tenant_hr_defaults(tenant_id: uuid.UUID) -> None:
             )
             logger.info("seed.payroll_settings.created", tenant_id=str(tenant_id))
 
+        await session.commit()
+
+
+# System roles mirrored into ``core_roles`` per tenant (design doc section 2.4).
+# Keys come from ``core_permissions`` — the platform-fixed catalog seeded by
+# migration 0006 with the six ``erp.hr.*`` / ``erp.payroll.*`` keys.
+CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("tenant_owner", (WILDCARD,)),
+    (
+        "organization_admin",
+        (
+            ERP_HR_READ,
+            ERP_HR_WRITE,
+            ERP_HR_APPROVE,
+            ERP_PAYROLL_READ,
+            ERP_PAYROLL_WRITE,
+            ERP_PAYROLL_APPROVE,
+        ),
+    ),
+    ("department_manager", (ERP_HR_READ, ERP_HR_WRITE, ERP_PAYROLL_READ)),
+    ("standard_user", (ERP_HR_READ,)),
+    ("auditor", (ERP_HR_READ, ERP_PAYROLL_READ)),
+)
+
+
+async def seed_core_roles_for_tenant(tenant_id: uuid.UUID) -> None:
+    """Idempotently seed the system roles for one tenant's core RBAC.
+
+    Populates ``core_roles`` — the role catalog ``require_permission`` resolves
+    through ``core_user_roles`` — with the five system roles and their ERP
+    grants (design doc section 2.4). Existing rows are merged, never reset:
+    ``is_system_role`` is forced to True and missing keys appended, so
+    tenant-specific grants on a system role are preserved.
+    """
+    async with async_session_factory() as session:
+        existing = {
+            role.name: role
+            for role in (
+                await session.execute(
+                    select(CoreRoleModel).where(CoreRoleModel.tenant_id == tenant_id)
+                )
+            ).scalars()
+        }
+
+        created = 0
+        for name, permissions in CORE_SYSTEM_ROLES:
+            role = existing.get(name)
+            if role is None:
+                session.add(
+                    CoreRoleModel(
+                        tenant_id=tenant_id,
+                        name=name,
+                        permissions=list(permissions),
+                        is_system_role=True,
+                    )
+                )
+                created += 1
+            else:
+                role.is_system_role = True
+                role.permissions = list(dict.fromkeys(role.permissions + list(permissions)))
+        if created:
+            logger.info("seed.core_roles.created", tenant_id=str(tenant_id), count=created)
         await session.commit()

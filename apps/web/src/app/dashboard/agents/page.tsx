@@ -1,15 +1,21 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Boxes, Sparkles } from "lucide-react";
+import { Boxes, Sparkles } from "lucide-react";
 
-import { ChatComposer } from "@/components/dashboard/chat-composer";
+import { AiGlyph, LogoMark } from "@/components/brand/logo";
+import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { createConversation } from "@/lib/api/agents-api";
 import { useModuleAccess } from "@/lib/access/modules";
 import { useSession } from "@/lib/auth/session";
 
-const SUGGESTIONS: { icon: typeof Bot; title: string; prompt: string }[] = [
+type SuggestionIcon = ComponentType<{
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
+
+const SUGGESTIONS: { icon: SuggestionIcon; title: string; prompt: string }[] = [
   {
     icon: Boxes,
     title: "Analyze my business",
@@ -21,7 +27,7 @@ const SUGGESTIONS: { icon: typeof Bot; title: string; prompt: string }[] = [
     prompt: "Find the biggest emerging opportunity in my market right now.",
   },
   {
-    icon: Bot,
+    icon: AiGlyph,
     title: "Draft something",
     prompt: "Draft an update for my team about this quarter's progress.",
   },
@@ -48,9 +54,7 @@ export default function AgentsHomePage() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-          <Bot aria-hidden="true" className="size-6" />
-        </div>
+        <LogoMark aria-hidden="true" className="size-12" tone="ai" />
         <h1 className="mt-5 text-center font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {firstName ? `Hi ${firstName}` : "Hi"} — what should I do next?
         </h1>

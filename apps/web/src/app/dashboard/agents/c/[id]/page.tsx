@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { notFound } from "next/navigation";
-import { LoaderCircle } from "lucide-react";
 
-import { ChatComposer } from "@/components/dashboard/chat-composer";
-import { MessageList } from "@/components/dashboard/chat-message-list";
+import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
+import { MessageList } from "@/components/dashboard/agents/chat-message-list";
+import { ChatSkeleton } from "@/components/ui/page-skeletons";
 import { getConversation, sendMessage } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import type { Conversation } from "@/lib/mock/agents-store";
@@ -49,11 +49,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   );
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-primary" />
-      </div>
-    );
+    return <ChatSkeleton />;
   }
 
   if (!conversation) {

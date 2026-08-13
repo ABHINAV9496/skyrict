@@ -10,9 +10,9 @@ from the database at request time (never from JWT claims) through
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,9 @@ from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
 from core.db.session import get_db
 from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
+
+if TYPE_CHECKING:
+    from core.features.finance.service import FinanceService
 
 security = HTTPBearer(auto_error=False)
 
@@ -88,3 +91,29 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
         return current_user
 
     return _check
+
+
+def get_finance_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceService:
+    """Composition root for the finance feature.
+
+    Wires the concrete repository, the shared audit sink, and the after-commit
+    event publisher onto ONE request-scoped session — so audit rows, the
+    business mutation, and (later) published events all commit atomically. The
+    request ID becomes the correlation ID stamped on money-moment events.
+    """
+    from core.db.audit_repository import AuditRepository
+    from core.events.producers import get_event_producer
+    from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.finance.repository import FinanceRepository
+    from core.features.finance.service import FinanceService
+
+    correlation_id = getattr(request.state, "request_id", None)
+    return FinanceService(
+        repo=FinanceRepository(db),
+        audit=AuditRepository(db),
+        events=FinanceEventPublisher(session=db, producer=get_event_producer()),
+        correlation_id=correlation_id,
+    )

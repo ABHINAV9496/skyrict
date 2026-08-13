@@ -211,7 +211,7 @@ async def http_client(test_app: FastAPI) -> httpx.AsyncClient:
 
 class TestPermissionsCatalog:
     async def test_get_permissions_catalog_structure(self, http_client: httpx.AsyncClient) -> None:
-        """GET /permissions returns 10 modules, 19 unique keys, union == CATALOG."""
+        """GET /permissions returns all permission modules and keys from CATALOG."""
         response = await http_client.get("/api/v1/permissions")
         assert response.status_code == 200
 
@@ -221,7 +221,7 @@ class TestPermissionsCatalog:
         assert "modules" in data
 
         modules = data["modules"]
-        assert len(modules) == 10
+        assert len(modules) == 15
 
         # Collect all keys from modules
         all_keys = []
@@ -236,9 +236,9 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-        # 19 unique keys
-        assert len(all_keys) == 19
-        assert len(module_keys_set) == 19
+        # 31 unique keys
+        assert len(all_keys) == 31
+        assert len(module_keys_set) == 31
 
         # Union equals CATALOG
         catalog_set = set(CATALOG)
@@ -254,6 +254,11 @@ class TestPermissionsCatalog:
             "security",
             "settings",
             "erp",
+            "erp_crm",
+            "erp_sales",
+            "erp_inventory",
+            "erp_finance",
+            "erp_hr",
             "billing",
             "invitations",
         }

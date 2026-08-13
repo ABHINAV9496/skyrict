@@ -1,5 +1,5 @@
 /**
- * Identity API client (roles, onboarding, invitations).
+ * Identity API client (roles, invitations).
  *
  * All calls go through the same-origin /api/v1/* BFF proxy, which derives the
  * tenant slug from the Host header, forwards the in-memory access token when
@@ -8,32 +8,6 @@
  */
 
 import { apiFetch, apiPost } from "@/lib/api/http";
-
-export interface MyRoles {
-  roles: string[];
-  permissions: string[];
-}
-
-export interface CurrentUserProfile {
-  id: string;
-  email: string;
-  fullName: string;
-  isActive: boolean;
-  isVerified: boolean;
-  mfaEnabled: boolean;
-  onboardingDismissedAt: string | null;
-  createdAt: string;
-}
-
-export interface OrganizationProfile {
-  id: string;
-  name: string;
-  slug: string;
-  isActive: boolean;
-  planTier: string;
-  onboardingCompletedAt: string | null;
-  createdAt: string;
-}
 
 export interface InvitationSummary {
   id: string;
@@ -57,25 +31,15 @@ export interface RoleSummary {
   createdAt: string;
 }
 
-interface UserPayload {
-  id?: unknown;
-  email?: unknown;
-  full_name?: unknown;
-  is_active?: unknown;
-  is_verified?: unknown;
-  mfa_enabled?: unknown;
-  onboarding_dismissed_at?: unknown;
-  created_at?: unknown;
+export interface Permission {
+  key: string;
+  description: string;
 }
 
-interface TenantPayload {
-  id?: unknown;
-  name?: unknown;
-  slug?: unknown;
-  is_active?: unknown;
-  plan_tier?: unknown;
-  onboarding_completed_at?: unknown;
-  created_at?: unknown;
+export interface PermissionModule {
+  key: string;
+  label: string;
+  permissions: Permission[];
 }
 
 interface InvitationPayload {
@@ -95,35 +59,6 @@ interface RolePayload {
   permissions?: unknown;
   is_system_role?: unknown;
   created_at?: unknown;
-}
-
-function mapUser(raw: UserPayload): CurrentUserProfile {
-  return {
-    id: String(raw.id ?? ""),
-    email: String(raw.email ?? ""),
-    fullName: String(raw.full_name ?? ""),
-    isActive: Boolean(raw.is_active),
-    isVerified: Boolean(raw.is_verified),
-    mfaEnabled: Boolean(raw.mfa_enabled),
-    onboardingDismissedAt: raw.onboarding_dismissed_at
-      ? String(raw.onboarding_dismissed_at)
-      : null,
-    createdAt: String(raw.created_at ?? ""),
-  };
-}
-
-function mapTenant(raw: TenantPayload): OrganizationProfile {
-  return {
-    id: String(raw.id ?? ""),
-    name: String(raw.name ?? ""),
-    slug: String(raw.slug ?? ""),
-    isActive: Boolean(raw.is_active),
-    planTier: String(raw.plan_tier ?? ""),
-    onboardingCompletedAt: raw.onboarding_completed_at
-      ? String(raw.onboarding_completed_at)
-      : null,
-    createdAt: String(raw.created_at ?? ""),
-  };
 }
 
 function mapInvitation(raw: InvitationPayload): InvitationSummary {
@@ -154,30 +89,6 @@ function mapRole(raw: RolePayload): RoleSummary {
   };
 }
 
-export async function getMyRoles(): Promise<MyRoles> {
-  return apiFetch<MyRoles>("/api/v1/roles/me");
-}
-
-export async function getMyProfile(): Promise<CurrentUserProfile> {
-  const raw = await apiFetch<UserPayload>("/api/v1/users/me");
-  return mapUser(raw ?? {});
-}
-
-export async function getMyOrganization(): Promise<OrganizationProfile> {
-  const raw = await apiFetch<TenantPayload>("/api/v1/organizations/me");
-  return mapTenant(raw ?? {});
-}
-
-export async function dismissOnboarding(): Promise<CurrentUserProfile> {
-  const raw = await apiPost<UserPayload>("/api/v1/users/me/onboarding/dismiss", {});
-  return mapUser(raw ?? {});
-}
-
-export async function completeOnboarding(): Promise<OrganizationProfile> {
-  const raw = await apiPost<TenantPayload>("/api/v1/organizations/me/onboarding/complete", {});
-  return mapTenant(raw ?? {});
-}
-
 export async function listInvitations(): Promise<InvitationSummary[]> {
   const items = await apiFetch<InvitationPayload[]>("/api/v1/invitations");
   return (items ?? []).map(mapInvitation);
@@ -198,7 +109,107 @@ export async function expireInvitation(invitationId: string): Promise<void> {
   await apiPost<{ expired: boolean }>(`/api/v1/invitations/${invitationId}/expire`, {});
 }
 
+const SYSTEM_ROLE_LABELS: Record<string, string> = {
+  tenant_owner: "Owner",
+  organization_admin: "Admin",
+  department_manager: "Manager",
+  standard_user: "Member",
+  auditor: "Auditor",
+};
+
+/** Friendly display label for a role name returned by the API. */
+export function roleDisplayName(roleName: string): string {
+  const label = SYSTEM_ROLE_LABELS[roleName];
+  if (label) return label;
+  return roleName
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+/** True when the name is reserved for one of the built-in system roles. */
+export function isSystemRoleName(roleName: string): boolean {
+  return roleName in SYSTEM_ROLE_LABELS;
+}
+
+interface PermissionPayload {
+  key?: unknown;
+  description?: unknown;
+}
+
+interface PermissionModulePayload {
+  key?: unknown;
+  label?: unknown;
+  permissions?: unknown;
+}
+
+function mapPermission(raw: PermissionPayload): Permission {
+  return {
+    key: String(raw.key ?? ""),
+    description: String(raw.description ?? ""),
+  };
+}
+
+function mapPermissionModule(raw: PermissionModulePayload): PermissionModule {
+  return {
+    key: String(raw.key ?? ""),
+    label: String(raw.label ?? ""),
+    permissions: Array.isArray(raw.permissions) ? raw.permissions.map(mapPermission) : [],
+  };
+}
+
+export async function listPermissions(): Promise<PermissionModule[]> {
+  const raw = await apiFetch<{ modules?: unknown }>("/api/v1/permissions");
+  const modules = raw?.modules;
+  return Array.isArray(modules) ? modules.map(mapPermissionModule) : [];
+}
+
+export async function createRole(input: {
+  name: string;
+  permissionKeys: string[];
+}): Promise<RoleSummary> {
+  const raw = await apiPost<RolePayload>("/api/v1/roles", {
+    name: input.name,
+    permission_keys: input.permissionKeys,
+  });
+  return mapRole(raw ?? {});
+}
+
+export async function updateRole(
+  roleId: string,
+  input: { name?: string; permissionKeys?: string[] },
+): Promise<RoleSummary> {
+  const raw = await apiFetch<RolePayload>(`/api/v1/roles/${roleId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: input.name,
+      permission_keys: input.permissionKeys,
+    }),
+  });
+  return mapRole(raw ?? {});
+}
+
+export async function deleteRole(roleId: string): Promise<void> {
+  await apiFetch<null>(`/api/v1/roles/${roleId}`, { method: "DELETE" });
+}
+
 export async function listRoles(): Promise<RoleSummary[]> {
   const items = await apiFetch<RolePayload[]>("/api/v1/roles");
   return (items ?? []).map(mapRole);
+}
+
+export interface MyRoles {
+  roles: string[];
+  permissions: string[];
+}
+
+/** The current user's role names and effective permissions in this tenant. */
+export async function getMyRoles(): Promise<MyRoles> {
+  const raw = await apiFetch<{ roles?: unknown; permissions?: unknown } | null>(
+    "/api/v1/roles/me",
+  );
+  return {
+    roles: Array.isArray(raw?.roles) ? raw.roles.map(String) : [],
+    permissions: Array.isArray(raw?.permissions) ? raw.permissions.map(String) : [],
+  };
 }

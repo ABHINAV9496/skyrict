@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 import typer
@@ -48,12 +49,19 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
 
 
 @app.command()
-def seed() -> None:
-    """Verify reference data seeded by migration 0001 (currencies, permissions).
+def seed(
+    tenant_id: str = typer.Option(
+        None,
+        "--tenant-id",
+        help="UUID of a tenant to seed HR/Payroll defaults for (leave types + payroll settings)",
+    ),
+) -> None:
+    """Seed reference + per-tenant HR/Payroll defaults.
 
-    Core's reference data (erp_currencies, core_permissions) is seeded by the
-    migration itself, so this command only reports that the expected rows are
-    present — it is intentionally idempotent.
+    Reference data (erp_currencies, core_permissions) is seeded by migration
+    0001 itself, so this command always verifies those rows are present. With
+    ``--tenant-id`` it additionally seeds that tenant's leave-type catalogue
+    defaults and the single payroll-settings row (core.seed) — idempotent.
     """
     import asyncio
 
@@ -74,7 +82,18 @@ def seed() -> None:
             typer.echo(f"erp_currencies: {currency_count} rows")
             typer.echo(f"core_permissions: {permission_count} rows")
 
-    asyncio.run(_verify())
+    async def _seed_tenant() -> None:
+        from core.seed import seed_tenant_hr_defaults
+
+        await seed_tenant_hr_defaults(uuid.UUID(tenant_id))
+        typer.echo(f"seeded HR/Payroll defaults for tenant {tenant_id}")
+
+    async def _run() -> None:
+        await _verify()
+        if tenant_id:
+            await _seed_tenant()
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":

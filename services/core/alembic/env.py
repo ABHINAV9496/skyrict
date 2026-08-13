@@ -22,10 +22,28 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 from core.core.config import settings
+
+# Feature ORM models — imported for autogenerate/``target_metadata`` so the full
+# schema is reflected. Models share the same ``core.models.base`` Base; import
+# order matters only for FK resolution (models use string table refs, so none).
+from core.features.hr.models import (  # noqa: F401
+    DepartmentModel,
+    EmployeeModel,
+    LeaveBalanceModel,
+    LeaveMovementModel,
+    LeaveRequestModel,
+    LeaveTypeModel,
+)
 from core.features.inventory.models.product import ErpProductModel  # noqa: F401
 from core.features.inventory.models.stock_level import ErpStockLevelModel  # noqa: F401
 from core.features.inventory.models.stock_movement import ErpStockMovementModel  # noqa: F401
 from core.features.inventory.models.warehouse import ErpWarehouseModel  # noqa: F401
+from core.features.payroll.models import (  # noqa: F401
+    CompensationModel,
+    PayrollEntryModel,
+    PayrollRunModel,
+    PayrollSettingsModel,
+)
 from core.models import (  # noqa: F401  # registers every ORM model
     CorePermissionModel,
     CoreRoleModel,

@@ -264,6 +264,7 @@ class TestTwoTenantRls:
                     {"tid": uuid.UUID(rls_world["tenant_b"])},
                 )
             assert "row-level security" in str(excinfo.value).lower()
+            await conn.rollback()
             await conn.exec_driver_sql("RESET ROLE")
 
         await engine.dispose()
@@ -315,6 +316,6 @@ class TestSeededReferenceData:
         """Core migrates under alembic_version_core; identity keeps alembic_version."""
         async with engine.connect() as conn:
             core_version = await conn.execute(text("SELECT version_num FROM alembic_version_core"))
-            assert core_version.scalar_one() == "0002"
+            assert core_version.scalar_one() == "0005"
             identity_version = await conn.execute(text("SELECT 1 FROM alembic_version"))
             assert identity_version.scalar_one() == 1

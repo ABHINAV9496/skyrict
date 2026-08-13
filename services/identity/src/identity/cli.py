@@ -30,10 +30,12 @@ def serve(
 def migrate(head: str = typer.Option("head", help="Alembic target revision")) -> None:
     """Run database migrations."""
     import subprocess
+    from pathlib import Path
 
+    service_root = Path(__file__).resolve().parents[2]
     subprocess.run(
         ["uv", "run", "alembic", "upgrade", head],
-        cwd="services/identity",
+        cwd=service_root,
         check=True,
     )
 
@@ -41,9 +43,11 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
 @app.command()
 def seed() -> None:
     """Load reference data (default tenant, roles, admin user)."""
-    typer.echo("Seeding reference data...")
-    # TODO: Implement seed logic
-    typer.echo("Done.")
+    import asyncio
+
+    from identity.seed import run_seed
+
+    asyncio.run(run_seed())
 
 
 if __name__ == "__main__":

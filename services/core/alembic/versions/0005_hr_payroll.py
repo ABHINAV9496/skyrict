@@ -252,7 +252,10 @@ def upgrade() -> None:
         sa.Column("leave_type", sa.String(32), nullable=False),
         sa.Column("qty", sa.Integer(), nullable=False),
         sa.Column("ref_type", sa.String(32), nullable=False),
-        sa.Column("ref_id", sa.Uuid(), nullable=True),
+        # String, not UUID: the annual-accrual ref is the leave year ("2025"),
+        # while leave_request/manual_adjustment refs are request/adjustment ids
+        # (mirrors erp_stock_movements.ref_id).
+        sa.Column("ref_id", sa.String(64), nullable=True),
         sa.Column("reason", sa.String(255), nullable=True),
         sa.Column(
             "occurred_at",

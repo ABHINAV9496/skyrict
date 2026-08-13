@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ShellRouter } from "@/components/dashboard/shell-router";
+import { ShellRouter } from "@/components/dashboard/shared/shell-router";
 import { SESSION_COOKIE } from "@/lib/server/auth";
 import { signinUrl } from "@/lib/server/urls";
 

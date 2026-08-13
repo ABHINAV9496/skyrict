@@ -1,35 +1,36 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  Boxes,
-  Bot,
+  Blocks,
+  Radar,
   RotateCw,
   ShieldCheck,
-  Sparkles,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
+import { AiGlyph } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
+import { OverviewSkeleton } from "@/components/ui/page-skeletons";
 import { accessibleModules, useModuleAccess, type ModuleKey } from "@/lib/access/modules";
 import { roleDisplayName } from "@/lib/api/identity-api";
 import { useSession } from "@/lib/auth/session";
 
+type ModuleIcon = LucideIcon | ComponentType<{ className?: string }>;
+
 const modules: {
   href: string;
   accessKey: ModuleKey;
-  kicker: string;
   title: string;
-  tagline: string;
-  capabilities: string[];
-  icon: LucideIcon;
+  oneLine: string;
+  icon: ModuleIcon;
   accent: {
     tile: string;
-    kicker: string;
+    topBar: string;
     hoverBorder: string;
   };
   tour: string;
@@ -37,15 +38,12 @@ const modules: {
   {
     href: "/dashboard/agents",
     accessKey: "agents",
-    kicker: "AI",
     title: "AI Agents",
-    tagline:
-      "Autonomous teammates that research, analyze, and draft — every action bound by the permissions you set.",
-    capabilities: ["Delegate work", "Market scans", "Drafts & summaries"],
-    icon: Bot,
+    oneLine: "Delegate tasks to your AI team.",
+    icon: AiGlyph,
     accent: {
-      tile: "bg-violet-500/10 text-violet-600 ring-violet-500/20 dark:text-violet-400",
-      kicker: "text-violet-600 dark:text-violet-400",
+      tile: "bg-gradient-to-br from-violet-500/20 to-violet-500/5 text-violet-600 ring-violet-500/20 dark:text-violet-400",
+      topBar: "bg-violet-500/60",
       hoverBorder: "hover:border-violet-500/40",
     },
     tour: "card-agents",
@@ -53,15 +51,12 @@ const modules: {
   {
     href: "/dashboard/erp",
     accessKey: "erp",
-    kicker: "ERP",
     title: "Business Operations",
-    tagline:
-      "Sales, inventory, finance, and HR on one source of truth — every department in sync, no silos.",
-    capabilities: ["CRM", "Sales & orders", "Finance & HR"],
-    icon: Boxes,
+    oneLine: "Every department, one source of truth.",
+    icon: Blocks,
     accent: {
-      tile: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
-      kicker: "text-emerald-600 dark:text-emerald-400",
+      tile: "bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
+      topBar: "bg-emerald-500/60",
       hoverBorder: "hover:border-emerald-500/40",
     },
     tour: "card-erp",
@@ -69,15 +64,12 @@ const modules: {
   {
     href: "/dashboard/intelligence",
     accessKey: "intelligence",
-    kicker: "Market",
     title: "Market Intelligence",
-    tagline:
-      "Search the market like you search the web — competitors, winning products, and trends from live signals.",
-    capabilities: ["Competitors", "Trends", "Niches"],
-    icon: Sparkles,
+    oneLine: "Competitors, trends, and niches.",
+    icon: Radar,
     accent: {
-      tile: "bg-sky-500/10 text-sky-600 ring-sky-500/20 dark:text-sky-400",
-      kicker: "text-sky-600 dark:text-sky-400",
+      tile: "bg-gradient-to-br from-sky-500/20 to-sky-500/5 text-sky-600 ring-sky-500/20 dark:text-sky-400",
+      topBar: "bg-sky-500/60",
       hoverBorder: "hover:border-sky-500/40",
     },
     tour: "card-intelligence",
@@ -116,7 +108,7 @@ export default function OverviewClient() {
     [access],
   );
 
-  // A member who can reach exactly one module lands in it directly.
+  // A member who can reach exactly one space lands in it directly.
   useEffect(() => {
     if (status !== "ready" || available.length !== 1) return;
     router.replace(`/dashboard/${available[0]}`);
@@ -126,83 +118,80 @@ export default function OverviewClient() {
   const canInvite = permissions.includes("*") || permissions.includes("users:read");
   const canManageRoles = permissions.includes("*") || permissions.includes("roles:read");
 
+  if (status === "loading") return <OverviewSkeleton />;
+
   return (
     <div className="space-y-8">
-      <section className={ENTER}>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/10 text-base font-semibold text-primary-foreground ring-1 ring-primary/20 ring-inset">
+      <section className={`overflow-hidden rounded-2xl border border-border bg-card ${ENTER}`}>
+        <div className="relative p-6 sm:p-8">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+          />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/25 to-primary/10 text-base font-semibold text-primary-foreground ring-1 ring-primary/20 ring-inset">
                 {initialsFor(user?.fullName ?? "", user?.email ?? "")}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-muted-foreground">
-                  {user?.email ?? "Your workspace"}
-                </p>
-                <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                <h1 className="truncate font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                   {greeting()}
                   {firstName ? `, ${firstName}` : ""}
                 </h1>
+                {roles && roles.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {roles.map((role) => (
+                      <span
+                        key={role}
+                        className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                      >
+                        {roleDisplayName(role)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Your workspace for Skyrict — invite your team, set roles and permissions, then open
-              a space to start working.
-            </p>
-            {roles && roles.length > 0 ? (
-              <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Your access</span>
-                {roles.map((role) => (
-                  <span
-                    key={role}
-                    className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-                  >
-                    {roleDisplayName(role)}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {canInvite ? (
-              <Button asChild>
-                <Link href="/dashboard/members">
-                  <UserPlus aria-hidden="true" className="size-4" />
-                  Invite a member
-                </Link>
-              </Button>
-            ) : null}
-            {canManageRoles ? (
-              <Button asChild variant="outline">
-                <Link href="/dashboard/roles">
-                  <ShieldCheck aria-hidden="true" className="size-4" />
-                  Manage roles
-                </Link>
-              </Button>
-            ) : null}
-            <button
-              type="button"
-              onClick={replayTour}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <RotateCw aria-hidden="true" className="size-4" />
-              Replay tour
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {canInvite ? (
+                <Button asChild>
+                  <Link href="/dashboard/members">
+                    <UserPlus aria-hidden="true" className="size-4" />
+                    Invite
+                  </Link>
+                </Button>
+              ) : null}
+              {canManageRoles ? (
+                <Button asChild variant="outline">
+                  <Link href="/dashboard/roles">
+                    <ShieldCheck aria-hidden="true" className="size-4" />
+                    Roles
+                  </Link>
+                </Button>
+              ) : null}
+              <button
+                type="button"
+                onClick={replayTour}
+                title="Replay tour"
+                aria-label="Replay tour"
+                className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <RotateCw aria-hidden="true" className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className={ENTER} style={{ animationDelay: "80ms" }}>
-          <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
-            Your spaces
-          </h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {status === "ready" && available.length === 0
-              ? "Your roles don't include any spaces yet. Ask an owner to update your access."
-              : "Open a space to start working — each one runs entirely inside your roles and permissions."}
-          </p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              Spaces
+            </h2>
+            <div aria-hidden="true" className="h-px flex-1 bg-border" />
+          </div>
         </div>
 
         {visibleModules.length > 0 ? (
@@ -217,43 +206,21 @@ export default function OverviewClient() {
               >
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-current opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                  className={`absolute inset-x-0 top-0 h-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${module.accent.topBar}`}
                 />
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${module.accent.tile}`}
-                  >
-                    <module.icon aria-hidden="true" className="size-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p
-                      className={`text-[11px] font-semibold tracking-wider uppercase ${module.accent.kicker}`}
-                    >
-                      {module.kicker}
-                    </p>
-                    <h3 className="font-display text-lg font-semibold tracking-tight text-foreground">
-                      {module.title}
-                    </h3>
-                  </div>
+                <div
+                  className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 ring-inset ${module.accent.tile}`}
+                >
+                  <module.icon aria-hidden="true" className="size-6" />
                 </div>
-
-                <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">
-                  {module.tagline}
+                <h3 className="mt-5 font-display text-lg font-semibold tracking-tight text-foreground">
+                  {module.title}
+                </h3>
+                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">
+                  {module.oneLine}
                 </p>
-
-                <ul className="mt-5 flex flex-wrap gap-1.5">
-                  {module.capabilities.map((capability) => (
-                    <li
-                      key={capability}
-                      className="rounded-full bg-muted/70 px-2.5 py-1 text-xs font-medium text-muted-foreground"
-                    >
-                      {capability}
-                    </li>
-                  ))}
-                </ul>
-
                 <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-foreground transition-colors group-hover:text-primary">
-                  Open space
+                  Open
                   <ArrowRight
                     aria-hidden="true"
                     className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"

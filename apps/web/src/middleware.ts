@@ -113,15 +113,19 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(signinOrigin(request, slug), request.url));
       }
       if (pathname === "/dashboard") {
-        return NextResponse.redirect(new URL("/", request.url));
+        return NextResponse.redirect(
+          new URL(`/${request.nextUrl.search || ""}`, request.url),
+        );
       }
       if (pathname.startsWith("/dashboard/")) {
         return NextResponse.redirect(
-          new URL(pathname.slice("/dashboard".length), request.url),
+          new URL(`${pathname.slice("/dashboard".length)}${request.nextUrl.search || ""}`, request.url),
         );
       }
       const internal = pathname === "/" ? "/dashboard" : `/dashboard${pathname}`;
-      return NextResponse.rewrite(new URL(internal, request.url));
+      return NextResponse.rewrite(
+        new URL(`${internal}${request.nextUrl.search || ""}`, request.url),
+      );
     }
     default:
       return notFound();

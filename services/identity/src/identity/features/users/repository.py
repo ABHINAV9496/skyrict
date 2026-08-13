@@ -35,6 +35,7 @@ def _to_orm(user: User) -> UserModel:
         "mfa_secret": user.mfa_secret,
         "phone_country": user.phone_country,
         "phone_number": user.phone_number,
+        "avatar_url": user.avatar_url,
         "mfa_backup_codes": user.mfa_backup_codes or None,
         "onboarding_dismissed_at": user.onboarding_dismissed_at,
     }
@@ -57,6 +58,7 @@ def _from_orm(model: UserModel) -> User:
         mfa_secret=model.mfa_secret,
         phone_country=model.phone_country,
         phone_number=model.phone_number,
+        avatar_url=model.avatar_url,
         mfa_backup_codes=list(model.mfa_backup_codes) if model.mfa_backup_codes else [],
         onboarding_dismissed_at=model.onboarding_dismissed_at,
         created_at=model.created_at,
@@ -159,6 +161,16 @@ class UserRepository(SqlRepository):
         model.mfa_enabled = False
         model.mfa_secret = None
         model.mfa_backup_codes = None
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
+    async def update_avatar(self, user_id: str | uuid.UUID, avatar_url: str | None) -> User:
+        """Store (or clear, when ``None``) the avatar_url and flush."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        model.avatar_url = avatar_url
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)

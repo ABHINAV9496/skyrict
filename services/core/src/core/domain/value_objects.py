@@ -64,6 +64,56 @@ class StockMovementType(StrEnum):
     RELEASE = "release"
 
 
+class AccountType(StrEnum):
+    """Native PostgreSQL enum backing ``erp_chart_of_accounts.account_type``.
+
+    The five DEALER account categories. The trial balance and P&L group
+    accounts by these buckets and use them to decide whether a balance is
+    shown as a debit (asset/expense) or a credit (liability/equity/revenue).
+    """
+
+    ASSET = "asset"
+    LIABILITY = "liability"
+    EQUITY = "equity"
+    REVENUE = "revenue"
+    EXPENSE = "expense"
+
+
+class EntryStatus(StrEnum):
+    """Native PostgreSQL enum backing ``erp_journal_entries.status``.
+
+    An entry is not real money until ``posted``. ``voided`` is pre-post
+    cancellation only in v1 (reversal entries arrive in v1.1).
+    """
+
+    DRAFT = "draft"
+    POSTED = "posted"
+    VOIDED = "voided"
+
+
+class InvoiceStatus(StrEnum):
+    """Native PostgreSQL enum backing ``erp_invoices.status``.
+
+    Revenue is recognized only at ``approved`` (accrual basis); ``paid`` moves
+    cash and reduces receivables. ``voided`` is allowed from draft/issued only.
+    """
+
+    DRAFT = "draft"
+    ISSUED = "issued"
+    APPROVED = "approved"
+    PAID = "paid"
+    VOIDED = "voided"
+
+
+class PaymentStatus(StrEnum):
+    """Native PostgreSQL enum backing ``erp_payments.status``.
+
+    v1 has a single state; a reversal payment adds a state in v1.1.
+    """
+
+    APPLIED = "applied"
+
+
 def _require_currency(currency: str) -> None:
     """Validate a currency code against the supported ISO 4217 set."""
     normalized = currency.strip().upper()

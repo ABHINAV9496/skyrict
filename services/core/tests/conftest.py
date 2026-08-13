@@ -39,7 +39,7 @@ _private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 os.environ.setdefault(
     "CORE_DATABASE_URL",
-    "postgresql+asyncpg://skyrict:Skyrict%4011419@localhost:5432/skyrict_identity",
+    "postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity",
 )
 os.environ["CORE_JWT_PUBLIC_KEY_PATH"] = str(_KEY_DIR / "public.pem")
 os.environ.setdefault("CORE_JWKS_ISSUER", "https://auth.test.skyrict.io")

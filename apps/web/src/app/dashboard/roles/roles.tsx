@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, LoaderCircle, Lock, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +31,7 @@ import {
   type RoleSummary,
 } from "@/lib/api/identity-api";
 import { cn } from "@/lib/utils";
+import { ListSkeleton } from "@/components/ui/page-skeletons";
 
 type PageStatus =
   | { state: "loading" }
@@ -42,13 +43,7 @@ type Notice = { tone: "success" | "error"; text: string };
 const NAME_PATTERN = /^[a-z0-9_-]+$/;
 
 function RoleListSkeleton() {
-  return (
-    <div className="space-y-2" aria-hidden="true">
-      {[0, 1, 2, 3].map((index) => (
-        <div key={index} className="h-14 animate-pulse rounded-lg bg-muted" />
-      ))}
-    </div>
-  );
+  return <ListSkeleton rows={4} />;
 }
 
 function permissionSummary(permissions: string[]): string {
@@ -432,13 +427,7 @@ export default function RolesClient() {
             </div>
 
             <div className="overflow-y-auto p-3 lg:max-h-[calc(100dvh-24rem)]">
-              {status.state === "loading" ? (
-                <div className="space-y-2" aria-hidden="true">
-                  {[0, 1, 2].map((index) => (
-                    <div key={index} className="h-20 animate-pulse rounded-lg bg-muted" />
-                  ))}
-                </div>
-              ) : null}
+              {status.state === "loading" ? <ListSkeleton rows={3} /> : null}
 
               {status.state === "ready" && filteredModules.length === 0 ? (
                 <div className="px-4 py-10 text-center text-sm text-muted-foreground">

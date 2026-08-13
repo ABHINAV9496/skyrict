@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, LoaderCircle, MailPlus, Plus, UserPlus, Users } from "lucide-react";
 
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,7 @@ import {
   type InvitationSummary,
   type RoleSummary,
 } from "@/lib/api/identity-api";
+import { ListSkeleton } from "@/components/ui/page-skeletons";
 import { cn } from "@/lib/utils";
 
 type Status =
@@ -99,20 +100,7 @@ function StatusBadge({ state }: { state: "used" | "expired" | "pending" }) {
 }
 
 function SkeletonRows() {
-  return (
-    <div className="space-y-4" aria-hidden="true">
-      {[0, 1, 2].map((index) => (
-        <div key={index} className="flex items-center gap-3">
-          <div className="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-            <div className="h-2.5 w-1/4 animate-pulse rounded bg-muted/70" />
-          </div>
-          <div className="h-5 w-16 shrink-0 animate-pulse rounded-full bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
+  return <ListSkeleton rows={3} />;
 }
 
 /** `{slug}.signin.{apex}/invite?token=...` link for a freshly created invite. */

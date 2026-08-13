@@ -196,6 +196,16 @@ class UserRepository(SqlRepository):
         await self.session.refresh(model)
         return _from_orm(model)
 
+    async def set_active(self, user_id: str | uuid.UUID, *, is_active: bool) -> User:
+        """Set the account's active flag (soft removal) and flush."""
+        model = await self.session.get(UserModel, user_id)
+        if model is None:
+            raise UserNotFoundError("User not found")
+        model.is_active = is_active
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)
+
     async def list_active(
         self,
         *,

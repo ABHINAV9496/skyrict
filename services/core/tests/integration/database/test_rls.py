@@ -153,7 +153,14 @@ async def _ensure_rls_role() -> None:
                 "END IF; END $$;"
             )
             await conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA public TO {RLS_ROLE}")
-            for table in ("core_roles", "core_user_roles"):
+            for table in (
+                "core_roles",
+                "core_user_roles",
+                "erp_products",
+                "erp_warehouses",
+                "erp_stock_levels",
+                "erp_stock_movements",
+            ):
                 await conn.exec_driver_sql(
                     f"GRANT SELECT, INSERT ON TABLE public.{table} TO {RLS_ROLE}"
                 )
@@ -310,5 +317,6 @@ class TestSeededReferenceData:
         async with engine.connect() as conn:
             core_version = await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             assert core_version.scalar_one() == "0005"
+            assert core_version.scalar_one() == "0002"
             identity_version = await conn.execute(text("SELECT 1 FROM alembic_version"))
             assert identity_version.scalar_one() == 1

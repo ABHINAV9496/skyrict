@@ -40,6 +40,10 @@ from core.features.payroll.models import (  # noqa: F401
     PayrollRunModel,
     PayrollSettingsModel,
 )
+from core.features.inventory.models.product import ErpProductModel  # noqa: F401
+from core.features.inventory.models.stock_level import ErpStockLevelModel  # noqa: F401
+from core.features.inventory.models.stock_movement import ErpStockMovementModel  # noqa: F401
+from core.features.inventory.models.warehouse import ErpWarehouseModel  # noqa: F401
 from core.models import (  # noqa: F401  # registers every ORM model
     CorePermissionModel,
     CoreRoleModel,

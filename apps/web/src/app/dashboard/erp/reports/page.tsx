@@ -1,7 +1,7 @@
 import { BarChart3 } from "lucide-react";
 
-import { ErpReportsKpis } from "@/components/dashboard/erp-reports-kpis";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { ErpReportsKpis } from "@/components/dashboard/erp/erp-reports-kpis";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
 
 export default function ErpReportsPage() {
   return (

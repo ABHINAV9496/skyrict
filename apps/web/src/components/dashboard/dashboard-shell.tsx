@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { ProductTour } from "@/components/dashboard/tour/product-tour";
 
 const COLLAPSED_KEY = "skyrict:sidebar:collapsed";
 
@@ -36,6 +37,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-6 lg:py-8">{children}</div>
         </main>
       </div>
+      <ProductTour />
     </div>
   );
 }

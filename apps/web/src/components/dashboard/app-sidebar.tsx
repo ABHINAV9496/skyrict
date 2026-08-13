@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import {
   Bot,
   Boxes,
-  Building2,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Users,
@@ -26,6 +26,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   soon?: boolean;
+  tour?: string;
 }
 
 interface NavGroup {
@@ -37,24 +38,69 @@ const navGroups: NavGroup[] = [
   {
     label: "Workspace",
     items: [
-      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-      { href: "/dashboard/members", label: "Members", icon: Users },
+      {
+        href: "/dashboard",
+        label: "Overview",
+        icon: LayoutDashboard,
+        tour: "nav-overview",
+      },
     ],
   },
   {
     label: "Modules",
     items: [
-      { href: "/dashboard/agents", label: "AI Agents", icon: Bot },
-      { href: "/dashboard/erp", label: "ERP", icon: Boxes },
-      { href: "/dashboard/intelligence", label: "Intelligence", icon: Sparkles },
+      {
+        href: "/dashboard/agents",
+        label: "AI Agents",
+        icon: Bot,
+        tour: "nav-agents",
+      },
+      {
+        href: "/dashboard/erp",
+        label: "ERP",
+        icon: Boxes,
+        tour: "nav-erp",
+      },
+      {
+        href: "/dashboard/intelligence",
+        label: "Intelligence",
+        icon: Sparkles,
+        tour: "nav-intelligence",
+      },
     ],
   },
   {
     label: "Manage",
     items: [
-      { href: "/dashboard/settings", label: "Settings", icon: SlidersHorizontal, soon: true },
-      { href: "/dashboard/integrations", label: "Integrations", icon: Plug, soon: true },
+      {
+        href: "/dashboard/roles",
+        label: "Roles",
+        icon: ShieldCheck,
+        tour: "nav-roles",
+      },
+      {
+        href: "/dashboard/integrations",
+        label: "Integrations",
+        icon: Plug,
+        soon: true,
+        tour: "nav-integrations",
+      },
     ],
+  },
+];
+
+const accountItems: NavItem[] = [
+  {
+    href: "/dashboard/members",
+    label: "Members",
+    icon: Users,
+    tour: "nav-members",
+  },
+  {
+    href: "/dashboard/settings",
+    label: "Settings",
+    icon: SlidersHorizontal,
+    tour: "nav-settings",
   },
 ];
 
@@ -65,9 +111,89 @@ function initialsFor(name: string, email: string): string {
   return email.slice(0, 2).toUpperCase() || "SK";
 }
 
+/**
+ * Compare the active path against an internal `/dashboard/*` href. The public
+ * workspace URL strips the prefix (e.g. `/settings`), so normalize it before
+ * comparing so the active state tracks the page regardless of which form the
+ * browser is showing.
+ */
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const normalized =
+    pathname === "/"
+      ? "/dashboard"
+      : pathname.startsWith("/dashboard")
+        ? pathname
+        : `/dashboard${pathname}`;
+  if (href === "/dashboard") return normalized === "/dashboard";
+  return normalized === href || normalized.startsWith(`${href}/`);
+}
+
+function SidebarLink({
+  item,
+  collapsed,
+  pathname,
+  onCloseMobile,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  pathname: string;
+  onCloseMobile: () => void;
+}) {
+  const active = isActive(pathname, item.href);
+  const Icon = item.icon;
+
+  if (item.soon) {
+    return (
+      <div
+        data-tour={item.tour}
+        title={collapsed ? item.label : undefined}
+        aria-disabled="true"
+        className={cn(
+          "flex items-center gap-3 rounded-lg text-sm font-medium text-muted-foreground/60 select-none",
+          collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
+        )}
+      >
+        <Icon aria-hidden="true" className="size-[18px] shrink-0" />
+        {!collapsed ? (
+          <>
+            <span className="truncate">{item.label}</span>
+            <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+              Soon
+            </span>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      data-tour={item.tour}
+      onClick={onCloseMobile}
+      title={collapsed ? item.label : undefined}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+        collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
+        active
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+        />
+      ) : null}
+      <Icon
+        aria-hidden="true"
+        className={cn("size-[18px] shrink-0", active && "text-primary")}
+      />
+      {!collapsed ? <span className="truncate">{item.label}</span> : null}
+    </Link>
+  );
 }
 
 interface AppSidebarProps {
@@ -107,17 +233,31 @@ export function AppSidebar({
         <header
           className={cn(
             "flex items-center border-b border-sidebar-border py-4",
-            collapsed ? "justify-center px-2" : "px-4",
+            collapsed ? "justify-center px-2" : "justify-between px-4",
           )}
         >
           <Link
             href="/dashboard"
             onClick={onCloseMobile}
             aria-label="Skyrict dashboard"
-            className="text-sidebar-foreground"
+            className={cn("text-sidebar-foreground", collapsed && "hidden")}
           >
             <Logo wordmark={!collapsed} />
           </Link>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {collapsed ? (
+              <PanelLeftOpen aria-hidden="true" className="size-4" />
+            ) : (
+              <PanelLeftClose aria-hidden="true" className="size-4" />
+            )}
+          </button>
         </header>
 
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Dashboard">
@@ -130,81 +270,35 @@ export function AppSidebar({
                   {group.label}
                 </p>
               )}
-              {group.items.map((item) => {
-                const active = isActive(pathname, item.href);
-                const Icon = item.icon;
-                if (item.soon) {
-                  return (
-                    <div
-                      key={item.href}
-                      title={collapsed ? item.label : undefined}
-                      aria-disabled="true"
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg text-sm font-medium text-muted-foreground/60 select-none",
-                        collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
-                      )}
-                    >
-                      <Icon aria-hidden="true" className="size-[18px] shrink-0" />
-                      {!collapsed ? (
-                        <>
-                          <span className="truncate">{item.label}</span>
-                          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                            Soon
-                          </span>
-                        </>
-                      ) : null}
-                    </div>
-                  );
-                }
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onCloseMobile}
-                    title={collapsed ? item.label : undefined}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "group relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
-                      collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
-                      active
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    {active ? (
-                      <span
-                        aria-hidden="true"
-                        className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
-                      />
-                    ) : null}
-                    <Icon
-                      aria-hidden="true"
-                      className={cn("size-[18px] shrink-0", active && "text-primary")}
-                    />
-                    {!collapsed ? <span className="truncate">{item.label}</span> : null}
-                  </Link>
-                );
-              })}
+              {group.items.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  pathname={pathname}
+                  onCloseMobile={onCloseMobile}
+                />
+              ))}
             </div>
           ))}
         </nav>
 
-        <div className="border-t border-sidebar-border p-3">
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            title={collapsed ? "Business OS" : undefined}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            <Building2 aria-hidden="true" className="size-[18px] shrink-0" />
-            {!collapsed ? <span className="truncate">Business OS</span> : null}
-          </button>
+        <div className="space-y-1 border-t border-sidebar-border p-3">
+          {accountItems.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              collapsed={collapsed}
+              pathname={pathname}
+              onCloseMobile={onCloseMobile}
+            />
+          ))}
         </div>
 
-        <footer className="space-y-2 border-t border-sidebar-border p-3">
+        <footer
+          data-tour="sidebar-profile"
+          className="space-y-2 border-t border-sidebar-border p-3"
+        >
           <div
             className={cn(
               "flex items-center gap-3",
@@ -230,21 +324,6 @@ export function AppSidebar({
               className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <LogOut aria-hidden="true" className="size-4" />
-            </button>
-          </div>
-          <div className={cn("flex", collapsed ? "justify-center" : "justify-end")}>
-            <button
-              type="button"
-              onClick={onToggleCollapsed}
-              aria-expanded={!collapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {collapsed ? (
-                <PanelLeftOpen aria-hidden="true" className="size-4" />
-              ) : (
-                <PanelLeftClose aria-hidden="true" className="size-4" />
-              )}
             </button>
           </div>
         </footer>

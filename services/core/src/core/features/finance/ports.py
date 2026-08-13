@@ -182,6 +182,10 @@ class FinanceRepositoryPort(Protocol):
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
     ) -> Invoice | None: ...
 
+    async def mark_invoice_paid(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
     # --- Payments ---
     async def create_payment(self, payment: Payment) -> Payment: ...
 

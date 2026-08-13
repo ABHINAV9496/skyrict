@@ -303,6 +303,9 @@ class FinanceRepository:
             status=entry.status,
             source=entry.source,
             source_ref=entry.source_ref,
+            posted_at=entry.posted_at,
+            posted_by_user_id=entry.posted_by_user_id,
+            voided_at=entry.voided_at,
         )
         self.session.add(model)
         try:
@@ -600,6 +603,18 @@ class FinanceRepository:
             return None
         model.status = InvoiceStatus.VOIDED
         model.voided_at = voided_at
+        await self.session.flush()
+        await self.session.refresh(model)
+        lines = await self._invoice_lines(invoice_id, tenant_id)
+        return _invoice_from_orm(model, lines)
+
+    async def mark_invoice_paid(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None:
+        model = await self._invoice_model(invoice_id, tenant_id)
+        if model is None:
+            return None
+        model.status = InvoiceStatus.PAID
         await self.session.flush()
         await self.session.refresh(model)
         lines = await self._invoice_lines(invoice_id, tenant_id)

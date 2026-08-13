@@ -56,6 +56,7 @@ JOURNAL_SOURCE_INVOICE = "invoice"
 JOURNAL_SOURCE_PAYMENT = "payment"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
+PAYMENT_SOURCE_MANUAL = "manual"
 
 # ---------------------------------------------------------------------------
 # Skip-auth paths (middleware bypass) — real mounted paths under /api/v1.

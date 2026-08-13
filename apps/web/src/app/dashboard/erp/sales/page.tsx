@@ -1,7 +1,7 @@
 import { ShoppingCart } from "lucide-react";
 
-import { ErpModuleTable } from "@/components/dashboard/erp-module-table";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { ErpModuleTable } from "@/components/dashboard/erp/erp-module-table";
+import { PageHeader } from "@/components/dashboard/shared/page-header";
 
 export default function ErpSalesPage() {
   return (

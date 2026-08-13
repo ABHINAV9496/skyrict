@@ -1,1 +1,19 @@
 """HR ORM models — one file per ``erp_*`` table (HR-DATA-001)."""
+
+from core.features.hr.models.department import DepartmentModel
+from core.features.hr.models.employee import EmployeeModel, EmploymentStatus
+from core.features.hr.models.leave_balance import LeaveBalanceModel
+from core.features.hr.models.leave_movement import LeaveMovementModel
+from core.features.hr.models.leave_request import LeaveRequestModel, LeaveRequestStatus
+from core.features.hr.models.leave_type import LeaveTypeModel
+
+__all__ = [
+    "DepartmentModel",
+    "EmployeeModel",
+    "EmploymentStatus",
+    "LeaveBalanceModel",
+    "LeaveMovementModel",
+    "LeaveRequestModel",
+    "LeaveRequestStatus",
+    "LeaveTypeModel",
+]

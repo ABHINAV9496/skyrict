@@ -70,7 +70,12 @@ class LeaveRequestModel(Base):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     days: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[LeaveRequestStatus] = mapped_column(
-        Enum(LeaveRequestStatus, name="erp_leave_request_status", create_type=False),
+        Enum(
+            LeaveRequestStatus,
+            name="erp_leave_request_status",
+            create_type=False,
+            values_callable=lambda cls: [m.value for m in cls],
+        ),
         nullable=False,
         server_default=text("'pending'"),
     )

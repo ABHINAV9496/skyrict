@@ -52,7 +52,12 @@ class PayrollSettingsModel(Base):
         Numeric(18, 4), nullable=False, server_default=text("0")
     )
     rounding: Mapped[PayrollRounding] = mapped_column(
-        Enum(PayrollRounding, name="erp_payroll_rounding", create_type=False),
+        Enum(
+            PayrollRounding,
+            name="erp_payroll_rounding",
+            create_type=False,
+            values_callable=lambda cls: [m.value for m in cls],
+        ),
         nullable=False,
         server_default=text("'nearest'"),
     )

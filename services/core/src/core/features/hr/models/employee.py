@@ -77,7 +77,12 @@ class EmployeeModel(Base):
     department_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     job_title: Mapped[str] = mapped_column(String(100), nullable=False)
     employment_status: Mapped[EmploymentStatus] = mapped_column(
-        Enum(EmploymentStatus, name="erp_employment_status", create_type=False),
+        Enum(
+            EmploymentStatus,
+            name="erp_employment_status",
+            create_type=False,
+            values_callable=lambda cls: [m.value for m in cls],
+        ),
         nullable=False,
         server_default=text("'active'"),
     )

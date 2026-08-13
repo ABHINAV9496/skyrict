@@ -70,7 +70,12 @@ class PayrollRunModel(Base):
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[PayrollRunStatus] = mapped_column(
-        Enum(PayrollRunStatus, name="erp_payroll_run_status", create_type=False),
+        Enum(
+            PayrollRunStatus,
+            name="erp_payroll_run_status",
+            create_type=False,
+            values_callable=lambda cls: [m.value for m in cls],
+        ),
         nullable=False,
         server_default=text("'draft'"),
     )

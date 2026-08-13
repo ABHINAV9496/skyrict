@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 from core.core.config import settings
-from core.features.finance.models import ( 
+from core.features.finance.models import (  # noqa: F401
     ErpChartOfAccountModel,
     ErpFiscalPeriodModel,
     ErpInvoiceLineModel,

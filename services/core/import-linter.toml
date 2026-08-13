@@ -28,6 +28,11 @@ name = "Only repositories touch the database layer"
 type = "forbidden"
 source_modules = ["core.features"]
 forbidden_modules = ["core.models", "core.db"]
+# Feature ORM MODELS are the one sanctioned exception: they must inherit the
+# shared declarative Base/mixins from core.models.base (identity convention —
+# no db/base.py), so importing core.models.** from features/**/models/** is
+# allowed. Repositories and everything else under core.features stay forbidden.
+ignore_imports = ["core.features.**.models.** -> core.models.**"]
 # Repositories are the ORM gateway: services/routers/schemas must never import
 # SQLAlchemy models or the db layer directly. Persistence stays in repository.py.
 # (When feature repositories land, restore ignore_imports for

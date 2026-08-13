@@ -1,0 +1,300 @@
+"""Finance ports — persistence, cross-module, audit, and event contracts.
+
+Declares what the repository must offer so the service depends on these
+Protocols (hexagonal "ports") rather than concrete SQLAlchemy/db/event
+implementations. Feature modules may NOT import ``core.models`` / ``core.db``
+(import-linter), so:
+
+- ``FinanceRepositoryPort`` is implemented by ``FinanceRepository`` (same
+  feature package — no layer violation);
+- ``AuditSink`` is implemented structurally by ``core.db.audit_repository``
+  (duck-typed — that module never imports this one, so there is no reverse
+  dependency);
+- ``FinanceEventSink`` is implemented structurally by
+  ``core.events.producers.finance_events.FinanceEventPublisher``;
+- ``InvoicePort`` is the seam the future CRM/sales module calls to bill a
+  sales order — it ships with a test double until CRM lands (finance never
+  reads sales tables; it only receives the ``SalesOrderForInvoicing`` DTO).
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from core.domain.entities import (
+        BalanceSheet,
+        ChartOfAccount,
+        FiscalPeriod,
+        Invoice,
+        JournalEntry,
+        Payment,
+        ProfitAndLoss,
+        TrialBalance,
+    )
+    from core.domain.value_objects import EntryStatus, InvoiceStatus
+
+
+# ---------------------------------------------------------------------------
+# Cross-module DTOs — the agreed data shape between finance and CRM/sales.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SalesOrderLine:
+    """One line of a sales order, as seen by finance.
+
+    ``account_id`` is the revenue account to post against. When omitted, the
+    service resolves the tenant's standard Revenue account (code ``4000``).
+    """
+
+    description: str
+    account_id: uuid.UUID | None
+    quantity: Decimal
+    unit_price: Decimal
+
+
+@dataclass(frozen=True)
+class SalesOrderForInvoicing:
+    """A sales order ready to be billed — the ONLY thing finance accepts.
+
+    ``order_id`` becomes ``source_ref`` with ``source='sales_order'``; the DB
+    ``UNIQUE (tenant_id, source, source_ref)`` lock makes a replayed handoff
+    return the existing invoice instead of billing twice.
+    """
+
+    tenant_id: uuid.UUID
+    order_id: str
+    customer_id: uuid.UUID
+    invoice_date: date
+    due_date: date
+    lines: tuple[SalesOrderLine, ...] = field(default_factory=tuple)
+    currency: str = "USD"
+
+
+# ---------------------------------------------------------------------------
+# Finance repository port
+# ---------------------------------------------------------------------------
+
+
+class FinanceRepositoryPort(Protocol):
+    """Persistence contract for the finance feature (only DB-touching code)."""
+
+    # --- Chart of accounts ---
+    async def create_account(self, account: ChartOfAccount) -> ChartOfAccount: ...
+
+    async def get_account_by_id(
+        self, account_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ChartOfAccount | None: ...
+
+    async def get_account_by_code(
+        self, code: str, tenant_id: uuid.UUID
+    ) -> ChartOfAccount | None: ...
+
+    async def list_accounts(
+        self, tenant_id: uuid.UUID, *, include_inactive: bool = False
+    ) -> Sequence[ChartOfAccount]: ...
+
+    async def deactivate_account(
+        self, account_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ChartOfAccount | None: ...
+
+    # --- Journal entries (header + lines, one transaction) ---
+    async def create_journal_entry(self, entry: JournalEntry) -> JournalEntry: ...
+
+    async def get_journal_entry(
+        self, entry_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> JournalEntry | None: ...
+
+    async def list_journal_entries(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: EntryStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Sequence[JournalEntry]: ...
+
+    async def post_journal_entry(
+        self,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        posted_by_user_id: uuid.UUID,
+        posted_at: datetime,
+    ) -> JournalEntry | None: ...
+
+    async def void_journal_entry(
+        self,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        voided_at: datetime,
+    ) -> JournalEntry | None: ...
+
+    # --- Fiscal periods ---
+    async def create_fiscal_period(self, period: FiscalPeriod) -> FiscalPeriod: ...
+
+    async def list_fiscal_periods(self, tenant_id: uuid.UUID) -> Sequence[FiscalPeriod]: ...
+
+    async def close_fiscal_period(
+        self, period_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> FiscalPeriod | None: ...
+
+    async def is_period_closed(self, entry_date: date, tenant_id: uuid.UUID) -> bool: ...
+
+    # --- Invoices (header + lines) ---
+    async def create_invoice(self, invoice: Invoice) -> Invoice: ...
+
+    async def get_invoice(self, invoice_id: uuid.UUID, tenant_id: uuid.UUID) -> Invoice | None: ...
+
+    async def get_invoice_by_source_ref(
+        self, source: str, source_ref: str, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
+    async def list_invoices(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Sequence[Invoice]: ...
+
+    async def issue_invoice(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, issued_at: datetime
+    ) -> Invoice | None: ...
+
+    async def approve_invoice(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, approved_at: datetime
+    ) -> Invoice | None: ...
+
+    async def void_invoice(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
+    ) -> Invoice | None: ...
+
+    # --- Payments ---
+    async def create_payment(self, payment: Payment) -> Payment: ...
+
+    async def get_payment(self, payment_id: uuid.UUID, tenant_id: uuid.UUID) -> Payment | None: ...
+
+    async def get_payment_by_source_ref(
+        self, source: str, source_ref: str, tenant_id: uuid.UUID
+    ) -> Payment | None: ...
+
+    async def sum_payments_for_invoice(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Decimal: ...
+
+    # --- Numbering (nextval on seq_erp_invoice_number / seq_erp_payment_number) ---
+    async def next_invoice_number(self, tenant_id: uuid.UUID, year: int) -> str: ...
+
+    async def next_payment_number(self, tenant_id: uuid.UUID, year: int) -> str: ...
+
+    # --- Reports (derived from posted lines, never stored) ---
+    async def trial_balance(self, tenant_id: uuid.UUID, as_of: date) -> TrialBalance: ...
+
+    async def profit_and_loss(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> ProfitAndLoss: ...
+
+    async def balance_sheet(self, tenant_id: uuid.UUID, as_of: date) -> BalanceSheet: ...
+
+
+# ---------------------------------------------------------------------------
+# Cross-module invoicing port (seam for CRM/sales)
+# ---------------------------------------------------------------------------
+
+
+class InvoicePort(Protocol):
+    """Billing seam the CRM/sales module calls when an order is ready to bill.
+
+    Implemented by the finance service (via ``FinanceService.create_from_order``)
+    and stubbed with a test double in unit tests until CRM lands. Idempotent:
+    re-billing the same ``order_id`` returns the existing invoice.
+    """
+
+    async def create_from_order(self, order: SalesOrderForInvoicing) -> Invoice: ...
+
+
+# ---------------------------------------------------------------------------
+# Audit sink (implemented structurally by core.db.audit_repository)
+# ---------------------------------------------------------------------------
+
+
+class AuditSink(Protocol):
+    """Append-only audit trail for finance state changes.
+
+    Written in the SAME request transaction as the state change so the audit
+    row commits atomically with the business mutation (identity's pattern).
+    """
+
+    async def log(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        user_id: str | uuid.UUID | None,
+        action: str,
+        target: str,
+        details: dict[str, Any] | None = None,
+    ) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# Event sink (implemented structurally by core.events.producers.finance_events)
+# ---------------------------------------------------------------------------
+
+
+class FinanceEventSink(Protocol):
+    """Outbound event announcements for finance money moments.
+
+    Implementations buffer events and publish them only AFTER the request
+    transaction commits (session ``after_commit``) so consumers never observe
+    money that did not actually persist.
+    """
+
+    def journal_entry_posted(
+        self,
+        *,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        correlation_id: str,
+    ) -> None: ...
+
+    def invoice_created(
+        self,
+        *,
+        invoice_id: uuid.UUID,
+        invoice_number: str,
+        tenant_id: uuid.UUID,
+        correlation_id: str,
+    ) -> None: ...
+
+    def invoice_approved(
+        self,
+        *,
+        invoice_id: uuid.UUID,
+        invoice_number: str,
+        revenue_entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        correlation_id: str,
+    ) -> None: ...
+
+    def payment_applied(
+        self,
+        *,
+        payment_id: uuid.UUID,
+        payment_number: str,
+        invoice_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        correlation_id: str,
+    ) -> None: ...

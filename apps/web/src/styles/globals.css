@@ -338,3 +338,118 @@
   --sidebar-border: #b45309;
   --sidebar-ring: #f59e0b;
 }
+
+/* ---------------------------------------------------------------------------
+ * Skeleton shimmer
+ *
+ * A single `.skeleton` primitive: a muted block with a moving highlight sweep.
+ * Tune the sheen via `--skeleton-sheen`, a color-mixed overlay of the current
+ * foreground so it reads well in light and dark themes alike.
+ * ------------------------------------------------------------------------- */
+
+@keyframes skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--foreground) 9%, transparent),
+    transparent
+  );
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Market analytics chart (GMIE home background)
+ *
+ * Decorative motion for the faded green graph behind the intelligence home
+ * hero: a sweeping scan highlight, a trend line that draws itself in, and
+ * pulsing data-point markers. All disabled under prefers-reduced-motion.
+ * ------------------------------------------------------------------------- */
+
+@keyframes chart-scan {
+  0% {
+    left: -25%;
+  }
+  100% {
+    left: 115%;
+  }
+}
+
+@keyframes chart-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chart-pulse {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.chart-scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -25%;
+  width: 5rem;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, #34d399 20%, transparent),
+    transparent
+  );
+  animation: chart-scan 6s linear infinite;
+}
+
+.chart-draw {
+  stroke-dasharray: 1500;
+  stroke-dashoffset: 1500;
+  animation: chart-draw 2.4s ease-out forwards;
+}
+
+.chart-pulse {
+  animation: chart-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-scan,
+  .chart-draw,
+  .chart-pulse {
+    animation: none;
+  }
+
+  .chart-draw {
+    stroke-dashoffset: 0;
+  }
+}
+
+

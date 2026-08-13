@@ -34,3 +34,15 @@ class TestCatalog:
     def test_inventory_key_is_provisional(self) -> None:
         # Provisional until docs/modules/inventory-warehouse.md lands.
         assert ERP_INVENTORY_READ == "erp.inventory.read"
+
+    def test_hr_and_payroll_keys_are_catalogued(self) -> None:
+        # docs/modules/hr-payroll.md §2.2 permission matrix; seeded by 0006.
+        for key in (
+            "erp.hr.read",
+            "erp.hr.write",
+            "erp.hr.approve",
+            "erp.payroll.read",
+            "erp.payroll.write",
+            "erp.payroll.approve",
+        ):
+            assert key in CATALOG

@@ -36,6 +36,16 @@ ERP_INVOICE_READ = "erp.invoice.read"
 ERP_INVOICE_APPROVE = "erp.invoice.approve"
 ERP_INVOICE_WRITE = "erp.invoice.write"
 
+# HR (design doc docs/design/hr-payroll.md)
+ERP_HR_READ = "erp.hr.read"
+ERP_HR_WRITE = "erp.hr.write"
+ERP_HR_APPROVE = "erp.hr.approve"
+
+# Payroll (design doc docs/design/hr-payroll.md)
+ERP_PAYROLL_READ = "erp.payroll.read"
+ERP_PAYROLL_WRITE = "erp.payroll.write"
+ERP_PAYROLL_APPROVE = "erp.payroll.approve"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -50,6 +60,12 @@ CATALOG: tuple[str, ...] = (
     ERP_INVOICE_READ,
     ERP_INVOICE_WRITE,
     ERP_INVOICE_APPROVE,
+    ERP_HR_READ,
+    ERP_HR_WRITE,
+    ERP_HR_APPROVE,
+    ERP_PAYROLL_READ,
+    ERP_PAYROLL_WRITE,
+    ERP_PAYROLL_APPROVE,
 )
 
 # Permission module groupings.
@@ -68,6 +84,8 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("purchase", "Purchasing", (ERP_PURCHASE_READ, ERP_PURCHASE_WRITE, ERP_PURCHASE_APPROVE)),
     ("sales", "Sales", (ERP_SALES_READ, ERP_SALES_WRITE)),
     ("invoice", "Finance / invoicing", (ERP_INVOICE_READ, ERP_INVOICE_WRITE, ERP_INVOICE_APPROVE)),
+    ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
+    ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
 )
 
 
@@ -90,6 +108,9 @@ _assert_catalog_union()
 
 __all__ = [
     "CATALOG",
+    "ERP_HR_APPROVE",
+    "ERP_HR_READ",
+    "ERP_HR_WRITE",
     "ERP_INVENTORY_ADJUST",
     "ERP_INVENTORY_ADJUST_APPROVE",
     "ERP_INVENTORY_READ",
@@ -97,6 +118,9 @@ __all__ = [
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
     "ERP_INVOICE_WRITE",
+    "ERP_PAYROLL_APPROVE",
+    "ERP_PAYROLL_READ",
+    "ERP_PAYROLL_WRITE",
     "ERP_PURCHASE_APPROVE",
     "ERP_PURCHASE_READ",
     "ERP_PURCHASE_WRITE",

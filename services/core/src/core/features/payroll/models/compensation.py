@@ -35,7 +35,10 @@ class CompensationModel(Base):
     __tablename__ = "erp_compensation"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "employee_id", "effective_from", name="uq_erp_compensation_employee_from"
+            "tenant_id",
+            "employee_id",
+            "effective_from",
+            name="uq_erp_compensation_employee_effective",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "employee_id"],

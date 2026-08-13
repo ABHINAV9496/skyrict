@@ -263,6 +263,7 @@ class TestErpRls:
                     {"tid": uuid.UUID(erp_world["tenant_b"])},
                 )
             assert "row-level security" in str(excinfo.value).lower()
+            await conn.rollback()
             await conn.exec_driver_sql("RESET ROLE")
 
         await engine.dispose()
@@ -364,6 +365,9 @@ class TestErpConstraints:
                     {"tid": uuid.UUID(erp_world["tenant_a"])},
                 )
             assert "uq_erp_payroll_runs_period_active" in str(excinfo.value)
+
+            # Roll back the aborted transaction before continuing.
+            await conn.rollback()
 
             # A VOID run may overlap — the index excludes voided rows.
             await conn.execute(

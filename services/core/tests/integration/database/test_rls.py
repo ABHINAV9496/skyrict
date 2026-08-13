@@ -257,6 +257,7 @@ class TestTwoTenantRls:
                     {"tid": uuid.UUID(rls_world["tenant_b"])},
                 )
             assert "row-level security" in str(excinfo.value).lower()
+            await conn.rollback()
             await conn.exec_driver_sql("RESET ROLE")
 
         await engine.dispose()

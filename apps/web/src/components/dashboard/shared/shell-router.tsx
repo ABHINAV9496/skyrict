@@ -7,6 +7,7 @@ import { DashboardShell } from "@/components/dashboard/workspace/dashboard-shell
 import { ErpShell } from "@/components/dashboard/erp/erp-shell";
 import { IntelligenceShell } from "@/components/dashboard/intelligence/intelligence-shell";
 import type { ModuleKey } from "@/lib/access/modules";
+import { normalizeDashboardPath } from "@/lib/dashboard-path";
 
 /**
  * Picks the world that wraps the current page. Each module renders inside its
@@ -36,15 +37,4 @@ function detectModule(pathname: string): ModuleKey | null {
     return "intelligence";
   }
   return null;
-}
-
-/**
- * Convert the browser's pathname to the internal `/dashboard/*` form. The
- * workspace surface serves the dashboard at the tenant root, so the public URL
- * strips the prefix (`/agents`, `/erp/crm`) and middleware rewrites it back.
- * `usePathname()` reports the public path, so normalize before matching.
- */
-function normalizeDashboardPath(pathname: string): string {
-  if (pathname === "/") return "/dashboard";
-  return pathname.startsWith("/dashboard") ? pathname : `/dashboard${pathname}`;
 }

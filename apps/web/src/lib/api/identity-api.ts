@@ -137,6 +137,17 @@ const SYSTEM_ROLE_LABELS: Record<string, string> = {
   auditor: "Auditor",
 };
 
+const ROLE_BADGE_CLASSES: Record<string, string> = {
+  tenant_owner: "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400",
+  organization_admin: "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-400",
+  department_manager:
+    "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-400",
+  standard_user: "bg-muted text-muted-foreground ring-1 ring-border",
+  auditor: "bg-violet-500/15 text-violet-700 ring-1 ring-violet-500/30 dark:text-violet-400",
+};
+
+const DEFAULT_ROLE_BADGE_CLASS = "bg-muted text-muted-foreground ring-1 ring-border";
+
 /** Friendly display label for a role name returned by the API. */
 export function roleDisplayName(roleName: string): string {
   const label = SYSTEM_ROLE_LABELS[roleName];
@@ -145,6 +156,11 @@ export function roleDisplayName(roleName: string): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+/** Tailwind classes for a role badge, color-coded so the owner stands apart. */
+export function roleBadgeClass(roleName: string): string {
+  return ROLE_BADGE_CLASSES[roleName] ?? DEFAULT_ROLE_BADGE_CLASS;
 }
 
 /** True when the name is reserved for one of the built-in system roles. */

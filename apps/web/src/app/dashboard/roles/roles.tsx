@@ -232,15 +232,15 @@ export default function RolesClient() {
   }
 
   return (
-    <div className="flex flex-col gap-6 lg:min-h-0 lg:flex-1">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
       <PageHeader
         title="Roles & permissions"
         description="Create custom roles with precise permissions and manage who has them."
         icon={ShieldCheck}
       />
 
-      <div className="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-        <section className="flex flex-col rounded-xl border border-border bg-card lg:min-h-0 lg:overflow-hidden">
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
           <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5">
             <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
               <ShieldCheck aria-hidden="true" className="size-4 text-primary" />
@@ -267,7 +267,7 @@ export default function RolesClient() {
             ) : null}
           </header>
 
-          <div className="p-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             {status.state === "loading" ? <RoleListSkeleton /> : null}
 
             {status.state === "error" ? (
@@ -344,11 +344,11 @@ export default function RolesClient() {
           </div>
         </section>
 
-        <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card lg:min-h-0 lg:overflow-hidden">
+        <section className="flex min-w-0 min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
           <form
             id="role-builder-form"
             onSubmit={(event) => void onSave(event)}
-            className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1"
+            className="flex min-w-0 min-h-0 flex-1 flex-col"
           >
             <div className="border-b border-border px-5 py-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -430,7 +430,7 @@ export default function RolesClient() {
               ) : null}
             </div>
 
-            <div className="p-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
               {status.state === "loading" ? <ListSkeleton rows={3} /> : null}
 
               {status.state === "ready" && filteredModules.length === 0 ? (

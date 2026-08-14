@@ -29,6 +29,7 @@ import {
   removeMember,
   revokeAllMemberSessions,
   revokeMemberSession,
+  roleBadgeClass,
   roleDisplayName,
   updateMemberRole,
   type Member,
@@ -36,6 +37,7 @@ import {
   type SessionInfo,
 } from "@/lib/api/identity-api";
 import { ListSkeleton } from "@/components/ui/page-skeletons";
+import { cn } from "@/lib/utils";
 
 type Status =
   | { state: "loading" }
@@ -300,6 +302,7 @@ export default function MembersClient() {
               {status.members.map((member) => {
                 const busy = status.busy === member.id;
                 const isSelf = member.isSelf;
+                const isOwner = member.roleName === "tenant_owner";
                 const knownRole = status.roles.some(
                   (role) => role.name === member.roleName,
                 );
@@ -311,7 +314,7 @@ export default function MembersClient() {
                     {member.avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={member.avatarUrl}
+                        src={`/api/auth/avatar/${member.avatarUrl}`}
                         alt=""
                         className="size-9 shrink-0 rounded-lg object-cover ring-1 ring-border"
                       />
@@ -344,7 +347,7 @@ export default function MembersClient() {
                     </div>
 
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                      {canChangeRoles && !isSelf && knownRole ? (
+                      {canChangeRoles && !isSelf && !isOwner && knownRole ? (
                         <Select
                           value={member.roleName}
                           onValueChange={(value) => {
@@ -356,9 +359,13 @@ export default function MembersClient() {
                         >
                           <SelectTrigger
                             size="sm"
+                            className={cn(
+                              "gap-1.5",
+                              roleBadgeClass(member.roleName),
+                            )}
                             aria-label={`Change role for ${member.fullName || member.email}`}
                           >
-                            <ShieldCheck aria-hidden="true" className="size-3.5 text-primary" />
+                            <ShieldCheck aria-hidden="true" className="size-3.5" />
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -370,9 +377,14 @@ export default function MembersClient() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          <ShieldCheck aria-hidden="true" className="size-3 text-primary" />
-                          {roleDisplayName(member.roleName)}
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                            roleBadgeClass(member.roleName),
+                          )}
+                        >
+                          <ShieldCheck aria-hidden="true" className="size-3" />
+                          {roleDisplayName(member.roleName) || "Member"}
                         </span>
                       )}
 
@@ -389,7 +401,7 @@ export default function MembersClient() {
                         </Button>
                       ) : null}
 
-                      {canRemove && !isSelf ? (
+                      {canRemove && !isSelf && !isOwner ? (
                         <Button
                           type="button"
                           variant="ghost"

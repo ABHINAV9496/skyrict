@@ -107,6 +107,8 @@ interface BackendCallOptions {
   token?: string | null;
   tenantSlug?: string | null;
   target?: "identity" | "core";
+  userAgent?: string | null;
+  clientIp?: string | null;
 }
 
 interface BackendCallResult {
@@ -114,6 +116,15 @@ interface BackendCallResult {
   status: number;
   data: Record<string, unknown> | null;
   payload: Record<string, unknown>;
+}
+
+/** Resolve the real client IP from the request, mirroring the backend. */
+export function clientIp(request: NextRequest): string | null {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0]?.trim() ?? null;
+  }
+  return request.headers.get("x-real-ip");
 }
 
 /** Proxy a call to an internal backend, forwarding tenant + bearer context. */
@@ -124,6 +135,8 @@ export async function callBackend(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (options.tenantSlug) headers["X-Tenant-Slug"] = options.tenantSlug;
   if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  if (options.userAgent) headers["User-Agent"] = options.userAgent;
+  if (options.clientIp) headers["X-Forwarded-For"] = options.clientIp;
 
   let response: Response;
   try {

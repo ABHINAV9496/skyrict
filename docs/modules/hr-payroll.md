@@ -196,6 +196,19 @@ Applied to every tenant-to-tenant FK: `erp_leave_requests → erp_employees`, `e
 - `services/core` verifies the **identity-issued access JWT** (RS256, shared public key, same issuer/audience). It never issues tokens.
 - **Permissions are resolved from the database at request time**, not from a JWT claim. `require_permission("erp.hr.read")` resolves the user's roles → permissions on every request, fail-closed.
 - `employee.user_id` (the optional identity-user link) is validated against the routed tenant through an injected port; HR stores only the UUID and never creates identity users.
+
+> **Accepted Phase-1 deviation (recorded, not incidental):** the concrete
+> identity validator is not wired in Phase 1. The composition root
+> (`services/core/src/core/api/deps.py::get_employee_service`) injects
+> `_NoopIdentityUserPort`, which **fails open** — it logs a warning
+> (`identity.validate_user_noop`) and accepts the `user_id` as-is, so
+> `POST /hr/employees` works without an identity round-trip. Consequences:
+> a hire may reference a user id that does not exist or belongs to another
+> tenant until the identity-integration ticket lands. The swap point is
+> intentionally the one composition-root line above; no test asserts the
+> no-op, and the security matrix's "validated" row for `user_id` is green
+> **only** under this deviation.
+
 - **Two permission families**:
 
 | Key | Meaning |

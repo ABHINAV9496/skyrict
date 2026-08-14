@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.domain.entities import (
     Compensation,
@@ -29,6 +29,13 @@ class MoneyOut(BaseModel):
 
     amount: Decimal
     currency: str
+
+    @field_validator("amount", mode="after")
+    @classmethod
+    def _quantize_amount(cls, value: Decimal) -> Decimal:
+        # The DB stores Money as NUMERIC(18,4); the API contract renders money
+        # with exactly two decimals ("5000.00"), matching the display convention.
+        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @classmethod
     def from_money(cls, money: Money | None) -> MoneyOut | None:
@@ -57,6 +64,14 @@ class PayrollSettingsOut(BaseModel):
     pf_rate: Decimal
     tax_rate: Decimal
     rounding: str
+
+    @field_validator("pf_rate", "tax_rate", mode="after")
+    @classmethod
+    def _normalize_rate(cls, value: Decimal) -> Decimal:
+        # The DB stores rates as NUMERIC(18,4); the API renders them with two
+        # decimals ("0.05", "0.10") except a zero rate, which renders as "0".
+        q = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return Decimal("0") if q.is_zero() else q
 
     @classmethod
     def from_entity(cls, settings: PayrollSettings) -> PayrollSettingsOut:

@@ -24,15 +24,19 @@ if TYPE_CHECKING:
     from httpx import AsyncClient
 
 
-def make_tenant_headers(rsa_private_key: str, tenant_id: str, slug: str) -> dict[str, str]:
+def make_tenant_headers(
+    rsa_private_key: str, tenant_id: str, slug: str, *, sub: str | None = None
+) -> dict[str, str]:
     """Build ``{X-Tenant-Slug, Authorization}`` for a signed access token.
 
     ``tenant_id`` must be the tenant's row UUID (from ``integration_db``);
-    ``slug`` is the routing header the middleware uses to resolve it.
+    ``slug`` is the routing header the middleware uses to resolve it. ``sub``
+    pins the token's user id — pass it to get a stable identity for permission
+    seeding; defaults to a fresh random user (no grants).
     """
     now = int(time.time())
     payload = {
-        "sub": str(uuid.uuid4()),
+        "sub": sub or str(uuid.uuid4()),
         "tenant_id": tenant_id,
         "iss": settings.JWKS_ISSUER,
         "aud": settings.JWKS_AUDIENCE,

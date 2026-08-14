@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from core.core.exceptions import _status_and_type
 from skyrict_common.exceptions import (
+    PermissionDeniedError,
     TenantContextMissingError,
     TenantDisabledError,
     TenantMismatchError,
@@ -38,3 +39,11 @@ class TestTenantErrorMapping:
         status, problem_type = _status_and_type(TenantDisabledError("disabled"))
         assert status == 403
         assert problem_type.endswith("/tenant-disabled")
+
+    def test_missing_permission_is_403_authorization_error(self) -> None:
+        # Spec error table (hr-payroll.md §7): valid JWT, missing permission →
+        # 403 `authorization-error` (PermissionDeniedError subclasses
+        # AuthorizationError; the MRO walk must land on the same URI).
+        status, problem_type = _status_and_type(PermissionDeniedError("no grant"))
+        assert status == 403
+        assert problem_type.endswith("/authorization-error")

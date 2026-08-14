@@ -15,9 +15,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from core.api.deps import (
-    get_current_user,
     get_payroll_service,
     get_tenant_id,
+    require_permission,
 )
 from core.api.v1.routers.errors import raise_from_service_error
 from core.api.v1.schemas import (
@@ -33,6 +33,11 @@ from core.api.v1.schemas import (
     SkippedEmployeeOut,
 )
 from core.core.constants import PayrollRounding
+from core.core.permissions import (
+    ERP_PAYROLL_APPROVE,
+    ERP_PAYROLL_READ,
+    ERP_PAYROLL_WRITE,
+)
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.features.payroll.service import PayrollService
@@ -40,6 +45,11 @@ from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/payroll", tags=["payroll"])
+
+# Permission singletons (docs/modules/hr-payroll.md §7) — resolved per request.
+_require_payroll_read = require_permission(ERP_PAYROLL_READ)
+_require_payroll_write = require_permission(ERP_PAYROLL_WRITE)
+_require_payroll_approve = require_permission(ERP_PAYROLL_APPROVE)
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +59,7 @@ router = APIRouter(prefix="/payroll", tags=["payroll"])
 
 @router.get("/settings", response_model=ResponseEnvelope[PayrollSettingsOut | None])
 async def get_settings(
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollSettingsOut | None]:
@@ -62,7 +72,7 @@ async def get_settings(
 @router.put("/settings", response_model=ResponseEnvelope[PayrollSettingsOut])
 async def update_settings(
     body: PayrollSettingsIn,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_write),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollSettingsOut]:
@@ -86,7 +96,7 @@ async def update_settings(
 @router.post("/runs", response_model=ResponseEnvelope[PayrollRunOut], status_code=201)
 async def create_run(
     body: PayrollRunCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_write),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollRunOut]:
@@ -107,7 +117,7 @@ async def list_runs(
     status: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[PayrollRunOut]]:
@@ -118,7 +128,7 @@ async def list_runs(
 @router.get("/runs/{run_id}", response_model=ResponseEnvelope[PayrollRunOut])
 async def get_run(
     run_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollRunOut]:
@@ -131,7 +141,7 @@ async def get_run(
 @router.post("/runs/{run_id}/compute", response_model=ResponseEnvelope[RunComputeOut])
 async def compute_run(
     run_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_write),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[RunComputeOut]:
@@ -159,7 +169,7 @@ async def compute_run(
 @router.post("/runs/{run_id}/approve", response_model=ResponseEnvelope[PayrollRunOut])
 async def approve_run(
     run_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollRunOut]:
@@ -178,7 +188,7 @@ async def approve_run(
 @router.post("/runs/{run_id}/pay", response_model=ResponseEnvelope[PayrollRunOut])
 async def mark_paid(
     run_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollRunOut]:
@@ -197,7 +207,7 @@ async def mark_paid(
 @router.post("/runs/{run_id}/void", response_model=ResponseEnvelope[PayrollRunOut])
 async def void_run(
     run_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollRunOut]:
@@ -222,7 +232,7 @@ async def void_run(
 async def list_entries(
     run_id: uuid.UUID,
     employee_id: uuid.UUID | None = Query(default=None),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[PayrollEntryOut]]:
@@ -235,7 +245,7 @@ async def adjust_entry(
     run_id: uuid.UUID,
     entry_id: uuid.UUID,
     body: EntryAdjustmentIn,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_write),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollEntryOut]:
@@ -260,7 +270,7 @@ async def adjust_entry(
 @router.post("/compensation", response_model=ResponseEnvelope[CompensationOut], status_code=201)
 async def record_compensation(
     body: CompensationCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_write),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[CompensationOut]:
@@ -279,7 +289,7 @@ async def record_compensation(
 @router.get("/compensation", response_model=ResponseEnvelope[list[CompensationOut]])
 async def list_compensation(
     employee_id: uuid.UUID = Query(...),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
     payroll_svc: PayrollService = Depends(get_payroll_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[CompensationOut]]:

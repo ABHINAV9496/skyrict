@@ -119,7 +119,7 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     AuthenticationError: (401, f"{_PROBLEM_BASE}/authentication-error"),
     TenantMismatchError: (401, f"{_PROBLEM_BASE}/tenant-mismatch"),
     AuthorizationError: (403, f"{_PROBLEM_BASE}/authorization-error"),
-    PermissionDeniedError: (403, f"{_PROBLEM_BASE}/permission-denied"),
+    PermissionDeniedError: (403, f"{_PROBLEM_BASE}/authorization-error"),
     TenantDisabledError: (403, f"{_PROBLEM_BASE}/tenant-disabled"),
     TenantContextMissingError: (400, f"{_PROBLEM_BASE}/tenant-context-missing"),
     NotFoundError: (404, f"{_PROBLEM_BASE}/not-found"),

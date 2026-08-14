@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.api.v1.schemas.payroll import CompensationOut
+from core.api.v1.schemas.payroll import MoneyOut
 
 
 class DepartmentCreate(BaseModel):
@@ -91,7 +91,7 @@ class EmployeeOut(BaseModel):
     termination_date: date | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    active_compensation: CompensationOut | None = None
+    active_compensation: MoneyOut | None = None
 
 
 class LeaveRequestCreate(BaseModel):

@@ -70,8 +70,17 @@ async def get_current_user(
     cross_check_jwt_tenant(payload.get("tenant_id"), routed_tenant_id)
     TenantContext.set_user_id(payload["sub"])
 
+    # The JWT ``sub`` is identity's user UUID as text; every core user_id
+    # column (core_user_roles, core_audit_log, hr employees) is a UUID, so
+    # normalize once here — downstream permission resolution, audit actors,
+    # and route handlers all receive a real UUID.
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, TypeError):
+        raise AuthenticationError("Invalid token subject") from None
+
     return {
-        "user_id": payload["sub"],
+        "user_id": user_id,
         "tenant_id": routed_tenant_id,
         "token_payload": payload,
     }
@@ -100,19 +109,52 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
     return _check
 
 
+def require_any_permission(*permissions: str) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory — grants access when ANY of ``permissions`` is held.
+
+    Used for actions the spec allows under either of two keys (e.g. cancelling
+    a leave request under ``erp.hr.write`` OR ``erp.hr.approve``, §7). Each
+    alternative resolves through the same DB-backed grant path as
+    :func:`require_permission` and fails closed with ``PermissionDeniedError``
+    when none is held.
+    """
+
+    async def _check(
+        current_user: dict[str, Any] = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        granted = await RbacRepository(db).resolve_user_permissions(
+            user_id=current_user["user_id"],
+            tenant_id=current_user["tenant_id"],
+        )
+        if not any(grants_permission(granted, permission) for permission in permissions):
+            alternatives = ", ".join(permissions)
+            raise PermissionDeniedError(f"Missing required permission: one of {alternatives}")
+        return current_user
+
+    return _check
+
+
 def get_tenant_id() -> uuid.UUID:
     """Return the current request's tenant id as a UUID (resolved by the middleware)."""
     return uuid.UUID(TenantContext.get())
 
 
 class _NoopIdentityUserPort:
-    """Phase 1 identity-port stand-in for :class:`IdentityUserPort`.
+    """ACCEPTED Phase-1 deviation: identity-service stand-in for :class:`IdentityUserPort`.
 
-    The concrete validator calls the identity service (in-process or HTTP) and
-    is wired here at the composition root — the one place to swap it when the
-    identity integration ticket lands. Phase 1 deliberately fails OPEN (logs a
-    warning) so ``POST /hr/employees`` works without an identity round-trip;
-    until then ``user_id`` on hire is accepted as-is.
+    ``IdentityUserPort`` exists so ``EmployeeService`` can validate
+    ``employee.user_id`` against the identity service (in-process or HTTP) and
+    this class is its wiring point at the composition root — the one place to
+    swap it when the identity-integration ticket lands. Phase 1 deliberately
+    FAILS OPEN (logs a warning) so ``POST /hr/employees`` works without an
+    identity round-trip; until then ``user_id`` on hire is accepted as-is, so
+    a hire may reference a nonexistent or cross-tenant user id.
+
+    This is a recorded deviation, not an oversight — see the callout in
+    ``docs/modules/hr-payroll.md`` §2.4. The security matrix's "validated"
+    row for ``user_id`` is green ONLY under this deviation; no test asserts
+    the no-op, and the swap must land with the identity-integration ticket.
     """
 
     async def validate_user(self, user_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:

@@ -823,8 +823,19 @@ def _remaining_days_in_year(hire_date: date, year: int) -> int:
 
 
 def _is_unique_violation(exc: Exception) -> bool:
-    """True for PostgreSQL unique-violation (23505) — mirrors repo error handling."""
-    return getattr(exc, "orig", None) is not None and "23505" in str(getattr(exc, "orig", ""))
+    """True for PostgreSQL unique-violation (SQLSTATE 23505).
+
+    asyncpg surfaces the SQLSTATE on ``orig.sqlstate`` but omits it from the
+    message text, so a message scan alone misses it (the string only carries
+    the constraint name). psycopg embeds the code in the message instead.
+    """
+    orig = getattr(exc, "orig", None)
+    if orig is None:
+        return False
+    sqlstate = getattr(orig, "sqlstate", None)
+    if sqlstate is not None:
+        return bool(sqlstate == "23505")
+    return "23505" in str(orig)
 
 
 __all__ = ["DepartmentService", "EmployeeService", "LeaveService"]

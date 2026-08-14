@@ -1,7 +1,7 @@
 """HR API endpoints — departments, employees, leave (HR-BE-002 §2, §7).
 
-Every handler requires a valid access token bound to the routed tenant
-(``get_current_user``) and resolves the tenant id from the request context.
+Every handler requires a valid access token bound to the routed tenant and the
+appropriate ``erp.hr.*`` permission (resolved from the database per request).
 Service ``ValueError`` results are translated to RFC 7807 domain errors via
 :func:`raise_from_service_error`.
 """
@@ -17,15 +17,15 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Query
 
 from core.api.deps import (
-    get_current_user,
     get_department_service,
     get_employee_service,
     get_leave_service,
     get_tenant_id,
+    require_any_permission,
+    require_permission,
 )
 from core.api.v1.routers.errors import raise_from_service_error
 from core.api.v1.schemas import (
-    CompensationOut,
     DepartmentCreate,
     DepartmentOut,
     DepartmentUpdate,
@@ -40,9 +40,11 @@ from core.api.v1.schemas import (
     LeaveRequestCreate,
     LeaveRequestOut,
     LeaveRequestRejectBody,
+    MoneyOut,
     TerminateRequest,
 )
 from core.core.constants import EmploymentStatus
+from core.core.permissions import ERP_HR_APPROVE, ERP_HR_READ, ERP_HR_WRITE
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
@@ -50,6 +52,13 @@ from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/hr", tags=["hr"])
+
+# Permission singletons (docs/modules/hr-payroll.md §7) — resolved per request.
+_require_hr_read = require_permission(ERP_HR_READ)
+_require_hr_write = require_permission(ERP_HR_WRITE)
+_require_hr_approve = require_permission(ERP_HR_APPROVE)
+# Cancel is allowed under write OR approve (§7 table row).
+_require_hr_cancel = require_any_permission(ERP_HR_WRITE, ERP_HR_APPROVE)
 
 
 async def _employee_out(
@@ -62,7 +71,7 @@ async def _employee_out(
     out = EmployeeOut.model_validate(employee)
     compensation = await employee_svc.get_active_compensation(employee.id, tenant_id=tenant_id)
     out.active_compensation = (
-        CompensationOut.from_entity(compensation) if compensation is not None else None
+        MoneyOut.from_money(compensation.monthly_salary) if compensation is not None else None
     )
     return out
 
@@ -75,7 +84,7 @@ async def _employee_out(
 @router.get("/departments", response_model=ResponseEnvelope[list[DepartmentOut]])
 async def list_departments(
     include_inactive: bool = Query(default=False),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     department_svc: DepartmentService = Depends(get_department_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[DepartmentOut]]:
@@ -86,7 +95,7 @@ async def list_departments(
 @router.post("/departments", response_model=ResponseEnvelope[DepartmentOut], status_code=201)
 async def create_department(
     body: DepartmentCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     department_svc: DepartmentService = Depends(get_department_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[DepartmentOut]:
@@ -108,7 +117,7 @@ async def create_department(
 async def update_department(
     department_id: uuid.UUID,
     body: DepartmentUpdate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     department_svc: DepartmentService = Depends(get_department_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[DepartmentOut]:
@@ -133,7 +142,7 @@ async def list_employees(
     department_id: uuid.UUID | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[EmployeeOut]]:
@@ -151,7 +160,7 @@ async def list_employees(
 @router.post("/employees", response_model=ResponseEnvelope[EmployeeOut], status_code=201)
 async def create_employee(
     body: EmployeeCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[EmployeeOut]:
@@ -180,7 +189,7 @@ async def create_employee(
 @router.get("/employees/{employee_id}", response_model=ResponseEnvelope[EmployeeOut])
 async def get_employee(
     employee_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[EmployeeOut]:
@@ -194,7 +203,7 @@ async def get_employee(
 async def update_employee(
     employee_id: uuid.UUID,
     body: EmployeeUpdate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[EmployeeOut]:
@@ -218,7 +227,7 @@ async def update_employee(
 async def change_employee_status(
     employee_id: uuid.UUID,
     body: EmployeeStatusBody,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[EmployeeOut]:
@@ -240,7 +249,7 @@ async def change_employee_status(
 async def terminate_employee(
     employee_id: uuid.UUID,
     body: TerminateRequest,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[EmployeeOut]:
@@ -273,7 +282,7 @@ async def list_leave_requests(
     to_date: date | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[LeaveRequestOut]]:
@@ -292,7 +301,7 @@ async def list_leave_requests(
 @router.post("/leave/requests", response_model=ResponseEnvelope[LeaveRequestOut], status_code=201)
 async def create_leave_request(
     body: LeaveRequestCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
@@ -316,7 +325,7 @@ async def create_leave_request(
 @router.get("/leave/requests/{request_id}", response_model=ResponseEnvelope[LeaveRequestOut])
 async def get_leave_request(
     request_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
@@ -331,7 +340,7 @@ async def get_leave_request(
 )
 async def approve_leave_request(
     request_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_approve),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
@@ -355,7 +364,7 @@ async def approve_leave_request(
 async def reject_leave_request(
     request_id: uuid.UUID,
     body: LeaveRequestRejectBody | None = Body(default=None),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_approve),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
@@ -379,7 +388,7 @@ async def reject_leave_request(
 )
 async def cancel_leave_request(
     request_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_cancel),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
@@ -404,7 +413,7 @@ async def cancel_leave_request(
 @router.get("/leave/balances", response_model=ResponseEnvelope[list[LeaveBalanceOut]])
 async def list_leave_balances(
     employee_id: uuid.UUID = Query(...),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[LeaveBalanceOut]]:
@@ -415,7 +424,7 @@ async def list_leave_balances(
 @router.post("/leave/balances/adjust", response_model=ResponseEnvelope[LeaveBalanceOut])
 async def adjust_leave_balance(
     body: LeaveBalanceAdjustRequest,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveBalanceOut]:
@@ -443,7 +452,7 @@ async def adjust_leave_balance(
 @router.post("/leave/accrue", response_model=ResponseEnvelope[LeaveMovementOut | None])
 async def accrue_leave(
     body: LeaveAccrueRequest,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_write),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveMovementOut | None]:
@@ -467,7 +476,7 @@ async def accrue_leave(
 async def list_leave_movements(
     employee_id: uuid.UUID = Query(...),
     leave_type: str | None = Query(default=None),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[LeaveMovementOut]]:

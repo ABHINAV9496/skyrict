@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Role, ScopeType
@@ -183,3 +183,28 @@ class RoleRepository(SqlRepository):
         for role_permissions in result.scalars().all():
             permissions.update(role_permissions)
         return permissions
+
+    async def revoke_all_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> None:
+        """Remove every role grant a user holds in a tenant (role replacement)."""
+        await self.session.execute(
+            delete(UserRoleModel).where(
+                UserRoleModel.user_id == user_id,
+                UserRoleModel.tenant_id == tenant_id,
+            )
+        )
+        await self.session.flush()
+
+    async def count_users_with_role(self, tenant_id: str | uuid.UUID, role_name: str) -> int:
+        """Count distinct users currently granted a role in a tenant."""
+        stmt = (
+            select(func.count(func.distinct(UserRoleModel.user_id)))
+            .join(RoleModel, UserRoleModel.role_id == RoleModel.id)
+            .where(
+                RoleModel.tenant_id == tenant_id,
+                RoleModel.name == role_name,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one() or 0)

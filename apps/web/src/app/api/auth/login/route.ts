@@ -6,6 +6,7 @@ import {
   assertSameOrigin,
   backendError,
   callBackend,
+  clientIp,
   mapUser,
   resolveTenantSlug,
 } from "@/lib/server/auth";
@@ -25,7 +26,12 @@ export async function POST(request: NextRequest) {
   }
 
   const slug = resolveTenantSlug(request.headers.get("host"));
-  const result = await callBackend("/auth/login", { body: { email, password }, tenantSlug: slug });
+  const result = await callBackend("/auth/login", {
+    body: { email, password },
+    tenantSlug: slug,
+    userAgent: request.headers.get("user-agent"),
+    clientIp: clientIp(request),
+  });
   if (!result.ok) return backendError(result);
 
   const data = result.data;

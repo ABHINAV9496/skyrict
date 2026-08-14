@@ -57,3 +57,9 @@ class RoleRepositoryPort(Protocol):
     async def get_permissions_for_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
     ) -> set[str]: ...
+
+    async def revoke_all_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
+    ) -> None: ...
+
+    async def count_users_with_role(self, tenant_id: str | uuid.UUID, role_name: str) -> int: ...

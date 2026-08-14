@@ -131,3 +131,19 @@ class MembershipRepository(SqlRepository):
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)
+
+    async def update_role(
+        self,
+        membership_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+    ) -> Membership:
+        """Swap a membership's primary role (kept in sync with the grant)."""
+        model = await self.session.get(MembershipModel, membership_id)
+        if model is None:
+            from skyrict_common.exceptions import NotFoundError
+
+            raise NotFoundError("Membership not found")
+        model.role_id = uuid.UUID(str(role_id))
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _from_orm(model)

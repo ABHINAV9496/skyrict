@@ -2,7 +2,7 @@
 
 Uses a dedicated FastAPI app (built via create_app) with dependency overrides so the
 module-level identity.main app is never mutated. Verifies:
-  - GET /permissions returns 200 with 10 modules, 19 unique keys, union == CATALOG
+  - GET /permissions returns 200 with 17 modules, 33 unique keys, union == CATALOG
   - POST /roles with invalid key -> 422, error detail names the key
   - POST /roles with valid keys -> 200, response permissions fully resolved
   - POST /roles with old 'permissions' field -> 422 (extra='forbid' proof)
@@ -221,7 +221,7 @@ class TestPermissionsCatalog:
         assert "modules" in data
 
         modules = data["modules"]
-        assert len(modules) == 15
+        assert len(modules) == 17
 
         # Collect all keys from modules
         all_keys = []
@@ -236,9 +236,9 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-        # 31 unique keys
-        assert len(all_keys) == 31
-        assert len(module_keys_set) == 31
+        # 33 unique keys
+        assert len(all_keys) == 33
+        assert len(module_keys_set) == 33
 
         # Union equals CATALOG
         catalog_set = set(CATALOG)
@@ -259,6 +259,8 @@ class TestPermissionsCatalog:
             "erp_inventory",
             "erp_finance",
             "erp_hr",
+            "agents",
+            "intelligence",
             "billing",
             "invitations",
         }

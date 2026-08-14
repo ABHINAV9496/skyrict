@@ -78,19 +78,24 @@ class SessionRepository(SqlRepository):
         await self.session.refresh(model)
         return _from_orm(model)
 
-    async def get_active_by_user(self, user_id: str | uuid.UUID) -> list[Session]:
-        """Get all active, unexpired sessions for a user, newest first."""
+    async def get_active_by_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> list[Session]:
+        """Get all active, unexpired sessions for a user, newest first.
+
+        When ``tenant_id`` is given the query is scoped to that tenant so admin
+        surfaces (member sessions) only see the workspace the admin is in.
+        """
         now = datetime.now(UTC)
+        conditions = [
+            SessionModel.user_id == user_id,
+            SessionModel.status == SessionStatus.ACTIVE.value,
+            SessionModel.expires_at > now,
+        ]
+        if tenant_id is not None:
+            conditions.append(SessionModel.tenant_id == tenant_id)
         stmt = (
-            select(SessionModel)
-            .where(
-                and_(
-                    SessionModel.user_id == user_id,
-                    SessionModel.status == SessionStatus.ACTIVE.value,
-                    SessionModel.expires_at > now,
-                )
-            )
-            .order_by(SessionModel.created_at.desc())
+            select(SessionModel).where(and_(*conditions)).order_by(SessionModel.created_at.desc())
         )
         result = await self.session.execute(stmt)
         return [_from_orm(model) for model in result.scalars().all()]
@@ -112,17 +117,20 @@ class SessionRepository(SqlRepository):
         result = await self.session.execute(stmt)
         return [_from_orm(model) for model in result.scalars().all()]
 
-    async def revoke_all_for_user(self, user_id: str | uuid.UUID) -> None:
-        """Revoke all active sessions for a user."""
+    async def revoke_all_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> None:
+        """Revoke all active sessions for a user (optionally within one tenant)."""
         now = datetime.now(UTC)
+        conditions = [
+            SessionModel.user_id == user_id,
+            SessionModel.status == SessionStatus.ACTIVE.value,
+        ]
+        if tenant_id is not None:
+            conditions.append(SessionModel.tenant_id == tenant_id)
         stmt = (
             update(SessionModel)
-            .where(
-                and_(
-                    SessionModel.user_id == user_id,
-                    SessionModel.status == SessionStatus.ACTIVE.value,
-                )
-            )
+            .where(and_(*conditions))
             .values(status=SessionStatus.REVOKED.value, revoked_at=now)
         )
         await self.session.execute(stmt)

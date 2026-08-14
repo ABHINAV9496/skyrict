@@ -22,6 +22,8 @@ export interface AuthUser {
   isVerified: boolean;
   mfaEnabled: boolean;
   createdAt: string;
+  /** Relative path `{user_id}/{filename}` served by /api/auth/avatar/... */
+  avatarUrl: string;
 }
 
 export type LoginResult =
@@ -337,8 +339,9 @@ export interface MfaSetup {
   backupCodes: string[];
 }
 
-function authHeaders(): Headers {
-  const headers = new Headers({ "Content-Type": "application/json" });
+function authHeaders(contentType: string | null = "application/json"): Headers {
+  const headers = new Headers();
+  if (contentType) headers.set("Content-Type", contentType);
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return headers;
@@ -462,4 +465,57 @@ export async function confirmMfaSetup(input: {
     throw new ApiError(res.status, payload.error ?? "Could not verify the code.");
   }
   return payload.ok ? { status: "ok" } : { status: "invalid" };
+}
+
+// ---------------------------------------------------------------------------
+// Profile avatar (authenticated, through the BFF)
+// ---------------------------------------------------------------------------
+
+interface BffAvatarResponse {
+  user?: AuthUser | null;
+  error?: string;
+}
+
+/** Parse a BFF avatar response, throwing the surfaced error on failure. */
+async function bffAvatarResult(res: Response): Promise<AuthUser> {
+  const payload = (await res.json().catch(() => ({}))) as BffAvatarResponse;
+  if (!res.ok) {
+    throw new ApiError(res.status, payload.error ?? "Could not update your avatar.");
+  }
+  if (!payload.user) {
+    throw new ApiError(502, "Unexpected avatar response.");
+  }
+  return payload.user;
+}
+
+export async function uploadAvatar(file: File): Promise<AuthUser> {
+  let res: Response;
+  try {
+    const form = new FormData();
+    form.append("avatar", file);
+    res = await fetch("/api/auth/avatar", {
+      method: "PUT",
+      // The browser sets the multipart boundary, so no Content-Type header.
+      headers: authHeaders(null),
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+  return bffAvatarResult(res);
+}
+
+export async function removeAvatar(): Promise<AuthUser> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/avatar", {
+      method: "DELETE",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Network error — check your connection and try again.");
+  }
+  return bffAvatarResult(res);
 }

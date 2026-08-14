@@ -103,7 +103,12 @@ export function middleware(request: NextRequest) {
       if (pathname === "/signin") {
         return NextResponse.rewrite(new URL("/login", request.url));
       }
-      if (pathname === "/setup-mfa" || pathname === "/mfa/verify" || isLegalPath(pathname)) {
+      if (
+        pathname === "/setup-mfa" ||
+        pathname === "/mfa/verify" ||
+        pathname === "/invite" ||
+        isLegalPath(pathname)
+      ) {
         return NextResponse.next();
       }
       return NextResponse.redirect(new URL("/signin", request.url));
@@ -113,15 +118,25 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(signinOrigin(request, slug), request.url));
       }
       if (pathname === "/dashboard") {
-        return NextResponse.redirect(new URL("/", request.url));
+        return NextResponse.redirect(
+          new URL(`/${request.nextUrl.search || ""}`, request.url),
+        );
+      }
+      if (pathname === "/dashboard/invite") {
+        // The workspace Invite page shares its name with the reserved auth
+        // invite-accept route (/invite); keep it under /dashboard so the
+        // normalize redirect below doesn't bounce it to the signin surface.
+        return NextResponse.next();
       }
       if (pathname.startsWith("/dashboard/")) {
         return NextResponse.redirect(
-          new URL(pathname.slice("/dashboard".length), request.url),
+          new URL(`${pathname.slice("/dashboard".length)}${request.nextUrl.search || ""}`, request.url),
         );
       }
       const internal = pathname === "/" ? "/dashboard" : `/dashboard${pathname}`;
-      return NextResponse.rewrite(new URL(internal, request.url));
+      return NextResponse.rewrite(
+        new URL(`${internal}${request.nextUrl.search || ""}`, request.url),
+      );
     }
     default:
       return notFound();

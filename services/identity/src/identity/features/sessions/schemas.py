@@ -21,6 +21,8 @@ class SessionResponse(BaseModel):
     created_at: datetime
     last_active_at: datetime
     expires_at: datetime | None = None
+    device: str | None = None
+    device_type: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 
+import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { ChatSkeleton } from "@/components/ui/page-skeletons";
@@ -58,14 +59,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="shrink-0 border-b border-border/70 px-4 py-3 lg:px-6">
-        <h1 className="truncate font-display text-sm font-semibold tracking-tight text-foreground">
-          {conversation.title}
-        </h1>
-      </header>
+    <div className="flex h-full flex-col overflow-hidden">
+      <AgentsHeader title={conversation.title} />
       <MessageList messages={conversation.messages} userDisplay={user?.fullName ?? user?.email ?? ""} />
-      <div className="shrink-0 px-4 pb-6 pt-2">
+      <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
         <ChatComposer
           onSend={handleSend}
           placeholder="Continue the conversation…"

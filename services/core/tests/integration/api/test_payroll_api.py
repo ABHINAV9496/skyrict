@@ -255,3 +255,60 @@ class TestRunLifecycle:
         globex = tenant_headers("globex")
         response = await client.get(f"/api/v1/payroll/runs/{run['id']}", headers=globex)
         assert response.status_code == 404
+
+
+class TestRosterScope:
+    """Rule 9 roster scope against the REAL repository SQL (docs §4.9).
+
+    Exercises ``PayrollRepository.list_active_employees`` end-to-end through a
+    compute: an employee terminated mid-period stays on the roster and is paid
+    through the termination date; employees terminated before ``period_start``
+    or hired after ``period_end`` are excluded entirely.
+    """
+
+    async def test_terminated_mid_period_included_and_others_excluded(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+
+        # Terminated DURING the period: hired Jan 1, terminated Jan 15. Must be
+        # on the roster and paid through the termination date (15 of 31 days).
+        mid = await hire_employee(client, headers, hire_date="2026-01-01")
+        terminated = await client.post(
+            f"/api/v1/hr/employees/{mid['id']}/terminate",
+            json={"termination_date": "2026-01-15"},
+            headers=headers,
+        )
+        assert terminated.status_code == 200, terminated.text
+
+        # Terminated BEFORE period_start: never on the Jan roster.
+        before = await hire_employee(client, headers, hire_date="2025-06-01")
+        terminated = await client.post(
+            f"/api/v1/hr/employees/{before['id']}/terminate",
+            json={"termination_date": "2025-12-15"},
+            headers=headers,
+        )
+        assert terminated.status_code == 200, terminated.text
+
+        # Hired AFTER period_end: never on the Jan roster.
+        after = await hire_employee(client, headers, hire_date="2026-02-01")
+
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        result = await _compute(client, headers, run["id"])
+
+        # Only the mid-period employee is on the roster — and they are paid
+        # through their termination date, not the full period.
+        assert len(result["entries"]) == 1
+        entry = result["entries"][0]
+        assert entry["employee_id"] == mid["id"]
+        assert entry["employee_id"] != before["id"]
+        assert entry["employee_id"] != after["id"]
+        assert entry["pay_days"] == 15
+        assert entry["gross"]["amount"] == "2419.35"  # 5000 × 15/31, rounded nearest
+
+        # The excluded employees are not even recorded as skipped (skipped is
+        # only for roster employees without effective compensation/pay days).
+        assert result["skipped"] == []

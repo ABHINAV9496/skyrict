@@ -189,8 +189,8 @@ export function ListPageSkeleton() {
 /** The conversations rail (New chat, Recents, History, account footer). */
 function AgentsRailSkeleton() {
   return (
-    <aside className="hidden w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-      <header className="flex items-center justify-between border-b border-sidebar-border px-4 py-4">
+    <aside className="hidden w-72 shrink-0 flex-col bg-background lg:flex lg:h-full lg:rounded-lg">
+      <header className="flex items-center justify-between px-4 py-4">
         <Skeleton className="size-7 rounded-lg" />
         <Skeleton className="h-5 w-20" />
       </header>
@@ -243,48 +243,55 @@ function AgentsRailSkeleton() {
 /** The AI Agents conversation view: header, message bubbles, composer. */
 export function ChatSkeleton() {
   return (
-    <div className="flex h-full flex-1 flex-col">
-      <header className="shrink-0 border-b border-border/70 px-4 py-3 lg:px-6">
+    <div className="flex h-full flex-1 flex-col overflow-hidden">
+      <div className="flex h-12 shrink-0 items-center gap-2 px-4">
+        <Skeleton className="size-8 rounded-lg" />
         <Skeleton className="h-4 w-44" />
-      </header>
-      <div className="flex-1 space-y-4 overflow-hidden px-4 py-6 lg:px-6">
-        <div className="flex justify-end">
-          <Skeleton className="h-12 w-3/4 rounded-2xl rounded-br-md" />
-        </div>
-        <div className="flex justify-start">
-          <Skeleton className="h-16 w-2/3 rounded-2xl rounded-bl-md" />
-        </div>
-        <div className="flex justify-end">
-          <Skeleton className="h-10 w-1/2 rounded-2xl rounded-br-md" />
-        </div>
-        <div className="flex justify-start">
-          <Skeleton className="h-20 w-3/4 rounded-2xl rounded-bl-md" />
+      </div>
+      <div className="flex-1 overflow-hidden px-4 py-6">
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6">
+          <div className="flex justify-end">
+            <Skeleton className="h-12 w-3/4 rounded-2xl rounded-br-md" />
+          </div>
+          <div className="flex justify-start gap-3">
+            <Skeleton className="size-8 shrink-0 rounded-lg" />
+            <Skeleton className="h-16 w-2/3 rounded-2xl rounded-bl-md" />
+          </div>
+          <div className="flex justify-end">
+            <Skeleton className="h-10 w-1/2 rounded-2xl rounded-br-md" />
+          </div>
+          <div className="flex justify-start gap-3">
+            <Skeleton className="size-8 shrink-0 rounded-lg" />
+            <Skeleton className="h-20 w-3/4 rounded-2xl rounded-bl-md" />
+          </div>
         </div>
       </div>
       <div className="shrink-0 px-4 pb-6 pt-2">
-        <Skeleton className="h-12 w-full rounded-full" />
+        <Skeleton className="h-24 w-full rounded-[1.5rem]" />
       </div>
     </div>
   );
 }
 
-/** The AI Agents home: hero, suggestion cards, composer. */
+/** The AI Agents home: hero, suggestion chips, composer. */
 export function AgentsHomeSkeleton() {
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-        <Skeleton className="size-12 rounded-2xl" />
-        <Skeleton className="mt-5 h-7 w-72" />
-        <Skeleton className="mt-3 h-3 w-96 max-w-full rounded-full" />
-        <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-          {[0, 1, 2].map((index) => (
-            <Skeleton key={index} className="h-20 rounded-xl" />
-          ))}
-        </div>
+    <div className="flex h-full flex-1 flex-col overflow-hidden">
+      <div className="flex h-12 shrink-0 items-center gap-2 px-4">
+        <Skeleton className="size-8 rounded-lg" />
+        <Skeleton className="h-4 w-20" />
       </div>
-      <div className="shrink-0 px-4 pb-6">
-        <Skeleton className="h-12 w-full rounded-full" />
-        <Skeleton className="mx-auto mt-3 h-3 w-48 rounded-full" />
+      <div className="flex flex-1 flex-col overflow-hidden px-4 py-10">
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <Skeleton className="size-12 rounded-2xl" />
+          <Skeleton className="mt-5 h-7 w-72" />
+          <Skeleton className="mt-3 h-3 w-96 max-w-full rounded-full" />
+        </div>
+        <div className="flex shrink-0 flex-col items-center gap-3">
+          <Skeleton className="h-24 w-full max-w-[44rem] rounded-[1.5rem]" />
+          <Skeleton className="h-3 w-48 rounded-full" />
+          <Skeleton className="mt-2 h-9 w-64 rounded-full" />
+        </div>
       </div>
     </div>
   );
@@ -293,13 +300,9 @@ export function AgentsHomeSkeleton() {
 /** Full-page AI Agents world: rail + chat area. */
 export function AgentsWorldSkeleton() {
   return (
-    <div className="flex h-dvh overflow-hidden bg-background theme-agents">
+    <div className="flex h-dvh overflow-hidden bg-muted/30 p-2 theme-agents">
       <AgentsRailSkeleton />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/85 px-4 lg:hidden">
-          <Skeleton className="size-9 rounded-lg" />
-          <Skeleton className="h-4 w-24" />
-        </header>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-sidebar">
         <ChatSkeleton />
       </div>
     </div>

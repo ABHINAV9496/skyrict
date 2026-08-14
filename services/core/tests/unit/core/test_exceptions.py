@@ -9,12 +9,20 @@ Tenant error mapping (ERP-FND-001):
 
 from __future__ import annotations
 
-from core.core.exceptions import _status_and_type
+from core.core.exceptions import (
+    DuplicateSkuError,
+    InsufficientStockError,
+    MovementImmutableError,
+    TransferRequiresDistinctWarehousesError,
+    _status_and_type,
+)
 from skyrict_common.exceptions import (
+    ConflictError,
     TenantContextMissingError,
     TenantDisabledError,
     TenantMismatchError,
     TenantNotFoundError,
+    ValidationError,
 )
 
 
@@ -38,3 +46,46 @@ class TestTenantErrorMapping:
         status, problem_type = _status_and_type(TenantDisabledError("disabled"))
         assert status == 403
         assert problem_type.endswith("/tenant-disabled")
+
+
+class TestConflictMapping:
+    """INV-BE-002: ledger conflicts surface as RFC 7807 409 (not a 500)."""
+
+    def test_conflict_base_maps_to_409(self) -> None:
+        status, problem_type = _status_and_type(ConflictError("boom"))
+        assert status == 409
+        assert problem_type.endswith("/conflict")
+
+    def test_insufficient_stock_is_409(self) -> None:
+        status, problem_type = _status_and_type(InsufficientStockError())
+        assert status == 409
+        assert problem_type.endswith("/conflict")
+        assert InsufficientStockError().code == "INSUFFICIENT_STOCK"
+
+    def test_duplicate_sku_is_409(self) -> None:
+        status, problem_type = _status_and_type(DuplicateSkuError())
+        assert status == 409
+        assert problem_type.endswith("/conflict")
+        assert DuplicateSkuError().code == "DUPLICATE_SKU"
+
+    def test_movement_immutable_is_409(self) -> None:
+        status, problem_type = _status_and_type(MovementImmutableError())
+        assert status == 409
+        assert problem_type.endswith("/conflict")
+        assert MovementImmutableError().code == "MOVEMENT_IMMUTABLE"
+
+
+class TestValidationMapping:
+    def test_validation_base_maps_to_422(self) -> None:
+        status, problem_type = _status_and_type(ValidationError("bad"))
+        assert status == 422
+        assert problem_type.endswith("/validation-error")
+
+    def test_transfer_same_warehouse_is_422(self) -> None:
+        status, problem_type = _status_and_type(TransferRequiresDistinctWarehousesError())
+        assert status == 422
+        assert problem_type.endswith("/validation-error")
+        assert (
+            TransferRequiresDistinctWarehousesError().code
+            == "TRANSFER_REQUIRES_DISTINCT_WAREHOUSES"
+        )

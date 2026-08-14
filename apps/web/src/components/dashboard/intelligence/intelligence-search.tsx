@@ -51,7 +51,7 @@ export function IntelligenceSearch({
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search the market — competitors, trends, niches…"
+        placeholder="Search for opportunities, competitors, and trends…"
         aria-label="Search the market"
         className={cn(
           "w-full rounded-full border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",

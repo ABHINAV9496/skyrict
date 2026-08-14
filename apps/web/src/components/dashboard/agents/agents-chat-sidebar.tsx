@@ -50,7 +50,7 @@ function ConversationRow({
         collapsed ? "justify-center px-0 py-2" : "px-2.5 py-2",
         active
           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          : "text-foreground hover:bg-muted/60",
       )}
     >
       {collapsed ? (

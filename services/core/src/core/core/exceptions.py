@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from skyrict_common.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    ConflictError,
     NotFoundError,
     PermissionDeniedError,
     SkyrictError,
@@ -38,6 +39,10 @@ from skyrict_common.exceptions import (
 __all__ = [
     "AuthenticationError",
     "AuthorizationError",
+    "ConflictError",
+    "DuplicateSkuError",
+    "InsufficientStockError",
+    "MovementImmutableError",
     "NotFoundError",
     "PermissionDeniedError",
     "SkyrictError",
@@ -48,6 +53,7 @@ __all__ = [
     "TenantNotFoundError",
     "TokenExpiredError",
     "TokenInvalidError",
+    "TransferRequiresDistinctWarehousesError",
     "ValidationError",
 ]
 
@@ -60,6 +66,34 @@ class StartupError(RuntimeError):
     JWT public key. NOT a SkyrictError — it is never mapped to an HTTP
     response; the orchestrator sees the non-zero exit and restarts the pod.
     """
+
+
+class InsufficientStockError(ConflictError):
+    """The requested mutation would push stock below zero (409)."""
+
+    message = "Insufficient stock for the requested quantity"
+    code = "INSUFFICIENT_STOCK"
+
+
+class DuplicateSkuError(ConflictError):
+    """A product with the same SKU already exists in this tenant (409)."""
+
+    message = "A product with this SKU already exists"
+    code = "DUPLICATE_SKU"
+
+
+class MovementImmutableError(ConflictError):
+    """The ledger is append-only: a source ref was already applied (409)."""
+
+    message = "Stock movements are immutable and cannot be replayed"
+    code = "MOVEMENT_IMMUTABLE"
+
+
+class TransferRequiresDistinctWarehousesError(ValidationError):
+    """Transfer source and destination must be different warehouses (422)."""
+
+    message = "Transfer source and destination warehouses must be different"
+    code = "TRANSFER_REQUIRES_DISTINCT_WAREHOUSES"
 
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
@@ -78,6 +112,7 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     TenantContextMissingError: (400, f"{_PROBLEM_BASE}/tenant-context-missing"),
     NotFoundError: (404, f"{_PROBLEM_BASE}/not-found"),
     TenantNotFoundError: (404, f"{_PROBLEM_BASE}/tenant-not-found"),
+    ConflictError: (409, f"{_PROBLEM_BASE}/conflict"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
 }
 

@@ -256,10 +256,13 @@ class TestConcurrentApprove:
         assert await _ledger_sum(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
 
     @pytest.mark.xfail(
-        reason="docs §4.2 Rule 3 Phase-1 caveat: two different requests for one "
-        "employee can both pass the service-side balance check and both commit "
-        "negative movements, so the materialized balance can go stale and the "
-        "ledger negative. Tracked for the concurrency-hardening ticket; the "
+        reason="Known unresolved race (docs/modules/hr-payroll.md §4.3 item 5): "
+        "two approvals on different requests for the same employee each read the "
+        "same pre-approval balance, each pass the service-side balance check, and "
+        "each write a materialized erp_leave_balances row from their own "
+        "uncommitted view — the ledger can go negative while the balance row "
+        "still reads >= 0 and ck_erp_leave_balances_non_negative cannot catch it. "
+        "Tracked as the HR-BE-002 concurrency-hardening follow-up; the "
         "single-request CAS test (below) covers the guarded case.",
         strict=False,
     )

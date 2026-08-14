@@ -37,7 +37,7 @@ export default function IntelligencePage() {
   return (
     <div className="relative overflow-hidden">
       <IntelligenceBackground />
-      <div className="relative flex min-h-[60vh] flex-col items-center justify-center gap-8 text-center">
+      <div className="relative flex min-h-[calc(100dvh-9rem)] flex-col items-center justify-center gap-8 text-center">
         <div>
           <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             Search the market

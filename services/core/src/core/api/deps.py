@@ -10,7 +10,7 @@ from the database at request time (never from JWT claims) through
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,7 +20,13 @@ from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
 from core.db.session import get_db
+from core.features.audit.repository import AuditRepository
+from core.features.inventory.repository import InventoryRepository
 from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
+
+if TYPE_CHECKING:
+    from core.features.audit.service import AuditService
+    from core.features.inventory.service import InventoryService
 
 security = HTTPBearer(auto_error=False)
 
@@ -88,3 +94,49 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
         return current_user
 
     return _check
+
+
+async def get_adjustment_authority(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """True when the caller may approve above-threshold inventory adjustments.
+
+    Resolves ``erp.inventory.adjust.approve`` (or the ``*`` wildcard) from the
+    DB grants at request time. The threshold itself is enforced by the service
+    (``settings.INVENTORY_ADJUST_APPROVE_THRESHOLD``) — this dependency only
+    answers "may this user approve?".
+    """
+    from core.core.permissions import ERP_INVENTORY_ADJUST_APPROVE
+
+    granted = await RbacRepository(db).resolve_user_permissions(
+        user_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
+    return grants_permission(granted, ERP_INVENTORY_ADJUST_APPROVE)
+
+
+# --- Repository deps ---
+
+
+def get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditRepository:
+    return AuditRepository(db)
+
+
+def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:
+    from core.features.audit.service import AuditService
+
+    return AuditService(audit_repo)
+
+
+def get_inventory_repo(db: AsyncSession = Depends(get_db)) -> InventoryRepository:
+    return InventoryRepository(db)
+
+
+def get_inventory_service(
+    inventory_repo: InventoryRepository = Depends(get_inventory_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> InventoryService:
+    from core.features.inventory.service import InventoryService
+
+    return InventoryService(inventory_repo, audit_service)

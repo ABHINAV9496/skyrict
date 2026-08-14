@@ -9,6 +9,8 @@ approval, and tenant isolation.
 
 from __future__ import annotations
 
+import dataclasses
+import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -312,3 +314,109 @@ class TestRosterScope:
         # The excluded employees are not even recorded as skipped (skipped is
         # only for roster employees without effective compensation/pay days).
         assert result["skipped"] == []
+
+
+class TestRepositoryLevelEntryImmutability:
+    """Rule 8 defense-in-depth (Task 3 gap #2).
+
+    Calls ``PayrollRepository.update_entry`` DIRECTLY against the real
+    repository, bypassing the service layer, on entries belonging to runs in
+    every status — proving the repository-level backstop itself fires when
+    something ever bypasses the service guard.
+    """
+
+    async def _repo_update(
+        self,
+        tenant_id: str,
+        entry_id: str,
+        *,
+        adjustments: dict[str, Any],
+    ) -> dict[str, Any]:
+        from core.db.sequence_repository import SequenceRepository
+        from core.db.session import async_session_factory
+        from core.features.payroll.repository import PayrollRepository
+
+        async with async_session_factory() as session:
+            repo = PayrollRepository(
+                session, next_sequence=SequenceRepository(session).next_value
+            )
+            entry = await repo.get_entry_by_id(
+                uuid.UUID(entry_id), tenant_id=uuid.UUID(tenant_id)
+            )
+            assert entry is not None
+            mutated = dataclasses.replace(entry, adjustments=adjustments)
+            updated = await repo.update_entry(mutated)
+            assert updated.id is not None
+            return {"id": str(updated.id), "adjustments": updated.adjustments}
+
+    async def _seed_computed_entry(
+        self,
+        client: AsyncClient,
+        headers: dict[str, str],
+        integration_db: dict[str, str],
+    ) -> tuple[str, str, str]:
+        await hire_employee(client, headers, hire_date="2026-01-05")
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        result = await _compute(client, headers, run["id"])
+        return run["id"], result["entries"][0]["id"], integration_db["acme_id"]
+
+    async def test_direct_update_blocked_on_approved_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        from core.core.exceptions import PayrollEntryImmutableError
+
+        headers = tenant_headers("olympus")
+        run_id, entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+        approved = await client.post(
+            f"/api/v1/payroll/runs/{run_id}/approve", headers=headers
+        )
+        assert approved.status_code == 200, approved.text
+
+        with pytest.raises(PayrollEntryImmutableError):
+            await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
+
+    async def test_direct_update_blocked_on_paid_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        from core.core.exceptions import PayrollEntryImmutableError
+
+        headers = tenant_headers("olympus")
+        run_id, entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+        approved = await client.post(
+            f"/api/v1/payroll/runs/{run_id}/approve", headers=headers
+        )
+        assert approved.status_code == 200, approved.text
+        paid = await client.post(f"/api/v1/payroll/runs/{run_id}/pay", headers=headers)
+        assert paid.status_code == 200, paid.text
+
+        with pytest.raises(PayrollEntryImmutableError):
+            await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
+
+    async def test_direct_update_allowed_on_computed_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        headers = tenant_headers("olympus")
+        _run_id, entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+
+        updated = await self._repo_update(
+            tenant_id, entry_id, adjustments={"amount": "100.00"}
+        )
+        assert updated["adjustments"] == {"amount": "100.00"}

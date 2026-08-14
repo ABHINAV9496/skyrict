@@ -15,9 +15,11 @@ Why each test is shaped this way:
   (``transition_leave_status`` conditional UPDATE) must make exactly one of two
   racing approves win: one movement, one audit row, one ``hr.leave.approved``
   event; the loser emits nothing.
-- ``test_concurrent_compute_idempotent`` — ``upsert_entries`` is
-  ``ON CONFLICT (tenant, run, employee) DO UPDATE``, so a racing recompute
-  overwrites instead of duplicating: one entry per employee, run computed.
+- ``test_concurrent_compute_idempotent`` — the run-status CAS
+  (``transition_run_status`` conditional UPDATE) lets only one racing compute
+  win the DRAFT→COMPUTED flip; the loser 409s instead of overwriting the
+  winner. Entries stay exactly one per employee (``upsert_entries`` is
+  ``ON CONFLICT (tenant, run, employee) DO UPDATE``), the run stays computed.
 - ``test_approve_beyond_balance_no_event`` — the service-level Rule 2 breach
   raises BEFORE any write; the request stays pending, no movement, no event.
 - ``test_duplicate_department_no_event`` — a DB unique violation surfaces at
@@ -43,6 +45,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.core import audit_events
 from core.core.audit_events import HR_EMPLOYEE_CREATED, HR_LEAVE_APPROVED
@@ -251,7 +254,11 @@ class TestConcurrentApprove:
             )
             == 1
         )
-        assert _count_by_type(recorded_events, HR_LEAVE_APPROVED) == 1
+        async def _event_flushed() -> bool:
+            return _count_by_type(recorded_events, HR_LEAVE_APPROVED) == 1
+
+        # Events flush asynchronously after commit (db/session.py after_commit).
+        assert await _settle(_event_flushed), "leave.approved event not flushed after commit"
         assert await _materialized_balance(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
         assert await _ledger_sum(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
 
@@ -348,7 +355,11 @@ class TestConcurrentCompute:
             client.post(f"/api/v1/payroll/runs/{run_id}/compute", headers=headers),
             client.post(f"/api/v1/payroll/runs/{run_id}/compute", headers=headers),
         )
-        assert [r.status_code for r in results] == [200, 200]
+        # The run-status CAS means only one racing compute wins the DRAFT->
+        # COMPUTED flip; the loser 409s. Under serialized scheduling both may
+        # return 200 (a computed->computed recompute) — either way the run
+        # must end computed with exactly one entry per employee.
+        assert [r.status_code for r in results] in ([200, 200], [200, 409], [409, 200])
 
         status, total_gross = await _row(
             "SELECT status, total_gross FROM erp_payroll_runs WHERE tenant_id = :t AND id = :r",
@@ -454,3 +465,62 @@ class TestNoEventOnFailedTransaction:
             t=uuid.UUID(tenant_id),
         )
         assert ghost_count == 0
+
+
+class TestPostEmitPreCommitFailure:
+    """An event that was ALREADY buffered (emit succeeded) must still vanish
+    if the transaction fails at COMMIT — the after_rollback listener discards
+    the buffer, so a failed write can never be observed through an event."""
+
+    async def test_buffered_event_discarded_when_commit_fails(
+        self,
+        migrated_schema: None,
+        recorded_events: list[_RecordedEvent],
+    ) -> None:
+        from skyrict_events.base import BaseEvent
+
+        from core.events import producers
+        from core.events.producers import (
+            buffered_events,
+            clear_event_buffer,
+            flush_events,
+            start_event_buffer,
+        )
+
+        start_event_buffer()
+        try:
+            async with async_session_factory() as session:
+                await producers.apublish(
+                    "hr.leave.cancelled",
+                    BaseEvent(
+                        event_type="hr.leave.cancelled",
+                        tenant_id=str(uuid.uuid4()),
+                        metadata={},
+                    ),
+                )
+                assert len(buffered_events()) == 1
+
+                # A DB failure AFTER the emit (FK violation on a bogus tenant)
+                # aborts the transaction before it can commit.
+                with pytest.raises(SQLAlchemyError):
+                    await session.execute(
+                        text(
+                            "INSERT INTO public.erp_leave_movements "
+                            "(tenant_id, id, employee_id, leave_type, qty, ref_type, ref_id) "
+                            "VALUES (:tenant_id, :id, :employee_id, 'annual', 1, "
+                            "'manual_adjustment', NULL)"
+                        ),
+                        {
+                            "tenant_id": uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                            "id": uuid.uuid4(),
+                            "employee_id": uuid.UUID("00000000-0000-0000-0000-000000000001"),
+                        },
+                    )
+                await session.rollback()
+
+            # after_rollback discarded the buffer; nothing was published.
+            assert buffered_events() == []
+            await flush_events()
+            assert recorded_events == []
+        finally:
+            clear_event_buffer()

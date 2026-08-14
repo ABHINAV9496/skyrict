@@ -183,7 +183,8 @@ class FakeSessionService:
         return [
             s
             for s in self.sessions
-            if str(s.user_id) == str(user_id) and (tenant_id is None or str(s.tenant_id) == str(tenant_id))
+            if str(s.user_id) == str(user_id)
+            and (tenant_id is None or str(s.tenant_id) == str(tenant_id))
         ]
 
     async def revoke_all_sessions(

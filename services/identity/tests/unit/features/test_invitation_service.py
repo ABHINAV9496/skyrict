@@ -751,9 +751,7 @@ class TestVerifyInvitation:
         with pytest.raises(InvitationAlreadyUsedError):
             await service.verify_invitation(token="verify-used-token")
 
-    async def test_verify_unknown_token_raises(
-        self, service: InvitationService
-    ) -> None:
+    async def test_verify_unknown_token_raises(self, service: InvitationService) -> None:
         with pytest.raises(InvitationNotFoundError):
             await service.verify_invitation(token="no-such-token")
 

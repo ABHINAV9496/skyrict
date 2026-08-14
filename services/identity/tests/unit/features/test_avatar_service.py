@@ -127,7 +127,9 @@ class TestAvatarService:
         user_id = _seed_user(repo, tenant_id=tenant_id)
         service = AvatarService(storage, repo)
 
-        user = await service.upload(user_id=str(user_id), tenant_id=str(tenant_id), data=_make_png())
+        user = await service.upload(
+            user_id=str(user_id), tenant_id=str(tenant_id), data=_make_png()
+        )
 
         assert user.avatar_url == f"{user_id}/{user.avatar_url.rsplit('/', 1)[-1]}"
         stored_key = f"{tenant_id}/{user_id}/{user.avatar_url.rsplit('/', 1)[-1]}"

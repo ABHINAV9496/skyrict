@@ -17,6 +17,7 @@ import { AiGlyph } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { OverviewSkeleton } from "@/components/ui/page-skeletons";
 import { accessibleModules, useModuleAccess, type ModuleKey } from "@/lib/access/modules";
+import type { AuthUser } from "@/lib/api/auth-api";
 import { roleDisplayName } from "@/lib/api/identity-api";
 import { useSession } from "@/lib/auth/session";
 
@@ -93,6 +94,11 @@ function initialsFor(name: string, email: string): string {
   return email.slice(0, 2).toUpperCase() || "SK";
 }
 
+/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
+function avatarSrc(user: AuthUser | null): string | null {
+  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
+}
+
 function replayTour() {
   window.dispatchEvent(new Event("skyrict:start-tour"));
 }
@@ -130,8 +136,17 @@ export default function OverviewClient() {
           />
           <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/25 to-primary/10 text-base font-semibold text-primary-foreground ring-1 ring-primary/20 ring-inset">
-                {initialsFor(user?.fullName ?? "", user?.email ?? "")}
+              <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary/25 to-primary/10 text-base font-semibold text-primary-foreground ring-1 ring-primary/20 ring-inset">
+                {avatarSrc(user) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarSrc(user) ?? ""}
+                    alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  initialsFor(user?.fullName ?? "", user?.email ?? "")
+                )}
               </div>
               <div className="min-w-0">
                 <h1 className="truncate font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">

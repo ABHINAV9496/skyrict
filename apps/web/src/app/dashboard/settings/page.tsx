@@ -95,7 +95,7 @@ export default function SettingsPage() {
   if (status === "loading") return <SettingsSkeleton />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       <PageHeader
         title="Settings"
         description="Manage your profile, security, and workspace preferences."

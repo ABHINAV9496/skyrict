@@ -11,6 +11,12 @@ import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 
 const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
+const ALLOWED_AVATAR_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 const acceptSchema = z
   .object({
@@ -67,6 +73,13 @@ function InviteAcceptForm({
     event.target.value = "";
     setAvatarError(null);
     if (!file) return;
+    if (!ALLOWED_AVATAR_MIME_TYPES.has(file.type)) {
+      setAvatar(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setAvatarError("Please choose a JPG, PNG, WEBP, or GIF image.");
+      return;
+    }
     if (file.size > MAX_AVATAR_BYTES) {
       setAvatar(null);
       if (previewUrl) URL.revokeObjectURL(previewUrl);

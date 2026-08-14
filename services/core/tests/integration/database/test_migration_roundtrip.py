@@ -131,7 +131,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0008", f"head is {version}, expected 0008"
+            assert version == "0009", f"head is {version}, expected 0009"
 
             row = (
                 await conn.execute(
@@ -204,6 +204,32 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).scalar_one()
             assert trigger_count == 1
+
+            for tgname in (
+                "erp_leave_movements_append_only",
+                "erp_leave_movements_guard_negative",
+            ):
+                tg_count = (
+                    await conn.execute(
+                        text(
+                            "SELECT count(*) FROM pg_trigger "
+                            "WHERE tgname = :name AND NOT tgisinternal"
+                        ),
+                        {"name": tgname},
+                    )
+                ).scalar_one()
+                assert tg_count == 1, f"trigger {tgname} missing after upgrade head"
+
+            neg_fn_count = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_proc "
+                        "WHERE proname = 'erp_leave_movements_guard_negative' "
+                        "AND prosecdef"
+                    )
+                )
+            ).scalar_one()
+            assert neg_fn_count == 1, "negative-guard function must be SECURITY DEFINER"
     finally:
         await engine.dispose()
 
@@ -229,6 +255,16 @@ async def _assert_downgraded_to_base(url: str) -> None:
                     await conn.execute(text(f"SELECT to_regclass('{table}')"))
                 ).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
+
+            func_count = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_proc "
+                        "WHERE proname LIKE 'erp_leave_movements_%'"
+                    )
+                )
+            ).scalar_one()
+            assert func_count == 0, "leave-movement trigger functions survive downgrade"
     finally:
         await engine.dispose()
 

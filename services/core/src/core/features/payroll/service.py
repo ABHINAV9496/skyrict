@@ -390,19 +390,24 @@ class PayrollService:
             currency = settings.default_currency
             total_gross = Money(Decimal("0"), currency)
             total_net = Money(Decimal("0"), currency)
-        computed = dataclasses.replace(
-            run,
-            status=PayrollRunStatus.COMPUTED,
-            total_gross=total_gross,
-            total_net=total_net,
+        computed = await self._repo.transition_run_status(
+            run_id,
+            run.status.value,
+            PayrollRunStatus.COMPUTED.value,
+            tenant_id=tenant_id,
             computed_by=actor_user_id,
             computed_at=datetime.now(UTC),
+            total_gross=total_gross,
+            total_net=total_net,
             skipped_employees=[
                 {"employee_id": str(employee_id), "reason": reason}
                 for employee_id, reason in skipped
             ],
         )
-        computed = await self._repo.update_run(computed)
+        if computed is None:
+            raise IllegalStateTransitionError(
+                f"run is not in {run.status.value} state"
+            ) from None
         await self._audit.log(
             action=audit_events.PAYROLL_RUN_COMPUTED,
             target=f"payroll_run:{run_id}",

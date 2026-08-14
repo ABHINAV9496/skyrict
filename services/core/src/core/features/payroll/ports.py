@@ -111,6 +111,9 @@ class PayrollRepositoryPort(Protocol):
         approved_at: object | None = None,
         paid_at: object | None = None,
         void_reason: str | None = None,
+        total_gross: Money | None = None,
+        total_net: Money | None = None,
+        skipped_employees: list[dict[str, str]] | None = None,
     ) -> ent.PayrollRun | None: ...
 
     async def next_run_code(self, tenant_id: uuid.UUID) -> int: ...

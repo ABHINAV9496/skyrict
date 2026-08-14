@@ -181,6 +181,9 @@ class FakePayrollRepository:
         approved_at=None,
         paid_at=None,
         void_reason=None,
+        total_gross=None,
+        total_net=None,
+        skipped_employees=None,
     ) -> ent.PayrollRun | None:
         current = self.runs.get(run_id)
         if current is None or current.status.value != from_status:
@@ -191,8 +194,8 @@ class FakePayrollRepository:
             period_start=current.period_start,
             period_end=current.period_end,
             status=PayrollRunStatus(to_status),
-            total_gross=current.total_gross,
-            total_net=current.total_net,
+            total_gross=total_gross if total_gross is not None else current.total_gross,
+            total_net=total_net if total_net is not None else current.total_net,
             computed_by=computed_by if computed_by is not None else current.computed_by,
             approved_by=approved_by if approved_by is not None else current.approved_by,
             paid_by=paid_by if paid_by is not None else current.paid_by,
@@ -203,7 +206,9 @@ class FakePayrollRepository:
             id=current.id,
             created_at=current.created_at,
             updated_at=current.updated_at,
-            skipped_employees=current.skipped_employees,
+            skipped_employees=(
+                skipped_employees if skipped_employees is not None else current.skipped_employees
+            ),
         )
         self.runs[run_id] = updated
         return updated
@@ -443,6 +448,33 @@ class TestRunLifecycle:
         run = await _create_run(service)
         with pytest.raises(IllegalStateTransitionError):
             await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+
+    async def test_recompute_loses_cas_race_raises(self, monkeypatch) -> None:
+        """A concurrent approver who flips the run between the service-level
+        machine check and the DB write makes the atomic CAS return None — the
+        recompute must fail instead of silently overwriting the run."""
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+
+        async def _lost_race(*args, **kwargs) -> None:
+            return None
+
+        monkeypatch.setattr(repo, "transition_run_status", _lost_race)
+        with pytest.raises(IllegalStateTransitionError):
+            await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
 
     async def test_approve_emits_real_entry_count(self, monkeypatch) -> None:
         from core.features.payroll import service as payroll_service_module

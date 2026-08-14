@@ -341,6 +341,9 @@ class PayrollRepository:
         approved_at: object | None = None,
         paid_at: object | None = None,
         void_reason: str | None = None,
+        total_gross: Money | None = None,
+        total_net: Money | None = None,
+        skipped_employees: list[dict[str, str]] | None = None,
     ) -> ent.PayrollRun | None:
         """Atomic conditional transition (CAS) — ``None`` if not in ``from_status``."""
         values: dict[str, object] = {
@@ -361,6 +364,12 @@ class PayrollRepository:
             values["paid_at"] = paid_at
         if void_reason is not None:
             values["void_reason"] = void_reason
+        if total_gross is not None:
+            values["total_gross"] = total_gross.amount
+        if total_net is not None:
+            values["total_net"] = total_net.amount
+        if skipped_employees is not None:
+            values["skipped_employees"] = skipped_employees
         stmt = (
             update(PayrollRunModel)
             .where(

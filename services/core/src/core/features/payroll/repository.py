@@ -482,21 +482,27 @@ class PayrollRepository:
             raise ValueError("payroll entry is missing an id")
         # Rule 8 defense-in-depth (gap #9): never mutate an entry whose run is
         # already approved/paid, even if a caller bypasses the service layer.
-        run_status = (
-            await self.session.execute(
-                select(PayrollRunModel.status).where(
-                    PayrollRunModel.tenant_id == entry.tenant_id,
-                    PayrollRunModel.id == entry.run_id,
-                )
-            )
-        ).scalar_one_or_none()
-        if run_status in (PayrollRunStatusModel.APPROVED, PayrollRunStatusModel.PAID):
-            raise PayrollEntryImmutableError("entries are immutable once a run is approved")
+        # Atomic guarded UPDATE: the immutability predicate lives in the WHERE
+        # clause itself — an approved/paid/void run's entries never match the
+        # subquery, so a run flipping status between a prior SELECT and this
+        # statement (TOCTOU) can still never be edited. Zero rows matched means
+        # the entry is missing OR its run is no longer mutable.
         stmt = (
             update(PayrollEntryModel)
             .where(
                 PayrollEntryModel.tenant_id == entry.tenant_id,
                 PayrollEntryModel.id == entry.id,
+                PayrollEntryModel.run_id.in_(
+                    select(PayrollRunModel.id).where(
+                        PayrollRunModel.tenant_id == entry.tenant_id,
+                        PayrollRunModel.status.in_(
+                            (
+                                PayrollRunStatusModel.DRAFT,
+                                PayrollRunStatusModel.COMPUTED,
+                            )
+                        ),
+                    )
+                ),
             )
             .values(
                 base_salary=entry.base_salary.amount,
@@ -510,7 +516,7 @@ class PayrollRepository:
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
-            raise ValueError(f"payroll entry {entry.id} not found")
+            raise PayrollEntryImmutableError("entries are immutable once a run is approved")
         currency = await self._currency_for(entry.tenant_id)
         return self._entry_from_orm(model, currency)
 

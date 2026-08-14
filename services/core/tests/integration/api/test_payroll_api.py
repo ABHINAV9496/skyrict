@@ -404,6 +404,25 @@ class TestRepositoryLevelEntryImmutability:
         with pytest.raises(PayrollEntryImmutableError):
             await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
 
+    async def test_direct_update_blocked_on_voided_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        from core.core.exceptions import PayrollEntryImmutableError
+
+        headers = tenant_headers("olympus")
+        run_id, entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+        voided = await client.post(f"/api/v1/payroll/runs/{run_id}/void", headers=headers)
+        assert voided.status_code == 200, voided.text
+
+        with pytest.raises(PayrollEntryImmutableError):
+            await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
+
     async def test_direct_update_allowed_on_computed_run(
         self,
         client: AsyncClient,

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -443,6 +443,37 @@ class TestRunLifecycle:
         run = await _create_run(service)
         with pytest.raises(IllegalStateTransitionError):
             await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+
+    async def test_approve_emits_real_entry_count(self, monkeypatch) -> None:
+        from core.features.payroll import service as payroll_service_module
+
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+        assert len(result.entries) == 1
+
+        captured: dict[str, Any] = {}
+
+        async def _capture_approved(**kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        monkeypatch.setattr(payroll_service_module, "emit_run_approved", _capture_approved)
+
+        approved = await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+        assert approved.status == PayrollRunStatus.APPROVED
+        assert captured["entry_count"] == 1
 
     async def test_mark_paid_requires_approved(self) -> None:
         service, repo, _ = _service()

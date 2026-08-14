@@ -461,10 +461,11 @@ class PayrollService:
         )
         if transitioned.id is not None:
             net = transitioned.total_net
+            entries = await self._repo.list_entries(run_id, tenant_id=tenant_id)
             await emit_run_approved(
                 run_id=run_id,
                 total_net=str(net.amount) if net is not None else "0",
-                entry_count=0,
+                entry_count=len(entries),
                 tenant_id=tenant_id,
             )
         return transitioned

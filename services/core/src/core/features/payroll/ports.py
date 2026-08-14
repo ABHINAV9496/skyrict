@@ -16,6 +16,7 @@ from datetime import date
 from typing import Protocol
 
 from core.domain import entities as ent
+from core.domain.value_objects import Money
 
 
 class LeaveLedgerPort(Protocol):

@@ -477,8 +477,6 @@ class TestPostEmitPreCommitFailure:
         migrated_schema: None,
         recorded_events: list[_RecordedEvent],
     ) -> None:
-        from skyrict_events.base import BaseEvent
-
         from core.events import producers
         from core.events.producers import (
             buffered_events,
@@ -486,6 +484,7 @@ class TestPostEmitPreCommitFailure:
             flush_events,
             start_event_buffer,
         )
+        from skyrict_events.base import BaseEvent
 
         start_event_buffer()
         try:

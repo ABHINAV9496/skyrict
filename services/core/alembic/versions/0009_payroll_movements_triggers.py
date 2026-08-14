@@ -21,7 +21,6 @@ Create Date: 2026-08-14
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0009"
@@ -91,11 +90,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DROP TRIGGER erp_leave_movements_guard_negative ON public.erp_leave_movements"
-    )
+    op.execute("DROP TRIGGER erp_leave_movements_guard_negative ON public.erp_leave_movements")
     op.execute("DROP FUNCTION public.erp_leave_movements_guard_negative()")
-    op.execute(
-        "DROP TRIGGER erp_leave_movements_append_only ON public.erp_leave_movements"
-    )
+    op.execute("DROP TRIGGER erp_leave_movements_append_only ON public.erp_leave_movements")
     op.execute("DROP FUNCTION public.erp_leave_movements_append_only()")

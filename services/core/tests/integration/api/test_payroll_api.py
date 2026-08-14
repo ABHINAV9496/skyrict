@@ -309,7 +309,7 @@ class TestRosterScope:
         assert entry["employee_id"] != before["id"]
         assert entry["employee_id"] != after["id"]
         assert entry["pay_days"] == 15
-        assert entry["gross"]["amount"] == "2419.35"  # 5000 × 15/31, rounded nearest
+        assert entry["gross"]["amount"] == "2419.35"  # 5000 x 15/31, rounded nearest
 
         # The excluded employees are not even recorded as skipped (skipped is
         # only for roster employees without effective compensation/pay days).
@@ -337,12 +337,8 @@ class TestRepositoryLevelEntryImmutability:
         from core.features.payroll.repository import PayrollRepository
 
         async with async_session_factory() as session:
-            repo = PayrollRepository(
-                session, next_sequence=SequenceRepository(session).next_value
-            )
-            entry = await repo.get_entry_by_id(
-                uuid.UUID(entry_id), tenant_id=uuid.UUID(tenant_id)
-            )
+            repo = PayrollRepository(session, next_sequence=SequenceRepository(session).next_value)
+            entry = await repo.get_entry_by_id(uuid.UUID(entry_id), tenant_id=uuid.UUID(tenant_id))
             assert entry is not None
             mutated = dataclasses.replace(entry, adjustments=adjustments)
             updated = await repo.update_entry(mutated)
@@ -373,9 +369,7 @@ class TestRepositoryLevelEntryImmutability:
         run_id, entry_id, tenant_id = await self._seed_computed_entry(
             client, headers, integration_db
         )
-        approved = await client.post(
-            f"/api/v1/payroll/runs/{run_id}/approve", headers=headers
-        )
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
         assert approved.status_code == 200, approved.text
 
         with pytest.raises(PayrollEntryImmutableError):
@@ -394,9 +388,7 @@ class TestRepositoryLevelEntryImmutability:
         run_id, entry_id, tenant_id = await self._seed_computed_entry(
             client, headers, integration_db
         )
-        approved = await client.post(
-            f"/api/v1/payroll/runs/{run_id}/approve", headers=headers
-        )
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
         assert approved.status_code == 200, approved.text
         paid = await client.post(f"/api/v1/payroll/runs/{run_id}/pay", headers=headers)
         assert paid.status_code == 200, paid.text
@@ -435,7 +427,5 @@ class TestRepositoryLevelEntryImmutability:
             client, headers, integration_db
         )
 
-        updated = await self._repo_update(
-            tenant_id, entry_id, adjustments={"amount": "100.00"}
-        )
+        updated = await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
         assert updated["adjustments"] == {"amount": "100.00"}

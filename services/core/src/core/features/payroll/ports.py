@@ -51,6 +51,10 @@ class PayrollRepositoryPort(Protocol):
         effective_for: date,
     ) -> ent.Compensation | None: ...
 
+    async def list_compensation(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Sequence[ent.Compensation]: ...
+
     # --- Runs ---
     async def create_run(self, run: ent.PayrollRun) -> ent.PayrollRun: ...
 
@@ -105,6 +109,10 @@ class PayrollRepositoryPort(Protocol):
 
     async def get_entry(
         self, run_id: uuid.UUID, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayrollEntry | None: ...
+
+    async def get_entry_by_id(
+        self, entry_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> ent.PayrollEntry | None: ...
 
     async def update_entry(self, entry: ent.PayrollEntry) -> ent.PayrollEntry: ...

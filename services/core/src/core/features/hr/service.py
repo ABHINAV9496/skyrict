@@ -255,6 +255,14 @@ class EmployeeService:
     async def get(self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID) -> ent.Employee | None:
         return await self._repo.get_employee(employee_id, tenant_id)
 
+    async def get_active_compensation(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.Compensation | None:
+        """The employee's current (as-of today) active compensation record."""
+        return await self._repo.get_compensation(
+            employee_id, tenant_id=tenant_id, effective_for=date.today()
+        )
+
     async def update(
         self,
         employee: ent.Employee,
@@ -758,7 +766,7 @@ class LeaveService:
             )
         return movement
 
-    async def list(
+    async def list_leave_requests(
         self,
         tenant_id: uuid.UUID,
         *,
@@ -779,6 +787,28 @@ class LeaveService:
                 limit=limit,
                 offset=offset,
             )
+        )
+
+    async def get(self, request_id: uuid.UUID, *, tenant_id: uuid.UUID) -> ent.LeaveRequest | None:
+        """Fetch one leave request by id."""
+        return await self._repo.get_leave_request(request_id, tenant_id)
+
+    async def list_balances(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> list[ent.LeaveBalance]:
+        """All materialized leave balances for one employee, by leave type."""
+        return list(await self._repo.list_balances(employee_id, tenant_id=tenant_id))
+
+    async def list_movements(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        leave_type: str | None = None,
+    ) -> list[ent.LeaveMovement]:
+        """The leave ledger history for one employee, optionally filtered by type."""
+        return list(
+            await self._repo.list_leave_movements(tenant_id, employee_id, leave_type=leave_type)
         )
 
 

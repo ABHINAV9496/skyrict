@@ -450,6 +450,20 @@ class PayrollRepository:
         currency = await self._currency_for(tenant_id)
         return self._entry_from_orm(model, currency)
 
+    async def get_entry_by_id(
+        self, entry_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayrollEntry | None:
+        """Fetch one payroll entry by its row id (API PATCH path)."""
+        stmt = select(PayrollEntryModel).where(
+            PayrollEntryModel.tenant_id == tenant_id,
+            PayrollEntryModel.id == entry_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        return self._entry_from_orm(model, currency)
+
     async def update_entry(self, entry: ent.PayrollEntry) -> ent.PayrollEntry:
         if entry.id is None:
             raise ValueError("payroll entry is missing an id")
@@ -526,6 +540,21 @@ class PayrollRepository:
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _compensation_from_orm(model) if model is not None else None
+
+    async def list_compensation(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Sequence[ent.Compensation]:
+        """Full compensation history for one employee, newest first."""
+        stmt = (
+            select(CompensationModel)
+            .where(
+                CompensationModel.tenant_id == tenant_id,
+                CompensationModel.employee_id == employee_id,
+            )
+            .order_by(CompensationModel.effective_from.desc())
+        )
+        result = await self.session.execute(stmt)
+        return [_compensation_from_orm(model) for model in result.scalars().all()]
 
     # ------------------------------------------------------------------
     # Roster (read-only, one-way erp_employees read per the ERD)

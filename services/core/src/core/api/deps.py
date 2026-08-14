@@ -9,18 +9,28 @@ from the database at request time (never from JWT claims) through
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.core.logging import get_logger
 from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
 from core.db.session import get_db
 from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
+
+if TYPE_CHECKING:
+    from core.core.audit_service import AuditService
+    from core.features.hr.repository import HrRepository
+    from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
+    from core.features.payroll.service import PayrollService
+
+logger = get_logger("core.deps")
 
 security = HTTPBearer(auto_error=False)
 
@@ -88,3 +98,90 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
         return current_user
 
     return _check
+
+
+def get_tenant_id() -> uuid.UUID:
+    """Return the current request's tenant id as a UUID (resolved by the middleware)."""
+    return uuid.UUID(TenantContext.get())
+
+
+class _NoopIdentityUserPort:
+    """Phase 1 identity-port stand-in for :class:`IdentityUserPort`.
+
+    The concrete validator calls the identity service (in-process or HTTP) and
+    is wired here at the composition root — the one place to swap it when the
+    identity integration ticket lands. Phase 1 deliberately fails OPEN (logs a
+    warning) so ``POST /hr/employees`` works without an identity round-trip;
+    until then ``user_id`` on hire is accepted as-is.
+    """
+
+    async def validate_user(self, user_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
+        logger.warning(
+            "identity.validate_user_noop",
+            user_id=str(user_id),
+            tenant_id=str(tenant_id),
+            message="identity-service user validation is not wired yet (Phase 1)",
+        )
+
+
+def get_hr_repo(db: AsyncSession = Depends(get_db)) -> HrRepository:
+    from core.db.sequence_repository import SequenceRepository
+    from core.features.hr.repository import HrRepository
+
+    return HrRepository(db, next_sequence=SequenceRepository(db).next_value)
+
+
+def get_audit_service(db: AsyncSession = Depends(get_db)) -> AuditService:
+    from core.core.audit_service import AuditService
+    from core.db.audit_repository import AuditLogRepository
+
+    return AuditService(AuditLogRepository(db))
+
+
+def get_department_service(
+    repo: HrRepository = Depends(get_hr_repo),
+    audit: AuditService = Depends(get_audit_service),
+) -> DepartmentService:
+    from core.features.hr.service import DepartmentService
+
+    return DepartmentService(repository=repo, audit=audit)
+
+
+def get_employee_service(
+    repo: HrRepository = Depends(get_hr_repo),
+    audit: AuditService = Depends(get_audit_service),
+) -> EmployeeService:
+    from core.features.hr.service import EmployeeService
+
+    return EmployeeService(repository=repo, audit=audit, identity=_NoopIdentityUserPort())
+
+
+def get_leave_service(
+    repo: HrRepository = Depends(get_hr_repo),
+    audit: AuditService = Depends(get_audit_service),
+) -> LeaveService:
+    from core.features.hr.service import LeaveService
+
+    return LeaveService(repository=repo, audit=audit)
+
+
+def get_payroll_service(
+    db: AsyncSession = Depends(get_db),
+    audit: AuditService = Depends(get_audit_service),
+) -> PayrollService:
+    """Payroll service with the HR repository injected as the leave ledger.
+
+    ``HrRepository`` implements ``LeaveLedgerPort.approved_unpaid_days`` (the
+    one sanctioned cross-feature read), so the payroll feature never imports
+    the HR feature directly.
+    """
+    from core.db.sequence_repository import SequenceRepository
+    from core.features.hr.repository import HrRepository
+    from core.features.payroll.repository import PayrollRepository
+    from core.features.payroll.service import PayrollService
+
+    return PayrollService(
+        repository=PayrollRepository(db, next_sequence=SequenceRepository(db).next_value),
+        leave_ledger=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
+        audit=audit,
+    )

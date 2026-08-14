@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import date
 from typing import Protocol
 
 from core.domain import entities as ent
@@ -99,6 +100,10 @@ class HrRepositoryPort(Protocol):
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> ent.LeaveBalance | None: ...
 
+    async def list_balances(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Sequence[ent.LeaveBalance]: ...
+
     async def upsert_balance(self, balance: ent.LeaveBalance) -> ent.LeaveBalance: ...
 
     # --- Leave requests ---
@@ -135,6 +140,14 @@ class HrRepositoryPort(Protocol):
 
     # --- Compensation (recorded at hire; owned by payroll repo at read time) ---
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation: ...
+
+    async def get_compensation(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        effective_for: date,
+    ) -> ent.Compensation | None: ...
 
 
 class HrServiceDeps(Protocol):

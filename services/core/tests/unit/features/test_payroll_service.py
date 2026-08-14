@@ -94,19 +94,28 @@ class FakePayrollRepository:
     def __init__(self) -> None:
         self.runs: dict[uuid.UUID, ent.PayrollRun] = {}
         self.entries: dict[uuid.UUID, ent.PayrollEntry] = {}
-        self.compensation: dict[uuid.UUID, ent.Compensation] = {}
+        self.compensation: list[ent.Compensation] = []
         self.settings: dict[uuid.UUID, ent.PayrollSettings] = {}
         self.run_numbers = 0
         self.employees: list[ent.Employee] = []
 
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation:
-        self.compensation[compensation.employee_id] = compensation
+        self.compensation.append(compensation)
         return compensation
 
     async def get_compensation(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID, effective_for: date
     ) -> ent.Compensation | None:
-        return self.compensation.get(employee_id)
+        candidates = [
+            c
+            for c in self.compensation
+            if c.employee_id == employee_id and c.is_active and c.effective_from <= effective_for
+        ]
+        return max(candidates, key=lambda c: c.effective_from) if candidates else None
+
+    async def list_compensation(self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID):
+        rows = [c for c in self.compensation if c.employee_id == employee_id]
+        return sorted(rows, key=lambda c: c.effective_from, reverse=True)
 
     async def create_run(self, run: ent.PayrollRun) -> ent.PayrollRun:
         self.runs[run.id] = run
@@ -189,6 +198,14 @@ class FakePayrollRepository:
         self, run_id: uuid.UUID, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> ent.PayrollEntry | None:
         return self.entries.get(employee_id)
+
+    async def get_entry_by_id(
+        self, entry_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayrollEntry | None:
+        for entry in self.entries.values():
+            if entry.id == entry_id:
+                return entry
+        return None
 
     async def update_entry(self, entry: ent.PayrollEntry) -> ent.PayrollEntry:
         self.entries[entry.employee_id] = entry
@@ -369,7 +386,8 @@ class TestRunLifecycle:
         run = await _create_run(service)
         assert run.status == PayrollRunStatus.DRAFT
 
-        computed, entries = await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+        computed, entries = result.run, result.entries
         assert computed.status == PayrollRunStatus.COMPUTED
         assert len(entries) == 1
         assert computed.total_net.amount == Decimal("3000")
@@ -429,8 +447,8 @@ class TestRunLifecycle:
             )
         )
         run = await _create_run(service)
-        _, first = await service.compute_run(run_id=run.id, tenant_id=TENANT)
-        _, second = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        first = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries
+        second = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries
         assert len(first) == 1 and len(second) == 1
 
 
@@ -450,11 +468,134 @@ class TestComputeUsesUnpaidLedger:
             )
         )
         run = await _create_run(service)
-        computed, entries = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        computed, entries = result.run, result.entries
         assert len(entries) == 1
         assert entries[0].pay_days == 20  # 30 - 10 unpaid
         assert entries[0].net.amount == Decimal("2000")
         assert computed.total_net.amount == Decimal("2000")
+
+
+class TestComputeSkips:
+    async def test_employee_without_compensation_is_skipped(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        run = await _create_run(service)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert result.entries == []
+        assert result.skipped == [(EMPLOYEE, "no effective compensation")]
+        assert result.run.status == PayrollRunStatus.COMPUTED
+
+    async def test_employee_with_zero_payable_days_is_skipped(self) -> None:
+        service, repo, _ = _service(
+            ledger=FakeLeaveLedger(unpaid_days=31)  # covers the whole 30-day period
+        )
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert result.entries == []
+        assert result.skipped == [(EMPLOYEE, "no payable days")]
+
+
+class TestAdjustEntryById:
+    async def test_merges_on_draft_run(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        entry = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
+        assert entry.id is not None
+
+        adjusted = await service.adjust_entry_by_id(
+            run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"bonus": 100}
+        )
+        assert adjusted.adjustments == {"bonus": 100}
+
+        merged = await service.adjust_entry_by_id(
+            run_id=run.id,
+            entry_id=entry.id,
+            tenant_id=TENANT,
+            adjustments={"other_deduction": 50},
+        )
+        assert merged.adjustments == {"bonus": 100, "other_deduction": 50}
+
+    async def test_blocked_once_run_is_approved(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        entry = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
+        await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+        assert entry.id is not None
+        with pytest.raises(PayrollEntryImmutableError):
+            await service.adjust_entry_by_id(
+                run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"bonus": 1}
+            )
+
+    async def test_unknown_entry_raises(self) -> None:
+        service, _, _ = _service()
+        run = await _create_run(service)
+        with pytest.raises(ValueError):
+            await service.adjust_entry_by_id(
+                run_id=run.id, entry_id=uuid.uuid4(), tenant_id=TENANT, adjustments={"bonus": 1}
+            )
+
+
+class TestCompensationHistory:
+    async def test_list_compensation_newest_first(self) -> None:
+        service, repo, _ = _service()
+        older = ent.Compensation(
+            tenant_id=TENANT,
+            employee_id=EMPLOYEE,
+            monthly_salary=_money("2000"),
+            effective_from=date(2023, 1, 1),
+            is_active=False,
+            id=uuid.uuid4(),
+        )
+        newer = ent.Compensation(
+            tenant_id=TENANT,
+            employee_id=EMPLOYEE,
+            monthly_salary=_money("3000"),
+            effective_from=date(2024, 1, 1),
+            is_active=True,
+            id=uuid.uuid4(),
+        )
+        await repo.create_compensation(older)
+        await repo.create_compensation(newer)
+        history = await service.list_compensation(EMPLOYEE, tenant_id=TENANT)
+        assert history == [newer, older]
 
 
 class TestSettings:

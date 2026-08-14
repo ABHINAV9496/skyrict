@@ -59,6 +59,8 @@ ignore = [
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "fastapi.Depends",   # FastAPI dependency-injection idiom (B008)
+    "fastapi.Query",     # FastAPI query-parameter idiom (B008)
+    "fastapi.Body",      # FastAPI body-parameter idiom (B008)
 ]
 
 # Imported names are resolved at runtime (pydantic/SQLAlchemy model fields,

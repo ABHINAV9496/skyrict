@@ -66,6 +66,15 @@ def _overlap_days(start_a: date, end_a: date, start_b: date, end_b: date) -> int
     return max(overlap, 0)
 
 
+@dataclasses.dataclass(frozen=True)
+class ComputeResult:
+    """Outcome of a compute run: the updated run, its entries, and skipped employees."""
+
+    run: ent.PayrollRun
+    entries: list[ent.PayrollEntry]
+    skipped: list[tuple[uuid.UUID, str]]
+
+
 class PayrollCompute:
     """Pure payroll computation — no repository, no DB.
 
@@ -268,7 +277,7 @@ class PayrollService:
         run_id: uuid.UUID,
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID | None = None,
-    ) -> tuple[ent.PayrollRun, list[ent.PayrollEntry]]:
+    ) -> ComputeResult:
         """Compute entries for every active employee in the period.
 
         Idempotent: recomputing a draft/computed run overwrites its entries;
@@ -289,6 +298,7 @@ class PayrollService:
         employees = await self._repo.list_active_employees(tenant_id, as_of=run.period_end)
         days_in_period = (run.period_end - run.period_start).days + 1
         entries: list[ent.PayrollEntry] = []
+        skipped: list[tuple[uuid.UUID, str]] = []
         for employee in employees:
             employee_id = _require_id(employee, "employee")
             compensation = await self._repo.get_compensation(
@@ -297,6 +307,7 @@ class PayrollService:
                 effective_for=run.period_end,
             )
             if compensation is None:
+                skipped.append((employee_id, "no effective compensation"))
                 continue  # no effective salary for this period — no entry
             unpaid_days = await self._leave_ledger.approved_unpaid_days(
                 employee_id,
@@ -312,6 +323,7 @@ class PayrollService:
                 unpaid_days=unpaid_days,
             )
             if days <= 0:
+                skipped.append((employee_id, "no payable days"))
                 continue
             gross, deductions, net = PayrollCompute.compute_entry(
                 base_salary=compensation.monthly_salary,
@@ -357,7 +369,14 @@ class PayrollService:
             target=f"payroll_run:{run_id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"entry_count": len(entries)},
+            details={
+                "entry_count": len(entries),
+                "skipped_count": len(skipped),
+                "skipped": [
+                    {"employee_id": str(employee_id), "reason": reason}
+                    for employee_id, reason in skipped
+                ],
+            },
         )
         if computed.id is not None:
             await emit_run_computed(
@@ -368,7 +387,7 @@ class PayrollService:
                 total_net=str(total_net.amount),
                 tenant_id=tenant_id,
             )
-        return computed, entries
+        return ComputeResult(run=computed, entries=entries, skipped=skipped)
 
     async def approve_run(
         self,
@@ -528,6 +547,61 @@ class PayrollService:
             )
         return updated
 
+    async def adjust_entry_by_id(
+        self,
+        *,
+        run_id: uuid.UUID,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        adjustments: dict[str, object],
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.PayrollEntry:
+        """Apply a flat adjustment to an entry looked up by its row id.
+
+        The public API addresses entries by id (``PATCH /runs/{id}/entries/
+        {entry_id}``), so this resolves the entry, then behaves exactly like
+        :meth:`adjust_entry`.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        if run.status in (PayrollRunStatus.APPROVED, PayrollRunStatus.PAID):
+            raise PayrollEntryImmutableError("entries are immutable once a run is approved")
+        entry = await self._repo.get_entry_by_id(entry_id, tenant_id=tenant_id)
+        if entry is None or entry.run_id != run_id:
+            raise ValueError(f"no entry {entry_id} in run {run_id}")
+        merged = {**(entry.adjustments or {}), **adjustments}
+        updated = dataclasses.replace(entry, adjustments=merged)
+        updated = await self._repo.update_entry(updated)
+        await self._audit.log(
+            action=audit_events.PAYROLL_ENTRY_ADJUSTED,
+            target=f"payroll_entry:{updated.id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={"adjustments": adjustments},
+        )
+        if updated.id is not None:
+            await emit_entry_adjusted(
+                run_id=run_id,
+                employee_id=entry.employee_id,
+                adjustments=adjustments,
+                tenant_id=tenant_id,
+            )
+        return updated
+
+    async def list_entries(
+        self,
+        run_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        employee_id: uuid.UUID | None = None,
+    ) -> list[ent.PayrollEntry]:
+        """Entries of one run, optionally narrowed to a single employee."""
+        entries = await self._repo.list_entries(run_id, tenant_id=tenant_id)
+        if employee_id is not None:
+            entries = [entry for entry in entries if entry.employee_id == employee_id]
+        return list(entries)
+
     # ------------------------------------------------------------------
     # Compensation (Rule 7: effective-date pick is repo-side; write here)
     # ------------------------------------------------------------------
@@ -550,6 +624,12 @@ class PayrollService:
         )
         created = await self._repo.create_compensation(compensation)
         return created
+
+    async def list_compensation(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> list[ent.Compensation]:
+        """Compensation history for one employee, newest first."""
+        return list(await self._repo.list_compensation(employee_id, tenant_id=tenant_id))
 
 
 def _next_run_code(sequence: int) -> str:

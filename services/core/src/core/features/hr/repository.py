@@ -493,6 +493,21 @@ class HrRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _leave_balance_from_orm(model) if model is not None else None
 
+    async def list_balances(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Sequence[ent.LeaveBalance]:
+        """All materialized leave balances for one employee, ordered by type."""
+        stmt = (
+            select(LeaveBalanceModel)
+            .where(
+                LeaveBalanceModel.tenant_id == tenant_id,
+                LeaveBalanceModel.employee_id == employee_id,
+            )
+            .order_by(LeaveBalanceModel.leave_type.asc())
+        )
+        result = await self.session.execute(stmt)
+        return [_leave_balance_from_orm(model) for model in result.scalars().all()]
+
     async def upsert_balance(self, balance: ent.LeaveBalance) -> ent.LeaveBalance:
         stmt = (
             pg_insert(LeaveBalanceModel)
@@ -638,6 +653,33 @@ class HrRepository:
         await self.session.flush()
         await self.session.refresh(model)
         return _compensation_from_orm(model)
+
+    async def get_compensation(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        effective_for: date,
+    ) -> ent.Compensation | None:
+        """Latest active compensation effective at or before ``effective_for``.
+
+        Mirror of the payroll repository read, kept here so the HR employee
+        detail view can surface current compensation without the HR feature
+        reaching into the payroll feature (docs §4.7, Rule 7 pick).
+        """
+        stmt = (
+            select(CompensationModel)
+            .where(
+                CompensationModel.tenant_id == tenant_id,
+                CompensationModel.employee_id == employee_id,
+                CompensationModel.is_active.is_(True),
+                CompensationModel.effective_from <= effective_for,
+            )
+            .order_by(CompensationModel.effective_from.desc())
+            .limit(1)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _compensation_from_orm(model) if model is not None else None
 
     # ------------------------------------------------------------------
     # LeaveLedgerPort (implemented for payroll — one sanctioned cross-feature read)

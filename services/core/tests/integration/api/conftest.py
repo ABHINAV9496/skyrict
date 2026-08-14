@@ -18,7 +18,9 @@ from core.db.session import async_session_factory, engine
 from core.models.tenant import TenantModel
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
+
+    from httpx import AsyncClient
 
 # "acme" is a reserved platform slug, so the canonical primary test tenant
 # uses a non-reserved slug (mirrors identity's suite).
@@ -78,7 +80,37 @@ async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str]
 
 
 @pytest.fixture
-async def client():
+async def seeded_hr_defaults(integration_db: dict[str, str]) -> None:
+    """Seed the olympus tenant's HR/Payroll defaults (leave types + settings).
+
+    Idempotent — safe to re-run across tests sharing the tenant.
+    """
+    from core.seed import seed_tenant_hr_defaults
+
+    await seed_tenant_hr_defaults(uuid.UUID(integration_db["acme_id"]))
+
+
+@pytest.fixture
+def tenant_headers(
+    integration_db: dict[str, str], rsa_private_key: str
+) -> Callable[[str], dict[str, str]]:
+    """Headers factory — signed JWT bound to a tenant's UUID + its slug header."""
+    from .helpers import make_tenant_headers
+
+    tenant_ids = {
+        "olympus": integration_db["acme_id"],
+        "globex": integration_db["globex_id"],
+        "disabledco": integration_db["disabled_id"],
+    }
+
+    def _headers(slug: str = "olympus") -> dict[str, str]:
+        return make_tenant_headers(rsa_private_key, tenant_ids[slug], slug)
+
+    return _headers
+
+
+@pytest.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client against the FastAPI app (ASGI transport).
 
     Runs the REAL application lifespan (startup dependency verification +

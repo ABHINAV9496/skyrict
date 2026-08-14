@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select, update
 
 from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
 from core.domain.value_objects import Money, StockMovementType
@@ -148,6 +148,15 @@ class InventoryRepository:
         model = result.scalar_one_or_none()
         return _product_from_orm(model) if model is not None else None
 
+    async def get_product_by_sku(self, sku: str, tenant_id: uuid.UUID) -> Product | None:
+        stmt = select(ErpProductModel).where(
+            ErpProductModel.tenant_id == tenant_id,
+            ErpProductModel.sku == sku,
+        )
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _product_from_orm(model) if model is not None else None
+
     async def deactivate_product(
         self, product_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Product | None:
@@ -164,14 +173,40 @@ class InventoryRepository:
         return _product_from_orm(model)
 
     async def list_products(
-        self, tenant_id: uuid.UUID, *, include_inactive: bool = False
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        category: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
     ) -> Sequence[Product]:
         stmt = select(ErpProductModel).where(ErpProductModel.tenant_id == tenant_id)
         if not include_inactive:
             stmt = stmt.where(ErpProductModel.is_active.is_(True))
-        stmt = stmt.order_by(ErpProductModel.sku)
+        if category:
+            stmt = stmt.where(ErpProductModel.category == category)
+        stmt = stmt.order_by(ErpProductModel.sku).offset(offset).limit(limit)
         result = await self.session.execute(stmt)
         return [_product_from_orm(model) for model in result.scalars().all()]
+
+    async def count_products(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        category: str | None = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpProductModel)
+            .where(ErpProductModel.tenant_id == tenant_id)
+        )
+        if not include_inactive:
+            stmt = stmt.where(ErpProductModel.is_active.is_(True))
+        if category:
+            stmt = stmt.where(ErpProductModel.category == category)
+        return int((await self.session.execute(stmt)).scalar_one())
 
     # ------------------------------------------------------------------
     # Warehouses
@@ -211,14 +246,31 @@ class InventoryRepository:
         return _warehouse_from_orm(model)
 
     async def list_warehouses(
-        self, tenant_id: uuid.UUID, *, include_inactive: bool = False
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        offset: int = 0,
+        limit: int = 20,
     ) -> Sequence[Warehouse]:
         stmt = select(ErpWarehouseModel).where(ErpWarehouseModel.tenant_id == tenant_id)
         if not include_inactive:
             stmt = stmt.where(ErpWarehouseModel.is_active.is_(True))
-        stmt = stmt.order_by(ErpWarehouseModel.name)
+        stmt = stmt.order_by(ErpWarehouseModel.name).offset(offset).limit(limit)
         result = await self.session.execute(stmt)
         return [_warehouse_from_orm(model) for model in result.scalars().all()]
+
+    async def count_warehouses(
+        self, tenant_id: uuid.UUID, *, include_inactive: bool = False
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpWarehouseModel)
+            .where(ErpWarehouseModel.tenant_id == tenant_id)
+        )
+        if not include_inactive:
+            stmt = stmt.where(ErpWarehouseModel.is_active.is_(True))
+        return int((await self.session.execute(stmt)).scalar_one())
 
     # ------------------------------------------------------------------
     # Stock levels
@@ -304,6 +356,147 @@ class InventoryRepository:
         await self.session.refresh(model)
         return _stock_level_from_orm(model)
 
+    async def list_stock_levels(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[StockLevel]:
+        stmt = select(ErpStockLevelModel).where(ErpStockLevelModel.tenant_id == tenant_id)
+        if product_id is not None:
+            stmt = stmt.where(ErpStockLevelModel.product_id == product_id)
+        if warehouse_id is not None:
+            stmt = stmt.where(ErpStockLevelModel.warehouse_id == warehouse_id)
+        stmt = (
+            stmt.order_by(ErpStockLevelModel.product_id, ErpStockLevelModel.warehouse_id)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return [_stock_level_from_orm(model) for model in result.scalars().all()]
+
+    async def count_stock_levels(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpStockLevelModel)
+            .where(ErpStockLevelModel.tenant_id == tenant_id)
+        )
+        if product_id is not None:
+            stmt = stmt.where(ErpStockLevelModel.product_id == product_id)
+        if warehouse_id is not None:
+            stmt = stmt.where(ErpStockLevelModel.warehouse_id == warehouse_id)
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def list_low_stock(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[tuple[StockLevel, Product]]:
+        """Levels currently at or below their product's reorder point."""
+        stmt = (
+            select(ErpStockLevelModel, ErpProductModel)
+            .join(
+                ErpProductModel,
+                and_(
+                    ErpProductModel.tenant_id == ErpStockLevelModel.tenant_id,
+                    ErpProductModel.id == ErpStockLevelModel.product_id,
+                ),
+            )
+            .where(
+                ErpStockLevelModel.tenant_id == tenant_id,
+                ErpStockLevelModel.qty_on_hand <= ErpProductModel.reorder_point,
+            )
+            .order_by(ErpStockLevelModel.qty_on_hand.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return [
+            (_stock_level_from_orm(level), _product_from_orm(product))
+            for level, product in result.all()
+        ]
+
+    async def count_low_stock(self, tenant_id: uuid.UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpStockLevelModel)
+            .join(
+                ErpProductModel,
+                and_(
+                    ErpProductModel.tenant_id == ErpStockLevelModel.tenant_id,
+                    ErpProductModel.id == ErpStockLevelModel.product_id,
+                ),
+            )
+            .where(
+                ErpStockLevelModel.tenant_id == tenant_id,
+                ErpStockLevelModel.qty_on_hand <= ErpProductModel.reorder_point,
+            )
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    # ------------------------------------------------------------------
+    # Guarded reservation updates (atomic row-lock + CHECK fallback)
+    #
+    # Reservation mutations run a conditional UPDATE on the materialized
+    # level FIRST: the ``WHERE`` re-evaluates against the freshly locked row,
+    # so concurrent reserve/release calls serialize on the row lock and the
+    # invariant ``qty_reserved <= qty_on_hand`` is enforced before any ledger
+    # row is written. The ledger movement is then appended and the level
+    # recomputed, keeping the projection consistent with the ledger. The DB
+    # CHECK constraint remains the final defense if the guard is bypassed.
+    # ------------------------------------------------------------------
+
+    async def apply_reservation_qty(
+        self, product_id: uuid.UUID, warehouse_id: uuid.UUID, qty: Decimal, tenant_id: uuid.UUID
+    ) -> bool:
+        """Atomically add ``qty`` to qty_reserved iff the result stays <= qty_on_hand."""
+        stmt = (
+            update(ErpStockLevelModel)
+            .where(
+                ErpStockLevelModel.tenant_id == tenant_id,
+                ErpStockLevelModel.product_id == product_id,
+                ErpStockLevelModel.warehouse_id == warehouse_id,
+                ErpStockLevelModel.qty_reserved + qty <= ErpStockLevelModel.qty_on_hand,
+            )
+            .values(qty_reserved=ErpStockLevelModel.qty_reserved + qty)
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
+
+    async def apply_release_qty(
+        self, product_id: uuid.UUID, warehouse_id: uuid.UUID, qty: Decimal, tenant_id: uuid.UUID
+    ) -> bool:
+        """Atomically subtract ``qty`` from qty_reserved iff the result stays >= 0."""
+        stmt = (
+            update(ErpStockLevelModel)
+            .where(
+                ErpStockLevelModel.tenant_id == tenant_id,
+                ErpStockLevelModel.product_id == product_id,
+                ErpStockLevelModel.warehouse_id == warehouse_id,
+                ErpStockLevelModel.qty_reserved - qty >= 0,
+            )
+            .values(qty_reserved=ErpStockLevelModel.qty_reserved - qty)
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
+
+    async def apply_consume_qty(
+        self, product_id: uuid.UUID, warehouse_id: uuid.UUID, qty: Decimal, tenant_id: uuid.UUID
+    ) -> bool:
+        """Atomically release ``qty`` from qty_reserved (fulfilment step)."""
+        return await self.apply_release_qty(product_id, warehouse_id, qty, tenant_id)
+
     # ------------------------------------------------------------------
     # Movements (immutable — no update, no delete)
     # ------------------------------------------------------------------
@@ -363,21 +556,46 @@ class InventoryRepository:
 
     async def list_movements(
         self,
-        product_id: uuid.UUID,
-        warehouse_id: uuid.UUID,
         tenant_id: uuid.UUID,
         *,
-        limit: int = 100,
+        product_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+        movement_type: StockMovementType | None = None,
+        offset: int = 0,
+        limit: int = 20,
     ) -> Sequence[StockMovement]:
-        stmt = (
-            select(ErpStockMovementModel)
-            .where(
-                ErpStockMovementModel.tenant_id == tenant_id,
-                ErpStockMovementModel.product_id == product_id,
-                ErpStockMovementModel.warehouse_id == warehouse_id,
-            )
-            .order_by(ErpStockMovementModel.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select(ErpStockMovementModel).where(ErpStockMovementModel.tenant_id == tenant_id)
+        if product_id is not None:
+            stmt = stmt.where(ErpStockMovementModel.product_id == product_id)
+        if warehouse_id is not None:
+            stmt = stmt.where(ErpStockMovementModel.warehouse_id == warehouse_id)
+        if movement_type is not None:
+            stmt = stmt.where(ErpStockMovementModel.movement_type == movement_type)
+        stmt = stmt.order_by(ErpStockMovementModel.created_at.desc()).offset(offset).limit(limit)
         result = await self.session.execute(stmt)
         return [_stock_movement_from_orm(model) for model in result.scalars().all()]
+
+    async def count_movements(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+        movement_type: StockMovementType | None = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpStockMovementModel)
+            .where(ErpStockMovementModel.tenant_id == tenant_id)
+        )
+        if product_id is not None:
+            stmt = stmt.where(ErpStockMovementModel.product_id == product_id)
+        if warehouse_id is not None:
+            stmt = stmt.where(ErpStockMovementModel.warehouse_id == warehouse_id)
+        if movement_type is not None:
+            stmt = stmt.where(ErpStockMovementModel.movement_type == movement_type)
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def commit(self) -> None:
+        """Commit the current transaction — services own the transaction lifecycle."""
+        await self.session.commit()

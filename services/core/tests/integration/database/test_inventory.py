@@ -547,7 +547,7 @@ class TestMovementLedger:
             assert src is not None and src.qty_on_hand == Decimal("0")
             assert dst is not None and dst.qty_on_hand == Decimal("3")
 
-            movements = await repo.list_movements(product, wh1, tenant)
+            movements = await repo.list_movements(tenant, product_id=product, warehouse_id=wh1)
             assert [m.ref_id for m in movements].count("TR-LEDGER-1") == 1
 
     async def test_idempotency_returns_existing_movement(
@@ -584,7 +584,7 @@ class TestMovementLedger:
             await session.commit()
 
             assert second.id == first.id
-            movements = await repo.list_movements(product, wh1, tenant)
+            movements = await repo.list_movements(tenant, product_id=product, warehouse_id=wh1)
             assert [m.ref_id for m in movements].count("PO-IDEMPOTENT") == 1
 
     async def test_over_reservation_rejected_and_movement_rolled_back(

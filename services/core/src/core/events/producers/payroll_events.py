@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.events.producers import get_event_producer
+from core.events.producers import apublish
 from skyrict_events.base import BaseEvent
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ async def emit_run_created(
             "period_end": period_end,
         },
     )
-    await get_event_producer().apublish("payroll.run.created", event, key=str(tenant_id))
+    await apublish("payroll.run.created", event, key=str(tenant_id))
 
 
 async def emit_run_computed(
@@ -60,7 +60,7 @@ async def emit_run_computed(
             "total_net": total_net,
         },
     )
-    await get_event_producer().apublish("payroll.run.computed", event, key=str(tenant_id))
+    await apublish("payroll.run.computed", event, key=str(tenant_id))
 
 
 async def emit_run_approved(
@@ -80,7 +80,7 @@ async def emit_run_approved(
             "entry_count": entry_count,
         },
     )
-    await get_event_producer().apublish("payroll.run.approved", event, key=str(tenant_id))
+    await apublish("payroll.run.approved", event, key=str(tenant_id))
 
 
 async def emit_run_paid(
@@ -100,7 +100,7 @@ async def emit_run_paid(
             "paid_at": paid_at,
         },
     )
-    await get_event_producer().apublish("payroll.run.paid", event, key=str(tenant_id))
+    await apublish("payroll.run.paid", event, key=str(tenant_id))
 
 
 async def emit_run_voided(
@@ -118,7 +118,7 @@ async def emit_run_voided(
         tenant_id=str(tenant_id),
         metadata=metadata,
     )
-    await get_event_producer().apublish("payroll.run.voided", event, key=str(tenant_id))
+    await apublish("payroll.run.voided", event, key=str(tenant_id))
 
 
 async def emit_entry_adjusted(
@@ -138,7 +138,7 @@ async def emit_entry_adjusted(
             "adjustments": adjustments,
         },
     )
-    await get_event_producer().apublish("payroll.entry.adjusted", event, key=str(tenant_id))
+    await apublish("payroll.entry.adjusted", event, key=str(tenant_id))
 
 
 async def emit_settings_updated(
@@ -152,4 +152,24 @@ async def emit_settings_updated(
         tenant_id=str(tenant_id),
         metadata={"changed_fields": changed_fields},
     )
-    await get_event_producer().apublish("payroll.settings.updated", event, key=str(tenant_id))
+    await apublish("payroll.settings.updated", event, key=str(tenant_id))
+
+
+async def emit_compensation_recorded(
+    *,
+    employee_id: uuid.UUID,
+    monthly_salary: str,
+    effective_from: str,
+    tenant_id: uuid.UUID,
+) -> None:
+    """Emit ``payroll.compensation.recorded`` (compensation written)."""
+    event = BaseEvent(
+        event_type="payroll.compensation.recorded",
+        tenant_id=str(tenant_id),
+        metadata={
+            "employee_id": str(employee_id),
+            "monthly_salary": monthly_salary,
+            "effective_from": effective_from,
+        },
+    )
+    await apublish("payroll.compensation.recorded", event, key=str(tenant_id))

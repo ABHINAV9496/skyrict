@@ -109,6 +109,7 @@ class PayrollRunOut(BaseModel):
     approved_at: datetime | None = None
     paid_at: datetime | None = None
     void_reason: str | None = None
+    skipped_employees: list[SkippedEmployeeOut] | None = None
     created_at: datetime | None = None
 
     @classmethod
@@ -129,6 +130,11 @@ class PayrollRunOut(BaseModel):
             approved_at=run.approved_at,
             paid_at=run.paid_at,
             void_reason=run.void_reason,
+            skipped_employees=(
+                [SkippedEmployeeOut(**item) for item in run.skipped_employees]
+                if run.skipped_employees
+                else None
+            ),
             created_at=run.created_at,
         )
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.events.producers import get_event_producer
+from core.events.producers import apublish
 from skyrict_events.base import BaseEvent
 
 if TYPE_CHECKING:
@@ -31,7 +31,25 @@ async def emit_department_created(
         tenant_id=str(tenant_id),
         metadata={"department_id": str(department_id), "name": name},
     )
-    await get_event_producer().apublish("hr.department.created", event, key=str(tenant_id))
+    await apublish("hr.department.created", event, key=str(tenant_id))
+
+
+async def emit_department_updated(
+    *,
+    department_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    changed_fields: dict[str, object],
+) -> None:
+    """Emit ``hr.department.updated`` (department edited)."""
+    event = BaseEvent(
+        event_type="hr.department.updated",
+        tenant_id=str(tenant_id),
+        metadata={
+            "department_id": str(department_id),
+            "changed_fields": changed_fields,
+        },
+    )
+    await apublish("hr.department.updated", event, key=str(tenant_id))
 
 
 async def emit_employee_created(
@@ -55,7 +73,7 @@ async def emit_employee_created(
         tenant_id=str(tenant_id),
         metadata=metadata,
     )
-    await get_event_producer().apublish("hr.employee.created", event, key=str(tenant_id))
+    await apublish("hr.employee.created", event, key=str(tenant_id))
 
 
 async def emit_employee_onboarded(
@@ -77,7 +95,7 @@ async def emit_employee_onboarded(
         tenant_id=str(tenant_id),
         metadata=metadata,
     )
-    await get_event_producer().apublish("hr.employee.onboarded", event, key=str(tenant_id))
+    await apublish("hr.employee.onboarded", event, key=str(tenant_id))
 
 
 async def emit_employee_updated(
@@ -95,7 +113,7 @@ async def emit_employee_updated(
             "changed_fields": changed_fields,
         },
     )
-    await get_event_producer().apublish("hr.employee.updated", event, key=str(tenant_id))
+    await apublish("hr.employee.updated", event, key=str(tenant_id))
 
 
 async def emit_employee_terminated(
@@ -113,7 +131,7 @@ async def emit_employee_terminated(
             "termination_date": termination_date,
         },
     )
-    await get_event_producer().apublish("hr.employee.terminated", event, key=str(tenant_id))
+    await apublish("hr.employee.terminated", event, key=str(tenant_id))
 
 
 async def emit_leave_requested(
@@ -135,7 +153,7 @@ async def emit_leave_requested(
             "days": days,
         },
     )
-    await get_event_producer().apublish("hr.leave.requested", event, key=str(tenant_id))
+    await apublish("hr.leave.requested", event, key=str(tenant_id))
 
 
 async def emit_leave_approved(
@@ -157,7 +175,7 @@ async def emit_leave_approved(
             "days": days,
         },
     )
-    await get_event_producer().apublish("hr.leave.approved", event, key=str(tenant_id))
+    await apublish("hr.leave.approved", event, key=str(tenant_id))
 
 
 async def emit_leave_rejected(
@@ -179,7 +197,7 @@ async def emit_leave_rejected(
         tenant_id=str(tenant_id),
         metadata=metadata,
     )
-    await get_event_producer().apublish("hr.leave.rejected", event, key=str(tenant_id))
+    await apublish("hr.leave.rejected", event, key=str(tenant_id))
 
 
 async def emit_leave_cancelled(
@@ -201,7 +219,7 @@ async def emit_leave_cancelled(
             "days": days,
         },
     )
-    await get_event_producer().apublish("hr.leave.cancelled", event, key=str(tenant_id))
+    await apublish("hr.leave.cancelled", event, key=str(tenant_id))
 
 
 async def emit_leave_balance_adjusted(
@@ -223,7 +241,7 @@ async def emit_leave_balance_adjusted(
             "reason": reason,
         },
     )
-    await get_event_producer().apublish("hr.leave.balance.adjusted", event, key=str(tenant_id))
+    await apublish("hr.leave.balance.adjusted", event, key=str(tenant_id))
 
 
 async def emit_leave_accrued(
@@ -245,4 +263,4 @@ async def emit_leave_accrued(
             "qty": qty,
         },
     )
-    await get_event_producer().apublish("hr.leave.accrued", event, key=str(tenant_id))
+    await apublish("hr.leave.accrued", event, key=str(tenant_id))

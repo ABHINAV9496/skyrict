@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from core.core.config import settings
 from core.core.tenant_context import TenantContext
+from core.events.producers import clear_event_buffer, flush_events, start_event_buffer
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -61,10 +62,19 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
     Commits when the handler completes successfully, rolls back otherwise:
     without the commit every write made by a route handler would be rolled
     back when the session closes.
+
+    Domain events emitted during the request are buffered (docs §2.5: events
+    fire AFTER commit) — ``flush_events`` runs only once the transaction is
+    durable, and a failed/rolled-back transaction discards the buffer.
     """
+    start_event_buffer()
     async with async_session_factory() as session:
         try:
             yield session
             await session.commit()
+            await flush_events()
+        except Exception:
+            clear_event_buffer()
+            raise
         finally:
             await session.close()

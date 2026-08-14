@@ -19,10 +19,11 @@ from core.domain import entities as ent
 
 
 class LeaveLedgerPort(Protocol):
-    """Approved unpaid-leave reads — implemented by ``features/hr``.
+    """Leave reads + annual accrual — implemented by ``features/hr``.
 
     Used by payroll to compute the unpaid-leave overlap for ``pay_days``
-    proration (docs/hr-payroll.md §4.10, Rule 9).
+    proration (docs/hr-payroll.md §4.10, Rule 9) and to run the Rule 4 annual
+    accrual at the start of every compute (gap #3).
     """
 
     async def approved_unpaid_days(
@@ -34,6 +35,22 @@ class LeaveLedgerPort(Protocol):
         period_end: date,
     ) -> int:
         """Return the count of approved ``unpaid`` leave days overlapping the period."""
+        ...
+
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
+        """Return leave-type names that accrue annually (``accrues`` = true)."""
+        ...
+
+    async def accrue(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        leave_type: str,
+        year: int,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> object | None:
+        """Write the idempotent annual leave accrual for one employee/type/year."""
         ...
 
 
@@ -117,6 +134,16 @@ class PayrollRepositoryPort(Protocol):
 
     async def update_entry(self, entry: ent.PayrollEntry) -> ent.PayrollEntry: ...
 
+    async def delete_entries_for_run(
+        self,
+        run_id: uuid.UUID,
+        employee_ids: Sequence[uuid.UUID],
+        *,
+        tenant_id: uuid.UUID,
+    ) -> int:
+        """Delete run entries whose employee is NOT in ``employee_ids`` (recompute cleanup)."""
+        ...
+
     # --- Settings ---
     async def get_settings(self, tenant_id: uuid.UUID) -> ent.PayrollSettings | None: ...
 
@@ -124,7 +151,11 @@ class PayrollRepositoryPort(Protocol):
 
     # --- Roster (read-only, one-way erp_employees read per the ERD) ---
     async def list_active_employees(
-        self, tenant_id: uuid.UUID, *, as_of: date
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        period_start: date,
+        period_end: date,
     ) -> Sequence[ent.Employee]: ...
 
 

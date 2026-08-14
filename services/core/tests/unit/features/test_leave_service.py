@@ -21,7 +21,12 @@ from core.core.audit_events import (
 )
 from core.core.audit_service import AuditService
 from core.core.constants import EmploymentStatus, LeaveRequestStatus
-from core.core.exceptions import LeaveBalanceExceededError, SelfApprovalForbiddenError
+from core.core.exceptions import (
+    EmployeeTerminatedError,
+    IllegalStateTransitionError,
+    LeaveBalanceExceededError,
+    SelfApprovalForbiddenError,
+)
 from core.domain import entities as ent
 from core.features.hr.service import LeaveService
 
@@ -148,6 +153,14 @@ class FakeHrRepository:
     async def get_leave_type(self, leave_type: str, tenant_id: uuid.UUID) -> ent.LeaveType | None:
         return self.leave_types.get(leave_type)
 
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
+        return [lt.code for lt in self.leave_types.values() if lt.is_accrual]
+
+    async def approved_unpaid_days(
+        self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID, period_start, period_end
+    ) -> int:
+        return 0
+
     async def add_leave_movement(self, movement: ent.LeaveMovement) -> ent.LeaveMovement:
         self.movements.append(movement)
         return movement
@@ -267,6 +280,7 @@ async def _request(
     employee_id: uuid.UUID = EMPLOYEE_1,
 ) -> ent.LeaveRequest:
     start = date(2024, 5, 1)
+    await repo.create_employee(_employee(employee_id=employee_id))
     return await service.request(
         tenant_id=TENANT,
         employee_id=employee_id,
@@ -370,11 +384,19 @@ class TestRule5Cancel:
         assert cancellation and cancellation[0].qty == 3
         assert audit.added and audit.added[-1].action == HR_LEAVE_CANCELLED
 
-    async def test_cancel_from_pending_rejected(self) -> None:
+    async def test_cancel_from_pending_cancels_without_movement(self) -> None:
+        service, repo, audit = _service()
+        req = await _request(service, repo)
+        request, balance = await service.cancel(request_id=req.id, tenant_id=TENANT)
+        assert request.status == LeaveRequestStatus.CANCELLED
+        assert balance == 0
+        assert not [m for m in repo.movements if m.ref_id == str(req.id)]
+        assert audit.added and audit.added[-1].action == HR_LEAVE_CANCELLED
+
+    async def test_cancel_from_rejected_still_blocked(self) -> None:
         service, repo, _ = _service()
         req = await _request(service, repo)
-        from core.core.exceptions import IllegalStateTransitionError
-
+        await service.reject(request_id=req.id, tenant_id=TENANT)
         with pytest.raises(IllegalStateTransitionError):
             await service.cancel(request_id=req.id, tenant_id=TENANT)
 
@@ -450,6 +472,47 @@ class TestRequest:
         service, repo, _ = _service()
         with pytest.raises(ValueError, match="unknown leave type"):
             await _request(service, repo, leave_type="bogus")
+
+    async def test_request_rejected_for_terminated_employee(self) -> None:
+        service, repo, _ = _service()
+        await repo.create_employee(_employee(status=EmploymentStatus.TERMINATED))
+        with pytest.raises(EmployeeTerminatedError):
+            await service.request(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE_1,
+                leave_type="annual",
+                start_date=date(2024, 5, 1),
+                end_date=date(2024, 5, 2),
+            )
+        assert not repo.requests
+
+
+class TestTerminatedEmployeeGuards:
+    async def test_approve_rejected_for_terminated_employee(self) -> None:
+        service, repo, _ = _service()
+        req = await _request(service, repo)
+        repo.employees[EMPLOYEE_1] = _employee(status=EmploymentStatus.TERMINATED)
+        with pytest.raises(EmployeeTerminatedError):
+            await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        assert repo.requests[req.id].status == LeaveRequestStatus.PENDING
+
+
+class TestLeaveLedgerDelegates:
+    async def test_list_accrual_leave_types_returns_only_accrual_types(self) -> None:
+        service, _, _ = _service()
+        assert await service.list_accrual_leave_types(TENANT) == ["annual"]
+
+    async def test_approved_unpaid_days_delegates_to_repository(self) -> None:
+        service, _, _ = _service()
+        assert (
+            await service.approved_unpaid_days(
+                EMPLOYEE_1,
+                tenant_id=TENANT,
+                period_start=date(2024, 5, 1),
+                period_end=date(2024, 5, 31),
+            )
+            == 0
+        )
 
 
 __all__ = ["FakeAuditRepository", "FakeHrRepository"]

@@ -25,10 +25,11 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
+from core.core.exceptions import PayrollEntryImmutableError
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.features.hr.models.employee import (
@@ -97,6 +98,7 @@ def _run_to_orm(run: ent.PayrollRun) -> PayrollRunModel:
         "approved_at": run.approved_at,
         "paid_at": run.paid_at,
         "void_reason": run.void_reason,
+        "skipped_employees": run.skipped_employees,
     }
     if run.id is not None:
         kwargs["id"] = run.id
@@ -184,6 +186,7 @@ class PayrollRepository:
             void_reason=model.void_reason,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            skipped_employees=model.skipped_employees,
         )
 
     # ------------------------------------------------------------------
@@ -268,6 +271,7 @@ class PayrollRepository:
                 approved_at=run.approved_at,
                 paid_at=run.paid_at,
                 void_reason=run.void_reason,
+                skipped_employees=run.skipped_employees,
                 updated_at=func.now(),
             )
             .returning(PayrollRunModel)
@@ -467,6 +471,18 @@ class PayrollRepository:
     async def update_entry(self, entry: ent.PayrollEntry) -> ent.PayrollEntry:
         if entry.id is None:
             raise ValueError("payroll entry is missing an id")
+        # Rule 8 defense-in-depth (gap #9): never mutate an entry whose run is
+        # already approved/paid, even if a caller bypasses the service layer.
+        run_status = (
+            await self.session.execute(
+                select(PayrollRunModel.status).where(
+                    PayrollRunModel.tenant_id == entry.tenant_id,
+                    PayrollRunModel.id == entry.run_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if run_status in (PayrollRunStatusModel.APPROVED, PayrollRunStatusModel.PAID):
+            raise PayrollEntryImmutableError("entries are immutable once a run is approved")
         stmt = (
             update(PayrollEntryModel)
             .where(
@@ -503,6 +519,27 @@ class PayrollRepository:
             adjustments=model.adjustments,
             created_at=model.created_at,
         )
+
+    async def delete_entries_for_run(
+        self,
+        run_id: uuid.UUID,
+        employee_ids: Sequence[uuid.UUID],
+        *,
+        tenant_id: uuid.UUID,
+    ) -> int:
+        """Delete run entries whose employee is no longer on the roster (gap #10).
+
+        Only ever removes employees that were NOT recomputed, so a recompute
+        that shrinks the roster does not leave ghost rows in the snapshot.
+        Returns the number of deleted rows.
+        """
+        stmt = delete(PayrollEntryModel).where(
+            PayrollEntryModel.tenant_id == tenant_id,
+            PayrollEntryModel.run_id == run_id,
+            PayrollEntryModel.employee_id.not_in(employee_ids),
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount or 0
 
     # ------------------------------------------------------------------
     # Compensation (effective-date pick per Rule 7)
@@ -561,17 +598,29 @@ class PayrollRepository:
     # ------------------------------------------------------------------
 
     async def list_active_employees(
-        self, tenant_id: uuid.UUID, *, as_of: date
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        period_start: date,
+        period_end: date,
     ) -> Sequence[ent.Employee]:
-        """Active employees hired on/before ``as_of``, ordered by employee_number.
+        """Payroll roster for a period (gap #5), ordered by employee_number.
 
-        Termination is excluded by status: only ``active`` employees are in the
-        roster; ``on_leave`` employees still earn base pay (docs §4.10 Rule 9).
+        Docs §4.9: the roster is everyone hired by the period end who is NOT
+        terminated, plus employees who were terminated during the period (they
+        earn through their termination date, Rule 9 prorates ``pay_days``).
+        ``on_leave`` employees stay on the roster and still earn base pay.
         """
         stmt = select(EmployeeModel).where(
             EmployeeModel.tenant_id == tenant_id,
-            EmployeeModel.employment_status == EmployeeEmploymentStatus.ACTIVE,
-            EmployeeModel.hire_date <= as_of,
+            EmployeeModel.hire_date <= period_end,
+            (
+                (EmployeeModel.employment_status != EmployeeEmploymentStatus.TERMINATED)
+                | (
+                    (EmployeeModel.employment_status == EmployeeEmploymentStatus.TERMINATED)
+                    & (EmployeeModel.termination_date >= period_start)
+                )
+            ),
         )
         stmt = stmt.order_by(EmployeeModel.employee_number.asc())
         result = await self.session.execute(stmt)

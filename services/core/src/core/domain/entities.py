@@ -342,6 +342,10 @@ class PayrollRun:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    # Employees excluded from the compute with the reason (JSON list of
+    # {"employee_id": str, "reason": str}), set at compute time (gap #6).
+    skipped_employees: list[dict[str, str]] | None = None
+
 
 @dataclass(frozen=True)
 class PayrollEntry:

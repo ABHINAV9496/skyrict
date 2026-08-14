@@ -29,6 +29,7 @@ from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.events.producers.hr_events import (
     emit_department_created,
+    emit_department_updated,
     emit_employee_created,
     emit_employee_onboarded,
     emit_employee_terminated,
@@ -122,13 +123,31 @@ class DepartmentService:
     async def update(
         self, department: ent.Department, *, actor_user_id: uuid.UUID | None = None
     ) -> ent.Department:
+        if department.id is None:
+            raise ValueError("cannot update a department without an id")
+        existing = await self._repo.get_department(department.id, department.tenant_id)
+        if existing is None:
+            raise ValueError(f"department {department.id} not found")
         updated = await self._repo.update_department(department)
+        changed: dict[str, object] = {}
+        for field_name in ("name", "manager_employee_id", "is_active"):
+            old_value = getattr(existing, field_name)
+            new_value = getattr(department, field_name)
+            if new_value != old_value:
+                changed[field_name] = str(new_value) if isinstance(new_value, uuid.UUID) else new_value
         await self._audit.log(
             action=audit_events.HR_DEPARTMENT_UPDATED,
             target=f"department:{updated.id}",
             tenant_id=updated.tenant_id,
             user_id=actor_user_id,
+            details=changed,
         )
+        if updated.id is not None:
+            await emit_department_updated(
+                department_id=updated.id,
+                tenant_id=updated.tenant_id,
+                changed_fields=changed,
+            )
         return updated
 
     async def list(self, tenant_id: uuid.UUID, *, include_inactive: bool = False) -> list[ent.Department]:
@@ -419,6 +438,11 @@ class LeaveService:
         leave_type_row = await self._repo.get_leave_type(leave_type, tenant_id=tenant_id)
         if leave_type_row is None:
             raise ValueError(f"unknown leave type {leave_type!r}")
+        employee = await self._repo.get_employee(employee_id, tenant_id)
+        if employee is None:
+            raise ValueError(f"employee {employee_id} not found")
+        if employee.employment_status == EmploymentStatus.TERMINATED:
+            raise EmployeeTerminatedError("terminated employees cannot request leave")
         request = ent.LeaveRequest(
             tenant_id=tenant_id,
             employee_id=employee_id,
@@ -460,6 +484,13 @@ class LeaveService:
         request = await self._repo.get_leave_request(request_id, tenant_id)
         if request is None:
             raise ValueError(f"leave request {request_id} not found")
+
+        # Rule 3 (docs §4.3): only active employees may have leave approved.
+        employee = await self._repo.get_employee(request.employee_id, tenant_id)
+        if employee is None:
+            raise ValueError(f"employee {request.employee_id} not found")
+        if employee.employment_status == EmploymentStatus.TERMINATED:
+            raise EmployeeTerminatedError("cannot approve leave for a terminated employee")
 
         # Rule 6: approver != requester.
         if approved_by == request.employee_id:
@@ -596,14 +627,22 @@ class LeaveService:
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID | None = None,
     ) -> tuple[ent.LeaveRequest, int]:
-        """Rule 5: cancel a request only from approved; write +days reversal."""
+        """Rule 5: cancel from pending (no-op) or approved (+days reversal)."""
         request = await self._repo.get_leave_request(request_id, tenant_id)
         if request is None:
             raise ValueError(f"leave request {request_id} not found")
         try:
             _LEAVE_MACHINE.transition(request.status.value, LeaveRequestStatus.CANCELLED.value)
         except InvalidTransitionError:
-            raise IllegalStateTransitionError("only approved requests can be cancelled") from None
+            raise IllegalStateTransitionError("only pending or approved requests can be cancelled") from None
+
+        if request.status == LeaveRequestStatus.PENDING:
+            return await self._cancel_pending(
+                request=request,
+                request_id=request_id,
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+            )
 
         leave_type_row = await self._repo.get_leave_type(request.leave_type, tenant_id=tenant_id)
         is_accrual = leave_type_row is not None and leave_type_row.is_accrual
@@ -642,6 +681,47 @@ class LeaveService:
                 )
             )
 
+        await self._audit.log(
+            action=audit_events.HR_LEAVE_CANCELLED,
+            target=f"leave_request:{request_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={"days": request.days, "leave_type": request.leave_type, "new_balance": new_balance},
+        )
+        if transitioned.id is not None:
+            await emit_leave_cancelled(
+                request_id=request_id,
+                employee_id=request.employee_id,
+                leave_type=request.leave_type,
+                days=request.days,
+                tenant_id=tenant_id,
+            )
+        return transitioned, new_balance
+
+    async def _cancel_pending(
+        self,
+        *,
+        request: ent.LeaveRequest,
+        request_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+    ) -> tuple[ent.LeaveRequest, int]:
+        """Cancel a pending request: transition only, no ledger movement (gap #1).
+
+        A pending request has written nothing to the ledger, so there is no
+        reversal to post; this is a plain status transition (docs §4.5).
+        """
+        transitioned = await self._repo.transition_leave_status(
+            request_id,
+            LeaveRequestStatus.PENDING.value,
+            LeaveRequestStatus.CANCELLED.value,
+            tenant_id=tenant_id,
+        )
+        if transitioned is None:
+            raise IllegalStateTransitionError("leave request is not pending")
+        new_balance = await self._repo.recompute_balance(
+            request.employee_id, request.leave_type, tenant_id=tenant_id
+        )
         await self._audit.log(
             action=audit_events.HR_LEAVE_CANCELLED,
             target=f"leave_request:{request_id}",
@@ -810,6 +890,23 @@ class LeaveService:
         return list(
             await self._repo.list_leave_movements(tenant_id, employee_id, leave_type=leave_type)
         )
+
+    async def approved_unpaid_days(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        period_start: date,
+        period_end: date,
+    ) -> int:
+        """LeaveLedgerPort read: approved ``unpaid`` leave days in a period (Rule 9)."""
+        return await self._repo.approved_unpaid_days(
+            employee_id, tenant_id=tenant_id, period_start=period_start, period_end=period_end
+        )
+
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
+        """LeaveLedgerPort read: leave types that accrue annually (Rule 4)."""
+        return list(await self._repo.list_accrual_leave_types(tenant_id))
 
 
 def _round_half_up(value: Decimal) -> int:

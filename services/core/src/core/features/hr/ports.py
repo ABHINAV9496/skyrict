@@ -78,6 +78,10 @@ class HrRepositoryPort(Protocol):
         self, leave_type: str, tenant_id: uuid.UUID
     ) -> ent.LeaveType | None: ...
 
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
+        """Return leave-type names that accrue annually (``accrues`` = true)."""
+        ...
+
     # --- Leave ledger & balances ---
     async def add_leave_movement(self, movement: ent.LeaveMovement) -> ent.LeaveMovement: ...
 

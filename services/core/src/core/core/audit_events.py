@@ -37,6 +37,7 @@ PAYROLL_RUN_PAID = "payroll.run.paid"
 PAYROLL_RUN_VOIDED = "payroll.run.voided"
 PAYROLL_ENTRY_ADJUSTED = "payroll.entry.adjusted"
 PAYROLL_SETTINGS_UPDATED = "payroll.settings.updated"
+PAYROLL_COMPENSATION_RECORDED = "payroll.compensation.recorded"
 
 # Every catalogued audit event, in catalog order.
 CATALOG: tuple[str, ...] = (
@@ -58,6 +59,7 @@ CATALOG: tuple[str, ...] = (
     PAYROLL_RUN_VOIDED,
     PAYROLL_ENTRY_ADJUSTED,
     PAYROLL_SETTINGS_UPDATED,
+    PAYROLL_COMPENSATION_RECORDED,
 )
 
 ALL_AUDIT_EVENTS: frozenset[str] = frozenset(CATALOG)
@@ -93,6 +95,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             PAYROLL_RUN_VOIDED,
             PAYROLL_ENTRY_ADJUSTED,
             PAYROLL_SETTINGS_UPDATED,
+            PAYROLL_COMPENSATION_RECORDED,
         ),
     ),
 )
@@ -121,14 +124,15 @@ __all__ = [
     "HR_DEPARTMENT_CREATED",
     "HR_DEPARTMENT_UPDATED",
     "HR_EMPLOYEE_CREATED",
-    "HR_EMPLOYEE_UPDATED",
     "HR_EMPLOYEE_TERMINATED",
+    "HR_EMPLOYEE_UPDATED",
     "HR_LEAVE_ACCRUED",
     "HR_LEAVE_APPROVED",
     "HR_LEAVE_BALANCE_ADJUSTED",
     "HR_LEAVE_CANCELLED",
     "HR_LEAVE_REJECTED",
     "HR_LEAVE_REQUESTED",
+    "PAYROLL_COMPENSATION_RECORDED",
     "PAYROLL_ENTRY_ADJUSTED",
     "PAYROLL_RUN_APPROVED",
     "PAYROLL_RUN_COMPUTED",

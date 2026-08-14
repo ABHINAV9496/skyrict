@@ -13,7 +13,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.core.audit_events import PAYROLL_RUN_CREATED
+from core.core.audit_events import (
+    PAYROLL_COMPENSATION_RECORDED,
+    PAYROLL_RUN_CREATED,
+)
 from core.core.audit_service import AuditService
 from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
 from core.core.exceptions import (
@@ -79,13 +82,34 @@ class FakeAuditRepository:
 
 
 class FakeLeaveLedger:
-    def __init__(self, unpaid_days: int = 0) -> None:
+    def __init__(
+        self,
+        unpaid_days: int = 0,
+        *,
+        accrual_types: Sequence[str] = (),
+    ) -> None:
         self.unpaid_days = unpaid_days
+        self.accrual_types = list(accrual_types)
+        self.accrued: list[tuple[uuid.UUID, str, int]] = []
 
     async def approved_unpaid_days(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID, period_start: date, period_end: date
     ) -> int:
         return self.unpaid_days
+
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
+        return list(self.accrual_types)
+
+    async def accrue(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        leave_type: str,
+        year: int,
+        actor_user_id=None,
+    ) -> None:
+        self.accrued.append((employee_id, leave_type, year))
 
 
 class FakePayrollRepository:
@@ -179,6 +203,7 @@ class FakePayrollRepository:
             id=current.id,
             created_at=current.created_at,
             updated_at=current.updated_at,
+            skipped_employees=current.skipped_employees,
         )
         self.runs[run_id] = updated
         return updated
@@ -211,6 +236,18 @@ class FakePayrollRepository:
         self.entries[entry.employee_id] = entry
         return entry
 
+    async def delete_entries_for_run(
+        self, run_id: uuid.UUID, employee_ids: Sequence[uuid.UUID], *, tenant_id: uuid.UUID
+    ) -> int:
+        to_delete = [
+            eid
+            for eid, e in list(self.entries.items())
+            if e.run_id == run_id and e.employee_id not in employee_ids
+        ]
+        for eid in to_delete:
+            del self.entries[eid]
+        return len(to_delete)
+
     async def get_settings(self, tenant_id: uuid.UUID) -> ent.PayrollSettings | None:
         return self.settings.get(tenant_id)
 
@@ -218,7 +255,9 @@ class FakePayrollRepository:
         self.settings[settings.tenant_id] = settings
         return settings
 
-    async def list_active_employees(self, tenant_id: uuid.UUID, *, as_of: date):
+    async def list_active_employees(
+        self, tenant_id: uuid.UUID, *, period_start: date, period_end: date
+    ):
         return self.employees
 
 
@@ -507,6 +546,155 @@ class TestComputeSkips:
         result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
         assert result.entries == []
         assert result.skipped == [(EMPLOYEE, "no payable days")]
+
+
+def _employee_with_id(employee_id: uuid.UUID) -> ent.Employee:
+    return ent.Employee(
+        tenant_id=TENANT,
+        employee_number=f"EMP-{employee_id.int % 100}",
+        first_name="A",
+        last_name="B",
+        job_title="Engineer",
+        hire_date=date(2020, 1, 1),
+        employment_status=EmploymentStatus.ACTIVE,
+        id=employee_id,
+    )
+
+
+async def _seed_compensation(repo: FakePayrollRepository, employee_id: uuid.UUID) -> None:
+    await repo.create_compensation(
+        ent.Compensation(
+            tenant_id=TENANT,
+            employee_id=employee_id,
+            monthly_salary=_money("3000"),
+            effective_from=date(2024, 1, 1),
+            is_active=True,
+            id=uuid.uuid4(),
+        )
+    )
+
+
+class TestComputeAccrual:
+    async def test_accrual_run_for_every_roster_employee_and_type(self) -> None:
+        ledger = FakeLeaveLedger(accrual_types=["annual", "sick"])
+        service, repo, _ = _service(ledger=ledger)
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await _seed_compensation(repo, EMPLOYEE)
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert ledger.accrued == [(EMPLOYEE, "annual", 2024), (EMPLOYEE, "sick", 2024)]
+
+    async def test_no_accrual_when_no_accrual_types_configured(self) -> None:
+        ledger = FakeLeaveLedger()
+        service, repo, _ = _service(ledger=ledger)
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await _seed_compensation(repo, EMPLOYEE)
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert ledger.accrued == []
+
+
+class TestComputePreservesAdjustments:
+    async def test_recompute_preserves_adjustments_and_row_identity(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await _seed_compensation(repo, EMPLOYEE)
+        run = await _create_run(service)
+        first = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
+        await service.adjust_entry(
+            run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "100"}
+        )
+        recomputed = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
+        assert recomputed.adjustments == {"amount": "100"}
+        assert recomputed.id == first.id
+        assert recomputed.net.amount == Decimal("2900")  # 3000 - 100 adjustment
+
+
+class TestComputeStaleCleanup:
+    async def test_recompute_drops_employees_off_the_roster(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        other = uuid.uuid4()
+        repo.employees = [_employee_with_id(EMPLOYEE), _employee_with_id(other)]
+        await _seed_compensation(repo, EMPLOYEE)
+        await _seed_compensation(repo, other)
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert len(await service.list_entries(run.id, tenant_id=TENANT)) == 2
+
+        repo.employees = [_employee_with_id(EMPLOYEE)]  # other left the roster
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        entries = await service.list_entries(run.id, tenant_id=TENANT)
+        assert [e.employee_id for e in entries] == [EMPLOYEE]
+        assert result.entries == entries
+
+
+class TestComputeSkipsPersisted:
+    async def test_skipped_employees_persisted_on_run(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        run = await _create_run(service)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        assert result.entries == []
+        assert result.run.skipped_employees == [
+            {"employee_id": str(EMPLOYEE), "reason": "no effective compensation"}
+        ]
+
+    async def test_skips_survive_approval(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        approved = await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+        assert approved.skipped_employees == [
+            {"employee_id": str(EMPLOYEE), "reason": "no effective compensation"}
+        ]
+
+
+class TestAdjustRecompute:
+    async def test_adjust_entry_recomputes_net(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await _seed_compensation(repo, EMPLOYEE)
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT)
+        adjusted = await service.adjust_entry(
+            run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "100"}
+        )
+        assert adjusted.gross.amount == Decimal("3000")
+        assert adjusted.net.amount == Decimal("2900")
+
+    async def test_adjust_entry_by_id_recomputes_net(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await _seed_compensation(repo, EMPLOYEE)
+        run = await _create_run(service)
+        entry = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
+        adjusted = await service.adjust_entry_by_id(
+            run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"amount": "100"}
+        )
+        assert adjusted.gross.amount == Decimal("3000")
+        assert adjusted.net.amount == Decimal("2900")
+
+
+class TestRecordCompensationAudit:
+    async def test_record_compensation_writes_audit_entry(self) -> None:
+        service, _, audit = _service()
+        await service.record_compensation(
+            tenant_id=TENANT,
+            employee_id=EMPLOYEE,
+            monthly_salary=_money("2000"),
+            effective_from=date(2024, 4, 1),
+            actor_user_id=ACTOR,
+        )
+        assert audit.added and audit.added[-1].action == PAYROLL_COMPENSATION_RECORDED
 
 
 class TestAdjustEntryById:

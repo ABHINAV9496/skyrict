@@ -412,6 +412,18 @@ class HrRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _leave_type_from_orm(model) if model is not None else None
 
+    async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
+        """Return leave-type codes with ``is_accrual`` set (annual accrual)."""
+        stmt = (
+            select(LeaveTypeModel.code)
+            .where(
+                LeaveTypeModel.tenant_id == tenant_id,
+                LeaveTypeModel.is_accrual.is_(True),
+            )
+            .order_by(LeaveTypeModel.code)
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
+
     # ------------------------------------------------------------------
     # Leave ledger & balances
     # ------------------------------------------------------------------

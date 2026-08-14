@@ -211,19 +211,25 @@ def get_payroll_service(
     db: AsyncSession = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> PayrollService:
-    """Payroll service with the HR repository injected as the leave ledger.
+    """Payroll service with ``LeaveService`` injected as the leave ledger.
 
-    ``HrRepository`` implements ``LeaveLedgerPort.approved_unpaid_days`` (the
-    one sanctioned cross-feature read), so the payroll feature never imports
-    the HR feature directly.
+    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
+    days, accrual-type catalogue, idempotent annual accrual — Rule 4), so the
+    payroll feature never imports the HR feature directly. The HR repository
+    is shared (same ``db`` session), keeping payroll-driven accrual in the same
+    transaction as the compute.
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.hr.repository import HrRepository
+    from core.features.hr.service import LeaveService
     from core.features.payroll.repository import PayrollRepository
     from core.features.payroll.service import PayrollService
 
     return PayrollService(
         repository=PayrollRepository(db, next_sequence=SequenceRepository(db).next_value),
-        leave_ledger=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
+        leave_ledger=LeaveService(
+            repository=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
+            audit=audit,
+        ),
         audit=audit,
     )

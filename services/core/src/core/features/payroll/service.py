@@ -26,6 +26,7 @@ from core.core.state_machine import InvalidTransitionError, StateMachine
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.events.producers.payroll_events import (
+    emit_compensation_recorded,
     emit_entry_adjusted,
     emit_run_approved,
     emit_run_computed,
@@ -295,7 +296,32 @@ class PayrollService:
         if settings is None:
             raise ValueError(f"payroll settings missing for tenant {tenant_id}")
 
-        employees = await self._repo.list_active_employees(tenant_id, as_of=run.period_end)
+        employees = await self._repo.list_active_employees(
+            tenant_id,
+            period_start=run.period_start,
+            period_end=run.period_end,
+        )
+
+        # Rule 4 (docs §4.4): run the idempotent annual accrual for every
+        # roster employee on every accrual-type before computing entries.
+        accrual_types = await self._leave_ledger.list_accrual_leave_types(tenant_id)
+        if accrual_types:
+            for employee in employees:
+                employee_id = _require_id(employee, "employee")
+                for leave_type in accrual_types:
+                    await self._leave_ledger.accrue(
+                        tenant_id=tenant_id,
+                        employee_id=employee_id,
+                        leave_type=leave_type,
+                        year=run.period_start.year,
+                    )
+
+        # Preserve manual adjustments across recompute (gap #4) and let the
+        # repo drop entries for employees no longer on the roster (gap #10).
+        existing_entries = {
+            entry.employee_id: entry
+            for entry in await self._repo.list_entries(run_id, tenant_id=tenant_id)
+        }
         days_in_period = (run.period_end - run.period_start).days + 1
         entries: list[ent.PayrollEntry] = []
         skipped: list[tuple[uuid.UUID, str]] = []
@@ -325,6 +351,8 @@ class PayrollService:
             if days <= 0:
                 skipped.append((employee_id, "no payable days"))
                 continue
+            existing = existing_entries.get(employee_id)
+            adjustments = existing.adjustments if existing is not None else None
             gross, deductions, net = PayrollCompute.compute_entry(
                 base_salary=compensation.monthly_salary,
                 pay_days=days,
@@ -332,7 +360,7 @@ class PayrollService:
                 pf_rate=settings.pf_rate,
                 tax_rate=settings.tax_rate,
                 rounding=settings.rounding,
-                adjustments=None,
+                adjustments=adjustments,
             )
             entries.append(
                 ent.PayrollEntry(
@@ -344,11 +372,18 @@ class PayrollService:
                     gross=gross,
                     deductions=deductions,
                     net=net,
-                    id=uuid.uuid4(),
+                    adjustments=adjustments,
+                    id=existing.id if existing is not None else uuid.uuid4(),
                 )
             )
 
         await self._repo.upsert_entries(entries, tenant_id=tenant_id)
+        if existing_entries:
+            keep_ids = [entry.employee_id for entry in entries]
+            if set(existing_entries) - set(keep_ids):
+                await self._repo.delete_entries_for_run(
+                    run_id, keep_ids, tenant_id=tenant_id
+                )
         if entries:
             total_gross, total_net = PayrollCompute.compute_totals(entries)
         else:
@@ -362,6 +397,10 @@ class PayrollService:
             total_net=total_net,
             computed_by=actor_user_id,
             computed_at=datetime.now(UTC),
+            skipped_employees=[
+                {"employee_id": str(employee_id), "reason": reason}
+                for employee_id, reason in skipped
+            ],
         )
         computed = await self._repo.update_run(computed)
         await self._audit.log(
@@ -530,6 +569,7 @@ class PayrollService:
             raise ValueError(f"no entry for employee {employee_id} in run {run_id}")
         merged = {**(entry.adjustments or {}), **adjustments}
         updated = dataclasses.replace(entry, adjustments=merged)
+        updated = await self._recompute_entry(updated, run=run, tenant_id=tenant_id)
         updated = await self._repo.update_entry(updated)
         await self._audit.log(
             action=audit_events.PAYROLL_ENTRY_ADJUSTED,
@@ -572,6 +612,7 @@ class PayrollService:
             raise ValueError(f"no entry {entry_id} in run {run_id}")
         merged = {**(entry.adjustments or {}), **adjustments}
         updated = dataclasses.replace(entry, adjustments=merged)
+        updated = await self._recompute_entry(updated, run=run, tenant_id=tenant_id)
         updated = await self._repo.update_entry(updated)
         await self._audit.log(
             action=audit_events.PAYROLL_ENTRY_ADJUSTED,
@@ -588,6 +629,35 @@ class PayrollService:
                 tenant_id=tenant_id,
             )
         return updated
+
+    async def _recompute_entry(
+        self,
+        entry: ent.PayrollEntry,
+        *,
+        run: ent.PayrollRun,
+        tenant_id: uuid.UUID,
+    ) -> ent.PayrollEntry:
+        """Recompute an entry's gross/deductions/net after an adjustment (gap #4).
+
+        Uses the run's current settings; missing settings fall back to zero
+        statutory rates with nearest rounding so the adjustment still applies
+        (existing draft runs predate explicit settings rows).
+        """
+        settings = await self._repo.get_settings(tenant_id)
+        pf_rate = settings.pf_rate if settings is not None else Decimal("0")
+        tax_rate = settings.tax_rate if settings is not None else Decimal("0")
+        rounding = settings.rounding if settings is not None else PayrollRounding.NEAREST
+        days_in_period = (run.period_end - run.period_start).days + 1
+        gross, deductions, net = PayrollCompute.compute_entry(
+            base_salary=entry.base_salary,
+            pay_days=entry.pay_days,
+            days_in_period=days_in_period,
+            pf_rate=pf_rate,
+            tax_rate=tax_rate,
+            rounding=rounding,
+            adjustments=entry.adjustments,
+        )
+        return dataclasses.replace(entry, gross=gross, deductions=deductions, net=net)
 
     async def list_entries(
         self,
@@ -623,6 +693,24 @@ class PayrollService:
             id=uuid.uuid4(),
         )
         created = await self._repo.create_compensation(compensation)
+        await self._audit.log(
+            action=audit_events.PAYROLL_COMPENSATION_RECORDED,
+            target=f"compensation:{created.id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={
+                "employee_id": str(employee_id),
+                "monthly_salary": str(monthly_salary.amount),
+                "effective_from": effective_from.isoformat(),
+            },
+        )
+        if created.id is not None:
+            await emit_compensation_recorded(
+                employee_id=employee_id,
+                monthly_salary=str(monthly_salary.amount),
+                effective_from=effective_from.isoformat(),
+                tenant_id=tenant_id,
+            )
         return created
 
     async def list_compensation(

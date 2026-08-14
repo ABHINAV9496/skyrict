@@ -67,6 +67,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        head = forwarded.split(",", 1)[0].strip()
+        if head:
+            return head
     return request.client.host if request.client else "unknown"
 
 

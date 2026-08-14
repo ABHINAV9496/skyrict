@@ -73,12 +73,15 @@ class MemberService:
                 role = await self.role_repo.get_by_id(membership.role_id)
                 if role is not None:
                     role_name = role.name
+            if not role_name:
+                granted = await self.role_repo.get_roles_for_user(user.id, tenant_id)
+                role_name = granted[0] if granted else ""
 
             rows.append(
                 MemberResponse(
                     id=user.id,
                     email=user.email,
-                    full_name=user.full_name,
+                    full_name=user.full_name or user.email,
                     role_name=role_name,
                     joined_at=membership.joined_at or user.created_at,
                     avatar_url=user.avatar_url,
@@ -100,8 +103,8 @@ class MemberService:
         """Swap a member's role to ``role_name`` (single-role replace).
 
         Replaces the member's role grant and keeps ``memberships.role_id`` in
-        sync. The last ``tenant_owner`` cannot be demoted — the organization
-        always needs at least one owner.
+        sync. The workspace owner can never be demoted — only the owner keeps
+        full access to the tenant.
         """
         user = await self._require_active_member(tenant_id, user_id)
 
@@ -110,8 +113,8 @@ class MemberService:
             raise ValidationError(f"Role '{role_name}' does not exist in this organization")
 
         current_roles = await self.role_repo.get_roles_for_user(user_id, tenant_id)
-        if TENANT_OWNER in current_roles and await self._is_last_owner(tenant_id):
-            raise ValidationError("The organization must keep at least one owner")
+        if TENANT_OWNER in current_roles:
+            raise ValidationError("The workspace owner's role cannot be changed")
 
         await self.role_repo.revoke_all_for_user(user_id, tenant_id)
         await self.role_repo.grant_to_user(
@@ -144,8 +147,8 @@ class MemberService:
         """Remove a member (soft deactivate) and lock them out.
 
         Deactivates the account, revokes every active session (forcing logout
-        everywhere), and suspends the membership. The last owner cannot be
-        removed, and a member cannot remove themselves.
+        everywhere), and suspends the membership. The workspace owner can never
+        be removed, and a member cannot remove themselves.
         """
         if str(user_id) == str(actor_user_id):
             raise ValidationError("You cannot remove your own account from the workspace")
@@ -153,8 +156,8 @@ class MemberService:
         user = await self._require_active_member(tenant_id, user_id)
 
         current_roles = await self.role_repo.get_roles_for_user(user_id, tenant_id)
-        if TENANT_OWNER in current_roles and await self._is_last_owner(tenant_id):
-            raise ValidationError("The organization must keep at least one owner")
+        if TENANT_OWNER in current_roles:
+            raise ValidationError("The workspace owner cannot be removed")
 
         await self.user_repo.set_active(user_id, is_active=False)
         await self.session_service.revoke_all_sessions(user_id)
@@ -230,6 +233,3 @@ class MemberService:
         if user is None or user.tenant_id != uuid.UUID(str(tenant_id)):
             raise UserNotFoundError("Member not found")
         return user
-
-    async def _is_last_owner(self, tenant_id: str | uuid.UUID) -> bool:
-        return await self.role_repo.count_users_with_role(tenant_id, TENANT_OWNER) <= 1

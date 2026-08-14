@@ -311,6 +311,24 @@ async def test_list_members_marks_others_as_not_self(
     assert rows[0].is_self is False
 
 
+async def test_list_members_falls_back_to_granted_role_when_membership_role_missing(
+    service: MemberService,
+    user_repo: FakeUserRepo,
+    membership_svc: FakeMembershipService,
+    role_repo: FakeRoleRepo,
+    tenant_id: uuid.UUID,
+) -> None:
+    member = user_repo.add(_user(tenant_id, name="Grace Hopper"))
+    owner_role = role_repo.add(_role(tenant_id, "tenant_owner"))
+    role_repo.grant(member.id, owner_role.id)
+    membership_svc.add(_membership(tenant_id, member, None, datetime.now(UTC)))
+
+    rows = await service.list_members(tenant_id, viewer_id=member.id)
+
+    assert len(rows) == 1
+    assert rows[0].role_name == "tenant_owner"
+
+
 async def test_list_members_skips_rows_without_a_user(
     service: MemberService,
     membership_svc: FakeMembershipService,
@@ -424,6 +442,34 @@ async def test_change_role_rejects_demoting_last_owner(
     assert role_repo.grants[owner.id] == [owner_role.id]
 
 
+async def test_change_role_cannot_demote_owner_even_when_other_owners_exist(
+    service: MemberService,
+    user_repo: FakeUserRepo,
+    membership_svc: FakeMembershipService,
+    role_repo: FakeRoleRepo,
+    tenant_id: uuid.UUID,
+) -> None:
+    owner = user_repo.add(_user(tenant_id, name="The Owner"))
+    co_owner = user_repo.add(_user(tenant_id, name="Co Owner"))
+    owner_role = role_repo.add(_role(tenant_id, "tenant_owner"))
+    role_repo.add(_role(tenant_id, "standard_user"))
+    role_repo.grant(owner.id, owner_role.id)
+    role_repo.grant(co_owner.id, owner_role.id)
+    membership_svc.add(_membership(tenant_id, owner, owner_role.id, datetime.now(UTC)))
+    membership_svc.add(_membership(tenant_id, co_owner, owner_role.id, datetime.now(UTC)))
+
+    with pytest.raises(ValidationError, match="owner's role cannot be changed"):
+        await service.change_role(
+            tenant_id=tenant_id,
+            user_id=owner.id,
+            role_name="standard_user",
+            actor_user_id=uuid.uuid4(),
+        )
+
+    assert role_repo.grants[owner.id] == [owner_role.id]
+    assert role_repo.grants[co_owner.id] == [owner_role.id]
+
+
 async def test_remove_member_deactivates_revokes_and_suspends(
     service: MemberService,
     user_repo: FakeUserRepo,
@@ -477,6 +523,29 @@ async def test_remove_member_cannot_remove_last_owner(
     membership_svc.add(_membership(tenant_id, owner, owner_role.id, datetime.now(UTC)))
 
     with pytest.raises(ValidationError):
+        await service.remove_member(
+            tenant_id=tenant_id, user_id=owner.id, actor_user_id=uuid.uuid4()
+        )
+
+    assert user_repo.deactivated == []
+
+
+async def test_remove_member_cannot_remove_owner_even_when_other_owners_exist(
+    service: MemberService,
+    user_repo: FakeUserRepo,
+    membership_svc: FakeMembershipService,
+    role_repo: FakeRoleRepo,
+    tenant_id: uuid.UUID,
+) -> None:
+    owner = user_repo.add(_user(tenant_id, name="The Owner"))
+    co_owner = user_repo.add(_user(tenant_id, name="Co Owner"))
+    owner_role = role_repo.add(_role(tenant_id, "tenant_owner"))
+    role_repo.grant(owner.id, owner_role.id)
+    role_repo.grant(co_owner.id, owner_role.id)
+    membership_svc.add(_membership(tenant_id, owner, owner_role.id, datetime.now(UTC)))
+    membership_svc.add(_membership(tenant_id, co_owner, owner_role.id, datetime.now(UTC)))
+
+    with pytest.raises(ValidationError, match="owner cannot be removed"):
         await service.remove_member(
             tenant_id=tenant_id, user_id=owner.id, actor_user_id=uuid.uuid4()
         )

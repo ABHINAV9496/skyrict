@@ -28,6 +28,7 @@ _require_sessions_revoke = require_permission("sessions:revoke")
 def _session_response(session: Session) -> SessionResponse:
     """Map a session entity to a response, adding human-readable device facts."""
     device = parse_user_agent(session.user_agent)
+    assert session.id is not None
     return SessionResponse(
         id=session.id,
         user_id=session.user_id,

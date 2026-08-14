@@ -132,9 +132,7 @@ def build_avatar_storage() -> AvatarStoragePort:
     backend = settings.AVATAR_STORAGE_BACKEND.strip().lower()
     if backend == "s3":
         if not settings.AVATAR_S3_BUCKET.strip():
-            raise RuntimeError(
-                "AVATAR_STORAGE_BACKEND=s3 requires AVATAR_S3_BUCKET to be set"
-            )
+            raise RuntimeError("AVATAR_STORAGE_BACKEND=s3 requires AVATAR_S3_BUCKET to be set")
         return S3AvatarStorage(
             bucket=settings.AVATAR_S3_BUCKET,
             prefix=settings.AVATAR_S3_PREFIX,

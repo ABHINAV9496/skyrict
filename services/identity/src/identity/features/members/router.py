@@ -106,9 +106,7 @@ async def list_member_sessions(
     )
 
 
-@router.delete(
-    "/{user_id}/sessions/{session_id}", response_model=ResponseEnvelope[None]
-)
+@router.delete("/{user_id}/sessions/{session_id}", response_model=ResponseEnvelope[None])
 async def revoke_member_session(
     user_id: UUID,
     session_id: UUID,

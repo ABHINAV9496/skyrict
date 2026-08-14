@@ -43,9 +43,7 @@ class AvatarService:
     def _public_url(self, user_id: str, filename: str) -> str:
         return f"{user_id}/{filename}"
 
-    async def upload(
-        self, *, user_id: str, tenant_id: str, data: bytes
-    ) -> User:
+    async def upload(self, *, user_id: str, tenant_id: str, data: bytes) -> User:
         """Normalize ``data``, store it, and point the user's avatar_url at it.
 
         Replaces any previous avatar (deleted after the DB update commits).
@@ -61,17 +59,11 @@ class AvatarService:
 
         filename = f"{uuid.uuid4().hex}.webp"
         normalized = normalize_avatar(data)
-        await self.storage.put(
-            self._key(tenant_id, user_id, filename), normalized, AVATAR_MIME
-        )
-        updated = await self.user_repo.update_avatar(
-            user_id, self._public_url(user_id, filename)
-        )
+        await self.storage.put(self._key(tenant_id, user_id, filename), normalized, AVATAR_MIME)
+        updated = await self.user_repo.update_avatar(user_id, self._public_url(user_id, filename))
 
         if old_url:
-            await self.storage.delete(
-                self._key(tenant_id, user_id, old_url.rsplit("/", 1)[-1])
-            )
+            await self.storage.delete(self._key(tenant_id, user_id, old_url.rsplit("/", 1)[-1]))
         return updated
 
     async def remove(self, *, user_id: str, tenant_id: str) -> User:
@@ -82,9 +74,7 @@ class AvatarService:
         old_url = user.avatar_url
         updated = await self.user_repo.update_avatar(user_id, None)
         if old_url:
-            await self.storage.delete(
-                self._key(tenant_id, user_id, old_url.rsplit("/", 1)[-1])
-            )
+            await self.storage.delete(self._key(tenant_id, user_id, old_url.rsplit("/", 1)[-1]))
         return updated
 
     async def attach_to_user(self, *, user_id: str, tenant_id: str, data: bytes) -> None:
@@ -104,9 +94,7 @@ class AvatarService:
             logger.warning("avatar_skipped_invalid_upload", user_id=user_id)
             return
         filename = f"{uuid.uuid4().hex}.webp"
-        await self.storage.put(
-            self._key(tenant_id, user_id, filename), normalized, AVATAR_MIME
-        )
+        await self.storage.put(self._key(tenant_id, user_id, filename), normalized, AVATAR_MIME)
         await self.user_repo.update_avatar(user_id, self._public_url(user_id, filename))
 
     async def fetch(self, *, user_id: str, filename: str, tenant_id: str) -> bytes | None:

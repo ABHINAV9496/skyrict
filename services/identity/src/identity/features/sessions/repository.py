@@ -95,9 +95,7 @@ class SessionRepository(SqlRepository):
         if tenant_id is not None:
             conditions.append(SessionModel.tenant_id == tenant_id)
         stmt = (
-            select(SessionModel)
-            .where(and_(*conditions))
-            .order_by(SessionModel.created_at.desc())
+            select(SessionModel).where(and_(*conditions)).order_by(SessionModel.created_at.desc())
         )
         result = await self.session.execute(stmt)
         return [_from_orm(model) for model in result.scalars().all()]

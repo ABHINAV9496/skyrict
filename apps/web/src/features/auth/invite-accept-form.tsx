@@ -74,6 +74,13 @@ function InviteAcceptForm({
       setAvatarError("Image must be 10 MB or smaller.");
       return;
     }
+    if (!file.type.startsWith("image/")) {
+      setAvatar(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setAvatarError("Please choose an image file.");
+      return;
+    }
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setAvatar(file);
     setPreviewUrl(URL.createObjectURL(file));
@@ -223,11 +230,11 @@ function InviteAcceptForm({
       <div className="space-y-1.5">
         <div className="flex items-center gap-4">
           {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={previewUrl}
-              alt="Avatar preview"
-              className="size-16 rounded-full object-cover ring-1 ring-border"
+            <div
+              role="img"
+              aria-label="Avatar preview"
+              className="size-16 shrink-0 rounded-full bg-cover bg-center ring-1 ring-border"
+              style={{ backgroundImage: `url("${previewUrl}")` }}
             />
           ) : (
             <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xl font-semibold text-primary-foreground">

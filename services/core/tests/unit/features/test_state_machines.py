@@ -58,8 +58,9 @@ class TestEmployeeMachine:
     def test_active_to_terminated(self) -> None:
         _EMPLOYEE_MACHINE.transition(EmploymentStatus.ACTIVE, EmploymentStatus.TERMINATED)
 
-    def test_on_leave_to_terminated(self) -> None:
-        _EMPLOYEE_MACHINE.transition(EmploymentStatus.ON_LEAVE, EmploymentStatus.TERMINATED)
+    def test_on_leave_cannot_be_terminated_directly(self) -> None:
+        with pytest.raises(InvalidTransitionError):
+            _EMPLOYEE_MACHINE.transition(EmploymentStatus.ON_LEAVE, EmploymentStatus.TERMINATED)
 
     def test_terminated_is_terminal(self) -> None:
         with pytest.raises(InvalidTransitionError):

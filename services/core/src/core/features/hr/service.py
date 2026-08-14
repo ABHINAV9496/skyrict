@@ -47,7 +47,7 @@ from core.features.hr.ports import HrRepositoryPort, IdentityUserPort
 _EMPLOYEE_MACHINE = StateMachine(
     {
         EmploymentStatus.ACTIVE: (EmploymentStatus.ON_LEAVE, EmploymentStatus.TERMINATED),
-        EmploymentStatus.ON_LEAVE: (EmploymentStatus.ACTIVE, EmploymentStatus.TERMINATED),
+        EmploymentStatus.ON_LEAVE: (EmploymentStatus.ACTIVE,),
         EmploymentStatus.TERMINATED: (),
     },
     entity="employee",

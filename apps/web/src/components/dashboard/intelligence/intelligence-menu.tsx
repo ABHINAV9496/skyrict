@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,11 @@ function initialsFor(name: string, email: string): string {
   }
   if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
   return email.slice(0, 2).toUpperCase() || "SK";
+}
+
+/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
+function avatarSrc(user: AuthUser | null): string | null {
+  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
 }
 
 export function IntelligenceMenu({
@@ -181,8 +187,17 @@ export function IntelligenceMenu({
         </nav>
 
         <footer className="flex items-center gap-3 border-t border-border px-5 py-4">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-            {initialsFor(user?.fullName ?? "", user?.email ?? "")}
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
+            {avatarSrc(user) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarSrc(user) ?? ""}
+                alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
+                className="size-full object-cover"
+              />
+            ) : (
+              initialsFor(user?.fullName ?? "", user?.email ?? "")
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-foreground">

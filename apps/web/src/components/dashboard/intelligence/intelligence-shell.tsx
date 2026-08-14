@@ -8,6 +8,7 @@ import { Menu } from "lucide-react";
 import { IntelligenceCountrySelect } from "@/components/dashboard/intelligence/intelligence-country-select";
 import { IntelligenceMenu } from "@/components/dashboard/intelligence/intelligence-menu";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
+import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,11 @@ function initialsFor(name: string, email: string): string {
   }
   if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
   return email.slice(0, 2).toUpperCase() || "SK";
+}
+
+/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
+function avatarSrc(user: AuthUser | null): string | null {
+  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
 }
 
 export function IntelligenceShell({ children }: { children: React.ReactNode }) {
@@ -111,9 +117,18 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                 href="/dashboard/settings"
                 aria-label="Account"
                 title="Account"
-                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/25"
+                className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/25"
               >
-                {initialsFor(user?.fullName ?? "", user?.email ?? "")}
+                {avatarSrc(user) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarSrc(user) ?? ""}
+                    alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  initialsFor(user?.fullName ?? "", user?.email ?? "")
+                )}
               </Link>
             </div>
           </div>

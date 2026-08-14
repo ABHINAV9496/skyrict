@@ -8,11 +8,17 @@ import { ArrowLeft, History, LogOut, SquarePen } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { getConversations } from "@/lib/api/agents-api";
+import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/mock/agents-store";
 
 const RECENT_WINDOW_MS = 1000 * 60 * 60 * 48;
+
+/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
+function avatarSrc(user: AuthUser | null): string | null {
+  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
+}
 
 function isActive(pathname: string, id: string): boolean {
   const normalized =
@@ -183,8 +189,17 @@ export function AgentsChatSidebar({
 
         <footer className="space-y-2 border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-              {(user?.fullName || user?.email || "A").slice(0, 2).toUpperCase()}
+            <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
+              {avatarSrc(user) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarSrc(user) ?? ""}
+                  alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
+                  className="size-full object-cover"
+                />
+              ) : (
+                (user?.fullName || user?.email || "A").slice(0, 2).toUpperCase()
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">

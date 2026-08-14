@@ -209,10 +209,12 @@ class InventoryServicePort(Protocol):
 
     # --- Products / warehouses ---
     async def create_product(
-        self, tenant_id: uuid.UUID, *, sku: str, name: str, **kwargs
+        self, tenant_id: uuid.UUID, *, sku: str, name: str, **kwargs: object
     ) -> Product: ...
 
-    async def create_warehouse(self, tenant_id: uuid.UUID, *, name: str, **kwargs) -> Warehouse: ...
+    async def create_warehouse(
+        self, tenant_id: uuid.UUID, *, name: str, **kwargs: object
+    ) -> Warehouse: ...
 
     # --- Stock operations ---
     async def adjust_stock(

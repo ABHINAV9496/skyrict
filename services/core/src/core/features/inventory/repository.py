@@ -17,9 +17,10 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import and_, case, func, select, update
+from sqlalchemy.engine import CursorResult
 
 from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
 from core.domain.value_objects import Money, StockMovementType
@@ -471,7 +472,7 @@ class InventoryRepository:
             )
             .values(qty_reserved=ErpStockLevelModel.qty_reserved + qty)
         )
-        result = await self.session.execute(stmt)
+        result = cast("CursorResult[Any]", await self.session.execute(stmt))
         return result.rowcount > 0
 
     async def apply_release_qty(
@@ -488,7 +489,7 @@ class InventoryRepository:
             )
             .values(qty_reserved=ErpStockLevelModel.qty_reserved - qty)
         )
-        result = await self.session.execute(stmt)
+        result = cast("CursorResult[Any]", await self.session.execute(stmt))
         return result.rowcount > 0
 
     async def apply_consume_qty(

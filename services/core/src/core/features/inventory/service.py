@@ -32,6 +32,7 @@ of one order line can coexist under the movement unique constraint. Invariants:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -581,7 +582,7 @@ class InventoryService:
         category: str | None = None,
         offset: int = 0,
         limit: int = 20,
-    ):
+    ) -> Sequence[Product]:
         return await self.inventory_repo.list_products(
             _as_uuid(tenant_id),
             category=category,
@@ -596,7 +597,7 @@ class InventoryService:
 
     async def list_warehouses(
         self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
-    ):
+    ) -> Sequence[Warehouse]:
         return await self.inventory_repo.list_warehouses(
             _as_uuid(tenant_id), offset=offset, limit=limit
         )
@@ -612,7 +613,7 @@ class InventoryService:
         warehouse_id: uuid.UUID | None = None,
         offset: int = 0,
         limit: int = 20,
-    ):
+    ) -> Sequence[StockLevel]:
         return await self.inventory_repo.list_stock_levels(
             _as_uuid(tenant_id),
             product_id=product_id,
@@ -641,7 +642,7 @@ class InventoryService:
         movement_type: StockMovementType | None = None,
         offset: int = 0,
         limit: int = 20,
-    ):
+    ) -> Sequence[StockMovement]:
         return await self.inventory_repo.list_movements(
             _as_uuid(tenant_id),
             product_id=product_id,
@@ -666,7 +667,9 @@ class InventoryService:
             movement_type=movement_type,
         )
 
-    async def list_alerts(self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20):
+    async def list_alerts(
+        self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
+    ) -> Sequence[tuple[StockLevel, Product]]:
         return await self.inventory_repo.list_low_stock(
             _as_uuid(tenant_id), offset=offset, limit=limit
         )

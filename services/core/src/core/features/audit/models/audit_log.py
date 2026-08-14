@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -40,7 +41,7 @@ class AuditLogModel(Base):
     )
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     target: Mapped[str] = mapped_column(String(255), nullable=False)
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # hash / prev_hash are populated by identity's audit_logs_set_hash trigger.

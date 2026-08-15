@@ -547,14 +547,46 @@ class PayrollRepository:
         Only ever removes employees that were NOT recomputed, so a recompute
         that shrinks the roster does not leave ghost rows in the snapshot.
         Returns the number of deleted rows.
+
+        Rule 8 defense-in-depth (mirrors ``update_entry``): the immutability
+        predicate lives in the DELETE's WHERE clause itself — entries of an
+        approved/paid/voided run never match the run-status subquery, so a
+        caller bypassing the service layer still cannot mutate an immutable
+        run's snapshot. When zero rows were deleted we re-read the run status
+        to distinguish "no stale rows on a mutable run" from "the run is
+        immutable" (the latter raises).
         """
         stmt = delete(PayrollEntryModel).where(
             PayrollEntryModel.tenant_id == tenant_id,
             PayrollEntryModel.run_id == run_id,
             PayrollEntryModel.employee_id.not_in(employee_ids),
+            PayrollEntryModel.run_id.in_(
+                select(PayrollRunModel.id).where(
+                    PayrollRunModel.tenant_id == tenant_id,
+                    PayrollRunModel.status.in_(
+                        (
+                            PayrollRunStatusModel.DRAFT,
+                            PayrollRunStatusModel.COMPUTED,
+                        )
+                    ),
+                )
+            ),
         )
         result = await self.session.execute(stmt)
-        return result.rowcount or 0
+        deleted = result.rowcount or 0
+        if deleted == 0:
+            status = await self.session.scalar(
+                select(PayrollRunModel.status).where(
+                    PayrollRunModel.tenant_id == tenant_id,
+                    PayrollRunModel.id == run_id,
+                )
+            )
+            if status not in (
+                PayrollRunStatusModel.DRAFT,
+                PayrollRunStatusModel.COMPUTED,
+            ):
+                raise PayrollEntryImmutableError("entries are immutable once a run is approved")
+        return deleted
 
     # ------------------------------------------------------------------
     # Compensation (effective-date pick per Rule 7)

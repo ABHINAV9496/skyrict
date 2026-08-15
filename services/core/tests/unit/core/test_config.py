@@ -35,21 +35,21 @@ class TestProductionSafety:
         monkeypatch.setenv("CORE_ENVIRONMENT", "production")
         monkeypatch.delenv("CORE_BASE_DOMAIN", raising=False)
         with pytest.raises(RuntimeError, match="BASE_DOMAIN"):
-            Settings()
+            Settings(_env_file=None)
 
     def test_production_rejects_debug(self, monkeypatch) -> None:
         monkeypatch.setenv("CORE_ENVIRONMENT", "production")
         monkeypatch.setenv("CORE_BASE_DOMAIN", "skyrict.com")
         monkeypatch.setenv("CORE_DEBUG", "true")
         with pytest.raises(RuntimeError, match="DEBUG"):
-            Settings()
+            Settings(_env_file=None)
 
     def test_production_rejects_wildcard_cors(self, prod_env, monkeypatch) -> None:
         monkeypatch.setenv("CORE_CORS_ORIGINS", '["*"]')
         with pytest.raises(RuntimeError, match="CORS"):
-            Settings()
+            Settings(_env_file=None)
 
     def test_production_accepts_explicit_origins(self, prod_env, monkeypatch) -> None:
         monkeypatch.setenv("CORE_CORS_ORIGINS", '["https://app.skyrict.com"]')
-        instance = Settings()
+        instance = Settings(_env_file=None)
         assert instance.CORS_ORIGINS == ["https://app.skyrict.com"]

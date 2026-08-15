@@ -185,7 +185,7 @@ class FinanceEventPublisher:
         for topic, evt in pending:
             self._producer.publish(topic, evt, key=str(evt.tenant_id))
 
-    def _on_commit(self, _session: Session, _previous_transaction: object) -> None:
+    def _on_commit(self, _session: Session) -> None:
         """Publish after a successful commit.
 
         Never lets a producer failure escape: the transaction already committed,

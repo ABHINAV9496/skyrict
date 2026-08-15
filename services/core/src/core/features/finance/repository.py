@@ -701,12 +701,12 @@ class FinanceRepository:
     # ------------------------------------------------------------------
 
     async def next_invoice_number(self, tenant_id: uuid.UUID, year: int) -> str:
-        stmt = select(func.nextval(text("seq_erp_invoice_number")))
+        stmt = select(text("nextval('seq_erp_invoice_number')"))
         seq = int((await self.session.execute(stmt)).scalar_one())
         return _document_number(INVOICE_PREFIX, year, seq)
 
     async def next_payment_number(self, tenant_id: uuid.UUID, year: int) -> str:
-        stmt = select(func.nextval(text("seq_erp_payment_number")))
+        stmt = select(text("nextval('seq_erp_payment_number')"))
         seq = int((await self.session.execute(stmt)).scalar_one())
         return _document_number(PAYMENT_PREFIX, year, seq)
 

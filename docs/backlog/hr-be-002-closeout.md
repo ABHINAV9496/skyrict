@@ -141,12 +141,20 @@ All commands run at `services/core` (or repo root where noted), live Postgres on
 
 ## Commit range
 
-`git log --oneline 0f2021e..HEAD` (run live — snapshot below captured at
-`9054673`, 30 commits):
+`git log --oneline 0f2021e..HEAD` = **32 commits** = 28 implementation commits
+plus 4 close-out meta-commits. **The counts in this section are accurate as of
+the reconciliation commit (this one).** Because this document lists its own
+history, it can never include the commits that create and correct it — any
+future edit to this file is a fifth meta-commit that moves the live count
+again, so re-run `git log --oneline 0f2021e..HEAD` rather than trusting these
+numbers once the file has changed since this commit.
+
+### Implementation commits — `git log --oneline 0f2021e..e267d3d` (28)
+
+Pinned at `e267d3d` so this table is deterministic and never disturbed by
+later edits to this record:
 
 ```
-9054673 docs(core): [HR-BE-002] finalize close-out commit range with this commit included
-aab0b07 docs(core): [HR-BE-002] add close-out record with item citations, race lifecycle, and gate evidence
 e267d3d docs(core): [HR-BE-002] mark leave-approval atomicity race RESOLVED in hr-payroll.md 4.3
 7a6f439 test(core): [HR-BE-002] add lock_leave_balance no-op to unit-test repository doubles
 0c57f7f test(core): [HR-BE-002] stale-balance xfail to deterministic pass + stress/deadlock/first-grant/delete-guard tests
@@ -176,3 +184,15 @@ c09f43e feat(core): add core audit log and ERP sequence ORM models + domain enti
 c320255 feat(core): add ERP HR and Payroll permission keys to core catalog
 1de8cc9 feat(core): migration 0006 - ERP sequences + core audit hash chain, seeds ERP permission keys
 ```
+
+### Close-out meta-commits (4, excluded from the implementation table)
+
+These commits only create and maintain this close-out record; each lands after
+`e267d3d` and therefore cannot appear in the pinned implementation range. This
+is the self-reference stated above: a doc listing its own history cannot
+include the commits that create and correct it.
+
+- `aab0b07` — add close-out record with item citations, race lifecycle, and gate evidence (creates this file)
+- `9054673` — finalize close-out commit range with this commit included
+- `12f348e` — make close-out commit range self-consistent snapshot
+- `HEAD` — reconcile close-out commit accounting — pinned implementation range + meta-commit list (this commit, which thus lands fourth)

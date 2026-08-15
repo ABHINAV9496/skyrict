@@ -44,6 +44,7 @@ RUN uv sync --frozen --directory services/identity
 # Copy source code (skyrict-common is imported directly by identity at runtime)
 COPY services/identity/src services/identity/src
 COPY libs/skyrict-common/src libs/skyrict-common/src
+COPY libs/skyrict-events/src libs/skyrict-events/src
 
 # Copy tests (dev only — never reaches production)
 COPY services/identity/tests services/identity/tests

@@ -44,6 +44,7 @@ RUN uv sync --frozen --directory services/core
 # Copy source code (skyrict-common is imported directly by core at runtime)
 COPY services/core/src services/core/src
 COPY libs/skyrict-common/src libs/skyrict-common/src
+COPY libs/skyrict-events/src libs/skyrict-events/src
 
 # Copy tests (dev only — never reaches production)
 COPY services/core/tests services/core/tests

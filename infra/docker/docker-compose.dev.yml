@@ -49,6 +49,7 @@ services:
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
       # JWT RSA keys (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/identity, so the relative key
       # paths in services/identity/.env resolve to /app/services/identity/.dev/keys.
@@ -91,6 +92,7 @@ services:
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/core, so the relative key path in
       # services/core/.env resolves to /app/services/core/.dev/keys.

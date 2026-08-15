@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, type ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Blocks,
@@ -16,7 +15,7 @@ import {
 import { AiGlyph } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { OverviewSkeleton } from "@/components/ui/page-skeletons";
-import { accessibleModules, useModuleAccess, type ModuleKey } from "@/lib/access/modules";
+import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
 import type { AuthUser } from "@/lib/api/auth-api";
 import { roleDisplayName } from "@/lib/api/identity-api";
 import { useSession } from "@/lib/auth/session";
@@ -105,23 +104,15 @@ function replayTour() {
 
 export default function OverviewClient() {
   const { user } = useSession();
-  const router = useRouter();
   const { status, access, roles, permissions } = useModuleAccess();
 
-  const available = useMemo(() => accessibleModules(access), [access]);
   const visibleModules = useMemo(
     () => modules.filter((module) => access[module.accessKey]),
     [access],
   );
 
-  // A member who can reach exactly one space lands in it directly.
-  useEffect(() => {
-    if (status !== "ready" || available.length !== 1) return;
-    router.replace(`/dashboard/${available[0]}`);
-  }, [status, available, router]);
-
   const firstName = user?.fullName ? user.fullName.trim().split(/\s+/)[0] : "";
-  const canInvite = permissions.includes("*") || permissions.includes("users:read");
+  const canInvite = permissions.includes("*") || permissions.includes("invitations:send");
   const canManageRoles = permissions.includes("*") || permissions.includes("roles:read");
 
   if (status === "loading") return <OverviewSkeleton />;

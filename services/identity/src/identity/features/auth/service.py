@@ -583,10 +583,16 @@ class TokenService:
         session_id = payload.get("session_id")
 
         session = await self.session_service.get_session(session_id) if session_id else None
+
+        # A terminal session was already handled when it died — a client
+        # retrying that refresh token is rejected quietly so the reuse handler
+        # (family revoke + audit log) is not re-armed on every retry.
+        if session is not None and session.status is not SessionStatus.ACTIVE:
+            raise TokenReuseDetectedError()
+
         if (
             session is None
             or session.user_id != uuid.UUID(user_id)
-            or session.status is not SessionStatus.ACTIVE
             or session.refresh_token_hash != hash_refresh_token(refresh_token)
         ):
             await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session=session)

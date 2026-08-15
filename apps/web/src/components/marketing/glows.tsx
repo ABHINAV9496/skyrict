@@ -7,19 +7,19 @@ function Glows() {
       <div
         className="absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full opacity-60 blur-3xl"
         style={{
-          background: "radial-gradient(closest-side, rgba(135,206,235,0.45), transparent)",
+          background: "radial-gradient(closest-side, var(--glow-primary), transparent)",
         }}
       />
       <div
         className="absolute top-1/3 -left-40 h-[420px] w-[420px] rounded-full opacity-40 blur-3xl"
         style={{
-          background: "radial-gradient(closest-side, rgba(174,222,241,0.5), transparent)",
+          background: "radial-gradient(closest-side, var(--glow-secondary), transparent)",
         }}
       />
       <div
         className="absolute -right-40 bottom-0 h-[420px] w-[480px] rounded-full opacity-40 blur-3xl"
         style={{
-          background: "radial-gradient(closest-side, rgba(76,182,225,0.35), transparent)",
+          background: "radial-gradient(closest-side, var(--glow-tertiary), transparent)",
         }}
       />
     </div>

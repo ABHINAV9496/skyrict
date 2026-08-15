@@ -788,14 +788,14 @@ Routes under `apps/web/src/app/dashboard/erp/` (the existing ERP placeholder at 
 
 Component conventions (follow the existing code):
 
-- Server components render the shell + `PageHeader` (`@/components/dashboard/page-header`); client components ("use client") do data fetching with `useSession()` + the `crm-api` client.
+- Server components render the shell + `PageHeader` (`@/components/dashboard/shared/page-header`); client components ("use client") do data fetching with `useSession()` + the `crm-api` client.
 - Mutations: optimistic UI + `ApiError` (from `lib/api/http`) surface as inline/toast errors; retries are safe because transitions are state-guarded (a timed-out confirm can be re-issued as-is).
 - Status badges, empty states, and skeletons — reuse `@/components/ui/*` (shadcn), no bespoke styling.
 - **Permission gating is UI-only here** (sidebar + route guards hide what the user can't see); the real gate is the backend `require_permission`.
 
 ### 7.4 Sidebar
 
-`apps/web/src/components/dashboard/app-sidebar.tsx` currently has a static "ERP" nav item under *Modules*. Replace it with an ERP group exposing the sections, filtered by the session's permissions (`useSession` → roles/permissions from `/api/v1/roles/me`):
+`apps/web/src/components/dashboard/workspace/app-sidebar.tsx` renders the nav from `sidebar-config.ts` (`erpNavGroups`). Expose the ERP sections there, filtered by the session's permissions (`useModuleAccess()` → `getMyRoles()` → `/api/v1/roles/me`):
 
 - *CRM* → shown when `permissions` contains `erp.crm.read`
 - *Orders* → shown when `erp.sales.read`

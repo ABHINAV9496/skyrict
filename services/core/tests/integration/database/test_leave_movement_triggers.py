@@ -166,9 +166,7 @@ class TestLeaveLedgerTriggers:
             employee_id = await _new_employee(session, tenant_id)
             # sick is ledger-only (is_accrual=False): the guard must NOT fire,
             # even on the first row taking the ledger negative (migration 0014).
-            movement_id = await _insert(
-                session, tenant_id, employee_id, qty=-5, leave_type="sick"
-            )
+            movement_id = await _insert(session, tenant_id, employee_id, qty=-5, leave_type="sick")
             assert await _sum(session, tenant_id, employee_id, leave_type="sick") == -5
             assert (
                 await session.execute(

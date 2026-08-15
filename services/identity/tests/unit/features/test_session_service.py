@@ -53,13 +53,16 @@ class FakeSessionRepo:
         self.sessions[session.id] = session
         return session
 
-    async def get_active_by_user(self, user_id: str | uuid.UUID) -> list[Session]:
+    async def get_active_by_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> list[Session]:
         now = datetime.now(UTC)
         return sorted(
             (
                 session
                 for session in self.sessions.values()
                 if session.user_id == uuid.UUID(str(user_id))
+                and (tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id)))
                 and session.status is SessionStatus.ACTIVE
                 and session.expires_at > now
             ),
@@ -84,10 +87,14 @@ class FakeSessionRepo:
             session.status = SessionStatus.REVOKED
             session.revoked_at = datetime.now(UTC)
 
-    async def revoke_all_for_user(self, user_id: str | uuid.UUID) -> None:
+    async def revoke_all_for_user(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> None:
         self.revoked_for_users.append(uuid.UUID(str(user_id)))
         for session in self.sessions.values():
-            if session.user_id == uuid.UUID(str(user_id)):
+            if session.user_id == uuid.UUID(str(user_id)) and (
+                tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+            ):
                 session.status = SessionStatus.REVOKED
 
     async def revoke_family(self, family_id: str | uuid.UUID) -> None:

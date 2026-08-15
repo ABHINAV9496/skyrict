@@ -41,9 +41,12 @@ __all__ = [
     "AuthorizationError",
     "ConflictError",
     "DuplicateRecordError",
+    "DuplicateSkuError",
     "EmployeeTerminatedError",
     "IllegalStateTransitionError",
+    "InsufficientStockError",
     "LeaveBalanceExceededError",
+    "MovementImmutableError",
     "NotFoundError",
     "PayrollEntryImmutableError",
     "PayrollPeriodConflictError",
@@ -57,6 +60,7 @@ __all__ = [
     "TenantNotFoundError",
     "TokenExpiredError",
     "TokenInvalidError",
+    "TransferRequiresDistinctWarehousesError",
     "ValidationError",
 ]
 
@@ -108,6 +112,39 @@ class SelfApprovalForbiddenError(ValidationError):
     """The actor is the requesting employee (no self-approval)."""
 
 
+# ---------------------------------------------------------------------------
+# Inventory domain exceptions (INV-BE-002)
+# ---------------------------------------------------------------------------
+
+
+class InsufficientStockError(ConflictError):
+    """The requested mutation would push stock below zero (409)."""
+
+    message = "Insufficient stock for the requested quantity"
+    code = "INSUFFICIENT_STOCK"
+
+
+class DuplicateSkuError(ConflictError):
+    """A product with the same SKU already exists in this tenant (409)."""
+
+    message = "A product with this SKU already exists"
+    code = "DUPLICATE_SKU"
+
+
+class MovementImmutableError(ConflictError):
+    """The ledger is append-only: a source ref was already applied (409)."""
+
+    message = "Stock movements are immutable and cannot be replayed"
+    code = "MOVEMENT_IMMUTABLE"
+
+
+class TransferRequiresDistinctWarehousesError(ValidationError):
+    """Transfer source and destination must be different warehouses (422)."""
+
+    message = "Transfer source and destination warehouses must be different"
+    code = "TRANSFER_REQUIRES_DISTINCT_WAREHOUSES"
+
+
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
 # Mapping from exception type to HTTP status code and problem type URI.
@@ -119,13 +156,13 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     AuthenticationError: (401, f"{_PROBLEM_BASE}/authentication-error"),
     TenantMismatchError: (401, f"{_PROBLEM_BASE}/tenant-mismatch"),
     AuthorizationError: (403, f"{_PROBLEM_BASE}/authorization-error"),
-    PermissionDeniedError: (403, f"{_PROBLEM_BASE}/authorization-error"),
+    PermissionDeniedError: (403, f"{_PROBLEM_BASE}/permission-denied"),
     TenantDisabledError: (403, f"{_PROBLEM_BASE}/tenant-disabled"),
     TenantContextMissingError: (400, f"{_PROBLEM_BASE}/tenant-context-missing"),
+    ConflictError: (409, f"{_PROBLEM_BASE}/conflict"),
     NotFoundError: (404, f"{_PROBLEM_BASE}/not-found"),
     TenantNotFoundError: (404, f"{_PROBLEM_BASE}/tenant-not-found"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
-    ConflictError: (409, f"{_PROBLEM_BASE}/conflict"),
     # HR & Payroll (docs/modules/hr-payroll.md §7 error table).
     DuplicateRecordError: (409, f"{_PROBLEM_BASE}/duplicate-record"),
     IllegalStateTransitionError: (409, f"{_PROBLEM_BASE}/illegal-state-transition"),

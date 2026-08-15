@@ -197,7 +197,7 @@ exclude = ['services/_template/', '(^|/)tests/']
 
 [[tool.mypy.overrides]]
 # Third-party packages without type stubs — treat as Any.
-module = ["typer", "kafka", "user_agents", "geoip2", "maxminddb"]
+module = ["typer", "kafka", "user_agents", "geoip2", "maxminddb", "boto3"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

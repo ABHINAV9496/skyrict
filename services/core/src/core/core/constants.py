@@ -78,8 +78,34 @@ PROBLEM_TENANT_NOT_FOUND = f"{PROBLEM_BASE_URL}/tenant-not-found"
 PROBLEM_TENANT_DISABLED = f"{PROBLEM_BASE_URL}/tenant-disabled"
 PROBLEM_PERMISSION_DENIED = f"{PROBLEM_BASE_URL}/permission-denied"
 PROBLEM_NOT_FOUND = f"{PROBLEM_BASE_URL}/not-found"
+PROBLEM_CONFLICT = f"{PROBLEM_BASE_URL}/conflict"
 PROBLEM_VALIDATION_ERROR = f"{PROBLEM_BASE_URL}/validation-error"
 PROBLEM_INTERNAL_ERROR = f"{PROBLEM_BASE_URL}/internal-error"
+
+# ---------------------------------------------------------------------------
+# Finance — document numbering
+# ---------------------------------------------------------------------------
+INVOICE_PREFIX = "INV"
+PAYMENT_PREFIX = "PMT"
+
+# ---------------------------------------------------------------------------
+# Finance — standard account codes for auto-generated entries.
+# Fixed platform defaults (user-editable COA entries still override at runtime).
+# ---------------------------------------------------------------------------
+AR_ACCOUNT_CODE = "1100"
+CASH_ACCOUNT_CODE = "1200"
+AP_ACCOUNT_CODE = "2110"
+REVENUE_ACCOUNT_CODE = "4000"
+
+# ---------------------------------------------------------------------------
+# Finance — journal entry and invoice provenance (idempotency source keys).
+# ---------------------------------------------------------------------------
+JOURNAL_SOURCE_MANUAL = "manual"
+JOURNAL_SOURCE_INVOICE = "invoice"
+JOURNAL_SOURCE_PAYMENT = "payment"
+INVOICE_SOURCE_MANUAL = "manual"
+INVOICE_SOURCE_SALES_ORDER = "sales_order"
+PAYMENT_SOURCE_MANUAL = "manual"
 
 # ---------------------------------------------------------------------------
 # Skip-auth paths (middleware bypass) — real mounted paths under /api/v1.

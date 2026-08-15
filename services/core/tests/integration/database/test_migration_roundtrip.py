@@ -131,7 +131,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0009", f"head is {version}, expected 0009"
+            assert version == "0013", f"head is {version}, expected 0013"
 
             row = (
                 await conn.execute(

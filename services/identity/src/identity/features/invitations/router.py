@@ -1,10 +1,10 @@
-"""Invitation endpoints — create, accept, and expire invitations."""
+"""Invitation endpoints — create, verify, accept, and expire invitations."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from identity.api.deps import get_invitation_service, require_permission
 from identity.core.console_urls import security_console_signin_origin
@@ -12,10 +12,10 @@ from identity.core.permissions import INVITATIONS_SEND
 from identity.core.tenant_context import TenantContext
 from identity.core.tenant_resolver import derive_tenant_slug
 from identity.features.invitations.schemas import (
-    InvitationAcceptRequest,
     InvitationCreateRequest,
     InvitationResponse,
     InvitationSummaryResponse,
+    InvitationVerifyResponse,
 )
 from identity.features.users.schemas import UserResponse
 from skyrict_common.schemas import ResponseEnvelope
@@ -72,16 +72,49 @@ async def create_invitation(
     )
 
 
+@router.get("/verify", response_model=ResponseEnvelope[InvitationVerifyResponse])
+async def verify_invitation(
+    token: str,
+    invitation_service: InvitationService = Depends(get_invitation_service),
+) -> ResponseEnvelope[InvitationVerifyResponse]:
+    """Validate an invite token so the accept page can render before submit.
+
+    Self-service (like ``POST /accept``): no tenant context exists yet, so the
+    route is exempt from tenant resolution in the middleware.
+    """
+    invitation, organization_name = await invitation_service.verify_invitation(token=token)
+    return ResponseEnvelope(
+        data=InvitationVerifyResponse(
+            email=invitation.email,
+            role_name=invitation.role_name,
+            expires_at=invitation.expires_at,
+            organization_name=organization_name,
+        ),
+        message="Invitation verified",
+    )
+
+
 @router.post("/accept", response_model=ResponseEnvelope[UserResponse])
 async def accept_invitation(
-    body: InvitationAcceptRequest,
+    token: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    full_name: Annotated[str, Form()],
+    avatar: Annotated[UploadFile | None, File()] = None,
     invitation_service: InvitationService = Depends(get_invitation_service),
 ) -> ResponseEnvelope[UserResponse]:
+    """Accept an invitation, creating the user (optionally with an avatar).
+
+    Accepts multipart/form-data so the optional avatar upload can ride along;
+    the browser send the fields as form parts (no preflight).
+    """
+    avatar_bytes = await avatar.read() if avatar is not None else None
     user = await invitation_service.accept_invitation(
-        token=body.token,
-        email=body.email,
-        password=body.password,
-        full_name=body.full_name,
+        token=token,
+        email=email,
+        password=password,
+        full_name=full_name,
+        avatar=avatar_bytes,
     )
     return ResponseEnvelope(
         data=UserResponse.model_validate(user),

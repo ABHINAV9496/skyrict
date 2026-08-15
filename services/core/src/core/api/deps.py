@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,12 +22,18 @@ from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
 from core.db.session import get_db
+from core.features.audit.repository import AuditRepository
+from core.features.inventory.repository import InventoryRepository
 from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 
 if TYPE_CHECKING:
-    from core.core.audit_service import AuditService
+    from core.core.audit_service import AuditService as CoreAuditService
+    from core.features.audit.service import AuditService
+    from core.features.finance.ports import AuditSink
+    from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
     from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
+    from core.features.inventory.service import InventoryService
     from core.features.payroll.service import PayrollService
 
 logger = get_logger("core.deps")
@@ -173,7 +179,7 @@ def get_hr_repo(db: AsyncSession = Depends(get_db)) -> HrRepository:
     return HrRepository(db, next_sequence=SequenceRepository(db).next_value)
 
 
-def get_audit_service(db: AsyncSession = Depends(get_db)) -> AuditService:
+def get_core_audit_service(db: AsyncSession = Depends(get_db)) -> CoreAuditService:
     from core.core.audit_service import AuditService
     from core.db.audit_repository import AuditLogRepository
 
@@ -182,7 +188,7 @@ def get_audit_service(db: AsyncSession = Depends(get_db)) -> AuditService:
 
 def get_department_service(
     repo: HrRepository = Depends(get_hr_repo),
-    audit: AuditService = Depends(get_audit_service),
+    audit: CoreAuditService = Depends(get_core_audit_service),
 ) -> DepartmentService:
     from core.features.hr.service import DepartmentService
 
@@ -191,7 +197,7 @@ def get_department_service(
 
 def get_employee_service(
     repo: HrRepository = Depends(get_hr_repo),
-    audit: AuditService = Depends(get_audit_service),
+    audit: CoreAuditService = Depends(get_core_audit_service),
 ) -> EmployeeService:
     from core.features.hr.service import EmployeeService
 
@@ -200,7 +206,7 @@ def get_employee_service(
 
 def get_leave_service(
     repo: HrRepository = Depends(get_hr_repo),
-    audit: AuditService = Depends(get_audit_service),
+    audit: CoreAuditService = Depends(get_core_audit_service),
 ) -> LeaveService:
     from core.features.hr.service import LeaveService
 
@@ -209,13 +215,13 @@ def get_leave_service(
 
 def get_payroll_service(
     db: AsyncSession = Depends(get_db),
-    audit: AuditService = Depends(get_audit_service),
+    audit: CoreAuditService = Depends(get_core_audit_service),
 ) -> PayrollService:
     """Payroll service with ``LeaveService`` injected as the leave ledger.
 
     ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
-    days, accrual-type catalogue, idempotent annual accrual — Rule 4), so the
-    payroll feature never imports the HR feature directly. The HR repository
+    leave days, accrual-type catalogue, idempotent annual accrual — Rule 4), so
+    the payroll feature never imports the HR feature directly. The HR repository
     is shared (same ``db`` session), keeping payroll-driven accrual in the same
     transaction as the compute.
     """
@@ -233,3 +239,74 @@ def get_payroll_service(
         ),
         audit=audit,
     )
+
+
+def get_finance_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceService:
+    """Composition root for the finance feature.
+
+    Wires the concrete repository, the shared audit sink, and the after-commit
+    event publisher onto ONE request-scoped session — so audit rows, the
+    business mutation, and (later) published events all commit atomically. The
+    request ID becomes the correlation ID stamped on money-moment events.
+    """
+    from core.events.producers import get_event_producer
+    from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.finance.repository import FinanceRepository
+    from core.features.finance.service import FinanceService
+
+    correlation_id = getattr(request.state, "request_id", None)
+    return FinanceService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+        events=FinanceEventPublisher(session=db, producer=get_event_producer()),
+        correlation_id=correlation_id,
+    )
+
+
+async def get_adjustment_authority(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """True when the caller may approve above-threshold inventory adjustments.
+
+    Resolves ``erp.inventory.adjust.approve`` (or the ``*`` wildcard) from the
+    DB grants at request time. The threshold itself is enforced by the service
+    (``settings.INVENTORY_ADJUST_APPROVE_THRESHOLD``) — this dependency only
+    answers "may this user approve?".
+    """
+    from core.core.permissions import ERP_INVENTORY_ADJUST_APPROVE
+
+    granted = await RbacRepository(db).resolve_user_permissions(
+        user_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
+    return grants_permission(granted, ERP_INVENTORY_ADJUST_APPROVE)
+
+
+# --- Repository deps ---
+
+
+def get_audit_repo(db: AsyncSession = Depends(get_db)) -> AuditRepository:
+    return AuditRepository(db)
+
+
+def get_audit_service(audit_repo: AuditRepository = Depends(get_audit_repo)) -> AuditService:
+    from core.features.audit.service import AuditService
+
+    return AuditService(audit_repo)
+
+
+def get_inventory_repo(db: AsyncSession = Depends(get_db)) -> InventoryRepository:
+    return InventoryRepository(db)
+
+
+def get_inventory_service(
+    inventory_repo: InventoryRepository = Depends(get_inventory_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> InventoryService:
+    from core.features.inventory.service import InventoryService
+
+    return InventoryService(inventory_repo, audit_service)

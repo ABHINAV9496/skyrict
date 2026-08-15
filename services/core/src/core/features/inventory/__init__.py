@@ -11,8 +11,13 @@ from core.features.inventory.models import (
     ErpStockMovementModel,
     ErpWarehouseModel,
 )
-from core.features.inventory.ports import InventoryRepositoryPort
+from core.features.inventory.ports import (
+    InventoryRepositoryPort,
+    InventoryServicePort,
+    StockReservationPort,
+)
 from core.features.inventory.repository import InventoryRepository
+from core.features.inventory.service import InventoryService
 
 __all__ = [
     "ErpProductModel",
@@ -21,4 +26,7 @@ __all__ = [
     "ErpWarehouseModel",
     "InventoryRepository",
     "InventoryRepositoryPort",
+    "InventoryService",
+    "InventoryServicePort",
+    "StockReservationPort",
 ]

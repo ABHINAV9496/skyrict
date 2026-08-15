@@ -55,6 +55,12 @@ MEMBERSHIP_REINSTATED = "membership.reinstated"
 MEMBERSHIP_LEFT = "membership.left"
 
 # ---------------------------------------------------------------------------
+# Member management
+# ---------------------------------------------------------------------------
+MEMBER_ROLE_UPDATED = "member.role_updated"
+MEMBER_REMOVED = "member.removed"
+
+# ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------
 SESSION_CREATED = "session.created"
@@ -96,6 +102,8 @@ CATALOG: tuple[str, ...] = (
     MEMBERSHIP_SUSPENDED,
     MEMBERSHIP_REINSTATED,
     MEMBERSHIP_LEFT,
+    MEMBER_ROLE_UPDATED,
+    MEMBER_REMOVED,
     SESSION_CREATED,
     SESSION_REVOKED,
     SESSION_REVOKED_ALL,
@@ -150,6 +158,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "Membership lifecycle",
         (MEMBERSHIP_ACTIVATED, MEMBERSHIP_SUSPENDED, MEMBERSHIP_REINSTATED, MEMBERSHIP_LEFT),
     ),
+    ("member", "Member management", (MEMBER_ROLE_UPDATED, MEMBER_REMOVED)),
     (
         "session",
         "Sessions",
@@ -201,6 +210,8 @@ __all__ = [
     "MEMBERSHIP_LEFT",
     "MEMBERSHIP_REINSTATED",
     "MEMBERSHIP_SUSPENDED",
+    "MEMBER_REMOVED",
+    "MEMBER_ROLE_UPDATED",
     "MFA_DISABLED",
     "MFA_ENABLED",
     "MFA_RECOVERY_CODES_REGENERATED",

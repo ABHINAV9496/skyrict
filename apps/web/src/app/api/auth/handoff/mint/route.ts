@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import {
   SESSION_COOKIE,
+  applySessionCookie,
   assertSameOrigin,
   backendError,
   callBackend,
@@ -43,10 +44,28 @@ export async function POST(request: NextRequest) {
       ? body.redirect
       : "/";
 
+  // Rotate the refresh token before embedding it in the handoff payload. The
+  // signin-origin cookie and the payload must never hold the same token: once
+  // the workspace redemption refreshes with the payload token, the cookie's
+  // copy becomes stale, and the next signin-origin refresh would be flagged as
+  // reuse — revoking the whole token family, including the brand-new workspace
+  // session. Rotating here consumes the cookie's copy and clears the cookie so
+  // the payload token is the only live token, used exactly once at redemption.
+  const rotated = await callBackend("/auth/refresh", {
+    body: { refresh_token: refreshToken },
+    tenantSlug: slug,
+  });
+  if (!rotated.ok || !rotated.data?.refresh_token) {
+    const response = NextResponse.json({ error: "Session expired." }, { status: 401 });
+    applySessionCookie(response, null);
+    return response;
+  }
+  const handoffToken = String(rotated.data.refresh_token);
+
   const result = await callBackend("/handoffs", {
     body: {
       purpose: "session",
-      payload: { refresh_token: refreshToken, tenant_slug: slug, redirect },
+      payload: { refresh_token: handoffToken, tenant_slug: slug, redirect },
     },
     tenantSlug: slug,
   });
@@ -57,9 +76,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not mint handoff token." }, { status: 502 });
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     token: String(data.token),
     workspaceUrl: workspaceUrl(request, slug),
     redirect,
   });
+  applySessionCookie(response, null);
+  return response;
 }

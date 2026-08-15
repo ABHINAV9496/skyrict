@@ -46,3 +46,9 @@ class MembershipRepositoryPort(Protocol):
         *,
         joined_at: datetime,
     ) -> Membership: ...
+
+    async def update_role(
+        self,
+        membership_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+    ) -> Membership: ...

@@ -1,12 +1,12 @@
 import {
   ArrowRight,
-  Bot,
   Boxes,
   Globe,
   Lightbulb,
   type LucideIcon,
 } from "lucide-react";
 
+import { AiGlyph } from "@/components/brand/logo";
 import { RevealSection } from "@/components/marketing/reveal-section";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,7 @@ function Bridge() {
             <div className="flex h-full flex-col rounded-2xl border border-primary/50 bg-primary/10 p-6 shadow-lg shadow-primary/15">
               <div className="flex items-center gap-2.5">
                 <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Bot aria-hidden="true" className="size-4.5" />
+                  <AiGlyph aria-hidden="true" className="size-4.5" />
                 </span>
                 <div>
                   <p className="font-mono text-[11px] uppercase tracking-wider text-primary">

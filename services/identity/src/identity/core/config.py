@@ -279,6 +279,21 @@ class Settings(BaseSettings):
         description="max backup-code regenerations per user per window",
     )
 
+    # --- Avatar uploads ---
+    AVATAR_STORAGE_BACKEND: str = Field(
+        default="local",
+        description="avatar storage backend: 'local' (filesystem) or 's3'",
+    )
+    AVATAR_STORAGE_LOCAL_DIR: str = Field(
+        default="./data/avatars",
+        description="base directory for the local avatar storage backend",
+    )
+    AVATAR_S3_BUCKET: str = Field(
+        default="", description="S3 bucket for avatars (required when backend='s3')"
+    )
+    AVATAR_S3_PREFIX: str = Field(default="avatars", description="S3 key prefix for avatar objects")
+    AVATAR_S3_REGION: str = Field(default="", description="AWS region of the avatar S3 bucket")
+
     # --- Derived (loaded from files at validation time) ---
     jwt_private_key: str = ""
     jwt_public_key: str = ""

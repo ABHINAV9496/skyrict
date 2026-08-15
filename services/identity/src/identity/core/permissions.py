@@ -63,6 +63,12 @@ ERP_PAYROLL_READ = "erp.payroll.read"
 ERP_PAYROLL_WRITE = "erp.payroll.write"
 ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 
+# AI Agents
+AGENTS_READ = "agents:read"
+
+# Market Intelligence
+INTELLIGENCE_READ = "intelligence:read"
+
 # Billing
 BILLING_MANAGE = "billing.manage"
 
@@ -104,6 +110,8 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
+    AGENTS_READ,
+    INTELLIGENCE_READ,
     BILLING_MANAGE,
     INVITATIONS_SEND,
 )
@@ -133,6 +141,8 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "ERP Payroll",
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
+    ("agents", "AI Agents", (AGENTS_READ,)),
+    ("intelligence", "Market Intelligence", (INTELLIGENCE_READ,)),
     ("billing", "Billing", (BILLING_MANAGE,)),
     ("invitations", "User invitations", (INVITATIONS_SEND,)),
 )
@@ -156,6 +166,7 @@ def _assert_catalog_union() -> None:
 _assert_catalog_union()
 
 __all__ = [
+    "AGENTS_READ",
     "AUDIT_READ",
     "BILLING_MANAGE",
     "CATALOG",
@@ -178,6 +189,7 @@ __all__ = [
     "ERP_SALES_APPROVE",
     "ERP_SALES_READ",
     "ERP_SALES_WRITE",
+    "INTELLIGENCE_READ",
     "INVITATIONS_SEND",
     "MFA_MANAGE",
     "PERMISSION_MODULES",

@@ -1,13 +1,15 @@
 """Canonical audit event keys for the core (ERP) domain.
 
-Single source of truth for the free-form ``action`` strings written to
-``core_audit_logs``. Services must reference these constants instead of
+Single source of truth for the free-form ``action`` strings written to the
+core audit trails — ``core_audit_logs`` (HR/payroll, see ``core.core.
+audit_service``) and ``audit_logs`` (the shared ``features.audit`` trail used
+by finance/inventory). Services must reference these constants instead of
 hardcoding strings so the event vocabulary stays greppable and drift-checked
 against the catalog grouping below.
 
 Vocabulary is defined by the HR & Payroll design doc (``docs/modules/
-hr-payroll.md``, step 4) — ``{domain}.{entity}.{action}``, e.g. ``hr.leave
-.approved``.
+hr-payroll.md``, step 4) and the finance/inventory modules — ``{domain}.
+{entity}.{action}``, e.g. ``hr.leave.approved``, ``finance.invoice.issued``.
 """
 
 from __future__ import annotations
@@ -39,6 +41,21 @@ PAYROLL_ENTRY_ADJUSTED = "payroll.entry.adjusted"
 PAYROLL_SETTINGS_UPDATED = "payroll.settings.updated"
 PAYROLL_COMPENSATION_RECORDED = "payroll.compensation.recorded"
 
+# ---------------------------------------------------------------------------
+# Finance
+# ---------------------------------------------------------------------------
+FINANCE_CHART_OF_ACCOUNTS_CREATED = "finance.chart_of_accounts.created"
+FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED = "finance.chart_of_accounts.deactivated"
+FINANCE_JOURNAL_ENTRY_POSTED = "finance.journal_entry.posted"
+FINANCE_JOURNAL_ENTRY_VOIDED = "finance.journal_entry.voided"
+FINANCE_FISCAL_PERIOD_CREATED = "finance.fiscal_period.created"
+FINANCE_FISCAL_PERIOD_CLOSED = "finance.fiscal_period.closed"
+FINANCE_INVOICE_CREATED = "finance.invoice.created"
+FINANCE_INVOICE_ISSUED = "finance.invoice.issued"
+FINANCE_INVOICE_APPROVED = "finance.invoice.approved"
+FINANCE_INVOICE_VOIDED = "finance.invoice.voided"
+FINANCE_PAYMENT_APPLIED = "finance.payment.applied"
+
 # Every catalogued audit event, in catalog order.
 CATALOG: tuple[str, ...] = (
     HR_DEPARTMENT_CREATED,
@@ -60,6 +77,17 @@ CATALOG: tuple[str, ...] = (
     PAYROLL_ENTRY_ADJUSTED,
     PAYROLL_SETTINGS_UPDATED,
     PAYROLL_COMPENSATION_RECORDED,
+    FINANCE_CHART_OF_ACCOUNTS_CREATED,
+    FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED,
+    FINANCE_JOURNAL_ENTRY_POSTED,
+    FINANCE_JOURNAL_ENTRY_VOIDED,
+    FINANCE_FISCAL_PERIOD_CREATED,
+    FINANCE_FISCAL_PERIOD_CLOSED,
+    FINANCE_INVOICE_CREATED,
+    FINANCE_INVOICE_ISSUED,
+    FINANCE_INVOICE_APPROVED,
+    FINANCE_INVOICE_VOIDED,
+    FINANCE_PAYMENT_APPLIED,
 )
 
 ALL_AUDIT_EVENTS: frozenset[str] = frozenset(CATALOG)
@@ -98,6 +126,23 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             PAYROLL_COMPENSATION_RECORDED,
         ),
     ),
+    (
+        "finance",
+        "Finance",
+        (
+            FINANCE_CHART_OF_ACCOUNTS_CREATED,
+            FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED,
+            FINANCE_JOURNAL_ENTRY_POSTED,
+            FINANCE_JOURNAL_ENTRY_VOIDED,
+            FINANCE_FISCAL_PERIOD_CREATED,
+            FINANCE_FISCAL_PERIOD_CLOSED,
+            FINANCE_INVOICE_CREATED,
+            FINANCE_INVOICE_ISSUED,
+            FINANCE_INVOICE_APPROVED,
+            FINANCE_INVOICE_VOIDED,
+            FINANCE_PAYMENT_APPLIED,
+        ),
+    ),
 )
 
 
@@ -121,6 +166,17 @@ __all__ = [
     "ALL_AUDIT_EVENTS",
     "AUDIT_EVENT_MODULES",
     "CATALOG",
+    "FINANCE_CHART_OF_ACCOUNTS_CREATED",
+    "FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED",
+    "FINANCE_FISCAL_PERIOD_CLOSED",
+    "FINANCE_FISCAL_PERIOD_CREATED",
+    "FINANCE_INVOICE_APPROVED",
+    "FINANCE_INVOICE_CREATED",
+    "FINANCE_INVOICE_ISSUED",
+    "FINANCE_INVOICE_VOIDED",
+    "FINANCE_JOURNAL_ENTRY_POSTED",
+    "FINANCE_JOURNAL_ENTRY_VOIDED",
+    "FINANCE_PAYMENT_APPLIED",
     "HR_DEPARTMENT_CREATED",
     "HR_DEPARTMENT_UPDATED",
     "HR_EMPLOYEE_CREATED",

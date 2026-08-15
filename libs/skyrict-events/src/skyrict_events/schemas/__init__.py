@@ -8,7 +8,31 @@ Each event model:
 
 from __future__ import annotations
 
+from pydantic import BaseModel, Field
+
 from skyrict_events.base import BaseEvent
+
+TENANT_PROVISIONED_EVENT_TYPE = "identity.tenant.provisioned"
+RBAC_ROLE_GRANTED_EVENT_TYPE = "identity.rbac.role_granted"
+
+
+class RoleGrant(BaseModel):
+    """One role + (optional) user grant snapshot inside an RBAC event.
+
+    ``user_id`` is set when the role is granted to a user (e.g. the tenant
+    owner at provisioning); ``scope_id`` mirrors the identity grant scope
+    (tenant id for tenant-scoped grants). Consumers upsert the role and,
+    when ``user_id`` is present, the user->role grant.
+    """
+
+    role_id: str = Field(..., description="Identity role UUID (reused as the core role id)")
+    role_name: str = Field(..., description="Role name (tenant-unique)")
+    permissions: list[str] = Field(default_factory=list, description="Granted permission keys")
+    is_system_role: bool = Field(default=True, description="Platform-defined role flag")
+    user_id: str | None = Field(default=None, description="User granted this role, if any")
+    scope_id: str | None = Field(
+        default=None, description="Grant scope id (tenant id when tenant-scoped)"
+    )
 
 
 class UserCreated(BaseEvent):
@@ -55,6 +79,27 @@ class TenantCreated(BaseEvent):
     slug: str
 
 
+class TenantProvisioned(BaseEvent):
+    """Published after a tenant's system roles + owner grant are provisioned.
+
+    Carries the full role snapshot so a consumer (e.g. the core service's RBAC
+    mirror) can provision its own ``core_roles`` / ``core_user_roles`` rows in
+    one step. Incremental grants are published separately as
+    :class:`RbacRoleGranted`.
+    """
+
+    event_type: str = TENANT_PROVISIONED_EVENT_TYPE
+    slug: str
+    role_grants: list[RoleGrant]
+
+
+class RbacRoleGranted(BaseEvent):
+    """Published when a role is granted to a user within a tenant scope."""
+
+    event_type: str = RBAC_ROLE_GRANTED_EVENT_TYPE
+    grant: RoleGrant
+
+
 class SessionCreated(BaseEvent):
     """Published when a user session is created."""
 
@@ -91,13 +136,18 @@ class MFAFailed(BaseEvent):
 
 
 __all__ = [
+    "RBAC_ROLE_GRANTED_EVENT_TYPE",
+    "TENANT_PROVISIONED_EVENT_TYPE",
     "AuthLoginFailed",
     "AuthLoginSuccess",
     "MFAFailed",
     "MFASuccess",
+    "RbacRoleGranted",
+    "RoleGrant",
     "SessionCreated",
     "SessionRevoked",
     "TenantCreated",
+    "TenantProvisioned",
     "UserCreated",
     "UserUpdated",
 ]

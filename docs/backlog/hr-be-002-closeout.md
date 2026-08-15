@@ -152,8 +152,8 @@ All numbers below are the post-merge, post-fix results.
 |-------|--------|
 | `pytest tests/ -q` (core) | **441 passed, 0 failed, 0 skipped** (fresh DB; per-test tenant isolation) |
 | `pytest tests/unit -q` + `pytest tests/integration/api -q` (identity) | **580 passed** (511 unit + 69 integration) |
-| `ruff check services/core/` + `services/identity/` | 12 findings, all pre-existing baseline, none in merge-changed files |
-| `ruff format --check` both services | 9 pre-existing files unformatted, none in merge-changed files |
+| `ruff check services/ libs/` | **clean (0 findings)** — 13 violations fixed in `f2c0ed8` (12 TC001/TC003 type-only imports in the audit/sequence feature moved into `TYPE_CHECKING` blocks, 1 I001 in `features/payroll/repository.py`), incl. one I001 the `d2c941c` `CursorResult` import had introduced |
+| `ruff format --check` changed files | clean (formatter applied to the 3 touched files) |
 | `mypy` core + identity | clean (core 124 files, identity 152 files) — the 6 pre-existing baseline errors fixed in `d2c941c` |
 | `import-linter lint` | 5 contracts kept, 0 broken (dev merge added one contract) |
 | Alembic chain | renumbered core head `0013`, identity head `0017`; `alembic current` = `0013 (head)`; round-trip covered by `test_migration_roundtrip.py` |
@@ -244,4 +244,5 @@ include the commits that create and correct it.
 - `9054673` — finalize close-out commit range with this commit included
 - `12f348e` — make close-out commit range self-consistent snapshot
 - `e09550a` — reconcile close-out commit accounting — pinned implementation range + meta-commit list (this commit, which thus lands fourth)
-- `HEAD` — post-merge gate amendment — dev-merge verification evidence + isolation note (fifth meta-commit)
+- `e0de91c` — post-merge gate amendment — dev-merge verification evidence + isolation note (fifth meta-commit)
+- `HEAD` — ruff gate correction — `ruff check services/ libs/` clean after `f2c0ed8` (sixth meta-commit)

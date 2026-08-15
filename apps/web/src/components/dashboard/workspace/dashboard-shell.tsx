@@ -18,6 +18,7 @@ import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import { cn } from "@/lib/utils";
 
 const COLLAPSED_KEY = "skyrict:sidebar:collapsed";
+const NO_PERMISSIONS: string[] = [];
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -40,14 +41,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Gate Members/Roles/Settings behind their permission keys once access is known.
-  const navGroups = useMemo(
-    () => (status === "ready" ? filterNavGroupsByPermissions(workspaceNavGroups, permissions) : workspaceNavGroups),
+  // Fail closed: until access permissions are known (loading/error) the
+  // sidebar renders only ungated items, and members never see entries for
+  // routes they lack the permission to use.
+  const effectivePermissions = useMemo(
+    () => (status === "ready" ? permissions : NO_PERMISSIONS),
     [status, permissions],
   );
+  const navGroups = useMemo(
+    () => filterNavGroupsByPermissions(workspaceNavGroups, effectivePermissions),
+    [effectivePermissions],
+  );
   const accountItems = useMemo(
-    () => (status === "ready" ? filterNavItemsByPermissions(workspaceAccountItems, permissions) : workspaceAccountItems),
-    [status, permissions],
+    () => filterNavItemsByPermissions(workspaceAccountItems, effectivePermissions),
+    [effectivePermissions],
   );
 
   return (

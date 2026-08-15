@@ -29,10 +29,11 @@ Why each test is shaped this way:
   event; proves the "failed transaction → no event" invariant through a real
   DB failure, not a mock.
 - ``test_concurrent_approve_cross_requests_invariant`` — the coupling invariant
-  that must hold for ANY race outcome: number of approved requests == number of
-  approval movements == number of emitted events, and the materialized balance
-  must equal the ledger sum. This is the test that would catch a stale
-  materialized balance (approving two requests that together exceed balance).
+  across concurrent approvals of DIFFERENT requests for the same employee:
+  approved requests == approval movements == emitted events, and materialized
+  balance == ledger sum. The balance-row lock (docs §4.3) serializes the writes,
+  so when two requests together exceed the balance exactly one approves and the
+  invariant holds deterministically — no longer an xfail.
 """
 
 from __future__ import annotations
@@ -262,17 +263,6 @@ class TestConcurrentApprove:
         assert await _materialized_balance(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
         assert await _ledger_sum(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
 
-    @pytest.mark.xfail(
-        reason="Known unresolved race (docs/modules/hr-payroll.md §4.3 item 5): "
-        "two approvals on different requests for the same employee each read the "
-        "same pre-approval balance, each pass the service-side balance check, and "
-        "each write a materialized erp_leave_balances row from their own "
-        "uncommitted view — the ledger can go negative while the balance row "
-        "still reads >= 0 and ck_erp_leave_balances_non_negative cannot catch it. "
-        "Tracked as the HR-BE-002 concurrency-hardening follow-up; the "
-        "single-request CAS test (below) covers the guarded case.",
-        strict=False,
-    )
     async def test_concurrent_approve_cross_requests_invariant(
         self,
         client: AsyncClient,
@@ -281,13 +271,15 @@ class TestConcurrentApprove:
         integration_db: dict[str, str],
         recorded_events: list[_RecordedEvent],
     ) -> None:
-        """Coupling invariant across any race: approvals == movements == events,
-        and materialized balance always equals the ledger sum.
+        """Coupling invariant across racing approves of different requests for
+        the same employee: approvals == movements == events, and the materialized
+        balance always equals the ledger sum.
 
-        The coupling counters (approvals/movements/events) hold for every race
-        outcome and are asserted unconditionally. The materialized-vs-ledger
-        equality is the documented Rule 3 caveat: both requests together exceed
-        the balance, so when the race resolves 200/200 the balance is stale.
+        The two requests together (30 days) exceed the balance (20), so the
+        balance-row lock (docs §4.3) must let exactly one approve through: the
+        loser re-reads the committed ledger under the lock and the Rule 2 check
+        rejects it (422). The coupled counters agree and the materialized
+        balance never drifts from the ledger — deterministically, not by timing.
         """
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
@@ -328,6 +320,60 @@ class TestConcurrentApprove:
             f"stale materialized balance: {materialized} != ledger {ledger}"
         )
         assert ledger >= 0
+
+    async def test_concurrent_approve_cross_requests_stress_balance_exact(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+        recorded_events: list[_RecordedEvent],
+    ) -> None:
+        """10 racing approvals (5 days each) against a 20-day balance: exactly
+        4 win and 6 are rejected — if any pair raced incorrectly the ledger
+        would go negative. The row lock serializes every approve, so the final
+        materialized balance must equal SUM(ledger) == 0 EXACTLY (not just "no
+        error raised"), and movements == events == approvals."""
+        tenant_id = integration_db["acme_id"]
+        headers = tenant_headers(_OLYMPUS)
+        employee = await _hire(client, headers)
+        request_ids = [
+            await _create_leave_request(client, headers, employee["id"], 5) for _ in range(10)
+        ]
+
+        results = await asyncio.gather(
+            *(
+                client.post(f"/api/v1/hr/leave/requests/{request_id}/approve", headers=headers)
+                for request_id in request_ids
+            )
+        )
+
+        approved = sum(1 for r in results if r.status_code == 200)
+        rejected = sum(1 for r in results if r.status_code == 422)
+        assert (approved, rejected) == (4, 6), (
+            "expected exactly 4 approvals / 6 rejections, got "
+            f"{approved}/{rejected}: {[r.status_code for r in results]}"
+        )
+
+        async def _movements_settled() -> bool:
+            return (
+                await _scalar(
+                    "SELECT count(*) FROM erp_leave_movements "
+                    "WHERE tenant_id = :t AND employee_id = :e AND ref_type = 'approval'",
+                    t=uuid.UUID(tenant_id),
+                    e=uuid.UUID(employee["id"]),
+                )
+                == approved
+            )
+
+        assert await _settle(_movements_settled), "approval movements did not settle"
+
+        async def _event_flushed() -> bool:
+            return _count_by_type(recorded_events, HR_LEAVE_APPROVED) == approved
+
+        assert await _settle(_event_flushed), "leave.approved events not flushed"
+        assert await _materialized_balance(tenant_id, employee["id"]) == 0
+        assert await _ledger_sum(tenant_id, employee["id"]) == 0
 
 
 class TestConcurrentCompute:
@@ -374,6 +420,128 @@ class TestConcurrentCompute:
             r=uuid.UUID(run_id),
         )
         assert entry_count == 1  # one employee → one entry, never two
+
+    async def test_concurrent_compute_with_approval_no_deadlock(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        """A multi-employee compute (fresh 2027 grants → acquires several balance
+        row locks in employee_number order) racing a single-employee approve
+        (exactly one row lock) must neither deadlock nor time out.
+
+        Single-row lock holders can never complete a cycle, and compute's lock
+        acquisition is a stable total order (LOCK-ORDERING CONTRACT, see
+        compute_run and HrRepository.lock_leave_balance), so no deadlock is
+        possible — this test proves it end to end.
+        """
+        tenant_id = integration_db["acme_id"]
+        headers = tenant_headers(_OLYMPUS)
+        # Hires accrue 2026 annual on hire; the 2027 grants below are FRESH, so
+        # compute_run takes a balance-row lock for every employee it accrues.
+        employees = [await _hire(client, headers) for _ in range(3)]
+        approve_target = employees[1]
+
+        created = await client.post(
+            "/api/v1/payroll/runs",
+            json={"period_start": "2027-01-01", "period_end": "2027-01-31"},
+            headers=headers,
+        )
+        assert created.status_code == 201, created.text
+        run_id = created.json()["data"]["id"]
+        request_id = await _create_leave_request(client, headers, approve_target["id"], 5)
+
+        results = await asyncio.gather(
+            client.post(f"/api/v1/payroll/runs/{run_id}/compute", headers=headers),
+            client.post(f"/api/v1/hr/leave/requests/{request_id}/approve", headers=headers),
+        )
+        assert results[0].status_code == 200, results[0].text
+        assert results[1].status_code == 200, results[1].text
+
+        (status,) = await _row(
+            "SELECT status FROM erp_payroll_runs WHERE tenant_id = :t AND id = :r",
+            t=uuid.UUID(tenant_id),
+            r=uuid.UUID(run_id),
+        )
+        assert status == "computed"
+
+        async def _grants_settled() -> bool:
+            return (
+                await _scalar(
+                    "SELECT count(*) FROM erp_leave_movements "
+                    "WHERE tenant_id = :t AND ref_type = 'annual_accrual' AND ref_id = '2027'",
+                    t=uuid.UUID(tenant_id),
+                )
+                == 3
+            )
+
+        assert await _settle(_grants_settled), "2027 grants did not settle"
+
+        # The approve deducted exactly once and balance still equals the ledger.
+        assert (
+            await _scalar(
+                "SELECT count(*) FROM erp_leave_movements "
+                "WHERE tenant_id = :t AND ref_type = 'approval' AND ref_id = :r",
+                t=uuid.UUID(tenant_id),
+                r=request_id,
+            )
+            == 1
+        )
+        materialized = await _materialized_balance(tenant_id, approve_target["id"])
+        ledger = await _ledger_sum(tenant_id, approve_target["id"])
+        assert materialized == ledger >= 0
+
+
+class TestConcurrentAccrual:
+    """Rule 4 idempotency under concurrency (probe → row-lock → re-probe)."""
+
+    async def test_concurrent_first_grant_single_movement(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        """Two racing FIRST-grant accruals of the same (employee, year): the
+        probe → lock → re-probe in accrue_leave_movement means exactly ONE grant
+        movement is written. This fails the moment the re-probe under the lock
+        is skipped (two grants would be written and balance would diverge)."""
+        tenant_id = integration_db["acme_id"]
+        headers = tenant_headers(_OLYMPUS)
+        employee = await _hire(client, headers)
+
+        results = await asyncio.gather(
+            client.post(
+                "/api/v1/hr/leave/accrue",
+                json={"employee_id": employee["id"], "leave_type": "annual", "leave_year": 2027},
+                headers=headers,
+            ),
+            client.post(
+                "/api/v1/hr/leave/accrue",
+                json={"employee_id": employee["id"], "leave_type": "annual", "leave_year": 2027},
+                headers=headers,
+            ),
+        )
+        assert [r.status_code for r in results] == [200, 200]
+
+        async def _grant_settled() -> bool:
+            return (
+                await _scalar(
+                    "SELECT count(*) FROM erp_leave_movements "
+                    "WHERE tenant_id = :t AND employee_id = :e "
+                    "AND ref_type = 'annual_accrual' AND ref_id = '2027'",
+                    t=uuid.UUID(tenant_id),
+                    e=uuid.UUID(employee["id"]),
+                )
+                == 1
+            )
+
+        assert await _settle(_grant_settled), "expected exactly one 2027 grant movement"
+        assert await _materialized_balance(tenant_id, employee["id"]) == await _ledger_sum(
+            tenant_id, employee["id"]
+        )
 
 
 class TestNoEventOnFailedTransaction:

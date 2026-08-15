@@ -345,6 +345,19 @@ class TestRepositoryLevelEntryImmutability:
             assert updated.id is not None
             return {"id": str(updated.id), "adjustments": updated.adjustments}
 
+    async def _repo_delete(self, tenant_id: str, run_id: str, *, keep: list[str]) -> int:
+        from core.db.sequence_repository import SequenceRepository
+        from core.db.session import async_session_factory
+        from core.features.payroll.repository import PayrollRepository
+
+        async with async_session_factory() as session:
+            repo = PayrollRepository(session, next_sequence=SequenceRepository(session).next_value)
+            return await repo.delete_entries_for_run(
+                uuid.UUID(run_id),
+                [uuid.UUID(e) for e in keep],
+                tenant_id=uuid.UUID(tenant_id),
+            )
+
     async def _seed_computed_entry(
         self,
         client: AsyncClient,
@@ -429,3 +442,41 @@ class TestRepositoryLevelEntryImmutability:
 
         updated = await self._repo_update(tenant_id, entry_id, adjustments={"amount": "100.00"})
         assert updated["adjustments"] == {"amount": "100.00"}
+
+    async def test_direct_delete_blocked_on_approved_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        from core.core.exceptions import PayrollEntryImmutableError
+
+        headers = tenant_headers("olympus")
+        run_id, _entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
+        assert approved.status_code == 200, approved.text
+
+        # Direct repo DELETE (bypassing the service layer) must refuse to drop
+        # entries from an immutable run — same defense-in-depth as update_entry.
+        with pytest.raises(PayrollEntryImmutableError):
+            await self._repo_delete(tenant_id, run_id, keep=[])
+
+    async def test_direct_delete_allowed_on_computed_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        headers = tenant_headers("olympus")
+        run_id, _entry_id, tenant_id = await self._seed_computed_entry(
+            client, headers, integration_db
+        )
+
+        # On a mutable (computed) run the same direct call succeeds and reports
+        # the number of stale entries dropped (gap #10 recompute path).
+        deleted = await self._repo_delete(tenant_id, run_id, keep=[])
+        assert deleted == 1

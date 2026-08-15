@@ -11,6 +11,7 @@ import {
 
 import type { AuthUser } from "@/lib/api/auth-api";
 import { ensureSession } from "@/lib/api/http";
+import { browserSigninUrl } from "@/lib/auth/client-urls";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 export type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -26,22 +27,6 @@ interface SessionContextValue {
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
-
-/**
- * Absolute `{slug}.signin.{apex}:{port}/signin` URL for the current origin,
- * mirroring the middleware's cross-surface routing. Falls back to the current
- * origin's `/signin` when there is no tenant label (dev without a subdomain).
- */
-function browserSigninUrl(): string {
-  const { protocol, hostname, port } = window.location;
-  const host = hostname.toLowerCase();
-  const portSuffix = port ? `:${port}` : "";
-  if (host.includes(".signin.")) return `${protocol}//${host}${portSuffix}/signin`;
-  const apex = host.split(".").slice(1).join(".");
-  if (!apex) return `${protocol}//${host}${portSuffix}/signin`;
-  const slug = host.split(".")[0];
-  return `${protocol}//${slug}.signin.${apex}${portSuffix}/signin`;
-}
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");

@@ -10,7 +10,7 @@ from the database at request time (never from JWT claims) through
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +26,7 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
+    from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.inventory.service import InventoryService
 
@@ -116,7 +117,7 @@ def get_finance_service(
     correlation_id = getattr(request.state, "request_id", None)
     return FinanceService(
         repo=FinanceRepository(db),
-        audit=AuditRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
         correlation_id=correlation_id,
     )

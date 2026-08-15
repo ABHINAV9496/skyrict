@@ -29,7 +29,10 @@ def _money(amount: str) -> Money:
 
 class TestPayDaysRule9:
     def test_full_period_no_reductions(self) -> None:
-        assert PayrollCompute.pay_days(period_start=date(2024, 5, 1), period_end=date(2024, 5, 31)) == 31
+        assert (
+            PayrollCompute.pay_days(period_start=date(2024, 5, 1), period_end=date(2024, 5, 31))
+            == 31
+        )
 
     def test_hire_mid_period_prorates_from_hire(self) -> None:
         assert (

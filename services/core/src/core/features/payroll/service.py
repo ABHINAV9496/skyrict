@@ -43,7 +43,11 @@ from core.features.payroll.ports import LeaveLedgerPort, PayrollRepositoryPort
 _RUN_MACHINE = StateMachine(
     {
         PayrollRunStatus.DRAFT: (PayrollRunStatus.COMPUTED, PayrollRunStatus.VOID),
-        PayrollRunStatus.COMPUTED: (PayrollRunStatus.COMPUTED, PayrollRunStatus.APPROVED, PayrollRunStatus.VOID),
+        PayrollRunStatus.COMPUTED: (
+            PayrollRunStatus.COMPUTED,
+            PayrollRunStatus.APPROVED,
+            PayrollRunStatus.VOID,
+        ),
         PayrollRunStatus.APPROVED: (PayrollRunStatus.PAID, PayrollRunStatus.VOID),
         PayrollRunStatus.PAID: (),
         PayrollRunStatus.VOID: (),
@@ -106,7 +110,9 @@ class PayrollCompute:
         days_in_period = (period_end - period_start).days + 1
         reduction = 0
         if hire_date is not None and hire_date > period_start:
-            reduction += _overlap_days(period_start, period_end, period_start, hire_date - timedelta(days=1))
+            reduction += _overlap_days(
+                period_start, period_end, period_start, hire_date - timedelta(days=1)
+            )
         if termination_date is not None and termination_date < period_end:
             reduction += _overlap_days(
                 period_start, period_end, termination_date + timedelta(days=1), period_end
@@ -201,7 +207,9 @@ class PayrollService:
                 new_value = getattr(settings, field_name)
                 old_value = getattr(existing, field_name)
                 if new_value != old_value:
-                    changed[field_name] = new_value if not isinstance(new_value, Decimal) else str(new_value)
+                    changed[field_name] = (
+                        new_value if not isinstance(new_value, Decimal) else str(new_value)
+                    )
         await self._audit.log(
             action=audit_events.PAYROLL_SETTINGS_UPDATED,
             target=f"settings:{settings.tenant_id}",
@@ -248,7 +256,10 @@ class PayrollService:
             target=f"payroll_run:{created.id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"period_start": period_start.isoformat(), "period_end": period_end.isoformat()},
+            details={
+                "period_start": period_start.isoformat(),
+                "period_end": period_end.isoformat(),
+            },
         )
         if created.id is not None:
             await emit_run_created(
@@ -270,7 +281,9 @@ class PayrollService:
         limit: int = 20,
         offset: int = 0,
     ) -> list[ent.PayrollRun]:
-        return list(await self._repo.list_runs(tenant_id, status=status, limit=limit, offset=offset))
+        return list(
+            await self._repo.list_runs(tenant_id, status=status, limit=limit, offset=offset)
+        )
 
     async def compute_run(
         self,
@@ -290,7 +303,9 @@ class PayrollService:
         try:
             _RUN_MACHINE.transition(run.status.value, PayrollRunStatus.COMPUTED.value)
         except InvalidTransitionError:
-            raise IllegalStateTransitionError("only draft/computed runs can be (re)computed") from None
+            raise IllegalStateTransitionError(
+                "only draft/computed runs can be (re)computed"
+            ) from None
 
         settings = await self._repo.get_settings(tenant_id)
         if settings is None:
@@ -390,9 +405,7 @@ class PayrollService:
         if existing_entries:
             keep_ids = [entry.employee_id for entry in entries]
             if set(existing_entries) - set(keep_ids):
-                await self._repo.delete_entries_for_run(
-                    run_id, keep_ids, tenant_id=tenant_id
-                )
+                await self._repo.delete_entries_for_run(run_id, keep_ids, tenant_id=tenant_id)
         if entries:
             total_gross, total_net = PayrollCompute.compute_totals(entries)
         else:
@@ -414,9 +427,7 @@ class PayrollService:
             ],
         )
         if computed is None:
-            raise IllegalStateTransitionError(
-                f"run is not in {run.status.value} state"
-            ) from None
+            raise IllegalStateTransitionError(f"run is not in {run.status.value} state") from None
         await self._audit.log(
             action=audit_events.PAYROLL_RUN_COMPUTED,
             target=f"payroll_run:{run_id}",

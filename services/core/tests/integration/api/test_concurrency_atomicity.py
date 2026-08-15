@@ -217,7 +217,12 @@ async def _create_leave_request(
     end = f"2026-03-{days:02d}" if days > 28 else f"2026-02-{days:02d}"
     response = await client.post(
         "/api/v1/hr/leave/requests",
-        json={"employee_id": employee_id, "leave_type": "annual", "start_date": start, "end_date": end},
+        json={
+            "employee_id": employee_id,
+            "leave_type": "annual",
+            "start_date": start,
+            "end_date": end,
+        },
         headers=headers,
     )
     assert response.status_code == 201, response.text
@@ -255,6 +260,7 @@ class TestConcurrentApprove:
             )
             == 1
         )
+
         async def _event_flushed() -> bool:
             return _count_by_type(recorded_events, HR_LEAVE_APPROVED) == 1
 
@@ -293,6 +299,7 @@ class TestConcurrentApprove:
         )
 
         approved = sum(1 for r in results if r.status_code == 200)
+
         # Wait for the winner's commit (get_db commits after the response).
         async def _movements_settled() -> bool:
             return (
@@ -303,10 +310,9 @@ class TestConcurrentApprove:
         settled = await _settle(_movements_settled)
         assert settled, "approval transactions did not settle within timeout"
 
-        movements = (
-            await _approval_movement_count(tenant_id, request_a)
-            + await _approval_movement_count(tenant_id, request_b)
-        )
+        movements = await _approval_movement_count(
+            tenant_id, request_a
+        ) + await _approval_movement_count(tenant_id, request_b)
         events = _count_by_type(recorded_events, HR_LEAVE_APPROVED)
 
         # The three coupled counters must agree, whatever the race outcome.
@@ -579,9 +585,7 @@ class TestNoEventOnFailedTransaction:
     ) -> None:
         """Unique violation at flush: the second create emits nothing."""
         headers = tenant_headers(_OLYMPUS)
-        first = await client.post(
-            "/api/v1/hr/departments", json={"name": "Dev"}, headers=headers
-        )
+        first = await client.post("/api/v1/hr/departments", json={"name": "Dev"}, headers=headers)
         assert first.status_code == 201, first.text
 
         duplicate = await client.post(
@@ -628,8 +632,7 @@ class TestNoEventOnFailedTransaction:
         # The failed transaction left nothing behind and emitted nothing.
         assert _count_by_type(recorded_events, HR_EMPLOYEE_CREATED) == 0
         ghost_count = await _scalar(
-            "SELECT count(*) FROM erp_employees "
-            "WHERE tenant_id = :t AND first_name = 'Ghost'",
+            "SELECT count(*) FROM erp_employees WHERE tenant_id = :t AND first_name = 'Ghost'",
             t=uuid.UUID(tenant_id),
         )
         assert ghost_count == 0

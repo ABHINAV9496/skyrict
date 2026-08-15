@@ -114,7 +114,9 @@ class DepartmentService:
             user_id=actor_user_id,
         )
         if created.id is not None:
-            await emit_department_created(department_id=created.id, tenant_id=tenant_id, name=created.name)
+            await emit_department_created(
+                department_id=created.id, tenant_id=tenant_id, name=created.name
+            )
         return created
 
     async def get(self, department_id: uuid.UUID, *, tenant_id: uuid.UUID) -> ent.Department | None:
@@ -134,7 +136,9 @@ class DepartmentService:
             old_value = getattr(existing, field_name)
             new_value = getattr(department, field_name)
             if new_value != old_value:
-                changed[field_name] = str(new_value) if isinstance(new_value, uuid.UUID) else new_value
+                changed[field_name] = (
+                    str(new_value) if isinstance(new_value, uuid.UUID) else new_value
+                )
         await self._audit.log(
             action=audit_events.HR_DEPARTMENT_UPDATED,
             target=f"department:{updated.id}",
@@ -150,14 +154,18 @@ class DepartmentService:
             )
         return updated
 
-    async def list(self, tenant_id: uuid.UUID, *, include_inactive: bool = False) -> list[ent.Department]:
+    async def list(
+        self, tenant_id: uuid.UUID, *, include_inactive: bool = False
+    ) -> list[ent.Department]:
         return list(await self._repo.list_departments(tenant_id, include_inactive=include_inactive))
 
 
 class EmployeeService:
     """Employee lifecycle — hire, update, status transitions, terminate (rules via §3.3)."""
 
-    def __init__(self, repository: HrRepositoryPort, audit: AuditService, identity: IdentityUserPort) -> None:
+    def __init__(
+        self, repository: HrRepositoryPort, audit: AuditService, identity: IdentityUserPort
+    ) -> None:
         self._repo = repository
         self._audit = audit
         self._identity = identity
@@ -223,7 +231,10 @@ class EmployeeService:
             target=f"employee:{created.id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"employee_number": created.employee_number, "hire_date": hire_date.isoformat()},
+            details={
+                "employee_number": created.employee_number,
+                "hire_date": hire_date.isoformat(),
+            },
         )
         if created.id is not None:
             await emit_employee_created(
@@ -253,10 +264,16 @@ class EmployeeService:
         self, employee: ent.Employee, *, year: int, tenant_id: uuid.UUID
     ) -> ent.LeaveMovement | None:
         leave_type = await self._repo.get_leave_type("annual", tenant_id=tenant_id)
-        if leave_type is None or not leave_type.is_accrual or leave_type.accrual_days_per_year is None:
+        if (
+            leave_type is None
+            or not leave_type.is_accrual
+            or leave_type.accrual_days_per_year is None
+        ):
             return None
         remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(Decimal(leave_type.accrual_days_per_year) * Decimal(remaining) / Decimal(365))
+        qty = _round_half_up(
+            Decimal(leave_type.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
+        )
         if qty < 1:
             return None
         return await self._repo.accrue_leave_movement(
@@ -579,7 +596,11 @@ class LeaveService:
             target=f"leave_request:{request_id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"days": request.days, "leave_type": request.leave_type, "new_balance": new_balance},
+            details={
+                "days": request.days,
+                "leave_type": request.leave_type,
+                "new_balance": new_balance,
+            },
         )
         if transitioned.id is not None:
             await emit_leave_approved(
@@ -644,7 +665,9 @@ class LeaveService:
         try:
             _LEAVE_MACHINE.transition(request.status.value, LeaveRequestStatus.CANCELLED.value)
         except InvalidTransitionError:
-            raise IllegalStateTransitionError("only pending or approved requests can be cancelled") from None
+            raise IllegalStateTransitionError(
+                "only pending or approved requests can be cancelled"
+            ) from None
 
         if request.status == LeaveRequestStatus.PENDING:
             return await self._cancel_pending(
@@ -703,7 +726,11 @@ class LeaveService:
             target=f"leave_request:{request_id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"days": request.days, "leave_type": request.leave_type, "new_balance": new_balance},
+            details={
+                "days": request.days,
+                "leave_type": request.leave_type,
+                "new_balance": new_balance,
+            },
         )
         if transitioned.id is not None:
             await emit_leave_cancelled(
@@ -744,7 +771,11 @@ class LeaveService:
             target=f"leave_request:{request_id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"days": request.days, "leave_type": request.leave_type, "new_balance": new_balance},
+            details={
+                "days": request.days,
+                "leave_type": request.leave_type,
+                "new_balance": new_balance,
+            },
         )
         if transitioned.id is not None:
             await emit_leave_cancelled(
@@ -784,7 +815,9 @@ class LeaveService:
                 id=uuid.uuid4(),
             )
         )
-        new_balance = await self._repo.recompute_balance(employee_id, leave_type, tenant_id=tenant_id)
+        new_balance = await self._repo.recompute_balance(
+            employee_id, leave_type, tenant_id=tenant_id
+        )
         if leave_type_row.is_accrual:
             await self._repo.upsert_balance(
                 ent.LeaveBalance(
@@ -800,7 +833,12 @@ class LeaveService:
             target=f"employee:{employee_id}",
             tenant_id=tenant_id,
             user_id=actor_user_id,
-            details={"leave_type": leave_type, "qty": qty, "reason": reason, "new_balance": new_balance},
+            details={
+                "leave_type": leave_type,
+                "qty": qty,
+                "reason": reason,
+                "new_balance": new_balance,
+            },
         )
         await emit_leave_balance_adjusted(
             employee_id=employee_id,
@@ -830,7 +868,9 @@ class LeaveService:
         if employee is None:
             raise ValueError(f"employee {employee_id} not found")
         remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(Decimal(leave_type_row.accrual_days_per_year) * Decimal(remaining) / Decimal(365))
+        qty = _round_half_up(
+            Decimal(leave_type_row.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
+        )
         if qty < 1:
             return None
         movement = await self._repo.accrue_leave_movement(

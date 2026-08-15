@@ -152,7 +152,9 @@ class FakePayrollRepository:
         self.runs[run.id] = run
         return run
 
-    async def list_runs(self, tenant_id: uuid.UUID, *, status=None, limit: int = 20, offset: int = 0):
+    async def list_runs(
+        self, tenant_id: uuid.UUID, *, status=None, limit: int = 20, offset: int = 0
+    ):
         return [r for r in self.runs.values() if status is None or r.status == status]
 
     async def find_overlapping_run(
@@ -217,7 +219,9 @@ class FakePayrollRepository:
         self.run_numbers += 1
         return self.run_numbers
 
-    async def upsert_entries(self, entries: Sequence[ent.PayrollEntry], *, tenant_id: uuid.UUID) -> None:
+    async def upsert_entries(
+        self, entries: Sequence[ent.PayrollEntry], *, tenant_id: uuid.UUID
+    ) -> None:
         for entry in entries:
             self.entries[entry.employee_id] = entry
 
@@ -272,7 +276,9 @@ def _service(
 ) -> tuple[PayrollService, FakePayrollRepository, FakeAuditRepository]:
     fake = repo or FakePayrollRepository()
     audit = FakeAuditRepository()
-    service = PayrollService(repository=fake, leave_ledger=ledger or FakeLeaveLedger(), audit=AuditService(audit))
+    service = PayrollService(
+        repository=fake, leave_ledger=ledger or FakeLeaveLedger(), audit=AuditService(audit)
+    )
     return service, fake, audit
 
 
@@ -328,7 +334,9 @@ class TestRule7CompensationPick:
             effective_from=date(2024, 4, 1),
             actor_user_id=ACTOR,
         )
-        picked = await repo.get_compensation(EMPLOYEE, tenant_id=TENANT, effective_for=date(2024, 5, 31))
+        picked = await repo.get_compensation(
+            EMPLOYEE, tenant_id=TENANT, effective_for=date(2024, 5, 31)
+        )
         assert picked is not None and picked.monthly_salary.amount == Decimal("2000")
         assert picked.effective_from == date(2024, 4, 1)
 
@@ -556,7 +564,9 @@ class TestRunLifecycle:
 
 class TestComputeUsesUnpaidLedger:
     async def test_unpaid_leave_reduces_net(self) -> None:
-        service, repo, _ = _service(repo=FakePayrollRepository(), ledger=FakeLeaveLedger(unpaid_days=10))
+        service, repo, _ = _service(
+            repo=FakePayrollRepository(), ledger=FakeLeaveLedger(unpaid_days=10)
+        )
         repo.settings[TENANT] = _settings()
         repo.employees = [_employee()]
         await repo.create_compensation(

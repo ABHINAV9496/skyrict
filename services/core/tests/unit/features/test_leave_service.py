@@ -118,7 +118,9 @@ class FakeHrRepository:
         self.employees[employee.id] = employee
         return employee
 
-    async def get_employee(self, employee_id: uuid.UUID, tenant_id: uuid.UUID) -> ent.Employee | None:
+    async def get_employee(
+        self, employee_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ent.Employee | None:
         return self.employees.get(employee_id)
 
     async def update_employee(self, employee: ent.Employee) -> ent.Employee:
@@ -132,7 +134,9 @@ class FakeHrRepository:
         self.employee_numbers += 1
         return self.employee_numbers
 
-    async def get_employee_by_number(self, employee_number: str, tenant_id: uuid.UUID) -> ent.Employee | None:
+    async def get_employee_by_number(
+        self, employee_number: str, tenant_id: uuid.UUID
+    ) -> ent.Employee | None:
         for employee in self.employees.values():
             if employee.employee_number == employee_number:
                 return employee
@@ -141,7 +145,9 @@ class FakeHrRepository:
     async def create_department(self, department: ent.Department) -> ent.Department:
         return department
 
-    async def get_department(self, department_id: uuid.UUID, tenant_id: uuid.UUID) -> ent.Department | None:
+    async def get_department(
+        self, department_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ent.Department | None:
         return None
 
     async def update_department(self, department: ent.Department) -> ent.Department:
@@ -197,7 +203,9 @@ class FakeHrRepository:
         # Pure read-side recompute — does NOT materialize. Only ``upsert_balance``
         # writes the materialized row (mirrors the real repository contract).
         return sum(
-            m.qty for m in self.movements if m.employee_id == employee_id and m.leave_type == leave_type
+            m.qty
+            for m in self.movements
+            if m.employee_id == employee_id and m.leave_type == leave_type
         )
 
     async def get_balance(
@@ -222,7 +230,9 @@ class FakeHrRepository:
         self.requests[request.id] = request
         return request
 
-    async def get_leave_request(self, request_id: uuid.UUID, tenant_id: uuid.UUID) -> ent.LeaveRequest | None:
+    async def get_leave_request(
+        self, request_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ent.LeaveRequest | None:
         return self.requests.get(request_id)
 
     async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest:
@@ -260,8 +270,17 @@ class FakeHrRepository:
         self.requests[request_id] = updated
         return updated
 
-    async def list_leave_requests(self, tenant_id: uuid.UUID, *, status=None, employee_id=None,
-                                  from_date=None, to_date=None, limit: int = 20, offset: int = 0):
+    async def list_leave_requests(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status=None,
+        employee_id=None,
+        from_date=None,
+        to_date=None,
+        limit: int = 20,
+        offset: int = 0,
+    ):
         return list(self.requests.values())
 
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation:
@@ -295,7 +314,9 @@ async def _request(
     )
 
 
-async def _accrue(service: LeaveService, repo: FakeHrRepository, *, year: int = 2024, qty: int = 10) -> None:
+async def _accrue(
+    service: LeaveService, repo: FakeHrRepository, *, year: int = 2024, qty: int = 10
+) -> None:
     await repo.add_leave_movement(
         ent.LeaveMovement(
             tenant_id=TENANT,
@@ -323,7 +344,9 @@ class TestRule1ApproveWritesMovement:
         service, repo, audit = _service()
         req = await _request(service, repo, days=2)
         await _accrue(service, repo, qty=10)
-        request, balance = await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        request, balance = await service.approve(
+            request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
+        )
 
         assert request.status == LeaveRequestStatus.APPROVED
         assert balance == 8
@@ -341,7 +364,9 @@ class TestRule1ApproveWritesMovement:
         await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
         movements_before = len(repo.movements)
 
-        request, balance = await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        request, balance = await service.approve(
+            request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
+        )
 
         assert request.status == LeaveRequestStatus.APPROVED
         assert balance == 8
@@ -350,7 +375,9 @@ class TestRule1ApproveWritesMovement:
     async def test_non_accrual_type_approval_does_not_seed_balance(self) -> None:
         service, repo, _ = _service()
         req = await _request(service, repo, leave_type="sick", days=1)
-        request, _ = await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        request, _ = await service.approve(
+            request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
+        )
         assert request.status == LeaveRequestStatus.APPROVED
         assert (EMPLOYEE_1, "sick") not in repo.balances
 
@@ -369,7 +396,9 @@ class TestRule2NegativeBalance:
         service, repo, _ = _service()
         req = await _request(service, repo, days=5)
         await _accrue(service, repo, qty=5)
-        request, balance = await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        request, balance = await service.approve(
+            request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
+        )
         assert request.status == LeaveRequestStatus.APPROVED
         assert balance == 0
 
@@ -385,7 +414,9 @@ class TestRule5Cancel:
 
         assert request.status == LeaveRequestStatus.CANCELLED
         assert balance == 10  # days returned
-        cancellation = [m for m in repo.movements if m.ref_type == "cancellation" and m.ref_id == str(req.id)]
+        cancellation = [
+            m for m in repo.movements if m.ref_type == "cancellation" and m.ref_id == str(req.id)
+        ]
         assert cancellation and cancellation[0].qty == 3
         assert audit.added and audit.added[-1].action == HR_LEAVE_CANCELLED
 
@@ -411,34 +442,50 @@ class TestRule4Accrual:
         service, repo, audit = _service()
         await repo.create_employee(_employee())
 
-        first = await service.accrue(tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024)
-        second = await service.accrue(tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024)
+        first = await service.accrue(
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+        )
+        second = await service.accrue(
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+        )
 
         assert first is not None and second is None
-        annual = [m for m in repo.movements if m.ref_type == "annual_accrual" and m.ref_id == "2024"]
+        annual = [
+            m for m in repo.movements if m.ref_type == "annual_accrual" and m.ref_id == "2024"
+        ]
         assert len(annual) == 1
         assert audit.added and audit.added[-1].action == HR_LEAVE_ACCRUED
 
     async def test_non_accrual_type_cannot_accrue(self) -> None:
         service, _, _ = _service()
         with pytest.raises(ValueError, match="does not accrue"):
-            await service.accrue(tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="sick", year=2024)
+            await service.accrue(
+                tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="sick", year=2024
+            )
 
     async def test_full_year_accrual_uses_leave_type_days(self) -> None:
         service, repo, _ = _service()
         employee = _employee(hire_date=date(2024, 1, 1))
         await repo.create_employee(employee)
-        movement = await service.accrue(tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024)
+        movement = await service.accrue(
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+        )
         assert movement is not None
         assert movement.qty == 20  # hired Jan 1 → full year
 
     async def test_prorated_accrual_from_hire_date(self) -> None:
         service, repo, _ = _service()
         await repo.create_employee(_employee(hire_date=date(2024, 7, 1)))
-        movement = await service.accrue(tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024)
+        movement = await service.accrue(
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+        )
         assert movement is not None
         remaining = 365 - (date(2024, 7, 1).timetuple().tm_yday - 1)  # 184 days left
-        expected = int((Decimal("20") * Decimal(remaining) / Decimal(365)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        expected = int(
+            (Decimal("20") * Decimal(remaining) / Decimal(365)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
         assert movement.qty == expected
         assert movement.qty == 10  # half-year → 10 days
 
@@ -460,7 +507,9 @@ class TestRule3AtomicApproval:
             id=req.id,
         )
         # Guard returns None → service re-reads and treats as already-approved.
-        request, balance = await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
+        request, balance = await service.approve(
+            request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
+        )
         assert request.status == LeaveRequestStatus.APPROVED
         assert balance == 10
 

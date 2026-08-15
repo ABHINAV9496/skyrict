@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 from core.core.config import settings
+from core.features.crm.models import (  # noqa: F401
+    ErpCrmCustomerModel,
+    ErpCrmLeadModel,
+    ErpCrmOpportunityModel,
+)
 from core.features.finance.models import (  # noqa: F401
     ErpChartOfAccountModel,
     ErpFiscalPeriodModel,
@@ -52,6 +57,10 @@ from core.features.payroll.models import (  # noqa: F401
     PayrollEntryModel,
     PayrollRunModel,
     PayrollSettingsModel,
+)
+from core.features.sales.models import (  # noqa: F401
+    ErpSalesOrderLineModel,
+    ErpSalesOrderModel,
 )
 from core.models import (  # noqa: F401  # registers every ORM model
     CorePermissionModel,

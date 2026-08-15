@@ -7,7 +7,9 @@ item, with source/test citations, and the exact verification evidence for the
 final gate.
 
 Verification status: **all items closed, all gates green** as of
-`e267d3d` (see [Verification gate](#verification-gate)).
+`e267d3d` (see [Verification gate](#verification-gate)), and re-verified
+after the `nkswalih/dev` merge (see
+[Post-merge gate — dev merge](#post-merge-gate--dev-merge)).
 
 ---
 
@@ -139,6 +141,52 @@ All commands run at `services/core` (or repo root where noted), live Postgres on
 
 ---
 
+## Post-merge gate — dev merge
+
+`nkswalih/dev` merged as `af2dd4d` (parents `e09550a9c` + `f7e1f666b`).
+The 14 items and the race fix were re-verified against the merged tree, then
+the full gate was re-run and all new findings fixed in follow-up `d2c941c`.
+All numbers below are the post-merge, post-fix results.
+
+| Check | Result |
+|-------|--------|
+| `pytest tests/ -q` (core) | **441 passed, 0 failed, 0 skipped** (fresh DB; per-test tenant isolation) |
+| `pytest tests/unit -q` + `pytest tests/integration/api -q` (identity) | **580 passed** (511 unit + 69 integration) |
+| `ruff check services/core/` + `services/identity/` | 12 findings, all pre-existing baseline, none in merge-changed files |
+| `ruff format --check` both services | 9 pre-existing files unformatted, none in merge-changed files |
+| `mypy` core + identity | clean (core 124 files, identity 152 files) — the 6 pre-existing baseline errors fixed in `d2c941c` |
+| `import-linter lint` | 5 contracts kept, 0 broken (dev merge added one contract) |
+| Alembic chain | renumbered core head `0013`, identity head `0017`; `alembic current` = `0013 (head)`; round-trip covered by `test_migration_roundtrip.py` |
+
+**Dev-merge conflicts resolved** (add/add on shared modules):
+`alembic/versions/0010_erp_sequences_and_audit_log.py` (renumbered from 0006),
+`0011_leave_approval_status_and_adjusted_entries.py` (from 0007),
+`0012_leave_balances_from_movements.py` (from 0008),
+`0013_leave_ledger_triggers.py` (from 0009), and identity `0017` (from 0015);
+`tests/unit/core/test_audit_events.py` (kept dev's inventory catalog test).
+
+**Gate fixes shipped in `d2c941c`:**
+- identity `test_mfa.py` — `/api/v1/invitations/accept` is now multipart/form-data;
+  test switched from `json=` to `data=` (dev added the avatar `UploadFile` field).
+- mypy strict typing: `domain/entities.py`, `models/core_audit_log.py`,
+  `alembic/versions/0010_...py`, `api/v1/schemas/payroll.py`
+  (`SkippedEmployeeOut` explicit construction), `features/payroll/repository.py`
+  (`CursorResult` guard), `features/hr/ports.py` (`approved_unpaid_days`).
+- ruff format/import hygiene on the three merge-touched test files.
+- No source-level behavioral change; core suite passes unchanged on a fresh DB.
+
+**Test-isolation note.** The core API suite shares permanent tenants
+`olympus`/`globex`/`disabledco`, created on demand and cleaned up per test by
+the `integration_db` fixture — but only when the fixture itself created them.
+After the dev merge these tenant rows persisted in the identity-owned
+`tenants` table (core's `downgrade base` does not drop identity data), so
+employee counters and payroll runs leaked between tests (19 failures, e.g.
+`test_employee_numbers_are_sequential_per_tenant`, PR-1 period-conflict 409s).
+Fix: delete the persistent test-tenant rows before the gate run so the fixture
+recreates them per test. The full suite then passes (441/441).
+
+---
+
 ## Commit range
 
 `git log --oneline 0f2021e..HEAD` = **32 commits** = 28 implementation commits
@@ -195,4 +243,5 @@ include the commits that create and correct it.
 - `aab0b07` — add close-out record with item citations, race lifecycle, and gate evidence (creates this file)
 - `9054673` — finalize close-out commit range with this commit included
 - `12f348e` — make close-out commit range self-consistent snapshot
-- `HEAD` — reconcile close-out commit accounting — pinned implementation range + meta-commit list (this commit, which thus lands fourth)
+- `e09550a` — reconcile close-out commit accounting — pinned implementation range + meta-commit list (this commit, which thus lands fourth)
+- `HEAD` — post-merge gate amendment — dev-merge verification evidence + isolation note (fifth meta-commit)

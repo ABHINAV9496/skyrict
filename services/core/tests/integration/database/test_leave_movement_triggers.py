@@ -1,11 +1,14 @@
-"""Behavioral DB tests for migration 0009's leave-ledger triggers (gap item 11).
+"""Behavioral DB tests for the leave-ledger triggers (gap item 11).
 
 Proves the append-only and non-negative guarantees at the SQL layer against
 REAL Postgres — not through the service:
 
   - a positive accrual INSERT succeeds;
   - an INSERT that would push the per-(tenant, employee, leave_type) SUM
-    negative is rejected and fully rolled back;
+    negative is rejected and fully rolled back — for ACCRUAL leave types;
+  - non-accrual (ledger-only) types such as sick are NOT guarded: their first
+    approval may take the ledger negative (migration 0014), matching the
+    service, which only pre-checks balances for accrual types;
   - landing exactly on zero is allowed;
   - direct UPDATE / DELETE of a ledger row is rejected (append-only).
 
@@ -34,7 +37,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def leave_ledger_world(migrated_schema: None) -> dict[str, str]:
-    """Seed one tenant + accrual leave type; each test creates its own employee.
+    """Seed one tenant + one accrual and one non-accrual leave type.
 
     Plain (sync) fixture: all DB work runs inside one ``asyncio.run()`` and the
     engine pool is disposed before that run's loop closes, so the function-
@@ -43,7 +46,6 @@ def leave_ledger_world(migrated_schema: None) -> dict[str, str]:
 
     async def _setup() -> dict[str, str]:
         tenant_id = str(uuid.uuid4())
-        leave_type_id = str(uuid.uuid4())
 
         async with async_session_factory() as session:
             session.add(
@@ -56,21 +58,24 @@ def leave_ledger_world(migrated_schema: None) -> dict[str, str]:
                 )
             )
             await session.flush()
-            session.add(
-                LeaveTypeModel(
-                    tenant_id=uuid.UUID(tenant_id),
-                    id=uuid.UUID(leave_type_id),
-                    code="annual",
-                    name="Annual Leave",
-                    is_accrual=True,
-                    accrual_days_per_year=20,
+            for code, is_accrual, days in (
+                ("annual", True, 20),
+                ("sick", False, None),
+            ):
+                session.add(
+                    LeaveTypeModel(
+                        tenant_id=uuid.UUID(tenant_id),
+                        id=uuid.uuid4(),
+                        code=code,
+                        name=code.title() + " Leave",
+                        is_accrual=is_accrual,
+                        accrual_days_per_year=days,
+                    )
                 )
-            )
             await session.commit()
         await engine.dispose()
         return {
             "tenant_id": tenant_id,
-            "leave_type": "annual",
         }
 
     return asyncio.run(_setup())
@@ -93,7 +98,9 @@ async def _new_employee(session, tenant_id: str) -> str:
     return str(employee_id)
 
 
-async def _insert(session, tenant_id: str, employee_id: str, *, qty: int) -> str:
+async def _insert(
+    session, tenant_id: str, employee_id: str, *, qty: int, leave_type: str = "annual"
+) -> str:
     movement_id = str(uuid.uuid4())
     await session.execute(
         text(
@@ -105,7 +112,7 @@ async def _insert(session, tenant_id: str, employee_id: str, *, qty: int) -> str
             "tenant_id": tenant_id,
             "id": movement_id,
             "employee_id": employee_id,
-            "leave_type": "annual",
+            "leave_type": leave_type,
             "qty": qty,
             "ref_type": "annual_accrual",
             "ref_id": "2026",
@@ -115,13 +122,14 @@ async def _insert(session, tenant_id: str, employee_id: str, *, qty: int) -> str
     return movement_id
 
 
-async def _sum(session, tenant_id: str, employee_id: str) -> int:
+async def _sum(session, tenant_id: str, employee_id: str, leave_type: str = "annual") -> int:
     result = await session.execute(
         text(
             "SELECT COALESCE(SUM(qty), 0) FROM public.erp_leave_movements "
             "WHERE tenant_id = :tenant_id AND employee_id = :employee_id"
+            " AND leave_type = :leave_type"
         ),
-        {"tenant_id": tenant_id, "employee_id": employee_id},
+        {"tenant_id": tenant_id, "employee_id": employee_id, "leave_type": leave_type},
     )
     return int(result.scalar_one())
 
@@ -151,6 +159,23 @@ class TestLeaveLedgerTriggers:
                 await _insert(session, tenant_id, employee_id, qty=-20)
             await session.rollback()
             assert await _sum(session, tenant_id, employee_id) == 10
+
+    async def test_non_accrual_negative_insert_allowed(self, leave_ledger_world) -> None:
+        tenant_id = leave_ledger_world["tenant_id"]
+        async with async_session_factory() as session:
+            employee_id = await _new_employee(session, tenant_id)
+            # sick is ledger-only (is_accrual=False): the guard must NOT fire,
+            # even on the first row taking the ledger negative (migration 0014).
+            movement_id = await _insert(
+                session, tenant_id, employee_id, qty=-5, leave_type="sick"
+            )
+            assert await _sum(session, tenant_id, employee_id, leave_type="sick") == -5
+            assert (
+                await session.execute(
+                    text("SELECT 1 FROM public.erp_leave_movements WHERE id = :id"),
+                    {"id": movement_id},
+                )
+            ).scalar_one() == 1
 
     async def test_landing_exactly_on_zero_is_allowed(self, leave_ledger_world) -> None:
         tenant_id = leave_ledger_world["tenant_id"]

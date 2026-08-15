@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCallback, useState } from "react";
 import {
   ArrowLeft,
   Blocks,
+  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -20,7 +22,10 @@ import { cn } from "@/lib/utils";
  * comparing so the active state tracks the page regardless of which form the
  * browser is showing.
  */
-function isActive(pathname: string, item: NavItem): boolean {
+function isActive(
+  pathname: string,
+  item: Pick<NavItem, "href" | "exact">,
+): boolean {
   const normalized =
     pathname === "/"
       ? "/dashboard"
@@ -127,6 +132,24 @@ export function AppSidebar({
   showBackToOverview = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  /** A collapsible group is open once toggled; until then it defaults to open only when a sub-item is active. */
+  const isGroupOpen = useCallback(
+    (group: NavGroup): boolean => {
+      if (!group.collapsible) return true;
+      if (openGroups[group.label] !== undefined) return openGroups[group.label];
+      return group.items.some((item) => isActive(pathname, item));
+    },
+    [openGroups, pathname],
+  );
+
+  const toggleGroup = useCallback(
+    (group: NavGroup) => {
+      setOpenGroups((prev) => ({ ...prev, [group.label]: !isGroupOpen(group) }));
+    },
+    [isGroupOpen],
+  );
 
   return (
     <>
@@ -190,26 +213,92 @@ export function AppSidebar({
         </header>
 
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Dashboard">
-          {navGroups.map((group) => (
-            <div key={group.label} className="space-y-1">
-              {collapsed ? (
+          {navGroups.map((group) => {
+            const open = isGroupOpen(group);
+            const headerActive = group.collapsible
+              ? group.items.some((item) => isActive(pathname, item))
+              : false;
+
+            let header: React.ReactNode;
+            if (group.collapsible) {
+              const Icon = group.items[0]?.icon;
+              header = (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                  aria-expanded={open}
+                  title={collapsed ? group.label : undefined}
+                  className={cn(
+                    "group relative flex items-center gap-3 rounded-lg text-sm font-semibold transition-colors",
+                    collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
+                    headerActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  {headerActive ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+                    />
+                  ) : null}
+                  {Icon ? (
+                    <Icon
+                      aria-hidden="true"
+                      className={cn(
+                        "size-[18px] shrink-0",
+                        headerActive && "text-primary",
+                      )}
+                    />
+                  ) : null}
+                  {!collapsed ? (
+                    <>
+                      <span className="truncate">{group.label}</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn(
+                          "ml-auto size-4 shrink-0 transition-transform",
+                          open && "rotate-180",
+                        )}
+                      />
+                    </>
+                  ) : null}
+                </button>
+              );
+            } else {
+              header = collapsed ? (
                 <div className="mx-1 mb-2 h-px bg-sidebar-border" aria-hidden="true" />
               ) : (
                 <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
                   {group.label}
                 </p>
-              )}
-              {group.items.map((item) => (
-                <SidebarLink
-                  key={item.href}
-                  item={item}
-                  collapsed={collapsed}
-                  pathname={pathname}
-                  onCloseMobile={onCloseMobile}
-                />
-              ))}
-            </div>
-          ))}
+              );
+            }
+
+            return (
+              <div key={group.label} className="space-y-1">
+                {header}
+                {!collapsed && (!group.collapsible || open) ? (
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      group.collapsible && "ml-3 border-l border-sidebar-border pl-2",
+                    )}
+                  >
+                    {group.items.map((item) => (
+                      <SidebarLink
+                        key={item.href}
+                        item={item}
+                        collapsed={collapsed}
+                        pathname={pathname}
+                        onCloseMobile={onCloseMobile}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         {showBackToOverview ? (

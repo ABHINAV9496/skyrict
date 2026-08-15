@@ -1,10 +1,14 @@
 import {
   BarChart3,
   Blocks,
+  BookOpen,
+  CalendarDays,
   Contact,
   LayoutDashboard,
+  NotebookPen,
   Package,
   Plug,
+  ReceiptText,
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
@@ -29,6 +33,8 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
+  /** Collapsible groups render their label as a toggle that opens the indented sub-items. */
+  collapsible?: boolean;
 }
 
 /** Workspace sidebar (non-module pages). Modules are entered from the Overview launchpad. */
@@ -97,9 +103,20 @@ export const erpNavGroups: NavGroup[] = [
       { href: "/dashboard/erp/crm", label: "CRM", icon: Contact, permission: "erp.crm.read" },
       { href: "/dashboard/erp/sales", label: "Sales", icon: ShoppingCart, permission: "erp.sales.read" },
       { href: "/dashboard/erp/inventory", label: "Inventory", icon: Package, permission: "erp.inventory.read" },
-      { href: "/dashboard/erp/finance", label: "Finance", icon: Wallet, permission: "erp.finance.read" },
       { href: "/dashboard/erp/hr", label: "HR", icon: Blocks, permission: "erp.hr.read" },
       { href: "/dashboard/erp/reports", label: "Reports", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Finance",
+    collapsible: true,
+    items: [
+      { href: "/dashboard/erp/finance", label: "Overview", icon: Wallet, permission: "erp.finance.read", exact: true },
+      { href: "/dashboard/erp/finance/accounts", label: "Accounts", icon: BookOpen, permission: "erp.finance.read" },
+      { href: "/dashboard/erp/finance/journal-entries", label: "Journal Entries", icon: NotebookPen, permission: "erp.finance.read" },
+      { href: "/dashboard/erp/finance/fiscal-periods", label: "Fiscal Periods", icon: CalendarDays, permission: "erp.finance.read" },
+      { href: "/dashboard/erp/finance/invoices", label: "Invoices", icon: ReceiptText, permission: "erp.finance.read" },
+      { href: "/dashboard/erp/finance/reports", label: "Reports", icon: BarChart3, permission: "erp.finance.read" },
     ],
   },
 ];

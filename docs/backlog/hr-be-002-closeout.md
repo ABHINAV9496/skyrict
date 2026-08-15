@@ -141,9 +141,11 @@ All commands run at `services/core` (or repo root where noted), live Postgres on
 
 ## Commit range
 
-`git log --oneline 0f2021e..HEAD` (29 commits):
+`git log --oneline 0f2021e..HEAD` (run live — snapshot below captured at
+`9054673`, 30 commits):
 
 ```
+9054673 docs(core): [HR-BE-002] finalize close-out commit range with this commit included
 aab0b07 docs(core): [HR-BE-002] add close-out record with item citations, race lifecycle, and gate evidence
 e267d3d docs(core): [HR-BE-002] mark leave-approval atomicity race RESOLVED in hr-payroll.md 4.3
 7a6f439 test(core): [HR-BE-002] add lock_leave_balance no-op to unit-test repository doubles

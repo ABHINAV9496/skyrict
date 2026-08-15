@@ -8,10 +8,12 @@ is additionally bound by RLS (``app.current_tenant_id``).
 
 from __future__ import annotations
 
-import uuid
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from core.domain.entities import AuditLogEntry, ErpSequence
+if TYPE_CHECKING:
+    import uuid
+
+    from core.domain.entities import AuditLogEntry, ErpSequence
 
 
 class SequenceRepositoryPort(Protocol):

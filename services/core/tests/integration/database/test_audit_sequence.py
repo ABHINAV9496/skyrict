@@ -27,7 +27,7 @@ Skipped automatically when Postgres is unreachable (``migrated_schema``).
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import text
@@ -40,6 +40,9 @@ from core.db.sequence_repository import SequenceRepository
 from core.db.session import async_session_factory, engine
 from core.domain.entities import AuditLogEntry
 from core.models.tenant import TenantModel
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 pytestmark = pytest.mark.integration
 
@@ -265,7 +268,11 @@ class TestAuditHashChain:
             filtered = await repo.list(
                 uuid.UUID(audit_world["tenant_a"]), action=PAYROLL_RUN_APPROVED
             )
-            assert [e.target for e in filtered] == ["payroll_run:2", "payroll_run:1", "payroll_run:0"]
+            assert [e.target for e in filtered] == [
+                "payroll_run:2",
+                "payroll_run:1",
+                "payroll_run:0",
+            ]
 
             fetched = await repo.get(uuid.UUID(audit_world["tenant_a"]), feed[0].id)
             assert fetched is not None and fetched.action == HR_LEAVE_APPROVED
@@ -300,9 +307,7 @@ class TestAuditHashChain:
                 ),
                 {"tid": uuid.UUID(audit_world["tenant_a"])},
             )
-            row_a = (
-                await conn.execute(text("SELECT hash, prev_hash FROM core_audit_logs"))
-            ).one()
+            row_a = (await conn.execute(text("SELECT hash, prev_hash FROM core_audit_logs"))).one()
             # Tenant B's first-ever row ALSO starts at genesis, despite A's rows.
             await conn.exec_driver_sql(
                 "SELECT set_config('app.current_tenant_id', $1, true)",
@@ -315,9 +320,7 @@ class TestAuditHashChain:
                 ),
                 {"tid": uuid.UUID(audit_world["tenant_b"])},
             )
-            row_b = (
-                await conn.execute(text("SELECT hash, prev_hash FROM core_audit_logs"))
-            ).one()
+            row_b = (await conn.execute(text("SELECT hash, prev_hash FROM core_audit_logs"))).one()
 
             assert row_a.prev_hash == "0" * 64
             assert row_b.prev_hash == "0" * 64
@@ -407,7 +410,9 @@ class TestAuditAndSequenceRls:
                 "SELECT set_config('app.current_tenant_id', $1, true)",
                 (audit_world["tenant_a"],),
             )
-            a_logs = (await conn.execute(text("SELECT target FROM core_audit_logs"))).scalars().all()
+            a_logs = (
+                (await conn.execute(text("SELECT target FROM core_audit_logs"))).scalars().all()
+            )
             assert a_logs == ["leave_request:rls"]
             a_seqs = (await conn.execute(text("SELECT entity FROM erp_sequences"))).scalars().all()
             assert a_seqs == ["invoice"]
@@ -416,7 +421,9 @@ class TestAuditAndSequenceRls:
                 "SELECT set_config('app.current_tenant_id', $1, true)",
                 (audit_world["tenant_b"],),
             )
-            b_logs = (await conn.execute(text("SELECT target FROM core_audit_logs"))).scalars().all()
+            b_logs = (
+                (await conn.execute(text("SELECT target FROM core_audit_logs"))).scalars().all()
+            )
             b_seqs = (await conn.execute(text("SELECT entity FROM erp_sequences"))).scalars().all()
             assert b_logs == []
             assert b_seqs == []
@@ -451,9 +458,7 @@ class TestAuditAndSequenceRls:
 
 
 class TestMigration0006:
-    async def test_erp_permission_keys_seeded(
-        self, migrated_schema: None
-    ) -> None:
+    async def test_erp_permission_keys_seeded(self, migrated_schema: None) -> None:
         async with async_session_factory() as session:
             result = await session.execute(text("SELECT key FROM core_permissions"))
             keys = result.scalars().all()

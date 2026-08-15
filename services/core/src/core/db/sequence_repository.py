@@ -9,7 +9,7 @@ concurrent first-uses can't duplicate the row, then retries the UPDATE.
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -17,6 +17,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from core.db.repository import SqlRepository
 from core.domain.entities import ErpSequence
 from core.models.erp_sequence import ErpSequenceModel
+
+if TYPE_CHECKING:
+    import uuid
 
 
 def _sequence_from_orm(model: ErpSequenceModel) -> ErpSequence:

@@ -7,13 +7,16 @@ only — there is no update or delete path.
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from core.db.repository import SqlRepository
 from core.domain.entities import AuditLogEntry
 from core.models.core_audit_log import CoreAuditLogModel
+
+if TYPE_CHECKING:
+    import uuid
 
 
 def _audit_from_orm(model: CoreAuditLogModel) -> AuditLogEntry:
@@ -64,9 +67,9 @@ class AuditLogRepository(SqlRepository):
         stmt = select(CoreAuditLogModel).where(CoreAuditLogModel.tenant_id == tenant_id)
         if action is not None:
             stmt = stmt.where(CoreAuditLogModel.action == action)
-        stmt = stmt.order_by(CoreAuditLogModel.created_at.desc(), CoreAuditLogModel.id.desc()).limit(
-            limit
-        )
+        stmt = stmt.order_by(
+            CoreAuditLogModel.created_at.desc(), CoreAuditLogModel.id.desc()
+        ).limit(limit)
         result = await self.session.execute(stmt)
         return [_audit_from_orm(model) for model in result.scalars().all()]
 

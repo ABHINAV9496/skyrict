@@ -8,12 +8,15 @@ Producers must use the constants from ``core.core.audit_events`` for ``action``.
 
 from __future__ import annotations
 
-import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.core.audit_events import ALL_AUDIT_EVENTS
-from core.db.ports import AuditLogRepositoryPort
 from core.domain.entities import AuditLogEntry
+
+if TYPE_CHECKING:
+    import uuid
+
+    from core.db.ports import AuditLogRepositoryPort
 
 
 class AuditService:
@@ -35,7 +38,9 @@ class AuditService:
     ) -> AuditLogEntry:
         """Append one immutable audit event (hash chain computed by the trigger)."""
         if action not in ALL_AUDIT_EVENTS:
-            raise ValueError(f"unknown audit action {action!r}; use core.core.audit_events constants")
+            raise ValueError(
+                f"unknown audit action {action!r}; use core.core.audit_events constants"
+            )
         return await self._repository.add(
             AuditLogEntry(
                 tenant_id=tenant_id,

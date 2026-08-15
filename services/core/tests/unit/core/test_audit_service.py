@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 
 from core.core.audit_events import HR_LEAVE_APPROVED
 from core.core.audit_service import AuditService
-from core.domain.entities import AuditLogEntry
+
+if TYPE_CHECKING:
+    from core.domain.entities import AuditLogEntry
 
 
 class FakeAuditRepository:

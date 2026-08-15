@@ -26,8 +26,8 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 
 from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
 from core.core.exceptions import PayrollEntryImmutableError

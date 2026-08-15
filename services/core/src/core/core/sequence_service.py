@@ -6,10 +6,13 @@ The service is a thin facade over :class:`SequenceRepositoryPort` so producers
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
-from core.db.ports import SequenceRepositoryPort
-from core.domain.entities import ErpSequence
+if TYPE_CHECKING:
+    import uuid
+
+    from core.db.ports import SequenceRepositoryPort
+    from core.domain.entities import ErpSequence
 
 
 class SequenceService:

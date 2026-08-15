@@ -577,24 +577,35 @@ All rules are implemented in the **service layer** (`features/hr/service.py`, `f
 3. If the balance would go negative (§4.2), the **entire transaction rolls back** — the request stays `pending`.
 4. Rejection writes no movement (nothing was deducted) and flips `pending → rejected` atomically.
 
-5. **Known, unresolved (tracked — NOT an accepted Phase-1 tradeoff):** the
-   single-request atomicity above does **not** extend across two concurrent
-   approvals on *different* requests for the *same* employee. Both can read
+5. **Resolved — concurrent-approval race (HR-BE-002):** the single-request
+   atomicity above originally did **not** extend across two concurrent
+   approvals on *different* requests for the *same* employee: both could read
    the same pre-approval balance, both pass the §4.2 check, and both write a
    materialized `erp_leave_balances` row based only on their own transaction's
-   view — so the ledger can go negative while the materialized balance still
-   reads `>= 0` and `ck_erp_leave_balances_non_negative` cannot see it (e.g.
-   two concurrent `−15` deductions from a balance of `20` each write
-   `balance = 5`; the true ledger sum is `−10`). This was **discovered, not
-   designed**, and is a live correctness bug in the leave-balance write path —
-   the same defect class §4.2's CHECK and the accrual idempotency probe exist
-   to prevent. Fix is tracked as the HR-BE-002 concurrency-hardening follow-up;
-   candidate approaches: `SELECT ... FOR UPDATE` on the employee's balance row,
-   serializable isolation for the approval transaction, or an atomic
-   recompute-and-check like the accrual path. Until then
-   `test_concurrent_approve_cross_requests_invariant` is `xfail` with this
-   exact mechanism as its reason — a passing run is race timing, not proof of
-   correctness.
+   view — the ledger could go negative while the materialized balance still
+   read `>= 0` and `ck_erp_leave_balances_non_negative` could not see it. This
+   was **discovered, not designed**, and was a live correctness bug in the
+   leave-balance write path. **Fix:** every balance-mutating path now takes a
+   row lock on `erp_leave_balances (tenant_id, employee_id, leave_type)` before
+   reading/rechecking the balance. `HrRepository.lock_leave_balance`
+   (`services/core/src/core/features/hr/repository.py:502`) first seeds the
+   row (`INSERT ... ON CONFLICT DO NOTHING` on
+   `uq_erp_leave_balances_employee_type`, so a not-yet-created balance is still
+   locked — `SELECT ... FOR UPDATE` alone would lock nothing on a missing row)
+   and is then re-probed with a **fresh** recompute, never the pre-lock value.
+   `approve_leave_request` locks before its §4.2 check
+   (`hr/service.py:521`), cancellation of an approved request locks before its
+   reversal (`hr/service.py:663`), and the accrual path locks in
+   `accrue_leave_movement` (`hr/repository.py:518`). Multi-row callers — payroll
+   `compute_run`'s accrual loop (`payroll/service.py:308`) — acquire locks in a
+   stable deterministic order (`list_active_employees` sorts by
+   `employee_number`, `payroll/repository.py:647`) to avoid deadlock; this
+   ordering contract is documented at the call site. Regression coverage:
+   `test_concurrent_approve_cross_requests_invariant` passes deterministically
+   (no longer `xfail`), plus `..._stress_balance_exact`,
+   `test_concurrent_compute_with_approval_no_deadlock`, and
+   `test_concurrent_first_grant_single_movement` in
+   `services/core/tests/integration/api/test_concurrency_atomicity.py`.
 
 ### 4.4 Rule 4 — Leave accrual is explicit and idempotent
 

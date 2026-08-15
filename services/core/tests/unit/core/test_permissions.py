@@ -49,6 +49,7 @@ class TestCatalog:
             "erp.payroll.approve",
         ):
             assert key in CATALOG
+
     def test_reuses_identity_crm_and_sales_approve_keys(self) -> None:
         # identity seeds erp.crm.read / erp.crm.write / erp.sales.approve —
         # the SAME strings (services/identity/src/identity/core/permissions.py),

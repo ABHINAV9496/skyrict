@@ -24,7 +24,7 @@ catalog that identity's ``permissions`` mirrors and role grants reference
 (``erp.hr.*`` and ``erp.payroll.*``).
 
 Revision ID: 0010
-Revises: 0006
+Revises: 0003
 Create Date: 2026-08-13
 """
 
@@ -37,7 +37,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0010"
-down_revision = "0006"
+down_revision = "0003"
 branch_labels = None
 depends_on = None
 

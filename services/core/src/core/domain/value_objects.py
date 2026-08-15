@@ -114,6 +114,83 @@ class PaymentStatus(StrEnum):
     APPLIED = "applied"
 
 
+class LeadStatus(StrEnum):
+    """Native PostgreSQL enum backing ``erp_crm_leads.status``.
+
+    An inbound inquiry before it has pipeline value. ``qualified`` is the
+    terminal lead state that qualifies into an opportunity; ``disqualified``
+    is the dead end. There is deliberately no ``converted`` state — promotion
+    to an opportunity is an event, not a lead state (SKY-43).
+    """
+
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    DISQUALIFIED = "disqualified"
+
+
+class OpportunityStage(StrEnum):
+    """Native PostgreSQL enum backing ``erp_crm_opportunities.stage``.
+
+    The pipeline moves ``prospecting -> qualified -> proposal ->
+    negotiation`` and terminates at ``won`` or ``lost`` (both are terminal —
+    the DB CHECK ``ck_erp_crm_opportunities_stage_outcome`` ties each terminal
+    stage to its timestamp and forbids both).
+    """
+
+    PROSPECTING = "prospecting"
+    QUALIFIED = "qualified"
+    PROPOSAL = "proposal"
+    NEGOTIATION = "negotiation"
+    WON = "won"
+    LOST = "lost"
+
+
+class OrderStatus(StrEnum):
+    """Native PostgreSQL enum backing ``erp_sales_orders.status``.
+
+    A draft is not yet a commitment; ``confirmed`` is the money moment that
+    reserves stock and runs the credit check; ``fulfilled`` hands the order to
+    finance for invoicing; ``cancelled`` is terminal. The DB CHECK
+    ``ck_erp_sales_orders_status_confirmed_at`` ties ``confirmed_at`` to
+    ``confirmed``/``fulfilled``.
+    """
+
+    DRAFT = "draft"
+    CONFIRMED = "confirmed"
+    FULFILLED = "fulfilled"
+    CANCELLED = "cancelled"
+
+
+class CreditCheckResult(StrEnum):
+    """Native PostgreSQL enum backing ``erp_sales_orders.credit_check``.
+
+    The confirm-time credit check against the customer's credit limit:
+    ``pending`` until confirm runs it, then ``passed`` or ``failed``. A failed
+    check keeps the order in ``draft`` (the DB has no opinion on the result —
+    the service does).
+    """
+
+    PENDING = "pending"
+    PASSED = "passed"
+    FAILED = "failed"
+
+
+class DataScope(StrEnum):
+    """How much of a tenant's data a user may see.
+
+    Ordered by increasing privilege: ``OWNER`` (only rows the user owns) <
+    ``TEAM`` (own rows plus the user's team's rows) < ``ALL`` (everything in
+    the tenant, still bounded by RLS). Resolution from a role happens in ONE
+    place — ``core.db.rbac.resolve_data_scope`` — repositories only ever
+    receive the resolved scope and never hardcode role names.
+    """
+
+    OWNER = "owner"
+    TEAM = "team"
+    ALL = "all"
+
+
 def _require_currency(currency: str) -> None:
     """Validate a currency code against the supported ISO 4217 set."""
     normalized = currency.strip().upper()

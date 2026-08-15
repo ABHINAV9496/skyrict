@@ -18,6 +18,13 @@ from core.core.constants import (
     PayrollRunStatus,
 )
 from core.domain.value_objects import Money
+from core.domain.value_objects import (
+    CreditCheckResult,
+    LeadStatus,
+    Money,
+    OpportunityStage,
+    OrderStatus,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -595,3 +602,140 @@ class BalanceSheet:
     total_assets: Decimal
     total_liabilities: Decimal
     total_equity: Decimal
+
+
+# ---------------------------------------------------------------------------
+# CRM entities (leads, opportunities, customers) — CRM-DATA-001
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Lead:
+    """An inbound inquiry before it has pipeline value.
+
+    Owner/team-scoped: ``owner_id`` and ``team_id`` are plain UUID references
+    to identity users (and a future teams model), resolved through ports at
+    the service layer. ``email`` is deliberately not unique — dedupe is a
+    soft probe at the service layer.
+    """
+
+    tenant_id: uuid.UUID
+    status: LeadStatus = LeadStatus.NEW
+    source: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company: str | None = None
+    owner_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Opportunity:
+    """A pipeline deal — moves through stages and terminates won/lost.
+
+    Deliberately customer-less in Phase 1 (a won opportunity is promoted to a
+    customer by the service layer). ``amount`` is optional until the deal has
+    value; when present it is a ``Money`` so the currency tag travels with it.
+    ``won_at`` / ``lost_at`` are set exactly on the terminal transition.
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    stage: OpportunityStage = OpportunityStage.PROSPECTING
+    amount: Money | None = None
+    probability: int = 0
+    expected_close_date: date | None = None
+    owner_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    won_at: datetime | None = None
+    lost_at: datetime | None = None
+    lost_reason: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Customer:
+    """An account we do business with.
+
+    Soft-deleted via ``is_active`` (the ERP convention — no status enum).
+    ``customer_code`` is the stable per-tenant external key. A NULL
+    ``credit_limit`` means "no limit"; when present it is a ``Money`` so the
+    currency tag travels with it.
+    """
+
+    tenant_id: uuid.UUID
+    customer_code: str
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    credit_limit: Money | None = None
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Sales entities (orders, order lines) — CRM-DATA-001
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SalesOrder:
+    """A customer commitment — the money record handed to finance.
+
+    ``status`` follows ``draft -> confirmed -> fulfilled`` (``cancelled``
+    terminal). The money columns are a cached projection: the service
+    recomputes them from the lines on every write (CRM-BE-002) — never
+    trusted from clients. ``credit_check`` records the confirm-time result.
+    """
+
+    tenant_id: uuid.UUID
+    order_number: str
+    customer_id: uuid.UUID
+    status: OrderStatus = OrderStatus.DRAFT
+    credit_check: CreditCheckResult = CreditCheckResult.PENDING
+    subtotal: Money = field(default_factory=lambda: Money.zero("USD"))
+    discount: Money = field(default_factory=lambda: Money.zero("USD"))
+    tax: Money = field(default_factory=lambda: Money.zero("USD"))
+    total: Money = field(default_factory=lambda: Money.zero("USD"))
+    confirmed_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SalesOrderLine:
+    """One line of a sales order.
+
+    ``product_name`` / ``sku`` are denormalized snapshots taken at order time
+    so history stays stable even if the product catalog changes. Per-line
+    prices are plain Decimals (the currency lives on the order header);
+    ``line_total`` is a cached projection recomputed by the service.
+
+    ``order_id`` is None on a line being created (the repository stamps the
+    generated header id on write — mirroring ``InvoiceLine.invoice_id``) and
+    always populated on read.
+    """
+
+    tenant_id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: str
+    sku: str
+    quantity: Decimal
+    order_id: uuid.UUID | None = None
+    unit_price: Decimal = Decimal("0")
+    discount: Decimal = Decimal("0")
+    tax: Decimal = Decimal("0")
+    line_total: Decimal = Decimal("0")
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

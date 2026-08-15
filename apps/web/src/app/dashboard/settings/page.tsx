@@ -1,7 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { LogOut, Plug, ShieldCheck, SlidersHorizontal, UserRound } from "lucide-react";
+import {
+  LogOut,
+  Monitor,
+  Moon,
+  Palette,
+  Plug,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sun,
+  UserRound,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { SettingsSkeleton } from "@/components/ui/page-skeletons";
@@ -52,6 +63,58 @@ function StatusBadge({ enabled }: { enabled: boolean }) {
     >
       {enabled ? "Enabled" : "Disabled"}
     </span>
+  );
+}
+
+const THEME_OPTIONS = [
+  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+] as const;
+
+function ThemeSection() {
+  const { theme, resolvedTheme, setTheme } = useTheme();
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Palette aria-hidden="true" className="size-5 text-primary" />
+        Appearance
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        Choose how Skyrict looks for you. System follows your device setting.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Theme">
+        {THEME_OPTIONS.map((option) => {
+          const selected = theme === option.value;
+          const Icon = option.icon;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setTheme(option.value)}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors",
+                selected
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {theme === "dark"
+          ? "Dark mode is on."
+          : theme === "light"
+            ? "Light mode is on."
+            : `Following your device (currently ${resolvedTheme === "dark" ? "dark" : "light"}).`}
+      </p>
+    </section>
   );
 }
 
@@ -203,6 +266,8 @@ export default function SettingsPage() {
           />
         </dl>
       </section>
+
+      <ThemeSection />
 
       <section className="rounded-xl border border-border bg-card p-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">

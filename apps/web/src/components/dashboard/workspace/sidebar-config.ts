@@ -84,7 +84,6 @@ export const workspaceAccountItems: NavItem[] = [
     href: "/dashboard/settings",
     label: "Settings",
     icon: SlidersHorizontal,
-    permission: "settings:read",
     tour: "nav-settings",
   },
 ];

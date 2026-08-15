@@ -133,6 +133,9 @@ class FakeHrRepository:
     async def recompute_balance(self, employee_id, leave_type, *, tenant_id) -> int:
         return 0
 
+    async def lock_leave_balance(self, employee_id, leave_type, *, tenant_id) -> None:
+        """No-op in the in-memory double: nothing to serialize without a DB."""
+
     async def list_leave_movements(self, tenant_id, employee_id, leave_type=None):
         return []
 

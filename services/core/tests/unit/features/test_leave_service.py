@@ -165,6 +165,11 @@ class FakeHrRepository:
         self.movements.append(movement)
         return movement
 
+    async def lock_leave_balance(
+        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
+    ) -> None:
+        """No-op in the in-memory double: nothing to serialize without a DB."""
+
     async def list_leave_movements(
         self, tenant_id: uuid.UUID, employee_id: uuid.UUID, leave_type: str | None = None
     ) -> list[ent.LeaveMovement]:

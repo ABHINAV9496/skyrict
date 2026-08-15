@@ -1119,7 +1119,7 @@ class TestDowngradeRoundTrip:
     revision, resolved dynamically), then ``upgrade head`` re-applies the
     CRM/sales block and everything above it, so the version table is back at
     head before any other test module runs. On this branch the HR/ERP
-    migrations 0010-0013 sit on top of 0003, so "0003 is the head" no longer
+    migrations 0010-0014 sit on top of 0003, so "0003 is the head" no longer
     holds; the parent is derived from the script directory instead.
     """
 

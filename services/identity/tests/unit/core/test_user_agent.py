@@ -39,7 +39,21 @@ def test_parse_mobile_chrome_android() -> None:
 
     assert info.os == "Android"
     assert info.device_type == "Mobile"
-    assert "Pixel" in info.device or "Pixel" in info.browser or info.device == "Unknown"
+    assert info.device.startswith("Pixel")
+    assert "Android" in info.device
+
+
+def test_desktop_chrome_gets_browser_device_label() -> None:
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    )
+    info = parse_user_agent(ua)
+
+    assert info.device_type == "Desktop"
+    assert info.device.startswith("Chrome")
+    assert "Windows" in info.device
+    assert info.device != "Unknown"
 
 
 def test_parse_ipad_is_tablet() -> None:
@@ -50,6 +64,7 @@ def test_parse_ipad_is_tablet() -> None:
     info = parse_user_agent(ua)
 
     assert info.device_type == "Tablet"
+    assert info.device.startswith("iPad")
 
 
 def test_empty_ua_yields_unknown() -> None:

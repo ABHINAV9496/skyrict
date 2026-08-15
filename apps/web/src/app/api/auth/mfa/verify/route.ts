@@ -6,6 +6,7 @@ import {
   assertSameOrigin,
   backendError,
   callBackend,
+  clientIp,
   mapUser,
   resolveTenantSlug,
 } from "@/lib/server/auth";
@@ -30,6 +31,8 @@ export async function POST(request: NextRequest) {
   const result = await callBackend("/auth/mfa/verify", {
     body: { mfa_token: mfaToken, code },
     tenantSlug: resolveTenantSlug(request.headers.get("host")),
+    userAgent: request.headers.get("user-agent"),
+    clientIp: clientIp(request),
   });
   if (!result.ok) return backendError(result);
 

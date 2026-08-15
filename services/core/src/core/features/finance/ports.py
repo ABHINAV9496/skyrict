@@ -7,9 +7,9 @@ implementations. Feature modules may NOT import ``core.models`` / ``core.db``
 
 - ``FinanceRepositoryPort`` is implemented by ``FinanceRepository`` (same
   feature package — no layer violation);
-- ``AuditSink`` is implemented structurally by ``core.db.audit_repository``
-  (duck-typed — that module never imports this one, so there is no reverse
-  dependency);
+- ``AuditSink`` is implemented structurally by
+  ``core.features.audit.repository`` (duck-typed — that module never imports
+  this one, so there is no reverse dependency);
 - ``FinanceEventSink`` is implemented structurally by
   ``core.events.producers.finance_events.FinanceEventPublisher``;
 - ``InvoicePort`` is the seam the future CRM/sales module calls to bill a
@@ -231,7 +231,7 @@ class InvoicePort(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Audit sink (implemented structurally by core.db.audit_repository)
+# Audit sink (implemented structurally by core.features.audit.repository)
 # ---------------------------------------------------------------------------
 
 

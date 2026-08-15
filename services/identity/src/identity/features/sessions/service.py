@@ -122,9 +122,15 @@ class SessionService:
                 details={"reason": "session_cap_evicted"},
             )
 
-    async def list_user_sessions(self, user_id: str | uuid.UUID) -> list[Session]:
-        """List all active, unexpired sessions for a user."""
-        return await self.session_repo.get_active_by_user(user_id)
+    async def list_user_sessions(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> list[Session]:
+        """List all active, unexpired sessions for a user.
+
+        When ``tenant_id`` is given only sessions in that tenant are returned
+        (used by the member-management surface).
+        """
+        return await self.session_repo.get_active_by_user(user_id, tenant_id)
 
     async def get_session(self, session_id: str | uuid.UUID) -> Session | None:
         """Fetch a session by id (any status), or None when absent."""
@@ -140,16 +146,24 @@ class SessionService:
         sessions = await self.session_repo.get_active_by_user(user_id)
         return any(_same_device(session, user_agent, ip_address) for session in sessions)
 
-    async def revoke_session(self, user_id: str | uuid.UUID, session_id: str | uuid.UUID) -> None:
+    async def revoke_session(
+        self,
+        user_id: str | uuid.UUID,
+        session_id: str | uuid.UUID,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         """Revoke a specific session (active -> revoked).
 
         Missing, foreign, and already-terminated sessions all surface as
-        ``SessionNotFoundError`` (404) so double-revoke stays idempotent.
+        ``SessionNotFoundError`` (404) so double-revoke stays idempotent. When
+        ``tenant_id`` is given, a session outside that tenant is treated as
+        foreign as well.
         """
         session = await self.session_repo.get_by_id(session_id)
         if (
             not session
             or session.user_id != uuid.UUID(str(user_id))
+            or (tenant_id is not None and session.tenant_id != uuid.UUID(str(tenant_id)))
             or session.status is not SessionStatus.ACTIVE
         ):
             raise SessionNotFoundError()
@@ -214,10 +228,17 @@ class SessionService:
                 tenant_id=str(session.tenant_id),
             )
 
-    async def revoke_all_sessions(self, user_id: str | uuid.UUID) -> None:
-        """Revoke all sessions for a user (force logout everywhere)."""
-        active = await self.session_repo.get_active_by_user(user_id)
-        await self.session_repo.revoke_all_for_user(user_id)
+    async def revoke_all_sessions(
+        self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
+    ) -> None:
+        """Revoke all sessions for a user (force logout everywhere).
+
+        When ``tenant_id`` is given only that tenant's sessions are revoked —
+        used to log a member out of the current workspace without touching
+        their sessions in other organizations.
+        """
+        active = await self.session_repo.get_active_by_user(user_id, tenant_id)
+        await self.session_repo.revoke_all_for_user(user_id, tenant_id)
         if active:
             await self.audit_service.log(
                 action=SESSION_REVOKED_ALL,

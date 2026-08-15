@@ -5,6 +5,7 @@ import {
   assertSameOrigin,
   backendError,
   callBackend,
+  clientIp,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
       phoneNumber: body.phoneNumber ?? null,
       address: body.address ?? null,
     },
+    userAgent: request.headers.get("user-agent"),
+    clientIp: clientIp(request),
   });
   if (!result.ok) return backendError(result);
 

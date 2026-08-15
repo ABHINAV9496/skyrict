@@ -42,6 +42,7 @@ class UserModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     phone_country: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     mfa_backup_codes: Mapped[list[str | None] | None] = mapped_column(ARRAY(TEXT), nullable=True)
     onboarding_dismissed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

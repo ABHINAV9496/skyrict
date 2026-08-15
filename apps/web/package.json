@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@hookform/resolvers": "^5.5.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

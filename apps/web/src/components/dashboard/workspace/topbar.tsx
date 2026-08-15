@@ -1,16 +1,17 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Inbox, Menu } from "lucide-react";
+import { Inbox, Menu, Play } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const knownTitles: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/members": "Members",
+  "/dashboard/invite": "Invite team",
   "/dashboard/agents": "AI Agents",
-  "/dashboard/erp": "ERP",
-  "/dashboard/intelligence": "Intelligence",
+  "/dashboard/erp": "Business Operations",
+  "/dashboard/intelligence": "Market Intelligence",
   "/dashboard/settings": "Settings",
   "/dashboard/integrations": "Integrations",
 };
@@ -25,13 +26,19 @@ function humanize(segment: string): string {
     .trim();
 }
 
-/** Resolve a page title from any route under /dashboard, known or not. */
+/** Resolve a page title from any workspace route, known or not. */
 function resolvePageTitle(pathname: string): string {
-  if (knownTitles[pathname]) return knownTitles[pathname];
+  const normalized =
+    pathname === "/"
+      ? "/dashboard"
+      : pathname.startsWith("/dashboard")
+        ? pathname
+        : `/dashboard${pathname}`;
+  if (knownTitles[normalized]) return knownTitles[normalized];
 
-  const segments = pathname.split("/").filter(Boolean);
+  const segments = normalized.split("/").filter(Boolean);
   const parent = Object.keys(knownTitles)
-    .filter((key) => pathname.startsWith(`${key}/`))
+    .filter((key) => normalized.startsWith(`${key}/`))
     .sort((a, b) => b.length - a.length)[0];
 
   const rest = parent
@@ -75,14 +82,27 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
         </h1>
       </div>
 
-      <button
-        type="button"
-        aria-label="Inbox"
-        title="Inbox"
-        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
-      >
-        <Inbox aria-hidden="true" className="size-5" />
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        {(pathname === "/" || pathname === "/dashboard") && (
+          <button
+            type="button"
+            aria-label="Replay product tour"
+            title="Replay tour"
+            onClick={() => window.dispatchEvent(new Event("skyrict:start-tour"))}
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
+          >
+            <Play aria-hidden="true" className="size-5" />
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label="Inbox"
+          title="Inbox"
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
+        >
+          <Inbox aria-hidden="true" className="size-5" />
+        </button>
+      </div>
     </header>
   );
 }

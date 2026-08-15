@@ -26,9 +26,11 @@ type CredentialsValues = z.infer<typeof credentialsSchema>;
 function LoginForm({
   initialEmail = "",
   initialError = "",
+  accepted = false,
 }: {
   initialEmail?: string;
   initialError?: string;
+  accepted?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"credentials" | "mfa">("credentials");
@@ -210,6 +212,14 @@ function LoginForm({
       className="space-y-5"
       noValidate
     >
+      {accepted ? (
+        <div
+          role="status"
+          className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+        >
+          Account created — sign in to continue.
+        </div>
+      ) : null}
       <AuthInput
         label="Email"
         id="email"

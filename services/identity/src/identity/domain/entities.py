@@ -90,6 +90,7 @@ class User:
     mfa_secret: str | None = None
     phone_country: str | None = None
     phone_number: str | None = None
+    avatar_url: str | None = None
     mfa_backup_codes: list[str | None] = field(default_factory=list)
     onboarding_dismissed_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

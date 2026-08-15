@@ -66,8 +66,8 @@ Key architectural facts this module depends on:
 Daily flows (Phase 1):
 
 1. **Lead capture** — a rep (or the owner) records a lead with a source (website, referral, call, social, event, partner, inbound).
-2. **Qualification** — the rep contacts the lead and either qualifies it (→ creates an **opportunity** at the *qualification* stage) or disqualifies it (records the reason).
-3. **Pipeline movement** — the opportunity moves *qualification → proposal → negotiation*, then terminates at *won* or *lost* (with a lost reason). Each move emits an event.
+2. **Qualification** — the rep contacts the lead and either qualifies it (→ creates an **opportunity** at the *prospecting* stage) or disqualifies it (records the reason).
+3. **Pipeline movement** — the opportunity moves *prospecting → qualified → proposal → negotiation*, then terminates at *won* or *lost* (with a lost reason). Each move emits an event.
 4. **Customer creation** — a *won* opportunity is promoted to a **customer** record (or a customer is created directly for an existing account).
 5. **Ordering** — a rep drafts a **sales order** against a customer. Confirmation runs a credit check and **reserves stock** (contract with Abinav's inventory module). Fulfilment deducts stock and **creates an invoice** (contract with Dennis's finance module). Cancellation releases any reserved stock.
 6. **Reporting** — the reporting module (M-RPT) consumes this module's events and tables for pipeline value, orders by period, and top customers.
@@ -143,7 +143,7 @@ services/core/
 │   ├── cli.py
 │   ├── main.py
 │   └── seed.py                   # reference data (payment terms, sources, stages)
-├── alembic/versions/             # 0001_initial, 0002_crm_sales, ...
+├── alembic/versions/             # 0001_initial … 0006_*, 0003_crm_sales (head)
 ├── tests/{unit,integration,factories}
 ├── Dockerfile
 └── pyproject.toml
@@ -308,96 +308,90 @@ class InvoicePort(Protocol):
 
 ```mermaid
 erDiagram
-    ERP_CRM_LEADS ||..o| ERP_CRM_OPPORTUNITIES : "qualifies to"
-    ERP_CRM_OPPORTUNITIES }o..o| ERP_CRM_CUSTOMERS : "promotes to"
+    ERP_CRM_LEADS ||..o| ERP_CRM_OPPORTUNITIES : "qualifies to (soft link, no FK)"
+    ERP_CRM_OPPORTUNITIES }o..o| ERP_CRM_CUSTOMERS : "promotes to (service layer)"
     ERP_CRM_CUSTOMERS ||--o{ ERP_SALES_ORDERS : "places"
     ERP_SALES_ORDERS ||--|{ ERP_SALES_ORDER_LINES : "contains"
-    ERP_SALES_ORDER_LINES }o--|| PRODUCTS : "references (inventory module)"
+    ERP_SALES_ORDER_LINES }o--|| ERP_PRODUCTS : "hard composite FK (inventory module)"
 
     ERP_CRM_LEADS {
         uuid id PK
         uuid tenant_id FK
-        string source "new|contacted|qualified|disqualified|converted"
-        string company_name
-        string contact_name
+        string status "new|contacted|qualified|disqualified"
+        string source "website|referral|cold_call|social|event|partner|inbound"
+        string first_name
+        string last_name
         string email
         string phone
-        string notes
-        uuid owner_id "identity user"
+        string company
+        uuid owner_id "identity user, nullable"
+        uuid team_id "soft UUID, nullable"
         timestamptz created_at
         timestamptz updated_at
     }
     ERP_CRM_OPPORTUNITIES {
         uuid id PK
         uuid tenant_id FK
-        uuid lead_id FK "nullable"
-        uuid customer_id FK "nullable"
         string name
-        string stage "qualification|proposal|negotiation|won|lost"
-        decimal amount
-        string currency
+        string stage "prospecting|qualified|proposal|negotiation|won|lost"
+        decimal amount "nullable"
+        string currency "required iff amount present"
+        int probability "0..100"
         date expected_close_date
-        uuid owner_id "identity user"
+        uuid owner_id "identity user, nullable"
+        uuid team_id "soft UUID, nullable"
         string lost_reason "nullable"
-        timestamptz won_at "nullable"
-        timestamptz lost_at "nullable"
+        timestamptz won_at "required iff stage=won"
+        timestamptz lost_at "required iff stage=lost"
         timestamptz created_at
         timestamptz updated_at
     }
     ERP_CRM_CUSTOMERS {
         uuid id PK
         uuid tenant_id FK
+        string customer_code "unique per tenant"
         string name
         string email
         string phone
-        string tax_id
-        jsonb billing_address
-        string payment_terms "net_30|net_15|due_on_receipt"
         decimal credit_limit "nullable"
-        string currency
-        string status "active|inactive"
+        string currency "required iff credit_limit present"
+        boolean is_active "soft delete"
         timestamptz created_at
         timestamptz updated_at
     }
     ERP_SALES_ORDERS {
         uuid id PK
         uuid tenant_id FK
-        string order_number "SO-2026-0001"
-        uuid customer_id FK
+        string order_number "SO-2026-0001, unique per tenant"
+        uuid customer_id FK "composite (tenant_id, customer_id)"
         string status "draft|confirmed|fulfilled|cancelled"
-        date order_date
-        date expected_ship_date
-        string currency
+        string credit_check "pending|passed|failed"
         decimal subtotal
         decimal discount
         decimal tax
         decimal total
-        string credit_check "pending|approved|rejected|not_required"
-        uuid owner_id "salesperson"
-        uuid created_by "identity user"
-        timestamptz confirmed_at
-        timestamptz fulfilled_at
-        timestamptz cancelled_at
-        string cancel_reason
+        string currency
+        timestamptz confirmed_at "required iff status in (confirmed, fulfilled)"
         timestamptz created_at
         timestamptz updated_at
     }
     ERP_SALES_ORDER_LINES {
         uuid id PK
         uuid tenant_id FK
-        uuid order_id FK "composite (tenant_id, order_id)"
-        uuid product_id "inventory module product UUID"
+        uuid order_id FK "composite (tenant_id, order_id), CASCADE"
+        uuid product_id FK "composite (tenant_id, product_id) -> erp_products, RESTRICT"
+        string product_name "denormalized snapshot"
         string sku "denormalized snapshot"
-        string description "denormalized snapshot"
-        decimal qty
+        decimal quantity "> 0"
         decimal unit_price
         decimal discount
-        decimal line_total
+        decimal tax
+        decimal line_total "cached projection"
         timestamptz created_at
     }
 ```
 
-> **Note on `product_id`:** products are owned by Abinav's inventory module (`erp_products`). Sales order lines keep `product_id` as a UUID reference plus a **denormalized `sku`/`description` snapshot** so order history is stable even if the product catalog changes. There is deliberately **no hard FK** to inventory's table (module boundaries + snapshot stability). Validation that `product_id` exists and belongs to the tenant happens at the service layer via `StockReservationPort` / a `ProductLookupPort`.
+> **Note on `product_id`:** products are owned by Abinav's inventory module (`erp_products`). Unlike the original plan, sales order lines carry a **real hard composite FK** `(tenant_id, product_id) → erp_products(tenant_id, id)` ON DELETE RESTRICT (locked SKY-43 decision) — a line can never point at a cross-tenant or non-existent product at the constraint level. `product_name` / `sku` are denormalized snapshots so order history stays stable if the product catalog changes.
 
 ### 3.2 Table-by-table contract
 
@@ -406,77 +400,82 @@ All tables: `id UUID PRIMARY KEY`, `tenant_id UUID NOT NULL`, RLS enabled with a
 **`erp_crm_leads`** — inbound inquiries before they have pipeline value.
 
 - `source` — enum: `website | referral | cold_call | social | event | partner | inbound`
-- `status` — enum: `new | contacted | qualified | disqualified | converted` (converted = an opportunity was created from it)
-- `owner_id UUID NULL` — identity user id; `NULL` = unassigned
-- `email` — no unique constraint (a company can be approached multiple times); dedupe guidance is a service-level nicety
-- Indexes: `(tenant_id, status)`, `(tenant_id, owner_id)`, partial unique `(tenant_id, lower(email)) WHERE email IS NOT NULL` (soft dedupe at creation)
+- `status` — enum: `new | contacted | qualified | disqualified` (locked SKY-43: **no `converted`** — qualification creates an opportunity via the service, the lead keeps its own lifecycle)
+- `first_name` / `last_name` / `email` / `phone` / `company` — at least one contact channel required (DB CHECK `ck_erp_crm_leads_contact_present`: a lead row is always identifiable)
+- `owner_id UUID NULL` — identity user id; `team_id UUID NULL` — soft team reference (no FK; teams don't exist yet); `NULL` = unassigned
+- `email` — **non-unique** `(tenant_id, email)` index (locked SKY-43); dedupe is a soft service-layer probe (`find_leads_by_email`), never a uniqueness constraint
+- Indexes: `(tenant_id, email)`, `(tenant_id, owner_id)`
 
 **`erp_crm_opportunities`** — pipeline deals.
 
-- `stage` — enum: `qualification | proposal | negotiation | won | lost`
-- `lead_id UUID NULL` — FK `erp_crm_leads(tenant_id, id)` (composite)
-- `customer_id UUID NULL` — FK `erp_crm_customers(tenant_id, id)`; set on promote or direct creation
-- `amount NUMERIC(18,4)` + `currency` (Money)
-- `won_at` / `lost_at` — set on terminal transition; `lost_reason` on lost
-- Indexes: `(tenant_id, stage)`, `(tenant_id, owner_id)`, `(tenant_id, expected_close_date)`
+- `stage` — enum: `prospecting | qualified | proposal | negotiation | won | lost`
+- **Customer-less in Phase 1** (locked SKY-43): there is **no** `customer_id` FK and **no** `lead_id` FK — a won opportunity is promoted to a customer by the service layer (`source_opportunity_id` on the customer is optional and deferred to CRM-BE-002)
+- `amount NUMERIC(18,4) NULL` + `currency` (Money) — DB CHECK: currency required iff amount present; amount must be >= 0
+- `probability INTEGER 0..100` (DB CHECK `ck_erp_crm_opportunities_probability_range`)
+- `won_at` / `lost_at` — DB CHECK `ck_erp_crm_opportunities_stage_outcome`: `won_at` required iff `stage='won'`, `lost_at` required iff `stage='lost'`, both forbidden together
+- Indexes: `(tenant_id, stage)`, `(tenant_id, owner_id)`, `(tenant_id, team_id)`, `(tenant_id, expected_close_date)`
 
 **`erp_crm_customers`** — accounts we do business with.
 
-- `payment_terms` — enum: `net_30 | net_15 | due_on_receipt`
-- `credit_limit NUMERIC(18,4) NULL` + `currency` — `NULL` = no limit (credit check passes)
-- `billing_address JSONB` — flat address object (no address normalization in Phase 1)
-- `status` — enum: `active | inactive`
-- Indexes: `(tenant_id, name)`, partial unique `(tenant_id, lower(email)) WHERE email IS NOT NULL`
+- `customer_code` — stable per-tenant external key; unique `(tenant_id, customer_code)`
+- `credit_limit NUMERIC(18,4) NULL` + `currency` — DB CHECK: currency required iff a limit is present; `NULL` = no limit (credit check passes)
+- `is_active BOOLEAN` — **soft delete** (locked SKY-43: no customer status enum); default `true`; `list_customers` hides inactive by default
+- Indexes: `(tenant_id, name)`
 
 **`erp_sales_orders`** — customer commitments; the money record handed to finance.
 
 - `order_number` — `SO-{yyyy}-{seq}`, sequential per tenant; unique `(tenant_id, order_number)`
 - `status` — enum: `draft | confirmed | fulfilled | cancelled` (state machine in §3.3)
-- Money columns: `subtotal`, `discount`, `tax`, `total` (total = subtotal − discount + tax). The service recomputes totals from lines on every write — **the columns are a cached projection, never written by clients**.
-- `credit_check` — enum: `not_required | pending | approved | rejected`; result of the confirm-time check
-- `owner_id` — salesperson; `created_by` — actor who created it (audit convenience)
-- Indexes: `(tenant_id, status)`, `(tenant_id, order_number)` (unique), `(tenant_id, customer_id)`, `(tenant_id, owner_id)`
+- `customer_id` with **composite FK** `(tenant_id, customer_id) → erp_crm_customers(tenant_id, id)` ON DELETE RESTRICT (customers are soft-deleted, never hard-deleted)
+- Money columns: `subtotal`, `discount`, `tax`, `total` (total = subtotal − discount + tax). The service recomputes totals from lines on every write (CRM-BE-002) — **the columns are a cached projection, never written by clients**; DB CHECK keeps them non-negative
+- `credit_check` — enum: `pending | passed | failed`; result of the confirm-time check (default `pending`)
+- `confirmed_at TIMESTAMPTZ NULL` — DB CHECK `ck_erp_sales_orders_status_confirmed_at`: present iff status is `confirmed` or `fulfilled`
+- Orders have **no owner/team columns** (locked SKY-43) — tenant-scoped only; RLS bounds the tenant
+- Indexes: `(tenant_id, status)`, `(tenant_id, customer_id)`
 
 **`erp_sales_order_lines`** — line items of an order.
 
-- `order_id` with **composite FK** `(tenant_id, order_id) → erp_sales_orders(tenant_id, id)`
-- `qty NUMERIC(18,4)` (supports fractional units), `unit_price`, `discount` (Money), `line_total` (derived: `(unit_price − discount) × qty`)
+- `order_id` with **composite FK** `(tenant_id, order_id) → erp_sales_orders(tenant_id, id)` ON DELETE CASCADE
+- `product_id` with **hard composite FK** `(tenant_id, product_id) → erp_products(tenant_id, id)` ON DELETE RESTRICT (see the note after the ERD)
+- `product_name` / `sku` — denormalized snapshots taken at order time
+- `quantity NUMERIC(18,4)` — DB CHECK `> 0`; `unit_price`, `discount`, `tax`, `line_total` (derived: `(unit_price − discount) × quantity`, cached projection) — all non-negative by DB CHECK
 - Indexes: `(tenant_id, order_id)`
 
 ### 3.3 State machines
 
 ```
-Lead:     new ──► contacted ──► qualified ──► converted
-                └──────────────► disqualified
+Lead:     new ──► contacted ──► qualified
+                 └─────────────► disqualified
 
-Opportunity:    qualification ──► proposal ──► negotiation ──► won
-                                   │                              │
-                                   └──────────────────────────────┘
-                                              └──► lost   (from any non-terminal stage)
+Opportunity:    prospecting ──► qualified ──► proposal ──► negotiation ──► won
+                                                │                            │
+                                                └────────────────────────────┘
+                                                           └──► lost   (from any non-terminal stage)
 
 Sales order:    draft ──► confirmed ──► fulfilled
                   │           │
                   └───────────┴──► cancelled   (from draft or confirmed only)
 ```
 
-Transition rules (enforced in the service, with **atomic guards** in the repository):
+Transition rules:
 
-- Lead: `qualified` may only move to `converted` via the `qualify` endpoint (which creates the opportunity in the same transaction).
-- Opportunity: only one transition per call; `won`/`lost` are terminal (a later `PATCH` on a won deal changes fields but never the stage).
-- Sales order: `confirm` only from `draft`; `fulfil` only from `confirmed`; `cancel` from `draft` or `confirmed`. Fulfilling a cancelled order is impossible. **Guards are conditional SQL UPDATEs** (below), so two concurrent confirm requests cannot both succeed.
+- Lead: `qualified` / `disqualified` are reached from `new`/`contacted` via the service; qualification creates the opportunity in the same transaction. The DB enforces only the contact-channel CHECK — lifecycle rules live in the service (CRM-BE-002).
+- Opportunity: only one transition per call; `won`/`lost` are terminal (a later update on a won deal changes fields but never the stage). The DB CHECK ties each terminal stage to its timestamp.
+- Sales order: `confirm` only from `draft`; `fulfil` only from `confirmed`; `cancel` from `draft` or `confirmed` (a cancelled order's `confirmed_at` is cleared to satisfy the status CHECK). Fulfilling a cancelled order is impossible. **Guards are conditional SQL UPDATEs** (below), so two concurrent confirm requests cannot both succeed.
 
 ### 3.4 Migrations
 
-Alembic under `services/core/alembic/`. Migration **`0002_crm_sales`** (after `0001_initial` creates base/RPC scaffolding):
+Alembic under `services/core/alembic/`. Migration **`0003_crm_sales`** is the current head. It follows the repo's out-of-order numbering precedent (0004): revision `"0003"` with `down_revision = "0006"`, keeping a single linear chain `0001 → 0002 → 0005 → 0004 → 0006 → 0003`. Implemented:
 
-1. Create `erp_crm_leads`, `erp_crm_opportunities`, `erp_crm_customers`, `erp_sales_orders`, `erp_sales_order_lines`.
-2. Create composite-FK constraints (tenant-scoped).
-3. Create indexes.
-4. Create enums (`lead_source`, `lead_status`, `opportunity_stage`, `customer_payment_terms`, `customer_status`, `sales_order_status`, `credit_check_status`).
+1. Create the four native enum types: `erp_crm_lead_status`, `erp_crm_opportunity_stage`, `erp_sales_order_status`, `erp_sales_credit_check_result`.
+2. Create `erp_crm_leads`, `erp_crm_opportunities`, `erp_crm_customers`, `erp_sales_orders`, `erp_sales_order_lines`.
+3. Create composite-FK constraints (tenant-scoped), including the **hard FK to `erp_products`** on order lines.
+4. Create indexes + the DB CHECKs listed in §3.2.
 5. `ENABLE ROW LEVEL SECURITY` + create tenant-isolation policies on all five tables.
-6. Downgrade drops policies first, then tables (reverse order).
+6. Seed the three new permission keys into `core_permissions`: `erp.crm.read`, `erp.crm.write`, `erp.sales.approve` (0001 already seeded `erp.sales.read/write`; 0006 seeded `erp.finance.*`). Idempotent `ON CONFLICT (key) DO NOTHING`.
+7. Downgrade drops permission seeds, then policies, enums, and tables (reverse order).
 
-Reference data (`src/core/seed.py`, no tenant data): payment terms, lead sources, opportunity stages, `SO-` numbering sequence start. Coordinate with Dennis: the `SO-` prefix constant lives in `core/constants.py` shared by the numbering service.
+Reference data (`src/core/seed.py`, no tenant data): lead sources, `SO-` numbering sequence start. Coordinate with Dennis: the `SO-` prefix constant lives in `core/constants.py` shared by the numbering service.
 
 ---
 
@@ -572,25 +571,36 @@ Order of operations on confirm (all-or-nothing): **state guard → credit check 
 
 ### 4.4 Owner and team scoping
 
-- A `standard_user` sees only rows where `owner_id = current_user` (**OWNER scope**).
-- A `department_manager` sees rows where `owner_id` is in their team, or all rows if no team concept exists yet (Phase 1: `organization_admin`-managed membership; start with TEAM = all rows owned by any user, refined when a team model lands). **TEAM scope.**
-- `organization_admin` / `auditor` / `tenant_owner` see all rows (**ALL scope**).
+Implemented in `core/db/rbac.py` — the ONE place a role name becomes a row-scoping rule:
 
-Scope is decided once per request in `api/deps.py` from the JWT permissions + role and passed to the repository:
+- `standard_user` sees only rows where `owner_id = current_user` (**OWNER scope**).
+- `department_manager` sees rows where `owner_id = current_user` **OR** `team_id = current_user's team` (**TEAM scope**).
+- `organization_admin` / `tenant_owner` / `owner` / `auditor` see all rows (**ALL scope**).
+- Unknown roles **fail closed** to OWNER — a user can never see MORE than their role grants. When a user holds several roles, the highest scope wins (merged per request).
+- **Unassigned rows** (owner_id AND team_id NULL) are visible only to ALL scope — a deliberate strict default.
+
+Scope is resolved once per request in `api/deps.py` via `RbacRepository.resolve_user_scope(...) -> (DataScope, team_id)` and passed to the repository — the repository never sees a role name:
 
 ```python
-# features/crm/repository.py (owner-scoping sketch)
-SCOPE = Literal["owner", "team", "all"]
-
-def _scope_filter(self, scope: SCOPE, owner_id: UUID) -> ColumnElement[bool] | None:
-    if scope == "owner":
-        return ErpCrmLead.owner_id == owner_id          # WHERE tenant_id = ctx AND owner_id = me
-    if scope == "team":
-        return ErpCrmLead.owner_id.is_not(None)
-    return None                                         # "all" → tenant filter only
+# features/crm/repository.py (implemented — no hardcoded role names)
+def _scope_filter(*, scope: DataScope, owner, team, user_id, team_id) -> ColumnElement[bool] | None:
+    if scope == DataScope.OWNER:
+        if user_id is None:
+            return false()                 # no user -> no rows (fail closed)
+        return owner == user_id
+    if scope == DataScope.TEAM:
+        predicates = []
+        if user_id is not None:
+            predicates.append(owner == user_id)
+        if team_id is not None:
+            predicates.append(team == team_id)
+        if not predicates:
+            return false()                 # neither id -> no rows (fail closed)
+        return or_(*predicates)
+    return None                            # ALL -> tenant filter only (RLS bounds the tenant)
 ```
 
-**Enforcement is server-side in the repository.** The frontend may hide rows, but it can never broaden them.
+**Enforcement is server-side in the repository.** The frontend may hide rows, but it can never broaden them. Customers and sales orders have no owner/team columns — they are tenant-scoped only (locked SKY-43 decision).
 
 ---
 
@@ -615,7 +625,7 @@ Verify: a `require_permission("erp.crm.read")` protected endpoint returns 401 wi
 
 ### Step 3 — Models + migration
 
-Write the five models in `features/{crm,sales}/models/` per §2.1. Then `alembic revision` → `0002_crm_sales` implementing §3.4. **Verify the hard part:** run two-tenant integration assertions (below) against the migration — RLS policies must block cross-tenant writes and silently filter cross-tenant reads.
+Write the five models in `features/{crm,sales}/models/` per §2.1. Then `alembic revision` → `0003_crm_sales` implementing §3.4. **Verify the hard part:** run two-tenant integration assertions (below) against the migration — RLS policies must block cross-tenant writes and silently filter cross-tenant reads.
 
 ### Step 4 — CRM feature
 
@@ -847,7 +857,7 @@ Verification checklist before review:
 ## 9. Definition of Done
 
 1. `services/core` builds, lints, typechecks, and tests pass (unit + integration + two-tenant isolation).
-2. Migration `0002_crm_sales` applies cleanly up and down; RLS verified by the isolation tests.
+2. Migration `0003_crm_sales` applies cleanly up and down (downgrade round-trip verified); RLS verified by the isolation tests.
 3. Identity permission keys `erp.crm.*` + `erp.sales.*` catalogued, migrated, and seeded to roles; 403 behavior verified for a user without them.
 4. All endpoints in §6 live, documented in OpenAPI, and covered by integration tests.
 5. BFF routes `crm/*` and `sales/*` to `services/core`; `crm-api.ts` client ships the workspace pages; sidebar gates on permissions.

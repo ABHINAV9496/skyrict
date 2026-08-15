@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from pathlib import Path
 
 import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
@@ -316,6 +318,9 @@ class TestSeededReferenceData:
         """Core migrates under alembic_version_core; identity keeps alembic_version."""
         async with engine.connect() as conn:
             core_version = await conn.execute(text("SELECT version_num FROM alembic_version_core"))
-            assert core_version.scalar_one() == "0004"
+            # Track the real head so the assertion survives future migrations.
+            core_alembic = Path(__file__).resolve().parents[3] / "alembic"
+            core_head = ScriptDirectory(str(core_alembic)).get_current_head()
+            assert core_version.scalar_one() == core_head
             identity_version = await conn.execute(text("SELECT 1 FROM alembic_version"))
             assert identity_version.scalar_one() == 1

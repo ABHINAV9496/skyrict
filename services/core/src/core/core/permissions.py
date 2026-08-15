@@ -36,6 +36,11 @@ ERP_INVOICE_READ = "erp.invoice.read"
 ERP_INVOICE_APPROVE = "erp.invoice.approve"
 ERP_INVOICE_WRITE = "erp.invoice.write"
 
+# Finance — full ledger/invoice/payment domain (successor to erp.invoice.*).
+ERP_FINANCE_READ = "erp.finance.read"
+ERP_FINANCE_WRITE = "erp.finance.write"
+ERP_FINANCE_APPROVE = "erp.finance.approve"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -50,6 +55,9 @@ CATALOG: tuple[str, ...] = (
     ERP_INVOICE_READ,
     ERP_INVOICE_WRITE,
     ERP_INVOICE_APPROVE,
+    ERP_FINANCE_READ,
+    ERP_FINANCE_WRITE,
+    ERP_FINANCE_APPROVE,
 )
 
 # Permission module groupings.
@@ -68,6 +76,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("purchase", "Purchasing", (ERP_PURCHASE_READ, ERP_PURCHASE_WRITE, ERP_PURCHASE_APPROVE)),
     ("sales", "Sales", (ERP_SALES_READ, ERP_SALES_WRITE)),
     ("invoice", "Finance / invoicing", (ERP_INVOICE_READ, ERP_INVOICE_WRITE, ERP_INVOICE_APPROVE)),
+    ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
 )
 
 
@@ -90,6 +99,9 @@ _assert_catalog_union()
 
 __all__ = [
     "CATALOG",
+    "ERP_FINANCE_APPROVE",
+    "ERP_FINANCE_READ",
+    "ERP_FINANCE_WRITE",
     "ERP_INVENTORY_ADJUST",
     "ERP_INVENTORY_ADJUST_APPROVE",
     "ERP_INVENTORY_READ",

@@ -5,6 +5,13 @@
 timestamps record when each state change happened. ``UNIQUE
 (tenant_id, invoice_number)`` guarantees every bill has a distinct number.
 ``customer_id`` is a plain UUID reference to CRM (CRM owns customers); no FK.
+
+``source`` / ``source_ref`` stamp where the invoice came from:
+``UNIQUE (tenant_id, source, source_ref)`` is the idempotency lock for
+``InvoicePort.create_from_order`` (source = 'sales_order', source_ref =
+order_id) — a replayed CRM handoff can never create a second invoice. Manual
+invoices default to source = 'manual' with a NULL source_ref, which stays
+distinct, so unlimited manual bills are allowed.
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ class ErpInvoiceModel(Base):
     __tablename__ = "erp_invoices"
     __table_args__ = (
         UniqueConstraint("tenant_id", "invoice_number", name="uq_erp_invoices_tenant_number"),
+        UniqueConstraint("tenant_id", "source", "source_ref", name="uq_erp_invoices_source_ref"),
         CheckConstraint("due_date >= invoice_date", name="ck_erp_invoices_due_date_range"),
         CheckConstraint("total >= 0", name="ck_erp_invoices_total_non_negative"),
         Index("ix_erp_invoices_tenant_status", "tenant_id", "status"),
@@ -63,6 +71,8 @@ class ErpInvoiceModel(Base):
         server_default=text("'draft'"),
     )
     total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, server_default=text("0"))
+    source: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'manual'"))
+    source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

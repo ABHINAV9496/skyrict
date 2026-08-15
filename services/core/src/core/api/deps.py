@@ -10,9 +10,9 @@ from the database at request time (never from JWT claims) through
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,8 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
+    from core.features.finance.ports import AuditSink
+    from core.features.finance.service import FinanceService
     from core.features.inventory.service import InventoryService
 
 security = HTTPBearer(auto_error=False)
@@ -94,6 +96,31 @@ def require_permission(permission: str) -> Callable[[], Awaitable[dict[str, Any]
         return current_user
 
     return _check
+
+
+def get_finance_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceService:
+    """Composition root for the finance feature.
+
+    Wires the concrete repository, the shared audit sink, and the after-commit
+    event publisher onto ONE request-scoped session — so audit rows, the
+    business mutation, and (later) published events all commit atomically. The
+    request ID becomes the correlation ID stamped on money-moment events.
+    """
+    from core.events.producers import get_event_producer
+    from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.finance.repository import FinanceRepository
+    from core.features.finance.service import FinanceService
+
+    correlation_id = getattr(request.state, "request_id", None)
+    return FinanceService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+        events=FinanceEventPublisher(session=db, producer=get_event_producer()),
+        correlation_id=correlation_id,
+    )
 
 
 async def get_adjustment_authority(

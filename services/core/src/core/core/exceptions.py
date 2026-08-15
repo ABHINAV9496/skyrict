@@ -110,9 +110,9 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     PermissionDeniedError: (403, f"{_PROBLEM_BASE}/permission-denied"),
     TenantDisabledError: (403, f"{_PROBLEM_BASE}/tenant-disabled"),
     TenantContextMissingError: (400, f"{_PROBLEM_BASE}/tenant-context-missing"),
+    ConflictError: (409, f"{_PROBLEM_BASE}/conflict"),
     NotFoundError: (404, f"{_PROBLEM_BASE}/not-found"),
     TenantNotFoundError: (404, f"{_PROBLEM_BASE}/tenant-not-found"),
-    ConflictError: (409, f"{_PROBLEM_BASE}/conflict"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
 }
 

@@ -105,9 +105,7 @@ async def _drop_scratch_db(maint_dsn: str, dbname: str) -> None:
         await conn.close()
 
 
-def _run_alembic(
-    ini: Path, cmd: list[str], overrides: dict[str, str], *, cwd: Path
-) -> None:
+def _run_alembic(ini: Path, cmd: list[str], overrides: dict[str, str], *, cwd: Path) -> None:
     """Run alembic in a fresh interpreter with env overrides (mirrors migrated_schema)."""
     env = {**os.environ, **overrides}
     result = subprocess.run(
@@ -148,14 +146,18 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert row[1] == 64, f"ref_id length is {row[1]}, expected 64"
 
             enums = (
-                await conn.execute(
-                    text(
-                        "SELECT typname FROM pg_type "
-                        "WHERE typtype = 'e' AND typname = ANY(:names)"
-                    ),
-                    {"names": list(_ENUM_TYPES)},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT typname FROM pg_type "
+                            "WHERE typtype = 'e' AND typname = ANY(:names)"
+                        ),
+                        {"names": list(_ENUM_TYPES)},
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             assert set(enums) == set(_ENUM_TYPES)
 
             policy_count = (
@@ -171,9 +173,7 @@ async def _assert_upgraded_schema(url: str) -> None:
 
             key_count = (
                 await conn.execute(
-                    text(
-                        "SELECT count(*) FROM core_permissions WHERE key = ANY(:keys)"
-                    ),
+                    text("SELECT count(*) FROM core_permissions WHERE key = ANY(:keys)"),
                     {"keys": list(_ERP_PERMISSION_KEYS)},
                 )
             ).scalar_one()
@@ -251,17 +251,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.core_permissions",
                 "public.erp_sequences",
             ):
-                regclass = (
-                    await conn.execute(text(f"SELECT to_regclass('{table}')"))
-                ).scalar_one()
+                regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             func_count = (
                 await conn.execute(
-                    text(
-                        "SELECT count(*) FROM pg_proc "
-                        "WHERE proname LIKE 'erp_leave_movements_%'"
-                    )
+                    text("SELECT count(*) FROM pg_proc WHERE proname LIKE 'erp_leave_movements_%'")
                 )
             ).scalar_one()
             assert func_count == 0, "leave-movement trigger functions survive downgrade"

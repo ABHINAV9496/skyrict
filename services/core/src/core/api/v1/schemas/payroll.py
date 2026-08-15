@@ -131,7 +131,12 @@ class PayrollRunOut(BaseModel):
             paid_at=run.paid_at,
             void_reason=run.void_reason,
             skipped_employees=(
-                [SkippedEmployeeOut(**item) for item in run.skipped_employees]
+                [
+                    SkippedEmployeeOut(
+                        employee_id=uuid.UUID(item["employee_id"]), reason=item["reason"]
+                    )
+                    for item in run.skipped_employees
+                ]
                 if run.skipped_employees
                 else None
             ),

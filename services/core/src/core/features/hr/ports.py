@@ -116,6 +116,17 @@ class HrRepositoryPort(Protocol):
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> ent.LeaveBalance | None: ...
 
+    async def approved_unpaid_days(
+        self,
+        employee_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        period_start: date,
+        period_end: date,
+    ) -> int:
+        """LeaveLedgerPort read: approved ``unpaid`` leave days in a period (Rule 9)."""
+        ...
+
     async def list_balances(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Sequence[ent.LeaveBalance]: ...

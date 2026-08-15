@@ -26,6 +26,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
@@ -573,7 +574,7 @@ class PayrollRepository:
             ),
         )
         result = await self.session.execute(stmt)
-        deleted = result.rowcount or 0
+        deleted = result.rowcount if isinstance(result, CursorResult) else 0
         if deleted == 0:
             status = await self.session.scalar(
                 select(PayrollRunModel.status).where(

@@ -39,7 +39,7 @@ class CoreAuditLogModel(Base):
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     target: Mapped[str] = mapped_column(String(255), nullable=False)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     hash: Mapped[str] = mapped_column(String(64), nullable=False)

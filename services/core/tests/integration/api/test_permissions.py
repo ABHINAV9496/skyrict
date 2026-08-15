@@ -6,7 +6,7 @@ six ERP keys; the ``unprivileged`` identity has a valid token but zero grants.
 
 Assertions follow the spec's error table:
   401 authentication-error   — missing/invalid token
-  403 authorization-error    — valid JWT, missing permission
+  403 permission-denied   — valid JWT, missing permission
   200/201                    — valid JWT with the required grant
 """
 
@@ -54,9 +54,11 @@ class TestHrPermissions:
     async def test_read_denied_without_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]
     ) -> None:
-        response = await client.get("/api/v1/hr/employees", headers=tenant_headers(unprivileged=True))
+        response = await client.get(
+            "/api/v1/hr/employees", headers=tenant_headers(unprivileged=True)
+        )
         assert response.status_code == 403
-        assert response.json()["type"].endswith("/authorization-error")
+        assert response.json()["type"].endswith("/permission-denied")
 
     async def test_read_allowed_with_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]
@@ -73,7 +75,7 @@ class TestHrPermissions:
             headers=tenant_headers(unprivileged=True),
         )
         assert response.status_code == 403
-        assert response.json()["type"].endswith("/authorization-error")
+        assert response.json()["type"].endswith("/permission-denied")
 
     async def test_write_allowed_with_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]
@@ -92,16 +94,18 @@ class TestHrPermissions:
             headers=tenant_headers(unprivileged=True),
         )
         assert response.status_code == 403
-        assert response.json()["type"].endswith("/authorization-error")
+        assert response.json()["type"].endswith("/permission-denied")
 
 
 class TestPayrollPermissions:
     async def test_read_denied_without_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]
     ) -> None:
-        response = await client.get("/api/v1/payroll/settings", headers=tenant_headers(unprivileged=True))
+        response = await client.get(
+            "/api/v1/payroll/settings", headers=tenant_headers(unprivileged=True)
+        )
         assert response.status_code == 403
-        assert response.json()["type"].endswith("/authorization-error")
+        assert response.json()["type"].endswith("/permission-denied")
 
     async def test_read_allowed_with_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]
@@ -118,7 +122,7 @@ class TestPayrollPermissions:
             headers=tenant_headers(unprivileged=True),
         )
         assert response.status_code == 403
-        assert response.json()["type"].endswith("/authorization-error")
+        assert response.json()["type"].endswith("/permission-denied")
 
     async def test_write_allowed_with_grant(
         self, client: AsyncClient, tenant_headers: Callable[..., dict[str, str]]

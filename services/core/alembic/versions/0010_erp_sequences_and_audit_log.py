@@ -90,7 +90,7 @@ def _tenant_scoped_pk() -> list[Any]:
     ]
 
 
-def _created_at() -> sa.Column:
+def _created_at() -> sa.Column[Any]:
     return sa.Column(
         "created_at",
         sa.DateTime(timezone=True),
@@ -99,7 +99,7 @@ def _created_at() -> sa.Column:
     )
 
 
-def _updated_at() -> sa.Column:
+def _updated_at() -> sa.Column[Any]:
     return sa.Column(
         "updated_at",
         sa.DateTime(timezone=True),

@@ -176,7 +176,7 @@ class AuditLogEntry:
     action: str
     target: str
     actor_user_id: uuid.UUID | None = None
-    details: dict | None = None
+    details: dict[str, object] | None = None
     ip_address: str | None = None
     user_agent: str | None = None
     id: uuid.UUID | None = None

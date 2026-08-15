@@ -139,7 +139,7 @@ class TestMemberMfaPolicy:
 
             accepted = await client.post(
                 "/api/v1/invitations/accept",
-                json={
+                data={
                     "token": invite_token,
                     "email": invite_email,
                     "password": "TestPassword123!",

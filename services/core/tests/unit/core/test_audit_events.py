@@ -8,14 +8,13 @@ CATALOG <-> AUDIT_EVENT_MODULES consistency and canonical vocabulary.
 
 from __future__ import annotations
 
+import core.audit_events as inventory_catalog
 from core.core.audit_events import (
     AUDIT_EVENT_MODULES,
     CATALOG,
     HR_LEAVE_APPROVED,
     PAYROLL_RUN_APPROVED,
 )
-
-import core.audit_events as inventory_catalog
 
 
 class TestAuditEventCatalog:
@@ -43,9 +42,7 @@ class TestInventoryCatalogShape:
         assert frozenset(inventory_catalog.CATALOG) == inventory_catalog.ALL_AUDIT_EVENTS
 
     def test_module_groups_union_equals_catalog(self) -> None:
-        module_keys = {
-            key for _, _, keys in inventory_catalog.AUDIT_EVENT_MODULES for key in keys
-        }
+        module_keys = {key for _, _, keys in inventory_catalog.AUDIT_EVENT_MODULES for key in keys}
         assert module_keys == set(inventory_catalog.CATALOG)
 
     def test_expected_events_present(self) -> None:

@@ -228,15 +228,35 @@ class TestRefreshTokens:
         assert session_service.revoked_families == []
         assert audit.events[-1]["action"] == AUTH_REFRESH_REUSE_DETECTED
 
-    async def test_reuse_when_session_revoked(self) -> None:
+    async def test_retry_against_revoked_session_is_rejected_quietly(self) -> None:
         token, _ = uuid_token_and_session()
         session = _bound_session(token)
         session.status = SessionStatus.REVOKED
         session_service = FakeSessionService([session])
-        service = TokenService(session_service, FakeAuditService())
+        audit = FakeAuditService()
+        service = TokenService(session_service, audit)
 
         with pytest.raises(TokenReuseDetectedError):
             await service.refresh_tokens(token)
+
+        assert session_service.revoked_families == []
+        assert session_service.committed is False
+        assert audit.events == []
+
+    async def test_retry_against_expired_session_is_rejected_quietly(self) -> None:
+        token, _ = uuid_token_and_session()
+        session = _bound_session(token)
+        session.status = SessionStatus.EXPIRED
+        session_service = FakeSessionService([session])
+        audit = FakeAuditService()
+        service = TokenService(session_service, audit)
+
+        with pytest.raises(TokenReuseDetectedError):
+            await service.refresh_tokens(token)
+
+        assert session_service.expired == []
+        assert session_service.committed is False
+        assert audit.events == []
 
     async def test_expired_session_is_marked_expired_and_rejected(self) -> None:
         token, _ = uuid_token_and_session()

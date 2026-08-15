@@ -7,6 +7,7 @@
  */
 
 import { getAccessToken, getTenantSlug, setAccessToken } from "@/lib/auth/session-store";
+import { browserSigninUrl } from "@/lib/auth/client-urls";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -26,11 +27,32 @@ export interface PaginationMeta {
 
 let refreshPromise: Promise<boolean> | null = null;
 
+let sessionLostRedirectPending = false;
+
+/**
+ * The session has definitively ended — the refresh token was rejected or
+ * revoked. Clear the in-memory access token and leave the workspace origin
+ * for the tenant's signin surface exactly once, so the app never keeps
+ * retrying a dead session (which re-arms the backend's reuse detector and
+ * re-logs the same revocation on every attempt).
+ */
+export function handleSessionLost(): void {
+  if (typeof window === "undefined" || sessionLostRedirectPending) return;
+  const target = browserSigninUrl();
+  if (target === window.location.href) return;
+  sessionLostRedirectPending = true;
+  setAccessToken(null);
+  window.location.assign(target);
+}
+
 function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = fetch("/api/auth/refresh", { method: "POST", cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) return false;
+        if (!response.ok) {
+          if (response.status === 401) handleSessionLost();
+          return false;
+        }
         const payload = (await response.json().catch(() => ({}))) as {
           status?: string;
           accessToken?: string | null;
@@ -70,6 +92,7 @@ export function ensureSession(): Promise<HydratedSession | null> {
   if (!sessionPromise) {
     sessionPromise = fetch("/api/auth/session", { cache: "no-store" })
       .then(async (response) => {
+        if (response.status === 401) handleSessionLost();
         const payload = (await response.json().catch(() => ({}))) as {
           authenticated?: boolean;
           accessToken?: string | null;
@@ -149,6 +172,7 @@ async function fetchWithSession(path: string, options: RequestInit): Promise<Res
         response = await fetch(path, { ...options, headers });
       } else {
         setAccessToken(null);
+        handleSessionLost();
       }
     }
   }

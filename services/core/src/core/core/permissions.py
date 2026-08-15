@@ -6,9 +6,11 @@ the ``{domain}.{entity}.{action}`` convention (e.g. ``erp.inventory.read``).
 
 A permission must be added here AND via migration before it can be assigned
 to roles. Keys reused from identity's catalog (``erp.invoice.read``,
-``erp.invoice.approve``, ``erp.purchase.approve``) are the SAME strings identity
-seeds, so role grants stay portable across the platform. Inventory/sales keys
-are provisional until docs/modules/inventory-warehouse.md lands.
+``erp.invoice.approve``, ``erp.purchase.approve``, ``erp.crm.*``,
+``erp.sales.*``) are the SAME strings identity seeds, so role grants stay
+portable across the platform. The CRM keys and ``erp.sales.approve`` are
+seeded into ``core_permissions`` by migration 0003. Inventory keys are
+provisional until docs/modules/inventory-warehouse.md lands.
 """
 
 from __future__ import annotations
@@ -27,9 +29,14 @@ ERP_PURCHASE_READ = "erp.purchase.read"
 ERP_PURCHASE_WRITE = "erp.purchase.write"
 ERP_PURCHASE_APPROVE = "erp.purchase.approve"
 
+# CRM (leads, opportunities, customers)
+ERP_CRM_READ = "erp.crm.read"
+ERP_CRM_WRITE = "erp.crm.write"
+
 # Sales
 ERP_SALES_READ = "erp.sales.read"
 ERP_SALES_WRITE = "erp.sales.write"
+ERP_SALES_APPROVE = "erp.sales.approve"
 
 # Finance / invoicing
 ERP_INVOICE_READ = "erp.invoice.read"
@@ -50,8 +57,11 @@ CATALOG: tuple[str, ...] = (
     ERP_PURCHASE_READ,
     ERP_PURCHASE_WRITE,
     ERP_PURCHASE_APPROVE,
+    ERP_CRM_READ,
+    ERP_CRM_WRITE,
     ERP_SALES_READ,
     ERP_SALES_WRITE,
+    ERP_SALES_APPROVE,
     ERP_INVOICE_READ,
     ERP_INVOICE_WRITE,
     ERP_INVOICE_APPROVE,
@@ -74,7 +84,8 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ),
     ),
     ("purchase", "Purchasing", (ERP_PURCHASE_READ, ERP_PURCHASE_WRITE, ERP_PURCHASE_APPROVE)),
-    ("sales", "Sales", (ERP_SALES_READ, ERP_SALES_WRITE)),
+    ("crm", "CRM", (ERP_CRM_READ, ERP_CRM_WRITE)),
+    ("sales", "Sales", (ERP_SALES_READ, ERP_SALES_WRITE, ERP_SALES_APPROVE)),
     ("invoice", "Finance / invoicing", (ERP_INVOICE_READ, ERP_INVOICE_WRITE, ERP_INVOICE_APPROVE)),
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
 )
@@ -99,6 +110,8 @@ _assert_catalog_union()
 
 __all__ = [
     "CATALOG",
+    "ERP_CRM_READ",
+    "ERP_CRM_WRITE",
     "ERP_FINANCE_APPROVE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
@@ -112,6 +125,7 @@ __all__ = [
     "ERP_PURCHASE_APPROVE",
     "ERP_PURCHASE_READ",
     "ERP_PURCHASE_WRITE",
+    "ERP_SALES_APPROVE",
     "ERP_SALES_READ",
     "ERP_SALES_WRITE",
     "PERMISSION_MODULES",

@@ -197,25 +197,6 @@ export default function InviteClient() {
 
   const createdUrl = created ? inviteLink(created.token) : "";
 
-  if (accessStatus !== "loading" && !canInvite) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Invite team"
-          description="Send invitation links to grow your workspace."
-          icon={UserPlus}
-        />
-        <div className="rounded-xl border border-border bg-card p-6">
-          <p className="text-sm text-muted-foreground">
-            You don&apos;t have permission to send invitations. Ask an admin or the workspace
-            owner for the <span className="font-medium text-foreground">Invite team</span>{" "}
-            role.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader

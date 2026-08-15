@@ -468,6 +468,22 @@ class HrRepository:
         )
         if existing is not None:
             return None
+        await self.lock_leave_balance(
+            movement.employee_id, movement.leave_type, tenant_id=movement.tenant_id
+        )
+        # Re-probe UNDER the lock: the first probe above was TOCTOU — a racing
+        # first grant could have committed while we waited on the row lock. This
+        # is a FRESH query against the committed ledger (never a value cached
+        # from the pre-lock probe) and returns None when the racing grant won.
+        existing = await self._find_movement_by_ref(
+            movement.employee_id,
+            movement.leave_type,
+            _ANNUAL_ACCRUAL,
+            movement.ref_id,
+            movement.tenant_id,
+        )
+        if existing is not None:
+            return None
         await self.add_leave_movement(movement)
         new_balance = await self.recompute_balance(
             movement.employee_id, movement.leave_type, tenant_id=movement.tenant_id
@@ -482,6 +498,56 @@ class HrRepository:
             )
         )
         return movement
+
+    async def lock_leave_balance(
+        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
+    ) -> None:
+        """Serialize concurrent balance mutations for one (employee, leave_type).
+
+        Row-level lock on ``erp_leave_balances`` keyed by
+        ``(tenant_id, employee_id, leave_type)`` (docs §4.3, Rule 3). The row is
+        FIRST seeded with ``INSERT ... ON CONFLICT DO NOTHING`` (balance 0)
+        because ``SELECT ... FOR UPDATE`` on a NON-EXISTENT row locks nothing —
+        the phantom-lock gap: the materialized row is otherwise only created by
+        ``upsert_balance`` after a movement write, so a first-grant accrual or a
+        pre-grant approve would race straight through an unlocked read. Seeding
+        guarantees a lock row always exists for accrual types, and the seed
+        ``balance = 0`` is only ever committed in a bucket whose ledger is empty
+        (a non-empty ledger always has a materialized row), where it is correct.
+
+        LOCK-ORDERING CONTRACT (load-bearing): multi-row callers — payroll
+        ``compute_run``'s accrual loop — must iterate in a stable total order so
+        aggregate lock acquisition is a total order; single-row callers
+        (``approve``, ``cancel``) take exactly one lock and can never complete a
+        deadlock cycle. See the comment at ``compute_run``'s accrual call site.
+        """
+        seed = (
+            pg_insert(LeaveBalanceModel)
+            .values(
+                tenant_id=tenant_id,
+                employee_id=employee_id,
+                leave_type=leave_type,
+                id=uuid.uuid4(),
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    LeaveBalanceModel.tenant_id,
+                    LeaveBalanceModel.employee_id,
+                    LeaveBalanceModel.leave_type,
+                ]
+            )
+        )
+        await self.session.execute(seed)
+        lock_stmt = (
+            select(LeaveBalanceModel.id)
+            .where(
+                LeaveBalanceModel.tenant_id == tenant_id,
+                LeaveBalanceModel.employee_id == employee_id,
+                LeaveBalanceModel.leave_type == leave_type,
+            )
+            .with_for_update()
+        )
+        await self.session.execute(lock_stmt)
 
     async def recompute_balance(
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID

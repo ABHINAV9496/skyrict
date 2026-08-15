@@ -511,6 +511,16 @@ class LeaveService:
         leave_type_row = await self._repo.get_leave_type(request.leave_type, tenant_id=tenant_id)
         is_accrual = leave_type_row is not None and leave_type_row.is_accrual
         if is_accrual:
+            # Rule 3 (docs §4.3): row-lock the employee's balance bucket BEFORE
+            # the balance read, inside this transaction. Two concurrent approves
+            # of different requests for the same employee serialize here: the
+            # loser re-reads the committed ledger and the Rule 2 check rejects
+            # it, so the ledger can never go negative and the materialized
+            # balance can never drift from it. LOCK-ORDERING: exactly one row,
+            # so no deadlock cycle is possible with any multi-row caller.
+            await self._repo.lock_leave_balance(
+                request.employee_id, request.leave_type, tenant_id=tenant_id
+            )
             current_balance = await self._repo.recompute_balance(
                 request.employee_id, request.leave_type, tenant_id=tenant_id
             )
@@ -646,6 +656,13 @@ class LeaveService:
 
         leave_type_row = await self._repo.get_leave_type(request.leave_type, tenant_id=tenant_id)
         is_accrual = leave_type_row is not None and leave_type_row.is_accrual
+        if is_accrual:
+            # Rule 3 (docs §4.3): same balance-row lock as approve — the reversal
+            # below also reads-then-writes the balance, so a concurrent approval
+            # must serialize against it rather than compute a stale ledger view.
+            await self._repo.lock_leave_balance(
+                request.employee_id, request.leave_type, tenant_id=tenant_id
+            )
 
         transitioned = await self._repo.transition_leave_status(
             request_id,

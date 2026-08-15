@@ -96,6 +96,18 @@ class HrRepositoryPort(Protocol):
         self, movement: ent.LeaveMovement
     ) -> ent.LeaveMovement | None: ...
 
+    async def lock_leave_balance(
+        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
+    ) -> None:
+        """Serialize concurrent balance mutations for one employee/leave_type.
+
+        Guarantees the ``erp_leave_balances`` lock row exists (seeds it) and
+        takes ``SELECT ... FOR UPDATE`` on it (docs §4.3). MUST be called
+        before any read-then-write of that balance, inside the same
+        transaction; the lock is held until commit/rollback.
+        """
+        ...
+
     async def recompute_balance(
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> int: ...

@@ -304,6 +304,15 @@ class PayrollService:
 
         # Rule 4 (docs §4.4): run the idempotent annual accrual for every
         # roster employee on every accrual-type before computing entries.
+        #
+        # LOCK-ORDERING CONTRACT (load-bearing, see HrRepository.lock_leave_balance):
+        # each accrual takes the employee's balance-row lock. This loop MUST
+        # iterate in a stable total order — `employees` is ordered by
+        # employee_number (list_active_employees) and `accrual_types` by code
+        # (list_accrual_leave_types) — so aggregate lock acquisition is a total
+        # order across the whole roster and a concurrent single-row approver
+        # (exactly one lock) can never deadlock with it. Preserve both orderings
+        # if this loop or those queries ever change.
         accrual_types = await self._leave_ledger.list_accrual_leave_types(tenant_id)
         if accrual_types:
             for employee in employees:

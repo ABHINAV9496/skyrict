@@ -184,7 +184,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
               ...entry,
               adjustments: { ...(entry.adjustments ?? {}), amount },
               net: {
-                amount: String(Math.round((Number(entry.net.amount) + delta) * 100) / 100),
+                amount: String(Math.round((Number(entry.net.amount) - delta) * 100) / 100),
                 currency: entry.net.currency,
               },
             }
@@ -568,7 +568,8 @@ export function RunDetailClient({ runId }: { runId: string }) {
           <DialogHeader>
             <DialogTitle>Adjust entry</DialogTitle>
             <DialogDescription>
-              Apply a flat adjustment to this entry&apos;s net pay. Negative amounts reduce it.
+              Apply a flat adjustment to this entry. Positive amounts reduce net
+              pay; negative amounts increase it.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-4">

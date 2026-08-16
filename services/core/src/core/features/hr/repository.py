@@ -709,7 +709,7 @@ class HrRepository:
         offset: int = 0,
     ) -> Sequence[ent.LeaveRequest]:
         stmt = select(LeaveRequestModel).where(LeaveRequestModel.tenant_id == tenant_id)
-        if status is not None:
+        if status:
             stmt = stmt.where(LeaveRequestModel.status == status)
         if employee_id is not None:
             stmt = stmt.where(LeaveRequestModel.employee_id == employee_id)

@@ -46,6 +46,7 @@ import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/compone
 import { cn } from "@/lib/utils";
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
+import { TableToolbar } from "@/features/finance/components/table-toolbar";
 
 type Status =
   | { state: "loading" }
@@ -423,6 +424,8 @@ function FinanceJournalEntries() {
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [periods, setPeriods] = useState<FiscalPeriod[]>([]);
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
+  const [query, setQuery] = useState("");
+  const [statusTab, setStatusTab] = useState<string>("all");
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -478,24 +481,47 @@ function FinanceJournalEntries() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-4">
         <PageHeader
           title="Journal Entries"
           description="The general ledger — every debit and credit the business posts."
           icon={NotebookPen}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <PeriodSelector
-            value={periodValue}
-            onChange={setPeriodValue}
-            periods={periods}
-            label="Entry period"
-          />
-          {canWrite ? <CreateJournalEntryDialog /> : null}
-        </div>
+        <TableToolbar
+          searchPlaceholder="Search memo or date…"
+          searchValue={query}
+          onSearchChange={setQuery}
+          tabs={[
+            { key: "all", label: "All", count: status.entries.length },
+            { key: "draft", label: "Draft", count: status.entries.filter((e) => e.status === "draft").length },
+            { key: "posted", label: "Posted", count: status.entries.filter((e) => e.status === "posted").length },
+            { key: "voided", label: "Voided", count: status.entries.filter((e) => e.status === "voided").length },
+          ]}
+          activeTab={statusTab}
+          onTabChange={setStatusTab}
+          period={
+            <PeriodSelector
+              value={periodValue}
+              onChange={setPeriodValue}
+              periods={periods}
+              label="Entry period"
+            />
+          }
+          actions={canWrite ? <CreateJournalEntryDialog /> : null}
+        />
       </div>
 
-      {status.entries.length === 0 ? (
+      {(() => {
+        const needle = query.trim().toLowerCase();
+        const visibleEntries = status.entries.filter((entry) => {
+          if (statusTab !== "all" && entry.status !== statusTab) return false;
+          if (!needle) return true;
+          return (
+            (entry.memo ?? "").toLowerCase().includes(needle) ||
+            entry.entry_date.toLowerCase().includes(needle)
+          );
+        });
+        return visibleEntries.length === 0 ? (
         <FinanceEmptyState
           icon={NotebookPen}
           title="No journal entries yet"
@@ -504,7 +530,7 @@ function FinanceJournalEntries() {
       ) : (
         <FinanceTable
           columns={columns}
-          rows={status.entries}
+          rows={visibleEntries}
           getKey={(entry) => entry.id}
           footer={
             <span className="flex justify-between gap-4">
@@ -529,7 +555,8 @@ function FinanceJournalEntries() {
             </span>
           }
         />
-      )}
+        );
+      })()}
     </div>
   );
 }

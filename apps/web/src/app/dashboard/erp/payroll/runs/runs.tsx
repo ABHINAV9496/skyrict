@@ -2,22 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Plus, Receipt } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
 
+import { NewRunDialog } from "@/components/dashboard/erp/payroll/run-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -27,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { useModuleAccess } from "@/lib/access/modules";
 import {
-  createPayrollRun,
   listPayrollRuns,
   type PayrollRun,
   type PayrollRunStatus,
@@ -66,9 +56,6 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ periodStart: "", periodEnd: "" });
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -141,35 +128,9 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
     },
   ];
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving || !canWrite) return;
-    if (!form.periodStart || !form.periodEnd) {
-      setFormError("Both a start and an end date are required.");
-      return;
-    }
-    if (form.periodEnd < form.periodStart) {
-      setFormError("The end date can't be before the start date.");
-      return;
-    }
-    setSaving(true);
-    setFormError(null);
-    try {
-      const run = await createPayrollRun({
-        periodStart: form.periodStart,
-        periodEnd: form.periodEnd,
-      });
-      setCreateOpen(false);
-      setForm({ periodStart: "", periodEnd: "" });
-      setNotice({ tone: "success", text: `${run.runCode} created as a draft.` });
-      await load();
-    } catch (error) {
-      setFormError(
-        error instanceof ApiError ? error.message : "Could not create the run.",
-      );
-    } finally {
-      setSaving(false);
-    }
+  async function onSaved(_run: PayrollRun, message: string) {
+    setNotice({ tone: "success", text: message });
+    await load();
   }
 
   return (
@@ -255,66 +216,11 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
         />
       ) : null}
 
-      <Dialog open={createOpen} onOpenChange={(open) => !saving && setCreateOpen(open)}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={(event) => void onSubmit(event)}>
-            <DialogHeader>
-              <DialogTitle>New payroll run</DialogTitle>
-              <DialogDescription>
-                Pick the pay period. The run starts as a draft so you can review
-                it before computing.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="period-start">Period start</Label>
-                <Input
-                  id="period-start"
-                  type="date"
-                  value={form.periodStart}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, periodStart: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="period-end">Period end</Label>
-                <Input
-                  id="period-end"
-                  type="date"
-                  value={form.periodEnd}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, periodEnd: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            {formError ? (
-              <p role="alert" className="mb-2 text-sm font-medium text-destructive">
-                {formError}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateOpen(false)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? (
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                ) : null}
-                Create run
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <NewRunDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={onSaved}
+      />
     </div>
   );
 }

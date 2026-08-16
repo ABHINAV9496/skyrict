@@ -1,22 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BadgeDollarSign, LoaderCircle, Plus } from "lucide-react";
+import { BadgeDollarSign, Plus } from "lucide-react";
 
+import { CompensationDialog } from "@/components/dashboard/erp/payroll/compensation-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -27,7 +19,6 @@ import {
 import { useModuleAccess } from "@/lib/access/modules";
 import { listEmployees, type Employee } from "@/lib/api/hr-api";
 import {
-  createCompensationChange,
   listCompensation,
   type Compensation,
 } from "@/lib/api/payroll-api";
@@ -58,9 +49,6 @@ export function CompensationClient() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const [recordOpen, setRecordOpen] = useState(false);
-  const [record, setRecord] = useState({ effectiveFrom: "", monthlySalary: "", currency: "USD" });
-  const [recordError, setRecordError] = useState<string | null>(null);
-  const [recordSaving, setRecordSaving] = useState(false);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -111,48 +99,7 @@ export function CompensationClient() {
   }, [selectedEmployeeId, loadHistory]);
 
   function openRecord() {
-    setRecord({ effectiveFrom: "", monthlySalary: "", currency: "USD" });
-    setRecordError(null);
     setRecordOpen(true);
-  }
-
-  async function onSubmitRecord(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (recordSaving || !canWrite) return;
-    if (!selectedEmployeeId || !record.effectiveFrom || !record.monthlySalary.trim()) {
-      setRecordError("Effective date and monthly salary are required.");
-      return;
-    }
-    if (!Number.isFinite(Number(record.monthlySalary))) {
-      setRecordError("Monthly salary must be a number.");
-      return;
-    }
-    if (!/^[A-Za-z]{3}$/.test(record.currency)) {
-      setRecordError("Currency must be a 3-letter code.");
-      return;
-    }
-    setRecordSaving(true);
-    setRecordError(null);
-    try {
-      const entry = await createCompensationChange({
-        employeeId: selectedEmployeeId,
-        effectiveFrom: record.effectiveFrom,
-        monthlySalary: record.monthlySalary.trim(),
-        currency: record.currency.toUpperCase(),
-      });
-      setRecordOpen(false);
-      setNotice({
-        tone: "success",
-        text: `Compensation change recorded (${formatDate(entry.effectiveFrom)}).`,
-      });
-      await loadHistory(selectedEmployeeId);
-    } catch (error) {
-      setRecordError(
-        error instanceof ApiError ? error.message : "Could not record the change.",
-      );
-    } finally {
-      setRecordSaving(false);
-    }
   }
 
   const columns: ErpColumn<Compensation>[] = [
@@ -318,84 +265,18 @@ export function CompensationClient() {
         </>
       ) : null}
 
-      <Dialog open={recordOpen} onOpenChange={(open) => !recordSaving && setRecordOpen(open)}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={(event) => void onSubmitRecord(event)}>
-            <DialogHeader>
-              <DialogTitle>Record compensation change</DialogTitle>
-              <DialogDescription>
-                Set a new monthly salary for the selected employee. The current
-                rate stops on the effective date.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="record-effective">Effective date</Label>
-                <Input
-                  id="record-effective"
-                  type="date"
-                  value={record.effectiveFrom}
-                  onChange={(event) =>
-                    setRecord((current) => ({ ...current, effectiveFrom: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[1fr_6rem]">
-                <div className="space-y-1.5">
-                  <Label htmlFor="record-salary">Monthly salary</Label>
-                  <Input
-                    id="record-salary"
-                    inputMode="decimal"
-                    placeholder="5000.00"
-                    value={record.monthlySalary}
-                    onChange={(event) =>
-                      setRecord((current) => ({ ...current, monthlySalary: event.target.value }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="record-currency">Currency</Label>
-                  <Input
-                    id="record-currency"
-                    maxLength={3}
-                    className="uppercase"
-                    value={record.currency}
-                    onChange={(event) =>
-                      setRecord((current) => ({
-                        ...current,
-                        currency: event.target.value.toUpperCase(),
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-            {recordError ? (
-              <p role="alert" className="mb-2 text-sm font-medium text-destructive">
-                {recordError}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRecordOpen(false)}
-                disabled={recordSaving}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={recordSaving}>
-                {recordSaving ? (
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                ) : null}
-                Record change
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CompensationDialog
+        open={recordOpen}
+        onOpenChange={setRecordOpen}
+        employees={employees}
+        defaultEmployeeId={selectedEmployeeId}
+        onSaved={(message) => {
+          setNotice({ tone: "success", text: message });
+          if (selectedEmployeeId) {
+            void loadHistory(selectedEmployeeId);
+          }
+        }}
+      />
     </div>
   );
 }

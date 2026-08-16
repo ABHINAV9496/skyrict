@@ -1,35 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, LoaderCircle, Pencil, Plus } from "lucide-react";
+import { Building2, Pencil, Plus } from "lucide-react";
 
+import { DepartmentDialog } from "@/components/dashboard/erp/hr/department-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useModuleAccess } from "@/lib/access/modules";
 import {
-  createDepartment,
   listDepartments,
   listEmployees,
-  updateDepartment,
   type Department,
   type Employee,
 } from "@/lib/api/hr-api";
@@ -43,13 +25,6 @@ type PageStatus =
 
 type Notice = { tone: "success" | "error"; text: string };
 
-interface DepartmentFormState {
-  name: string;
-  managerEmployeeId: string;
-}
-
-const EMPTY_FORM: DepartmentFormState = { name: "", managerEmployeeId: "" };
-
 export function DepartmentsClient() {
   const { permissions } = useModuleAccess();
   const canWrite =
@@ -61,9 +36,6 @@ export function DepartmentsClient() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
-  const [form, setForm] = useState<DepartmentFormState>(EMPTY_FORM);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -141,58 +113,12 @@ export function DepartmentsClient() {
 
   function openCreate() {
     setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormError(null);
     setFormOpen(true);
   }
 
   function openEdit(department: Department) {
     setEditing(department);
-    setForm({
-      name: department.name,
-      managerEmployeeId: department.managerEmployeeId ?? "",
-    });
-    setFormError(null);
     setFormOpen(true);
-  }
-
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving || !canWrite) return;
-    if (!form.name.trim()) {
-      setFormError("A department name is required.");
-      return;
-    }
-    setSaving(true);
-    setFormError(null);
-    try {
-      if (editing) {
-        await updateDepartment(editing.id, {
-          name: form.name.trim(),
-          managerEmployeeId: form.managerEmployeeId || undefined,
-        });
-      } else {
-        await createDepartment({
-          name: form.name.trim(),
-          managerEmployeeId: form.managerEmployeeId || undefined,
-        });
-      }
-      setFormOpen(false);
-      setNotice({
-        tone: "success",
-        text: editing
-          ? `${form.name.trim()} updated.`
-          : `${form.name.trim()} created.`,
-      });
-      await load();
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        text: error instanceof ApiError ? error.message : "Could not save the department.",
-      });
-    } finally {
-      setSaving(false);
-    }
   }
 
   return (
@@ -255,81 +181,16 @@ export function DepartmentsClient() {
         />
       ) : null}
 
-      <Dialog open={formOpen} onOpenChange={(open) => !saving && setFormOpen(open)}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={(event) => void onSubmit(event)}>
-            <DialogHeader>
-              <DialogTitle>
-                {editing ? "Edit department" : "New department"}
-              </DialogTitle>
-              <DialogDescription>
-                {editing
-                  ? "Update the department's name or manager."
-                  : "Create a department and optionally assign a manager."}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="department-name">Name</Label>
-                <Input
-                  id="department-name"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  placeholder="e.g. Engineering"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="department-manager">Manager (optional)</Label>
-                <Select
-                  value={form.managerEmployeeId}
-                  onValueChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      managerEmployeeId: value === "none" ? "" : value,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="department-manager" className="w-full">
-                    <SelectValue placeholder="No manager" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No manager</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.firstName} {employee.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {formError ? (
-              <p role="alert" className="mb-2 text-sm font-medium text-destructive">
-                {formError}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setFormOpen(false)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? (
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                ) : null}
-                {editing ? "Save changes" : "Create department"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <DepartmentDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        employees={employees}
+        department={editing}
+        onSaved={(message) => {
+          setNotice({ tone: "success", text: message });
+          void load();
+        }}
+      />
     </div>
   );
 }

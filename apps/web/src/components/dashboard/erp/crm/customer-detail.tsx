@@ -41,6 +41,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney } from "@/lib/erp/money";
 import { orderStatusBadgeClass, ORDER_STATUS_LABELS } from "@/lib/erp/labels";
+import { setPageTitle } from "@/lib/topbar-title";
 import { cn } from "@/lib/utils";
 
 type PageStatus =
@@ -70,16 +71,20 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
         listOrders({ customerId, limit: 100 }),
       ]);
       setStatus({ state: "ready", customer, orders: ordersResult.data });
+      setPageTitle(customer.name);
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : "Could not load the customer.";
       setStatus({ state: "error", message });
+      setPageTitle(null);
     }
   }, [customerId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => () => setPageTitle(null), []);
 
   async function onDeactivate() {
     setBusy(true);

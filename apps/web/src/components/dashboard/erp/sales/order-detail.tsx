@@ -38,6 +38,7 @@ import { ApiError } from "@/lib/api/http";
 import { orderActions } from "@/lib/erp/actions";
 import { formatDate, formatMoney, formatNumber } from "@/lib/erp/money";
 import { orderStatusBadgeClass, ORDER_STATUS_LABELS } from "@/lib/erp/labels";
+import { setPageTitle } from "@/lib/topbar-title";
 import { cn } from "@/lib/utils";
 
 type PageStatus =
@@ -64,15 +65,19 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
     try {
       const [order, lines] = await Promise.all([getOrder(orderId), listOrderLines(orderId)]);
       setStatus({ state: "ready", order, lines });
+      setPageTitle(order.orderNumber);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Could not load the order.";
       setStatus({ state: "error", message });
+      setPageTitle(null);
     }
   }, [orderId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => () => setPageTitle(null), []);
 
   async function runAction(action: Exclude<PendingAction, null>) {
     if (status.state !== "ready") return;

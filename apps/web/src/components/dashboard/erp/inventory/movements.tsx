@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 
 import { InventoryEmpty } from "@/components/dashboard/erp/inventory/inventory-empty";
 import { InventoryError } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,10 +18,9 @@ import {
 import { ApiError } from "@/lib/api/http";
 import {
     formatDate,
-    listAllPages,
+    getCatalogProducts,
+    getCatalogWarehouses,
     listMovements,
-    listProducts,
-    listWarehouses,
     movementTypeLabel,
     type PaginationMeta,
     type Product,
@@ -71,22 +70,27 @@ export function MovementsClient() {
     const [page, setPage] = useState(1);
     const [movementType, setMovementType] = useState<string>("");
 
+    const abortRef = useRef<AbortController | null>(null);
+
     const load = useCallback(async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setStatus({ state: "loading" });
         try {
             const [result, products, warehouses] = await Promise.all([
-                listMovements({
-                    page,
-                    pageSize: PAGE_SIZE,
-                    movementType: movementType || undefined,
-                }),
-                listAllPages((p) =>
-                    listProducts({ page: p, pageSize: 100, includeInactive: true }),
+                listMovements(
+                    {
+                        page,
+                        pageSize: PAGE_SIZE,
+                        movementType: movementType || undefined,
+                    },
+                    { signal: controller.signal },
                 ),
-                listAllPages((p) =>
-                    listWarehouses({ page: p, pageSize: 100, includeInactive: true }),
-                ),
+                getCatalogProducts(),
+                getCatalogWarehouses(),
             ]);
+            if (controller.signal.aborted) return;
             setStatus({
                 state: "ready",
                 movements: result.data,
@@ -95,6 +99,7 @@ export function MovementsClient() {
                 warehouses,
             });
         } catch (error) {
+            if (controller.signal.aborted) return;
             const message =
                 error instanceof ApiError
                     ? error.message
@@ -109,6 +114,7 @@ export function MovementsClient() {
 
     useEffect(() => {
         void load();
+        return () => abortRef.current?.abort();
     }, [load]);
 
     const productById = useMemo(() => {

@@ -1,22 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, PackagePlus } from "lucide-react";
 
 import { AdjustStockDialog } from "@/components/dashboard/erp/inventory/adjust-dialog";
 import { InventoryEmpty } from "@/components/dashboard/erp/inventory/inventory-empty";
 import { InventoryError } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
 import {
-    listAllPages,
+    getCatalogProducts,
+    getCatalogWarehouses,
     listAlerts,
-    listProducts,
-    listWarehouses,
     type Alert,
     type PaginationMeta,
     type Product,
@@ -57,14 +56,23 @@ export function AlertsClient() {
         warehouseId: string;
     } | null>(null);
 
+    const abortRef = useRef<AbortController | null>(null);
+
     const load = useCallback(async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setStatus({ state: "loading" });
         try {
             const [result, products, warehouses] = await Promise.all([
-                listAlerts({ page, pageSize: PAGE_SIZE }),
-                listAllPages((p) => listProducts({ page: p, pageSize: 100 })),
-                listAllPages((p) => listWarehouses({ page: p, pageSize: 100 })),
+                listAlerts(
+                    { page, pageSize: PAGE_SIZE },
+                    { signal: controller.signal },
+                ),
+                getCatalogProducts(),
+                getCatalogWarehouses(),
             ]);
+            if (controller.signal.aborted) return;
             setStatus({
                 state: "ready",
                 alerts: result.data,
@@ -73,6 +81,7 @@ export function AlertsClient() {
                 warehouses,
             });
         } catch (error) {
+            if (controller.signal.aborted) return;
             const message =
                 error instanceof ApiError
                     ? error.message
@@ -83,6 +92,7 @@ export function AlertsClient() {
 
     useEffect(() => {
         void load();
+        return () => abortRef.current?.abort();
     }, [load]);
 
     const warehouseById = useMemo(() => {

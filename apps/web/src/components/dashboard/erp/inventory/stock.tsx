@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, Layers, PackagePlus } from "lucide-react";
 
 import { AdjustStockDialog } from "@/components/dashboard/erp/inventory/adjust-dialog";
@@ -9,7 +9,7 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { TransferStockDialog } from "@/components/dashboard/erp/inventory/transfer-dialog";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -17,10 +17,9 @@ import { Button } from "@/components/ui/button";
 import { useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
 import {
-    listAllPages,
-    listProducts,
+    getCatalogProducts,
+    getCatalogWarehouses,
     listStockLevels,
-    listWarehouses,
     type PaginationMeta,
     type Product,
     type StockLevel,
@@ -78,18 +77,23 @@ export function StockClient() {
         fromWarehouseId: string;
     } | null>(null);
 
+    const abortRef = useRef<AbortController | null>(null);
+
     const load = useCallback(async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setStatus({ state: "loading" });
         try {
             const [result, products, warehouses] = await Promise.all([
-                listStockLevels({ page, pageSize: PAGE_SIZE }),
-                listAllPages((p) =>
-                    listProducts({ page: p, pageSize: 100, includeInactive: true }),
+                listStockLevels(
+                    { page, pageSize: PAGE_SIZE },
+                    { signal: controller.signal },
                 ),
-                listAllPages((p) =>
-                    listWarehouses({ page: p, pageSize: 100, includeInactive: true }),
-                ),
+                getCatalogProducts(),
+                getCatalogWarehouses(),
             ]);
+            if (controller.signal.aborted) return;
             setStatus({
                 state: "ready",
                 levels: result.data,
@@ -98,6 +102,7 @@ export function StockClient() {
                 warehouses,
             });
         } catch (error) {
+            if (controller.signal.aborted) return;
             const message =
                 error instanceof ApiError
                     ? error.message
@@ -108,6 +113,7 @@ export function StockClient() {
 
     useEffect(() => {
         void load();
+        return () => abortRef.current?.abort();
     }, [load]);
 
     useEffect(() => {

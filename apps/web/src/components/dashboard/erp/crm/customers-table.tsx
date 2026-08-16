@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ErpTable, type ErpColumn } from "@/components/dashboard/erp/erp-table";
 import { ErrorState } from "@/components/dashboard/erp/error-state";
 import { EmptyState } from "@/components/dashboard/erp/empty-state";
-import { Pagination } from "@/components/dashboard/erp/pagination";
+import { Pagination, offsetMeta } from "@/components/dashboard/erp/pagination";
 import { CustomerFormDialog } from "@/components/dashboard/erp/crm/customer-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -204,10 +204,8 @@ export function CustomersTable() {
           }
           footer={
             <Pagination
-              offset={offset}
-              limit={PAGE_SIZE}
-              total={status.total}
-              onPageChange={setOffset}
+              meta={offsetMeta(offset, PAGE_SIZE, status.total)}
+              onPageChange={(page) => setOffset((page - 1) * PAGE_SIZE)}
             />
           }
         />

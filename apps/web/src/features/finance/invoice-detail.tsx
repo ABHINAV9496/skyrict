@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/finance/format";
+import { cn } from "@/lib/utils";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
 import { InvoiceStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
@@ -272,6 +273,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
     { label: "Amount", align: "right", render: (line) => formatMoney(line.amount) },
   ];
 
+  const balanceDue =
+    invoice.status === "paid" || invoice.status === "voided" ? 0 : invoice.total;
+
   return (
     <div className="space-y-6">
       <Link
@@ -281,44 +285,6 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
         <ArrowLeft aria-hidden="true" className="size-4" />
         Invoices
       </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader
-          title={invoice.invoice_number}
-          description={`Customer ${invoice.customer_id}`}
-          icon={ReceiptText}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <InvoiceStatusBadge status={invoice.status} />
-          {canIssue ? (
-            <Button type="button" disabled={status.busy !== null} onClick={() => void runAction("issue")}>
-              {status.busy === "issue" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
-              Issue
-            </Button>
-          ) : null}
-          {canApproveInvoice ? (
-            <Button type="button" disabled={status.busy !== null} onClick={() => void runAction("approve")}>
-              {status.busy === "approve" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
-              Approve
-            </Button>
-          ) : null}
-          {canApplyPayment ? (
-            <ApplyPaymentDialog
-              invoice={invoice}
-              onApplied={(payment) => {
-                setLastPayment(payment);
-                void load();
-              }}
-            />
-          ) : null}
-          {canVoid ? (
-            <Button type="button" variant="outline" disabled={status.busy !== null} onClick={() => void runAction("void")}>
-              {status.busy === "void" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
-              Void
-            </Button>
-          ) : null}
-        </div>
-      </div>
 
       {actionError ? (
         <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
@@ -335,32 +301,99 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
         </div>
       ) : null}
 
-      <dl className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Invoice date</dt>
-          <dd className="mt-1 text-sm font-medium text-foreground">{formatDate(invoice.invoice_date)}</dd>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-5">
+          <div>
+            <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              Invoice
+            </p>
+            <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-foreground">
+              {invoice.invoice_number}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <InvoiceStatusBadge status={invoice.status} />
+            {canIssue ? (
+              <Button type="button" disabled={status.busy !== null} onClick={() => void runAction("issue")}>
+                {status.busy === "issue" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+                Issue
+              </Button>
+            ) : null}
+            {canApproveInvoice ? (
+              <Button type="button" disabled={status.busy !== null} onClick={() => void runAction("approve")}>
+                {status.busy === "approve" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+                Approve
+              </Button>
+            ) : null}
+            {canApplyPayment ? (
+              <ApplyPaymentDialog
+                invoice={invoice}
+                onApplied={(payment) => {
+                  setLastPayment(payment);
+                  void load();
+                }}
+              />
+            ) : null}
+            {canVoid ? (
+              <Button type="button" variant="outline" disabled={status.busy !== null} onClick={() => void runAction("void")}>
+                {status.busy === "void" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+                Void
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Due date</dt>
-          <dd className="mt-1 text-sm font-medium text-foreground">{formatDate(invoice.due_date)}</dd>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Total</dt>
-          <dd className="mt-1 text-sm font-medium text-foreground">{formatMoney(invoice.total)}</dd>
-        </div>
-      </dl>
 
-      <FinanceTable
-        columns={columns}
-        rows={invoice.lines}
-        getKey={(line) => line.id}
-        footer={
-          <span className="flex justify-between gap-4">
-            <span>Total</span>
-            <span className="tabular-nums">{formatMoney(invoice.total)}</span>
-          </span>
-        }
-      />
+        <div className="grid gap-6 p-5 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Bill to</p>
+            <p className="mt-1 font-mono text-sm break-all text-foreground">{invoice.customer_id}</p>
+          </div>
+          <dl className="space-y-2 sm:text-right">
+            <div className="flex justify-between gap-4 sm:flex-row-reverse">
+              <dt className="text-sm text-muted-foreground">Invoice date</dt>
+              <dd className="text-sm font-medium text-foreground">{formatDate(invoice.invoice_date)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 sm:flex-row-reverse">
+              <dt className="text-sm text-muted-foreground">Due date</dt>
+              <dd className="text-sm font-medium text-foreground">{formatDate(invoice.due_date)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-border/60 pt-2 sm:flex-row-reverse">
+              <dt className="text-sm text-muted-foreground">Balance due</dt>
+              <dd
+                className={cn(
+                  "text-base font-semibold tabular-nums",
+                  balanceDue > 0 ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {formatMoney(balanceDue)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <FinanceTable
+          columns={columns}
+          rows={invoice.lines}
+          getKey={(line) => line.id}
+          footer={
+            <span className="flex items-end justify-between gap-4">
+              <span className="text-xs font-medium text-muted-foreground">
+                {invoice.lines.length} line{invoice.lines.length === 1 ? "" : "s"}
+              </span>
+              <span className="space-y-1 text-right">
+                <span className="flex justify-between gap-8 text-sm">
+                  <span className="text-muted-foreground">Total</span>
+                  <span className="font-medium tabular-nums text-foreground">{formatMoney(invoice.total)}</span>
+                </span>
+                <span className="flex justify-between gap-8 text-sm">
+                  <span className="text-muted-foreground">Balance due</span>
+                  <span className="font-semibold tabular-nums text-foreground">{formatMoney(balanceDue)}</span>
+                </span>
+              </span>
+            </span>
+          }
+        />
+      </div>
     </div>
   );
 }

@@ -42,6 +42,13 @@ services:
       # services/identity/.env.
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       IDENTITY_REDIS_URL: redis://skyrict-redis:6379/0
+      # Trust the Docker network so the identity service reads the real client
+      # IP from X-Forwarded-For (appended by the nginx proxy) instead of
+      # recording nginx's own container IP on every session. Dev-only:
+      # production sets this to the ingress/node CIDRs in the k8s overlays.
+      # Tighten to the compose subnet (docker network inspect skyrict_default)
+      # if the exposed :8000 port is reachable by untrusted hosts.
+      IDENTITY_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       # Outbound email → MailHog container (Web UI: http://localhost:8025).
       IDENTITY_EMAIL_SMTP_HOST: mailhog
       IDENTITY_EMAIL_SMTP_PORT: "1025"

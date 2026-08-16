@@ -13,6 +13,7 @@ from identity.api.deps import (
     get_rate_limiter,
     require_permission,
 )
+from identity.core.client_ip import client_ip
 from identity.core.config import settings
 from identity.core.rate_limit import RateLimiter
 from identity.features.mfa.schemas import (
@@ -33,10 +34,6 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/mfa", tags=["mfa"])
 
 _require_mfa_manage = require_permission("mfa:manage")
-
-
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
 
 
 @router.post("/setup", response_model=ResponseEnvelope[MFASetupResponse])
@@ -67,7 +64,7 @@ async def verify_mfa(
     ``MFA_ENROLL_MAX_ATTEMPTS`` is exceeded.
     """
     user_id = current_user["user_id"]
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
 
     await limiter.enforce(
         key=f"mfa-enroll-ip:{ip_address}",

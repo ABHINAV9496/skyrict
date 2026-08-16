@@ -89,4 +89,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 CMD ["uvicorn", "identity.main:app", \
      "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "4", "--no-access-log"]
+     "--workers", "4", "--no-access-log", "--no-proxy-headers"]

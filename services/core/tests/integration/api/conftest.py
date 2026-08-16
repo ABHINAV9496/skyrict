@@ -11,7 +11,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.tenant_context import TenantContext
@@ -41,6 +41,32 @@ def _admin_sub(slug: str) -> str:
 
 def _nobody_sub(slug: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"skyrict:test:{slug}:nobody"))
+
+
+async def _upsert_test_user(tenant_id: uuid.UUID, sub: str) -> None:
+    """Create the identity ``users`` row backing a deterministic test sub.
+
+    The shared ``audit_logs`` table (identity-owned, migration 0001) enforces
+    ``actor_user_id -> users(id) ON DELETE SET NULL``, so any audit write by a
+    seeded test identity requires a real ``users`` row. Mirrors the raw insert
+    used by the inventory suite's ``rbac_world`` fixture.
+    """
+    async with async_session_factory() as session:
+        await session.execute(
+            text(
+                "INSERT INTO users (id, tenant_id, email, password_hash, full_name) "
+                "VALUES (:id, :tenant_id, :email, :password_hash, :full_name) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": uuid.UUID(sub),
+                "tenant_id": tenant_id,
+                "email": f"{sub}@skyrict.integration.test",
+                "password_hash": "not-a-real-hash",
+                "full_name": sub[:8],
+            },
+        )
+        await session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -110,10 +136,12 @@ async def seeded_test_rbac(integration_db: dict[str, str]) -> None:
 
     Runs before every test: seeds the system roles for olympus and globex and
     links each tenant's admin sub to ``organization_admin`` (all six
-    ``erp.hr.*`` / ``erp.payroll.*`` keys). Idempotent — the grant uses
-    ``ON CONFLICT DO NOTHING`` on the composite key. The "nobody" subs are
-    intentionally NOT granted so 403 tests use a distinct ungranted identity
-    instead of mutating a granted one mid-suite.
+    ``erp.hr.*`` / ``erp.payroll.*`` keys), and creates the identity ``users``
+    rows backing every deterministic test sub so shared ``audit_logs`` writes
+    (FK ``actor_user_id -> users(id)``) never violate the constraint.
+    Idempotent — the grant uses ``ON CONFLICT DO NOTHING`` on the composite
+    key. The "nobody" subs are intentionally NOT granted so 403 tests use a
+    distinct ungranted identity instead of mutating a granted one mid-suite.
     """
     from core.models.core_role import CoreRoleModel
     from core.models.core_user_role import CoreUserRoleModel
@@ -121,6 +149,8 @@ async def seeded_test_rbac(integration_db: dict[str, str]) -> None:
 
     for slug, key in ((TENANT_ACME, "acme_id"), (TENANT_GLOBEX, "globex_id")):
         tenant_id = uuid.UUID(integration_db[key])
+        for sub in (_admin_sub(slug), _nobody_sub(slug)):
+            await _upsert_test_user(tenant_id, sub)
         await seed_core_roles_for_tenant(tenant_id)
         async with async_session_factory() as session:
             role_id = await session.scalar(

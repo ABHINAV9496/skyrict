@@ -31,12 +31,17 @@ from sqlalchemy import select
 
 from core.core.config import settings
 from core.core.permissions import (
+    ERP_CRM_READ,
+    ERP_CRM_WRITE,
     ERP_HR_APPROVE,
     ERP_HR_READ,
     ERP_HR_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
+    ERP_SALES_APPROVE,
+    ERP_SALES_READ,
+    ERP_SALES_WRITE,
     WILDCARD,
 )
 from core.db.session import async_session_factory
@@ -127,7 +132,10 @@ async def seed_tenant_hr_defaults(tenant_id: uuid.UUID) -> None:
 
 # System roles mirrored into ``core_roles`` per tenant (design doc section 2.4).
 # Keys come from ``core_permissions`` — the platform-fixed catalog seeded by
-# migration 0006 with the six ``erp.hr.*`` / ``erp.payroll.*`` keys.
+# migration 0006 with the six ``erp.hr.*`` / ``erp.payroll.*`` keys; the
+# ``erp.crm.*`` / ``erp.sales.*`` grants mirror identity's SYSTEM_ROLE_DEFINITIONS
+# (services/identity/src/identity/core/constants.py) so role grants stay portable
+# across the platform.
 CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tenant_owner", (WILDCARD,)),
     (
@@ -139,11 +147,27 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_PAYROLL_READ,
             ERP_PAYROLL_WRITE,
             ERP_PAYROLL_APPROVE,
+            ERP_CRM_READ,
+            ERP_CRM_WRITE,
+            ERP_SALES_READ,
+            ERP_SALES_WRITE,
+            ERP_SALES_APPROVE,
         ),
     ),
-    ("department_manager", (ERP_HR_READ, ERP_HR_WRITE, ERP_PAYROLL_READ)),
-    ("standard_user", (ERP_HR_READ,)),
-    ("auditor", (ERP_HR_READ, ERP_PAYROLL_READ)),
+    (
+        "department_manager",
+        (
+            ERP_HR_READ,
+            ERP_HR_WRITE,
+            ERP_PAYROLL_READ,
+            ERP_CRM_READ,
+            ERP_CRM_WRITE,
+            ERP_SALES_READ,
+            ERP_SALES_WRITE,
+        ),
+    ),
+    ("standard_user", (ERP_HR_READ, ERP_CRM_READ, ERP_SALES_READ)),
+    ("auditor", (ERP_HR_READ, ERP_PAYROLL_READ, ERP_CRM_READ, ERP_SALES_READ)),
 )
 
 

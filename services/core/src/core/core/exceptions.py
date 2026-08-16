@@ -40,6 +40,7 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "ConflictError",
+    "CreditLimitExceededError",
     "DuplicateRecordError",
     "DuplicateSkuError",
     "EmployeeTerminatedError",
@@ -145,6 +146,18 @@ class TransferRequiresDistinctWarehousesError(ValidationError):
     code = "TRANSFER_REQUIRES_DISTINCT_WAREHOUSES"
 
 
+# ---------------------------------------------------------------------------
+# CRM & Sales domain exceptions (CRM-BE-002)
+# ---------------------------------------------------------------------------
+
+
+class CreditLimitExceededError(ValidationError):
+    """The customer's credit limit would be exceeded by this order (422)."""
+
+    message = "Customer credit limit would be exceeded"
+    code = "CREDIT_LIMIT_EXCEEDED"
+
+
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
 # Mapping from exception type to HTTP status code and problem type URI.
@@ -171,6 +184,8 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     PayrollPeriodConflictError: (409, f"{_PROBLEM_BASE}/payroll-period-conflict"),
     LeaveBalanceExceededError: (422, f"{_PROBLEM_BASE}/leave-balance-exceeded"),
     SelfApprovalForbiddenError: (422, f"{_PROBLEM_BASE}/self-approval-forbidden"),
+    # CRM & Sales (docs/modules/sales-crm.md §7 error table).
+    CreditLimitExceededError: (422, f"{_PROBLEM_BASE}/credit-limit-exceeded"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

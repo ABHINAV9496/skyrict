@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoaderCircle, Trash2 } from "lucide-react";
+import { Leaf, LoaderCircle, Trash2, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  changeEmployeeStatus,
   createEmployee,
   terminateEmployee,
   updateEmployee,
@@ -297,6 +298,99 @@ export function EmployeeFormDialog({
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : null}
               {employee ? "Save changes" : "Hire employee"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ChangeStatusDialog({
+  employee,
+  target,
+  onOpenChange,
+  onSaved,
+}: {
+  employee: Employee | null;
+  target: "active" | "on_leave" | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (employee: Employee, message: string) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!employee) return;
+    setError(null);
+  }, [employee]);
+
+  const leaving = target === "on_leave";
+  const name = employee ? `${employee.firstName} ${employee.lastName}` : "";
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!employee || !target || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await changeEmployeeStatus(employee.id, target);
+      onOpenChange(false);
+      onSaved(
+        updated,
+        leaving
+          ? `${updated.firstName} ${updated.lastName} placed on leave.`
+          : `${updated.firstName} ${updated.lastName} reactivated.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not update the employee status.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={employee !== null && target !== null}
+      onOpenChange={(next) => !saving && onOpenChange(next)}
+    >
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={(event) => void onSubmit(event)}>
+          <DialogHeader>
+            <DialogTitle>
+              {leaving ? `Place ${name} on leave?` : `Reactivate ${name}?`}
+            </DialogTitle>
+            <DialogDescription>
+              {leaving
+                ? "This moves the employee to on leave status. Their payroll entries and leave balances stay intact, and they can be reactivated later."
+                : "This moves the employee back to active status so they can join future payroll runs."}
+            </DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <p role="alert" className="mt-4 text-sm font-medium text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : leaving ? (
+                <Leaf aria-hidden="true" className="size-4" />
+              ) : (
+                <UserCheck aria-hidden="true" className="size-4" />
+              )}
+              {leaving ? "Place on leave" : "Reactivate"}
             </Button>
           </DialogFooter>
         </form>

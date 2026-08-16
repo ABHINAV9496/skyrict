@@ -7,14 +7,17 @@ import {
   BadgeDollarSign,
   Building2,
   CalendarDays,
+  Leaf,
   Mail,
   Pencil,
   Phone,
   Trash2,
+  UserCheck,
   UserRound,
 } from "lucide-react";
 
 import {
+  ChangeStatusDialog,
   EmployeeFormDialog,
   TerminateEmployeeDialog,
 } from "@/components/dashboard/erp/hr/employee-dialogs";
@@ -91,6 +94,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [terminating, setTerminating] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<"active" | "on_leave" | null>(null);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -221,6 +225,28 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         </Button>
         {canWrite ? (
           <div className="flex items-center gap-2">
+            {employee.employmentStatus === "active" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStatusTarget("on_leave")}
+              >
+                <Leaf aria-hidden="true" className="size-4" />
+                Place on leave
+              </Button>
+            ) : null}
+            {employee.employmentStatus === "on_leave" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStatusTarget("active")}
+              >
+                <UserCheck aria-hidden="true" className="size-4" />
+                Reactivate
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -417,6 +443,13 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
       <TerminateEmployeeDialog
         employee={terminating ? employee : null}
         onOpenChange={(open) => !open && setTerminating(false)}
+        onSaved={onSaved}
+      />
+
+      <ChangeStatusDialog
+        employee={statusTarget ? employee : null}
+        target={statusTarget}
+        onOpenChange={(open) => !open && setStatusTarget(null)}
         onSaved={onSaved}
       />
     </div>

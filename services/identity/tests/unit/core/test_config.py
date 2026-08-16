@@ -250,6 +250,49 @@ class TestMissingRequiredVars:
         assert field in str(excinfo.value)
 
 
+class TestTrustedProxies:
+    """TRUSTED_PROXIES parsing/validation for the client-IP extraction."""
+
+    def test_default_is_empty(self, tmp_path: Path):
+        s = Settings(**_make_valid_settings(tmp_path))
+        assert s.TRUSTED_PROXIES == []
+        assert s.trusted_proxy_networks == ()
+
+    def test_accepts_list_of_ips_and_cidrs(self, tmp_path: Path):
+        s = Settings(
+            **_make_valid_settings(
+                tmp_path,
+                TRUSTED_PROXIES=["10.0.0.1", "192.168.0.0/16", "2001:db8::/32"],
+            )
+        )
+        assert s.TRUSTED_PROXIES == ["10.0.0.1", "192.168.0.0/16", "2001:db8::/32"]
+        assert len(s.trusted_proxy_networks) == 3
+
+    def test_accepts_comma_separated_string(self, tmp_path: Path):
+        s = Settings(
+            **_make_valid_settings(
+                tmp_path,
+                TRUSTED_PROXIES="10.0.0.1, 192.168.0.0/16",
+            )
+        )
+        assert s.TRUSTED_PROXIES == ["10.0.0.1", "192.168.0.0/16"]
+
+    def test_bare_ip_expands_to_host_network(self, tmp_path: Path):
+        import ipaddress
+
+        s = Settings(**_make_valid_settings(tmp_path, TRUSTED_PROXIES=["10.0.0.1"]))
+        network = s.trusted_proxy_networks[0]
+        assert network == ipaddress.ip_network("10.0.0.1/32")
+
+    def test_rejects_garbage_entry(self, tmp_path: Path):
+        with pytest.raises(ValidationError, match="not a valid IP address or CIDR"):
+            Settings(**_make_valid_settings(tmp_path, TRUSTED_PROXIES=["10.0.0.999"]))
+
+    def test_rejects_non_string_entry(self, tmp_path: Path):
+        with pytest.raises(ValidationError, match="must be a string"):
+            Settings(**_make_valid_settings(tmp_path, TRUSTED_PROXIES=[42]))
+
+
 class TestEnvironmentEnum:
     """Verify Environment StrEnum works correctly."""
 

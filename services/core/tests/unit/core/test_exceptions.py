@@ -18,6 +18,7 @@ from core.core.exceptions import (
 )
 from skyrict_common.exceptions import (
     ConflictError,
+    PermissionDeniedError,
     TenantContextMissingError,
     TenantDisabledError,
     TenantMismatchError,
@@ -46,6 +47,11 @@ class TestTenantErrorMapping:
         status, problem_type = _status_and_type(TenantDisabledError("disabled"))
         assert status == 403
         assert problem_type.endswith("/tenant-disabled")
+
+    def test_missing_permission_is_403_permission_denied(self) -> None:
+        status, problem_type = _status_and_type(PermissionDeniedError("no grant"))
+        assert status == 403
+        assert problem_type.endswith("/permission-denied")
 
 
 class TestConflictMapping:

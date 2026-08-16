@@ -662,9 +662,7 @@ class TestDeactivateProduct:
         product = await _seed_product(repo, sku="SKU-1")
         warehouse = await _seed_warehouse(repo)
         await _seed_receipt(repo, product.id, warehouse.id, Decimal("10"))
-        await service.reserve_stock(
-            product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-DEL"
-        )
+        await service.reserve_stock(product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-DEL")
 
         with pytest.raises(StockReservedError):
             await service.deactivate_product(TENANT, product.id)

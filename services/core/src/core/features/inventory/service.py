@@ -59,7 +59,7 @@ from core.core.exceptions import (
     TransferRequiresDistinctWarehousesError,
 )
 from core.core.tenant_context import TenantContext
-from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
+from core.domain.entities import Product, SalesOrderLine, StockLevel, StockMovement, Warehouse
 from core.domain.value_objects import Money, StockMovementType
 from core.features.inventory.events.producers import emit_stock_level_changed
 from core.features.inventory.repository import _UNSET
@@ -782,6 +782,155 @@ class InventoryService:
         level = await self.inventory_repo.get_stock_level(product_id, warehouse_id, tid)
         assert level is not None
         return level
+
+    # ------------------------------------------------------------------
+    # §5.4 — whole-order reservation lifecycle (bulk, single-commit)
+    #
+    # The per-line methods above commit after EVERY line, which breaks
+    # all-or-nothing atomicity for a multi-line order sharing one request
+    # session. These three methods apply the SAME per-line semantics but defer
+    # the single commit to the end: a partial order can never be persisted, a
+    # rollback touches nothing, and the one commit also persists the sales
+    # order state guard that ran just before in the same transaction.
+    # ------------------------------------------------------------------
+
+    async def reserve_order(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Reserve every line of one order in a SINGLE transaction."""
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Reservation quantity must be positive")
+            ledger_ref = _step_ref(ref_id, _STEP_RESERVE)
+            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
+            await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            if not await self.inventory_repo.apply_reservation_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise InsufficientStockError()
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RESERVATION,
+                    qty=line.quantity,
+                    ref_type=ref_type,
+                    ref_id=ledger_ref,
+                )
+            )
+        await self.inventory_repo.commit()
+
+    async def release_order(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Release every reserved line of one order in a SINGLE transaction."""
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Release quantity must be positive")
+            ledger_ref = _step_ref(ref_id, _STEP_RELEASE)
+            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
+            await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            if not await self.inventory_repo.apply_release_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise ValidationError("Cannot release more than the reserved quantity")
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RELEASE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=ledger_ref,
+                )
+            )
+        await self.inventory_repo.commit()
+
+    async def fulfil_order_lines(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Fulfil every line of one order in a SINGLE transaction.
+
+        Consumption is serialized per line (guarded ``qty_reserved`` update),
+        so a replay or a second concurrent fulfil fails with 409 before any
+        movement is written — the sales service re-probes first and never
+        reaches this method for an already-fulfilled order.
+        """
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        emitted: list[tuple[Product, Decimal, Decimal]] = []
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Fulfilment quantity must be positive")
+            product = await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            before = await self._current_on_hand(line.product_id, warehouse_id, tid)
+
+            if not await self.inventory_repo.apply_consume_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise InsufficientStockError()
+
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RELEASE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=_step_ref(ref_id, _STEP_RELEASE),
+                )
+            )
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.ISSUE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=_step_ref(ref_id, _STEP_ISSUE),
+                )
+            )
+            emitted.append((product, before, line.quantity))
+
+        await self.inventory_repo.commit()
+
+        for product, before, qty in emitted:
+            await self._emit_level_changed(
+                tenant_id=tid,
+                product=product,
+                warehouse_id=warehouse_id,
+                before=before,
+                after=before - qty,
+            )
 
     # ------------------------------------------------------------------
     # Reads (thin forwards — the router owns response shaping)

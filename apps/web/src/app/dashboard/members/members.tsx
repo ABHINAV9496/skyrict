@@ -92,6 +92,32 @@ function DeviceIcon({ deviceType }: { deviceType: string | null }) {
   return <Monitor aria-hidden="true" className="size-4 text-primary" />;
 }
 
+const GENERIC_PLATFORM_FAMILIES = new Set(["Windows PC", "Linux PC", "Android Desktop", "Desktop"]);
+
+function sessionTitle(session: SessionInfo): string {
+  if (session.deviceType === "service") {
+    return `${session.deviceFamily ?? "API client"} · API client`;
+  }
+  const browser = [session.browserName, session.browserVersion].filter(Boolean).join(" ");
+  if (browser) {
+    return session.osName ? `${browser} · ${session.osName}` : browser;
+  }
+  const familyAndOs = [session.deviceFamily, session.osName].filter(Boolean).join(" · ");
+  if (familyAndOs) return familyAndOs;
+  return session.device || "Unknown device";
+}
+
+function sessionDetail(session: SessionInfo): string {
+  const parts: string[] = [];
+  if (session.deviceType !== "service" && session.deviceFamily) {
+    if (!GENERIC_PLATFORM_FAMILIES.has(session.deviceFamily)) {
+      parts.push(session.deviceFamily);
+    }
+  }
+  if (session.ipAddress) parts.push(session.ipAddress);
+  return parts.join(" · ");
+}
+
 function SkeletonRows() {
   return <ListSkeleton rows={3} />;
 }
@@ -510,6 +536,7 @@ export default function MembersClient() {
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {(sessions ?? []).map((session) => {
                   const busy = sessionBusy === session.id;
+                  const detail = sessionDetail(session);
                   return (
                     <li
                       key={session.id}
@@ -521,7 +548,7 @@ export default function MembersClient() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-sm font-medium text-foreground">
-                            {session.device || "Unknown device"}
+                            {sessionTitle(session)}
                           </p>
                           {session.isTrusted ? (
                             <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
@@ -530,8 +557,7 @@ export default function MembersClient() {
                           ) : null}
                         </div>
                         <p className="truncate text-xs text-muted-foreground">
-                          {session.ipAddress ? `${session.ipAddress} · ` : ""}active{" "}
-                          {relativeTime(session.lastActiveAt)}
+                          {detail ? `${detail} · ` : ""}active {relativeTime(session.lastActiveAt)}
                         </p>
                       </div>
                       {canRevokeSessions && !sessionsFor?.isSelf ? (

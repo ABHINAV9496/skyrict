@@ -7,10 +7,11 @@ call os.getenv() directly — everything routes through the ``settings`` object.
 from __future__ import annotations
 
 import enum
+import ipaddress
 import sys
 from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,6 +79,20 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = Field(
         default=[],
         description="allowed CORS origins — must be explicit, never '*' in staging/production",
+    )
+
+    # --- IP extraction (trusted proxies) ---
+    TRUSTED_PROXIES: list[str] = Field(
+        default=[],
+        description=(
+            "IP addresses or CIDR blocks of trusted reverse proxies (e.g. "
+            "'10.0.0.10' or '10.0.0.0/24'). When a request arrives from a "
+            "trusted peer, the real client IP is read from the rightmost "
+            "X-Forwarded-For entry appended by that proxy. Empty means no "
+            "proxy is trusted: forwarded headers are ignored and the direct "
+            "TCP peer is recorded, so spoofed X-Forwarded-For headers are "
+            "never honoured."
+        ),
     )
 
     # --- Logging ---
@@ -298,9 +313,38 @@ class Settings(BaseSettings):
     jwt_private_key: str = ""
     jwt_public_key: str = ""
 
+    @property
+    def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        """Trusted-proxy entries as network objects for cheap membership checks."""
+        return tuple(ipaddress.ip_network(entry, strict=False) for entry in self.TRUSTED_PROXIES)
+
     # ------------------------------------------------------------------
     # Validators — run in definition order (pydantic v2)
     # ------------------------------------------------------------------
+
+    @field_validator("TRUSTED_PROXIES", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, value: object) -> object:
+        """Accept a comma-separated string or a list; reject malformed entries.
+
+        ``IDENTITY_TRUSTED_PROXIES=10.0.0.1,10.0.0.0/24,2001:db8::/32`` is valid
+        env syntax; a bare IP is expanded to a /32 (IPv4) or /128 (IPv6)
+        network by ``ip_network(..., strict=False)``.
+        """
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split(",") if part.strip()]
+        if not isinstance(value, list):
+            return value
+        for entry in value:
+            if not isinstance(entry, str):
+                raise ValueError(f"TRUSTED_PROXIES entry must be a string, got {entry!r}")
+            try:
+                ipaddress.ip_network(entry.strip(), strict=False)
+            except ValueError as exc:
+                raise ValueError(
+                    f"TRUSTED_PROXIES entry {entry!r} is not a valid IP address or CIDR block"
+                ) from exc
+        return [entry.strip() for entry in value]
 
     @model_validator(mode="after")
     def load_rsa_keys(self) -> Settings:

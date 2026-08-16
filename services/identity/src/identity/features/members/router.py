@@ -9,11 +9,14 @@ from fastapi import APIRouter, Depends
 
 from identity.api.deps import get_member_service, require_permission
 from identity.core.tenant_context import TenantContext
-from identity.core.user_agent import parse_user_agent
 from identity.domain.entities import Session
 from identity.features.members.schemas import MemberResponse, MemberRoleUpdateRequest
 from identity.features.members.service import MemberService
-from identity.features.sessions.schemas import SessionListResponse, SessionResponse
+from identity.features.sessions.schemas import (
+    SessionListResponse,
+    SessionResponse,
+    session_to_response,
+)
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -26,23 +29,8 @@ _require_sessions_revoke = require_permission("sessions:revoke")
 
 
 def _session_response(session: Session) -> SessionResponse:
-    """Map a session entity to a response, adding human-readable device facts."""
-    device = parse_user_agent(session.user_agent)
-    assert session.id is not None
-    return SessionResponse(
-        id=session.id,
-        user_id=session.user_id,
-        tenant_id=session.tenant_id,
-        ip_address=session.ip_address,
-        user_agent=session.user_agent,
-        status=session.status.value,
-        is_trusted=session.is_trusted,
-        created_at=session.created_at,
-        last_active_at=session.last_active_at,
-        expires_at=session.expires_at,
-        device=device.device,
-        device_type=device.device_type,
-    )
+    """Map a session entity to a response (shared mapper for both routers)."""
+    return session_to_response(session)
 
 
 @router.get("", response_model=ResponseEnvelope[list[MemberResponse]])

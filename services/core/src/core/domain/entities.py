@@ -11,7 +11,19 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from core.domain.value_objects import Money
+from core.core.constants import (
+    EmploymentStatus,
+    LeaveRequestStatus,
+    PayrollRounding,
+    PayrollRunStatus,
+)
+from core.domain.value_objects import (
+    CreditCheckResult,
+    LeadStatus,
+    Money,
+    OpportunityStage,
+    OrderStatus,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -139,6 +151,253 @@ class StockMovement:
     ref_id: str
     id: uuid.UUID | None = None
     created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ErpSequence:
+    """A per-tenant monotonic counter for one document numbering sequence.
+
+    Services claim the next value via ``SequenceRepository.next_value`` (a
+    row-locking ``UPDATE ... SET current_value = current_value + 1 RETURNING``),
+    so consecutive numbers are race-safe and never reused.
+    """
+
+    tenant_id: uuid.UUID
+    entity: str
+    current_value: int = 0
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AuditLogEntry:
+    """One immutable core (ERP) audit event in the tenant's hash chain.
+
+    ``hash`` / ``prev_hash`` are computed by the DB trigger on INSERT and are
+    ``None`` until then. Append-only: never update or delete.
+    """
+
+    tenant_id: uuid.UUID
+    action: str
+    target: str
+    actor_user_id: uuid.UUID | None = None
+    details: dict[str, object] | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    id: uuid.UUID | None = None
+    hash: str | None = None
+    prev_hash: str | None = None
+    created_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# HR & Payroll entities (HR-BE-002) — pure domain, no framework dependencies.
+# The repository layer maps these to/from the ORM models under
+# ``features/{hr,payroll}/models/``.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Department:
+    """An organizational unit within a tenant (soft-deletable via ``is_active``)."""
+
+    tenant_id: uuid.UUID
+    name: str
+    manager_employee_id: uuid.UUID | None = None
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Employee:
+    """A person employed within a tenant.
+
+    ``employment_status`` is the single source of employment truth — there is
+    deliberately no separate ``is_active`` flag. ``termination_date`` is
+    required when status is ``terminated``.
+    """
+
+    tenant_id: uuid.UUID
+    employee_number: str
+    first_name: str
+    last_name: str
+    job_title: str
+    hire_date: date
+    employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
+    email: str | None = None
+    phone: str | None = None
+    user_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
+    termination_date: date | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class LeaveType:
+    """Tenant-scoped leave catalogue entry (per-tenant accrual policy)."""
+
+    tenant_id: uuid.UUID
+    code: str
+    name: str
+    is_accrual: bool
+    accrual_days_per_year: int | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class LeaveRequest:
+    """A leave request raised by an employee and its approval state.
+
+    ``days`` is derived (``end_date - start_date + 1``), computed server-side.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    leave_type: str
+    start_date: date
+    end_date: date
+    days: int
+    status: LeaveRequestStatus = LeaveRequestStatus.PENDING
+    reason: str | None = None
+    approved_by: uuid.UUID | None = None
+    approved_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class LeaveMovement:
+    """One immutable entry in the leave ledger for a single employee.
+
+    ``qty`` is signed (``+`` accrued/refunded, ``-`` approved/used) and must
+    never be zero. Append-only: no update, no delete.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    leave_type: str
+    qty: int
+    ref_type: str
+    ref_id: str | None = None
+    reason: str | None = None
+    id: uuid.UUID | None = None
+    occurred_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class LeaveBalance:
+    """Materialized current balance for one employee + leave type.
+
+    Only accrual leave types have balance rows; ``balance`` is recomputed from
+    the ledger and can never be negative (service + DB CHECK).
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    leave_type: str
+    balance: int = 0
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Compensation:
+    """An effective-dated salary record for an employee.
+
+    The row effective at or before period end (``is_active = true``, latest
+    ``effective_from``) is used by payroll. ``monthly_salary`` is ``Money`` so
+    currency is validated at construction.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    monthly_salary: Money
+    effective_from: date
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PayrollRun:
+    """A payroll run covering one tenant and one monthly period.
+
+    ``total_gross``/``total_net`` are None until the run is computed; a
+    zero-dollar run must stay distinct from a not-yet-computed run.
+    """
+
+    tenant_id: uuid.UUID
+    run_code: str
+    period_start: date
+    period_end: date
+    status: PayrollRunStatus = PayrollRunStatus.DRAFT
+    total_gross: Money | None = None
+    total_net: Money | None = None
+    computed_by: uuid.UUID | None = None
+    approved_by: uuid.UUID | None = None
+    paid_by: uuid.UUID | None = None
+    computed_at: datetime | None = None
+    approved_at: datetime | None = None
+    paid_at: datetime | None = None
+    void_reason: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    # Employees excluded from the compute with the reason (JSON list of
+    # {"employee_id": str, "reason": str}), set at compute time (gap #6).
+    skipped_employees: list[dict[str, str]] | None = None
+
+
+@dataclass(frozen=True)
+class PayrollEntry:
+    """An immutable per-employee result row inside a payroll run.
+
+    Once the run is approved, entries are frozen (no update, no delete).
+    ``adjustments`` is free-form (bonus/other deductions) applied while the
+    run is draft/computed.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    base_salary: Money
+    pay_days: int
+    gross: Money
+    deductions: Money
+    net: Money
+    adjustments: dict[str, object] | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PayrollSettings:
+    """Tenant payroll configuration — exactly one row per tenant."""
+
+    tenant_id: uuid.UUID
+    default_currency: str = "USD"
+    pf_rate: Decimal = Decimal("0")
+    tax_rate: Decimal = Decimal("0")
+    rounding: PayrollRounding = PayrollRounding.NEAREST
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Finance entities (FIN-BE-002) — pure domain, no framework dependencies.
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -342,3 +601,142 @@ class BalanceSheet:
     total_assets: Decimal
     total_liabilities: Decimal
     total_equity: Decimal
+
+
+# ---------------------------------------------------------------------------
+# CRM entities (leads, opportunities, customers) — CRM-DATA-001
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Lead:
+    """An inbound inquiry before it has pipeline value.
+
+    Owner/team-scoped: ``owner_id`` and ``team_id`` are plain UUID references
+    to identity users (and a future teams model), resolved through ports at
+    the service layer. ``email`` is deliberately not unique — dedupe is a
+    soft probe at the service layer.
+    """
+
+    tenant_id: uuid.UUID
+    status: LeadStatus = LeadStatus.NEW
+    source: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company: str | None = None
+    owner_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Opportunity:
+    """A pipeline deal — moves through stages and terminates won/lost.
+
+    Deliberately customer-less in Phase 1 (a won opportunity is promoted to a
+    customer by the service layer). ``amount`` is optional until the deal has
+    value; when present it is a ``Money`` so the currency tag travels with it.
+    ``won_at`` / ``lost_at`` are set exactly on the terminal transition.
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    lead_id: uuid.UUID | None = None
+    stage: OpportunityStage = OpportunityStage.PROSPECTING
+    amount: Money | None = None
+    probability: int = 0
+    expected_close_date: date | None = None
+    owner_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    won_at: datetime | None = None
+    lost_at: datetime | None = None
+    lost_reason: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Customer:
+    """An account we do business with.
+
+    Soft-deleted via ``is_active`` (the ERP convention — no status enum).
+    ``customer_code`` is the stable per-tenant external key. A NULL
+    ``credit_limit`` means "no limit"; when present it is a ``Money`` so the
+    currency tag travels with it.
+    """
+
+    tenant_id: uuid.UUID
+    customer_code: str
+    name: str
+    source_opportunity_id: uuid.UUID | None = None
+    email: str | None = None
+    phone: str | None = None
+    credit_limit: Money | None = None
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Sales entities (orders, order lines) — CRM-DATA-001
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SalesOrder:
+    """A customer commitment — the money record handed to finance.
+
+    ``status`` follows ``draft -> confirmed -> fulfilled`` (``cancelled``
+    terminal). The money columns are a cached projection: the service
+    recomputes them from the lines on every write (CRM-BE-002) — never
+    trusted from clients. ``credit_check`` records the confirm-time result.
+    """
+
+    tenant_id: uuid.UUID
+    order_number: str
+    customer_id: uuid.UUID
+    status: OrderStatus = OrderStatus.DRAFT
+    credit_check: CreditCheckResult = CreditCheckResult.PENDING
+    subtotal: Money = field(default_factory=lambda: Money.zero("USD"))
+    discount: Money = field(default_factory=lambda: Money.zero("USD"))
+    tax: Money = field(default_factory=lambda: Money.zero("USD"))
+    total: Money = field(default_factory=lambda: Money.zero("USD"))
+    confirmed_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SalesOrderLine:
+    """One line of a sales order.
+
+    ``product_name`` / ``sku`` are denormalized snapshots taken at order time
+    so history stays stable even if the product catalog changes. Per-line
+    prices are plain Decimals (the currency lives on the order header);
+    ``line_total`` is a cached projection recomputed by the service.
+
+    ``order_id`` is None on a line being created (the repository stamps the
+    generated header id on write — mirroring ``InvoiceLine.invoice_id``) and
+    always populated on read.
+    """
+
+    tenant_id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: str
+    sku: str
+    quantity: Decimal
+    order_id: uuid.UUID | None = None
+    unit_price: Decimal = Decimal("0")
+    discount: Decimal = Decimal("0")
+    tax: Decimal = Decimal("0")
+    line_total: Decimal = Decimal("0")
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

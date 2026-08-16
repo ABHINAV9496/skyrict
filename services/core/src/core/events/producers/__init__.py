@@ -13,6 +13,7 @@ only after the request transaction commits.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 import structlog
@@ -67,3 +68,58 @@ def get_event_producer() -> StubEventProducer:
     if _event_producer is None:
         _event_producer = StubEventProducer()
     return _event_producer
+
+
+# ---------------------------------------------------------------------------
+# After-commit event buffer (docs/modules/hr-payroll.md §2.5)
+# ---------------------------------------------------------------------------
+# Events emitted inside a request are buffered in a ContextVar and flushed
+# ONLY after the DB transaction commits (see core/db/session.py get_db). This
+# guarantees no event is observable unless its write was durable. Emits made
+# outside a request (tests, background jobs) publish immediately.
+# A pending buffer entry is (topic, event, key).
+_event_buffer: ContextVar[list[tuple[str, BaseEvent, str | None]] | None] = ContextVar(
+    "core_event_buffer",
+    default=None,
+)
+
+
+def start_event_buffer() -> None:
+    """Begin buffering after-commit events for the current request."""
+    _event_buffer.set([])
+
+
+def buffered_events() -> list[tuple[str, BaseEvent, str | None]]:
+    """Return the currently buffered (topic, event, key) triples."""
+    buffer = _event_buffer.get()
+    return list(buffer) if buffer is not None else []
+
+
+async def flush_events() -> None:
+    """Publish every buffered event to the producer, then drop the buffer."""
+    buffer = _event_buffer.get()
+    if buffer is None:
+        return
+    producer = get_event_producer()
+    for topic, event, key in buffer:
+        await producer.apublish(topic, event, key=key)
+    _event_buffer.set(None)
+
+
+def clear_event_buffer() -> None:
+    """Discard buffered events (transaction rolled back / failed)."""
+    _event_buffer.set(None)
+
+
+async def apublish(topic: str, event: BaseEvent, *, key: str | None = None) -> None:
+    """Publish an event, honoring the after-commit buffer when active.
+
+    Emit functions call this module-level wrapper instead of the producer
+    directly; when ``get_db`` has opened a buffer the event is queued until
+    the transaction commits, otherwise it publishes immediately.
+    """
+    buffer = _event_buffer.get()
+    if buffer is None:
+        await get_event_producer().apublish(topic, event, key=key)
+        return
+    buffer.append((topic, event, key))

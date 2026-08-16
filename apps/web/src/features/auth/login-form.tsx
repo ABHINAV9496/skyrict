@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,7 +42,9 @@ function LoginForm({
   const [useBackup, setUseBackup] = useState(false);
   const [backupCode, setBackupCode] = useState("");
   const [mfaError, setMfaError] = useState(false);
+  const [verifyingMfa, setVerifyingMfa] = useState(false);
   const [handingOff, setHandingOff] = useState(false);
+  const verifyingMfaRef = useRef(false);
 
   const {
     register,
@@ -85,24 +87,47 @@ function LoginForm({
     }
   }
 
-  async function onSubmitMfa() {
+  const submitMfa = useCallback(
+    async (code: string) => {
+      if (!mfaToken) {
+        setMfaError(true);
+        return;
+      }
+      if (verifyingMfaRef.current) return;
+      verifyingMfaRef.current = true;
+      setVerifyingMfa(true);
+      setMfaError(false);
+      const result = await verifyMfa({ code, mfaToken });
+      verifyingMfaRef.current = false;
+      setVerifyingMfa(false);
+      if (result.status === "ok") {
+        setHandingOff(true);
+        await completeHandoff("/");
+      } else {
+        setMfaError(true);
+        setMfaCode("");
+        setBackupCode("");
+      }
+    },
+    [mfaToken],
+  );
+
+  useEffect(() => {
+    if (!useBackup && mfaCode.length === 6) {
+      void submitMfa(mfaCode);
+    }
+  }, [mfaCode, useBackup, submitMfa]);
+
+  function onSubmitMfa() {
     const code = useBackup ? backupCode : mfaCode;
     const ready = useBackup
       ? /^[a-f0-9]{16}$/.test(code)
       : code.length === 6;
-    if (!ready || !mfaToken) {
+    if (!ready) {
       setMfaError(true);
       return;
     }
-    setMfaError(false);
-    const result = await verifyMfa({ code, mfaToken });
-    if (result.status === "ok") {
-      await finish();
-    } else {
-      setMfaError(true);
-      setMfaCode("");
-      setBackupCode("");
-    }
+    void submitMfa(code);
   }
 
   if (step === "mfa") {
@@ -126,7 +151,7 @@ function LoginForm({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void onSubmitMfa();
+            onSubmitMfa();
           }}
           className="space-y-6"
         >
@@ -142,12 +167,14 @@ function LoginForm({
               aria-label="Backup code"
               aria-invalid={mfaError}
               autoComplete="off"
+              disabled={verifyingMfa}
               className="h-14 w-full rounded-lg border border-border bg-card px-4 text-center font-mono text-lg lowercase tracking-widest tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
             />
           ) : (
             <OtpInput
               value={mfaCode}
               onChange={setMfaCode}
+              disabled={verifyingMfa}
               error={mfaError}
               ariaLabel="Two-factor code"
             />
@@ -160,7 +187,7 @@ function LoginForm({
           <AuthButton
             type="submit"
             className="w-full"
-            loading={handingOff}
+            loading={verifyingMfa || handingOff}
             disabled={useBackup ? backupCode.length !== 16 : mfaCode.length !== 6}
           >
             Verify code
@@ -174,7 +201,8 @@ function LoginForm({
                 setBackupCode("");
                 setMfaError(false);
               }}
-              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+              disabled={verifyingMfa}
+              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
               {useBackup ? "Use authenticator code" : "Use a backup code"}
             </button>
@@ -187,7 +215,8 @@ function LoginForm({
                 setUseBackup(false);
                 setMfaError(false);
               }}
-              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+              disabled={verifyingMfa}
+              className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
               Back to sign in
             </button>

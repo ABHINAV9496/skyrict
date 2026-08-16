@@ -24,6 +24,26 @@ STOCK_ADJUSTED = "inventory.stock.adjusted"
 STOCK_TRANSFERRED = "inventory.stock.transferred"
 STOCK_REORDER_ALERTED = "inventory.stock.reorder_alerted"
 
+# ---------------------------------------------------------------------------
+# CRM & Sales (CRM-BE-002 / docs/modules/sales-crm.md §6)
+# ---------------------------------------------------------------------------
+CRM_LEAD_CREATED = "crm.lead.created"
+CRM_LEAD_UPDATED = "crm.lead.updated"
+CRM_LEAD_STATUS_CHANGED = "crm.lead.status_changed"
+CRM_OPPORTUNITY_CREATED = "crm.opportunity.created"
+CRM_OPPORTUNITY_UPDATED = "crm.opportunity.updated"
+CRM_OPPORTUNITY_STAGE_CHANGED = "crm.opportunity.stage_changed"
+CRM_OPPORTUNITY_WON = "crm.opportunity.won"
+CRM_OPPORTUNITY_LOST = "crm.opportunity.lost"
+CRM_CUSTOMER_CREATED = "crm.customer.created"
+CRM_CUSTOMER_UPDATED = "crm.customer.updated"
+CRM_CUSTOMER_DEACTIVATED = "crm.customer.deactivated"
+SALES_ORDER_CREATED = "sales.order.created"
+SALES_ORDER_UPDATED = "sales.order.updated"
+SALES_ORDER_CONFIRMED = "sales.order.confirmed"
+SALES_ORDER_FULFILLED = "sales.order.fulfilled"
+SALES_ORDER_CANCELLED = "sales.order.cancelled"
+
 # Every catalogued audit event, in catalog order.
 CATALOG: tuple[str, ...] = (
     PRODUCT_CREATED,
@@ -37,6 +57,22 @@ CATALOG: tuple[str, ...] = (
     STOCK_ADJUSTED,
     STOCK_TRANSFERRED,
     STOCK_REORDER_ALERTED,
+    CRM_LEAD_CREATED,
+    CRM_LEAD_UPDATED,
+    CRM_LEAD_STATUS_CHANGED,
+    CRM_OPPORTUNITY_CREATED,
+    CRM_OPPORTUNITY_UPDATED,
+    CRM_OPPORTUNITY_STAGE_CHANGED,
+    CRM_OPPORTUNITY_WON,
+    CRM_OPPORTUNITY_LOST,
+    CRM_CUSTOMER_CREATED,
+    CRM_CUSTOMER_UPDATED,
+    CRM_CUSTOMER_DEACTIVATED,
+    SALES_ORDER_CREATED,
+    SALES_ORDER_UPDATED,
+    SALES_ORDER_CONFIRMED,
+    SALES_ORDER_FULFILLED,
+    SALES_ORDER_CANCELLED,
 )
 
 ALL_AUDIT_EVENTS: frozenset[str] = frozenset(CATALOG)
@@ -59,6 +95,34 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             STOCK_ADJUSTED,
             STOCK_TRANSFERRED,
             STOCK_REORDER_ALERTED,
+        ),
+    ),
+    (
+        "crm",
+        "CRM",
+        (
+            CRM_LEAD_CREATED,
+            CRM_LEAD_UPDATED,
+            CRM_LEAD_STATUS_CHANGED,
+            CRM_OPPORTUNITY_CREATED,
+            CRM_OPPORTUNITY_UPDATED,
+            CRM_OPPORTUNITY_STAGE_CHANGED,
+            CRM_OPPORTUNITY_WON,
+            CRM_OPPORTUNITY_LOST,
+            CRM_CUSTOMER_CREATED,
+            CRM_CUSTOMER_UPDATED,
+            CRM_CUSTOMER_DEACTIVATED,
+        ),
+    ),
+    (
+        "sales",
+        "Sales",
+        (
+            SALES_ORDER_CREATED,
+            SALES_ORDER_UPDATED,
+            SALES_ORDER_CONFIRMED,
+            SALES_ORDER_FULFILLED,
+            SALES_ORDER_CANCELLED,
         ),
     ),
 )
@@ -84,10 +148,26 @@ __all__ = [
     "ALL_AUDIT_EVENTS",
     "AUDIT_EVENT_MODULES",
     "CATALOG",
+    "CRM_CUSTOMER_CREATED",
+    "CRM_CUSTOMER_DEACTIVATED",
+    "CRM_CUSTOMER_UPDATED",
+    "CRM_LEAD_CREATED",
+    "CRM_LEAD_STATUS_CHANGED",
+    "CRM_LEAD_UPDATED",
+    "CRM_OPPORTUNITY_CREATED",
+    "CRM_OPPORTUNITY_LOST",
+    "CRM_OPPORTUNITY_STAGE_CHANGED",
+    "CRM_OPPORTUNITY_UPDATED",
+    "CRM_OPPORTUNITY_WON",
     "PRODUCT_CREATED",
     "PRODUCT_DEACTIVATED",
     "PRODUCT_REACTIVATED",
     "PRODUCT_UPDATED",
+    "SALES_ORDER_CANCELLED",
+    "SALES_ORDER_CONFIRMED",
+    "SALES_ORDER_CREATED",
+    "SALES_ORDER_FULFILLED",
+    "SALES_ORDER_UPDATED",
     "STOCK_ADJUSTED",
     "STOCK_REORDER_ALERTED",
     "STOCK_TRANSFERRED",

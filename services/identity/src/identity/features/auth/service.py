@@ -44,7 +44,7 @@ from identity.core.security import (
 )
 from identity.core.tenant_context import TenantContext
 from identity.core.turnstile import TurnstileVerifier
-from identity.core.user_agent import parse_user_agent
+from identity.core.user_agent import parse_client_hints, parse_user_agent
 from identity.domain.entities import Role, Session, SessionStatus, Tenant, User
 from identity.domain.value_objects import TokenPair
 from identity.events.producers.tenant_events import emit_tenant_provisioned
@@ -135,7 +135,12 @@ class AuthenticationService:
         self.captcha_store = captcha_store or CaptchaStore()
 
     async def login(
-        self, request: LoginRequest, *, ip_address: str | None = None, user_agent: str | None = None
+        self,
+        request: LoginRequest,
+        *,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        client_hints: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Authenticate a user and return a token pair (plus MFA posture).
 
@@ -236,6 +241,7 @@ class AuthenticationService:
             tenant_id=tenant_id,
             ip_address=ip_address,
             user_agent=user_agent,
+            client_hints=client_hints,
         )
         result["mfa_required"] = mfa_required
         result["next_step"] = "mfa.setup" if mfa_required else None
@@ -248,6 +254,7 @@ class AuthenticationService:
         tenant_id: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        client_hints: dict[str, str] | None = None,
         audit_action: str = "auth.login.success",
     ) -> dict[str, Any]:
         """Issue a fresh token pair + session and audit the completed login."""
@@ -261,7 +268,10 @@ class AuthenticationService:
             session_id=str(session_id),
         )
 
-        device = parse_user_agent(user_agent)
+        device = parse_user_agent(
+            user_agent,
+            hints=parse_client_hints(client_hints),
+        )
         location = geoip.lookup(ip_address)
         device_info = {
             "browser": device.browser,
@@ -270,6 +280,10 @@ class AuthenticationService:
             "os_version": device.os_version,
             "device": device.device,
             "device_type": device.device_type,
+            "browser_name": device.browser_name,
+            "os_name": device.os_name,
+            "device_family": device.device_family,
+            "device_model": device.device_model,
             "user_agent": user_agent,
         }
 
@@ -602,10 +616,16 @@ class TokenService:
         session_id = payload.get("session_id")
 
         session = await self.session_service.get_session(session_id) if session_id else None
+
+        # A terminal session was already handled when it died — a client
+        # retrying that refresh token is rejected quietly so the reuse handler
+        # (family revoke + audit log) is not re-armed on every retry.
+        if session is not None and session.status is not SessionStatus.ACTIVE:
+            raise TokenReuseDetectedError()
+
         if (
             session is None
             or session.user_id != uuid.UUID(user_id)
-            or session.status is not SessionStatus.ACTIVE
             or session.refresh_token_hash != hash_refresh_token(refresh_token)
         ):
             await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session=session)

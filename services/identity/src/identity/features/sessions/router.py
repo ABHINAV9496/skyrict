@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends
 from identity.api.deps import get_current_user, get_session_service
 from identity.features.sessions.schemas import (
     SessionListResponse,
-    SessionResponse,
     SessionTrustRequest,
+    session_to_response,
 )
 from identity.features.sessions.service import SessionService
 from skyrict_common.schemas import ResponseEnvelope
@@ -26,12 +26,8 @@ async def list_sessions(
 ) -> ResponseEnvelope[SessionListResponse]:
     """List all active sessions for the current user."""
     sessions = await session_svc.list_user_sessions(current_user["user_id"])
-    return ResponseEnvelope(
-        data=SessionListResponse(
-            sessions=[SessionResponse.model_validate(session) for session in sessions],
-            total=len(sessions),
-        )
-    )
+    responses = [session_to_response(session) for session in sessions]
+    return ResponseEnvelope(data=SessionListResponse(sessions=responses, total=len(responses)))
 
 
 @router.delete("/{session_id}")

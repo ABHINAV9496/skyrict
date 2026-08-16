@@ -8,20 +8,36 @@ TenantContext is populated, ``app.current_tenant_id`` is set via
 The middleware's pre-context tenant lookup (and any bootstrap/seed work that
 runs without a request) does not set the GUC, so it stays unconstrained.
 
-Event wiring follows the SQLAlchemy asyncio docs: an event is attached to the
+Event wiring follows the SQLAlchemy asyncio docs: events are attached to the
 *sync* ``sessionmaker`` that backs the ``async_sessionmaker`` (via
 ``sync_session_class``); ``after_begin`` then fires on the sync ``Connection``
 inside the greenlet bridge, before any statement of the transaction runs.
+
+After-commit events (docs §2.5) are drained on the sync ``after_commit`` hook:
+by then the COMMIT is durable, so an event is only observable after its write
+survives — and the drain is scheduled as a background task on the running
+loop, so a failing publish can never turn a successful request into a 500.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.core.config import settings
+from core.core.logging import get_logger
 from core.core.tenant_context import TenantContext
+from core.events.producers import (
+    buffered_events,
+    clear_event_buffer,
+    flush_events,
+    start_event_buffer,
+)
+
+logger = get_logger("core.db.session")
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -55,13 +71,60 @@ def _set_rls_tenant_context(_session: Session, _transaction: object, connection:
     )
 
 
+def _log_flush_failure(task: asyncio.Task[object]) -> None:
+    """Log a failed after-commit flush without propagating into the request."""
+    try:
+        task.result()
+    except Exception:
+        logger.exception(
+            "events.after_commit_flush_failed",
+            message="after-commit event flush failed; request already succeeded",
+        )
+
+
+@event.listens_for(_sync_session_factory, "after_commit")
+def _drain_event_buffer(_session: Session) -> None:
+    """Publish buffered events as a background task once the COMMIT is durable.
+
+    Runs on the loop that executed the commit (we're inside the greenlet
+    bridge of an ``await session.commit()``); scheduling a task means the
+    request does not wait on — and can never fail because of — the publish.
+    If no loop is running (e.g. an out-of-request commit) there is nothing
+    durable to coordinate with, so the buffer is dropped with a warning.
+    """
+    if not buffered_events():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning(
+            "events.after_commit_no_loop",
+            message="no running loop for after-commit flush; dropping buffered events",
+        )
+        clear_event_buffer()
+        return
+    task = loop.create_task(flush_events())
+    task.add_done_callback(_log_flush_failure)
+
+
+@event.listens_for(_sync_session_factory, "after_rollback")
+def _discard_event_buffer(_session: Session) -> None:
+    """Discard buffered events on rollback — nothing rolled back may be emitted."""
+    clear_event_buffer()
+
+
 async def get_db() -> AsyncSession:  # type: ignore[misc]
     """FastAPI dependency — yields an async session; commit on success.
 
     Commits when the handler completes successfully, rolls back otherwise:
     without the commit every write made by a route handler would be rolled
     back when the session closes.
+
+    Domain events emitted during the request are buffered (docs §2.5: events
+    fire AFTER commit). The buffer is drained by the ``after_commit`` listener
+    above and discarded by ``after_rollback`` — nothing here publishes events.
     """
+    start_event_buffer()
     async with async_session_factory() as session:
         try:
             yield session

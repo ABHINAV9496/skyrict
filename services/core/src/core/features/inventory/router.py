@@ -13,6 +13,7 @@ adjustments need ``erp.inventory.adjust`` plus above-threshold approval via
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
@@ -28,10 +29,12 @@ from core.core.permissions import (
     ERP_INVENTORY_READ,
     ERP_INVENTORY_WRITE,
 )
+from core.features.inventory.repository import _UNSET
 from core.features.inventory.schemas import (
     AlertResponse,
     ProductCreate,
     ProductResponse,
+    ProductUpdate,
     StockAdjustmentCreate,
     StockLevelResponse,
     StockMovementResponse,
@@ -39,6 +42,7 @@ from core.features.inventory.schemas import (
     TransferResponse,
     WarehouseCreate,
     WarehouseResponse,
+    WarehouseUpdate,
     money_input,
 )
 from skyrict_common.pagination import PaginationParams
@@ -65,16 +69,23 @@ async def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     category: str | None = Query(default=None),
+    include_inactive: bool = Query(default=False),
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
 ) -> ResponseEnvelope[ListResponse[ProductResponse]]:
-    """List products (active by default; ``?category=`` filters)."""
+    """List products (active by default; ``?include_inactive=true`` for archived)."""
     params = PaginationParams.create(page, page_size)
     products = await service.list_products(
-        tenant_id, category=category, offset=params.offset, limit=params.limit
+        tenant_id,
+        include_inactive=include_inactive,
+        category=category,
+        offset=params.offset,
+        limit=params.limit,
     )
-    total = await service.count_products(tenant_id, category=category)
+    total = await service.count_products(
+        tenant_id, include_inactive=include_inactive, category=category
+    )
     return ResponseEnvelope(
         data=ListResponse(
             data=[ProductResponse.from_entity(p) for p in products],
@@ -104,6 +115,60 @@ async def create_product(
     return ResponseEnvelope(data=ProductResponse.from_entity(product), message="Product created")
 
 
+@router.patch("/products/{product_id}", response_model=ResponseEnvelope[ProductResponse])
+async def update_product(
+    product_id: uuid.UUID,
+    body: ProductUpdate,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[ProductResponse]:
+    """Partially update a product (SKU stays unique within the tenant)."""
+    updates = body.model_fields_set
+    product = await service.update_product(
+        tenant_id,
+        product_id,
+        sku=body.sku if "sku" in updates else _UNSET,
+        name=body.name if "name" in updates else _UNSET,
+        category=body.category if "category" in updates else _UNSET,
+        unit=body.unit if "unit" in updates else _UNSET,
+        cost_price=money_input(body.cost_price) if "cost_price" in updates else _UNSET,
+        sell_price=money_input(body.sell_price) if "sell_price" in updates else _UNSET,
+        reorder_point=body.reorder_point if "reorder_point" in updates else _UNSET,
+    )
+    return ResponseEnvelope(data=ProductResponse.from_entity(product), message="Product updated")
+
+
+@router.delete("/products/{product_id}", response_model=ResponseEnvelope[ProductResponse])
+async def delete_product(
+    product_id: uuid.UUID,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[ProductResponse]:
+    """Archive a product (is_active = false; ledger history is preserved).
+
+    Blocked with 409 while reservations exist; on-hand quantity may remain and
+    is written off via a stock adjustment. Un-archive with POST .../reactivate.
+    """
+    product = await service.deactivate_product(tenant_id, product_id)
+    return ResponseEnvelope(data=ProductResponse.from_entity(product), message="Product deleted")
+
+
+@router.post("/products/{product_id}/reactivate", response_model=ResponseEnvelope[ProductResponse])
+async def reactivate_product(
+    product_id: uuid.UUID,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[ProductResponse]:
+    """Un-archive a product (is_active = true)."""
+    product = await service.reactivate_product(tenant_id, product_id)
+    return ResponseEnvelope(
+        data=ProductResponse.from_entity(product), message="Product reactivated"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Warehouses
 # ---------------------------------------------------------------------------
@@ -113,14 +178,17 @@ async def create_product(
 async def list_warehouses(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    include_inactive: bool = Query(default=False),
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
 ) -> ResponseEnvelope[ListResponse[WarehouseResponse]]:
-    """List warehouses in the routed tenant."""
+    """List warehouses (active by default; ``?include_inactive=true`` for archived)."""
     params = PaginationParams.create(page, page_size)
-    warehouses = await service.list_warehouses(tenant_id, offset=params.offset, limit=params.limit)
-    total = await service.count_warehouses(tenant_id)
+    warehouses = await service.list_warehouses(
+        tenant_id, include_inactive=include_inactive, offset=params.offset, limit=params.limit
+    )
+    total = await service.count_warehouses(tenant_id, include_inactive=include_inactive)
     return ResponseEnvelope(
         data=ListResponse(
             data=[WarehouseResponse.from_entity(w) for w in warehouses],
@@ -140,6 +208,61 @@ async def create_warehouse(
     warehouse = await service.create_warehouse(tenant_id, name=body.name, location=body.location)
     return ResponseEnvelope(
         data=WarehouseResponse.from_entity(warehouse), message="Warehouse created"
+    )
+
+
+@router.patch("/warehouses/{warehouse_id}", response_model=ResponseEnvelope[WarehouseResponse])
+async def update_warehouse(
+    warehouse_id: uuid.UUID,
+    body: WarehouseUpdate,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[WarehouseResponse]:
+    """Partially update a warehouse."""
+    updates = body.model_fields_set
+    warehouse = await service.update_warehouse(
+        tenant_id,
+        warehouse_id,
+        name=body.name if "name" in updates else _UNSET,
+        location=body.location if "location" in updates else _UNSET,
+    )
+    return ResponseEnvelope(
+        data=WarehouseResponse.from_entity(warehouse), message="Warehouse updated"
+    )
+
+
+@router.delete("/warehouses/{warehouse_id}", response_model=ResponseEnvelope[WarehouseResponse])
+async def delete_warehouse(
+    warehouse_id: uuid.UUID,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[WarehouseResponse]:
+    """Archive a warehouse (is_active = false; ledger history is preserved).
+
+    Blocked with 409 while reservations exist; on-hand quantity may remain and
+    is written off via a stock adjustment. Un-archive with POST .../reactivate.
+    """
+    warehouse = await service.deactivate_warehouse(tenant_id, warehouse_id)
+    return ResponseEnvelope(
+        data=WarehouseResponse.from_entity(warehouse), message="Warehouse deleted"
+    )
+
+
+@router.post(
+    "/warehouses/{warehouse_id}/reactivate", response_model=ResponseEnvelope[WarehouseResponse]
+)
+async def reactivate_warehouse(
+    warehouse_id: uuid.UUID,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[WarehouseResponse]:
+    """Un-archive a warehouse (is_active = true)."""
+    warehouse = await service.reactivate_warehouse(tenant_id, warehouse_id)
+    return ResponseEnvelope(
+        data=WarehouseResponse.from_entity(warehouse), message="Warehouse reactivated"
     )
 
 

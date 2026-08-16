@@ -245,6 +245,34 @@ async def _adjust(
     )
 
 
+async def _reserve(
+    *,
+    product_id: str,
+    warehouse_id: str,
+    tenant_id: str,
+    qty: int | str,
+    ref_id: str,
+) -> None:
+    """Reserve stock through the service port (no HTTP endpoint yet)."""
+    from core.db.session import async_session_factory
+    from core.features.audit.repository import AuditRepository
+    from core.features.audit.service import AuditService
+    from core.features.inventory.repository import InventoryRepository
+    from core.features.inventory.service import InventoryService
+
+    async with async_session_factory() as session:
+        service = InventoryService(
+            InventoryRepository(session), AuditService(AuditRepository(session))
+        )
+        await service.reserve_stock(
+            uuid.UUID(product_id),
+            uuid.UUID(warehouse_id),
+            Decimal(qty),
+            tenant_id,
+            ref_id=ref_id,
+        )
+
+
 class TestProducts:
     async def test_create_product_returns_envelope(
         self,
@@ -305,6 +333,218 @@ class TestProducts:
         assert page2.status_code == 200
         assert len(page2.json()["data"]["data"]) == 1
 
+    async def test_patch_product_updates_fields(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        response = await client.patch(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"name": "Renamed", "category": "Electronics", "reorder_point": "8"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()["data"]
+        assert body["name"] == "Renamed"
+        assert body["category"] == "Electronics"
+        assert Decimal(body["reorder_point"]) == Decimal("8")
+        assert body["sku"] == product["sku"]  # untouched field stays
+
+    async def test_patch_product_duplicate_sku_returns_409(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        sku_a = f"SKU-{_suffix()}"
+        sku_b = f"SKU-{_suffix()}"
+        await _create_product(client, rbac_tokens["full"], sku=sku_a)
+        other = await _create_product(client, rbac_tokens["full"], sku=sku_b)
+        response = await client.patch(
+            f"/api/v1/inventory/products/{other['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"sku": sku_a},
+        )
+        assert response.status_code == 409
+
+    async def test_patch_product_same_sku_is_allowed(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        sku = f"SKU-{_suffix()}"
+        product = await _create_product(client, rbac_tokens["full"], sku=sku)
+        response = await client.patch(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"sku": sku, "name": "Same SKU"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["name"] == "Same SKU"
+
+    async def test_patch_product_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.patch(
+            f"/api/v1/inventory/products/{uuid.uuid4()}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"name": "Ghost"},
+        )
+        assert response.status_code == 404
+
+    async def test_delete_product_soft_deletes(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        response = await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is False
+
+        listed = await client.get(
+            "/api/v1/inventory/products",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert product["id"] not in [p["id"] for p in listed.json()["data"]["data"]]
+
+    async def test_delete_product_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.delete(
+            f"/api/v1/inventory/products/{uuid.uuid4()}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 404
+
+    async def test_delete_product_allows_on_hand_and_hides_from_default_list(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+
+        response = await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is False
+
+        listed = await client.get(
+            "/api/v1/inventory/products",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert product["id"] not in [p["id"] for p in listed.json()["data"]["data"]]
+
+        including_archived = await client.get(
+            "/api/v1/inventory/products",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            params={"include_inactive": "true"},
+        )
+        ids = [p["id"] for p in including_archived.json()["data"]["data"]]
+        assert product["id"] in ids
+
+        # Archived stock stays visible in the stock report (name still resolves).
+        levels = await client.get(
+            "/api/v1/inventory/stock",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            params={"product_id": product["id"]},
+        )
+        assert levels.status_code == 200
+        assert Decimal(levels.json()["data"]["data"][0]["qty_on_hand"]) == Decimal("10")
+
+    async def test_delete_product_blocked_while_reserved(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+        rbac_world: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+        await _reserve(
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            tenant_id=rbac_world["acme_id"],
+            qty=4,
+            ref_id=f"SO-{_suffix()}",
+        )
+
+        response = await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 409
+        body = response.json()
+        assert body["type"].endswith("/conflict")
+        assert "reserved" in body["detail"]
+
+    async def test_reactivate_product_unarchives(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+
+        response = await client.post(
+            f"/api/v1/inventory/products/{product['id']}/reactivate",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is True
+
+    async def test_reactivate_product_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.post(
+            f"/api/v1/inventory/products/{uuid.uuid4()}/reactivate",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 404
+
+    async def test_patch_product_requires_write_permission(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        response = await client.patch(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["readonly"]),
+            json={"name": "Nope"},
+        )
+        assert response.status_code == 403
+
 
 class TestWarehouses:
     async def test_create_and_list_warehouses(
@@ -325,6 +565,304 @@ class TestWarehouses:
         assert response.status_code == 200
         names = [w["name"] for w in response.json()["data"]["data"]]
         assert name in names
+
+    async def test_patch_warehouse_updates_fields(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        response = await client.patch(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"location": "B2"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()["data"]
+        assert body["location"] == "B2"
+        assert body["name"] == warehouse["name"]  # untouched field stays
+
+    async def test_patch_warehouse_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.patch(
+            f"/api/v1/inventory/warehouses/{uuid.uuid4()}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={"name": "Ghost"},
+        )
+        assert response.status_code == 404
+
+    async def test_delete_warehouse_soft_deletes(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        response = await client.delete(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is False
+
+        listed = await client.get(
+            "/api/v1/inventory/warehouses",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]["data"]]
+
+    async def test_delete_warehouse_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.delete(
+            f"/api/v1/inventory/warehouses/{uuid.uuid4()}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 404
+
+    async def test_delete_warehouse_allows_on_hand_and_hides_from_default_list(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+
+        response = await client.delete(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is False
+
+        listed = await client.get(
+            "/api/v1/inventory/warehouses",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]["data"]]
+
+        including_archived = await client.get(
+            "/api/v1/inventory/warehouses",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            params={"include_inactive": "true"},
+        )
+        ids = [w["id"] for w in including_archived.json()["data"]["data"]]
+        assert warehouse["id"] in ids
+
+    async def test_delete_warehouse_blocked_while_reserved(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+        rbac_world: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+        await _reserve(
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            tenant_id=rbac_world["acme_id"],
+            qty=4,
+            ref_id=f"SO-{_suffix()}",
+        )
+
+        response = await client.delete(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 409
+        assert "reserved" in response.json()["detail"]
+
+    async def test_reactivate_warehouse_unarchives(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await client.delete(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+
+        response = await client.post(
+            f"/api/v1/inventory/warehouses/{warehouse['id']}/reactivate",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["is_active"] is True
+
+    async def test_reactivate_warehouse_unknown_id_returns_404(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        response = await client.post(
+            f"/api/v1/inventory/warehouses/{uuid.uuid4()}/reactivate",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert response.status_code == 404
+
+
+class TestArchivePostingBlock:
+    async def test_transfer_on_archived_product_returns_409(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        src = await _create_warehouse(client, rbac_tokens["full"], name=f"SRC-{_suffix()}")
+        dst = await _create_warehouse(client, rbac_tokens["full"], name=f"DST-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=src["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+        await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+
+        response = await client.post(
+            "/api/v1/inventory/stock/transfers",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={
+                "product_id": product["id"],
+                "from_warehouse_id": src["id"],
+                "to_warehouse_id": dst["id"],
+                "qty": 5,
+                "ref_id": f"TRF-{_suffix()}",
+            },
+        )
+        assert response.status_code == 409
+        assert "inactive" in response.json()["detail"]
+
+    async def test_transfer_on_archived_warehouse_returns_409(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        src = await _create_warehouse(client, rbac_tokens["full"], name=f"SRC-{_suffix()}")
+        dst = await _create_warehouse(client, rbac_tokens["full"], name=f"DST-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=src["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+        await client.delete(
+            f"/api/v1/inventory/warehouses/{src['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+
+        response = await client.post(
+            "/api/v1/inventory/stock/transfers",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            json={
+                "product_id": product["id"],
+                "from_warehouse_id": src["id"],
+                "to_warehouse_id": dst["id"],
+                "qty": 5,
+                "ref_id": f"TRF-{_suffix()}",
+            },
+        )
+        assert response.status_code == 409
+        assert "inactive" in response.json()["detail"]
+
+    async def test_adjust_on_archived_product_allowed_as_write_off(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=10,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+        await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+
+        write_off = await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=-10,
+            ref_id=f"WO-{_suffix()}",
+        )
+        assert write_off.status_code == 201, write_off.text
+
+        levels = await client.get(
+            "/api/v1/inventory/stock",
+            headers=_auth_olympus(rbac_tokens["full"]),
+            params={"product_id": product["id"]},
+        )
+        assert Decimal(levels.json()["data"]["data"][0]["qty_on_hand"]) == Decimal("0")
+
+    async def test_alerts_exclude_archived_product(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(
+            client, rbac_tokens["full"], sku=f"SKU-{_suffix()}", reorder=5
+        )
+        warehouse = await _create_warehouse(client, rbac_tokens["full"], name=f"WH-{_suffix()}")
+        await _adjust(
+            client,
+            rbac_tokens["full"],
+            product_id=product["id"],
+            warehouse_id=warehouse["id"],
+            qty=4,
+            ref_id=f"ADJ-{_suffix()}",
+        )
+
+        alerts = await client.get(
+            "/api/v1/inventory/alerts",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert product["sku"] in [a["sku"] for a in alerts.json()["data"]["data"]]
+
+        await client.delete(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        after = await client.get(
+            "/api/v1/inventory/alerts",
+            headers=_auth_olympus(rbac_tokens["full"]),
+        )
+        assert product["sku"] not in [a["sku"] for a in after.json()["data"]["data"]]
 
 
 class TestStockFlows:
@@ -620,6 +1158,25 @@ class TestTenantIsolation:
             },
             json={"sku": f"SKU-{_suffix()}", "name": "Cross"},
         )
+        assert response.status_code == 403
+        assert response.json()["type"].endswith("/permission-denied")
+
+    async def test_globex_cannot_edit_acme_product(
+        self,
+        client: AsyncClient,
+        rbac_tokens: dict[str, str],
+    ) -> None:
+        product = await _create_product(client, rbac_tokens["full"], sku=f"SKU-{_suffix()}")
+        response = await client.patch(
+            f"/api/v1/inventory/products/{product['id']}",
+            headers={
+                "X-Tenant-Slug": "globex",
+                "Authorization": f"Bearer {rbac_tokens['globex']}",
+            },
+            json={"name": "Hacked"},
+        )
+        # Globex has no write permission at all, so the router's write gate
+        # rejects the mutation before any tenant-scoped lookup runs.
         assert response.status_code == 403
         assert response.json()["type"].endswith("/permission-denied")
 

@@ -20,21 +20,30 @@ import pytest
 import core.features.inventory.service as service_module
 from core.audit_events import (
     PRODUCT_CREATED,
+    PRODUCT_DEACTIVATED,
+    PRODUCT_REACTIVATED,
+    PRODUCT_UPDATED,
     STOCK_ADJUSTED,
     STOCK_REORDER_ALERTED,
     STOCK_TRANSFERRED,
     WAREHOUSE_CREATED,
+    WAREHOUSE_DEACTIVATED,
+    WAREHOUSE_REACTIVATED,
+    WAREHOUSE_UPDATED,
 )
 from core.core.exceptions import (
     DuplicateSkuError,
+    InactiveItemError,
     InsufficientStockError,
     MovementImmutableError,
+    StockReservedError,
     TransferRequiresDistinctWarehousesError,
 )
 from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
-from core.domain.value_objects import StockMovementType
+from core.domain.value_objects import Money, StockMovementType
+from core.features.inventory.repository import _UNSET
 from core.features.inventory.service import InventoryService
-from skyrict_common.exceptions import PermissionDeniedError, ValidationError
+from skyrict_common.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
 TENANT = uuid.uuid4()
 
@@ -121,6 +130,85 @@ class FakeRepo:
                 return product
         return None
 
+    async def update_product(
+        self,
+        product_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        sku: str | object = _UNSET,
+        name: str | object = _UNSET,
+        category: str | object | None = _UNSET,
+        unit: str | object | None = _UNSET,
+        cost_price: object = _UNSET,
+        sell_price: object = _UNSET,
+        reorder_point: object = _UNSET,
+    ) -> Product | None:
+        product = self.products.get(product_id)
+        if product is None or product.tenant_id != tenant_id:
+            return None
+        updated = Product(
+            id=product.id,
+            tenant_id=product.tenant_id,
+            sku=product.sku if sku is _UNSET else str(sku),
+            name=product.name if name is _UNSET else str(name),
+            category=product.category if category is _UNSET else (category or None),
+            unit=product.unit if unit is _UNSET else (unit or None),
+            cost_price=product.cost_price if cost_price is _UNSET else cost_price,
+            sell_price=product.sell_price if sell_price is _UNSET else sell_price,
+            reorder_point=(product.reorder_point if reorder_point is _UNSET else reorder_point),
+            is_active=product.is_active,
+            created_at=product.created_at,
+            updated_at=product.updated_at,
+        )
+        self.products[product_id] = updated
+        return updated
+
+    async def deactivate_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Product | None:
+        product = self.products.get(product_id)
+        if product is None or product.tenant_id != tenant_id:
+            return None
+        deactivated = Product(
+            id=product.id,
+            tenant_id=product.tenant_id,
+            sku=product.sku,
+            name=product.name,
+            category=product.category,
+            unit=product.unit,
+            cost_price=product.cost_price,
+            sell_price=product.sell_price,
+            reorder_point=product.reorder_point,
+            is_active=False,
+            created_at=product.created_at,
+            updated_at=product.updated_at,
+        )
+        self.products[product_id] = deactivated
+        return deactivated
+
+    async def reactivate_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Product | None:
+        product = self.products.get(product_id)
+        if product is None or product.tenant_id != tenant_id:
+            return None
+        reactivated = Product(
+            id=product.id,
+            tenant_id=product.tenant_id,
+            sku=product.sku,
+            name=product.name,
+            category=product.category,
+            unit=product.unit,
+            cost_price=product.cost_price,
+            sell_price=product.sell_price,
+            reorder_point=product.reorder_point,
+            is_active=True,
+            created_at=product.created_at,
+            updated_at=product.updated_at,
+        )
+        self.products[product_id] = reactivated
+        return reactivated
+
     async def list_products(self, tenant_id: uuid.UUID, **kwargs):
         return [p for p in self.products.values() if p.tenant_id == tenant_id]
 
@@ -145,6 +233,65 @@ class FakeRepo:
     ) -> Warehouse | None:
         warehouse = self.warehouses.get(warehouse_id)
         return warehouse if warehouse is not None and warehouse.tenant_id == tenant_id else None
+
+    async def update_warehouse(
+        self,
+        warehouse_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        name: str | object = _UNSET,
+        location: str | object | None = _UNSET,
+    ) -> Warehouse | None:
+        warehouse = self.warehouses.get(warehouse_id)
+        if warehouse is None or warehouse.tenant_id != tenant_id:
+            return None
+        updated = Warehouse(
+            id=warehouse.id,
+            tenant_id=warehouse.tenant_id,
+            name=warehouse.name if name is _UNSET else str(name),
+            location=warehouse.location if location is _UNSET else (location or None),
+            is_active=warehouse.is_active,
+            created_at=warehouse.created_at,
+            updated_at=warehouse.updated_at,
+        )
+        self.warehouses[warehouse_id] = updated
+        return updated
+
+    async def deactivate_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Warehouse | None:
+        warehouse = self.warehouses.get(warehouse_id)
+        if warehouse is None or warehouse.tenant_id != tenant_id:
+            return None
+        deactivated = Warehouse(
+            id=warehouse.id,
+            tenant_id=warehouse.tenant_id,
+            name=warehouse.name,
+            location=warehouse.location,
+            is_active=False,
+            created_at=warehouse.created_at,
+            updated_at=warehouse.updated_at,
+        )
+        self.warehouses[warehouse_id] = deactivated
+        return deactivated
+
+    async def reactivate_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Warehouse | None:
+        warehouse = self.warehouses.get(warehouse_id)
+        if warehouse is None or warehouse.tenant_id != tenant_id:
+            return None
+        reactivated = Warehouse(
+            id=warehouse.id,
+            tenant_id=warehouse.tenant_id,
+            name=warehouse.name,
+            location=warehouse.location,
+            is_active=True,
+            created_at=warehouse.created_at,
+            updated_at=warehouse.updated_at,
+        )
+        self.warehouses[warehouse_id] = reactivated
+        return reactivated
 
     async def list_warehouses(self, tenant_id: uuid.UUID, **kwargs):
         return [w for w in self.warehouses.values() if w.tenant_id == tenant_id]
@@ -193,6 +340,28 @@ class FakeRepo:
 
     async def count_stock_levels(self, tenant_id: uuid.UUID, **kwargs) -> int:
         return len(self.levels)
+
+    async def sum_stock_by_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]:
+        on_hand = Decimal("0")
+        reserved = Decimal("0")
+        for (pid, _wid), level in self.levels.items():
+            if level.tenant_id == tenant_id and pid == product_id:
+                on_hand += level.qty_on_hand
+                reserved += level.qty_reserved
+        return on_hand, reserved
+
+    async def sum_stock_by_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]:
+        on_hand = Decimal("0")
+        reserved = Decimal("0")
+        for (_pid, wid), level in self.levels.items():
+            if level.tenant_id == tenant_id and wid == warehouse_id:
+                on_hand += level.qty_on_hand
+                reserved += level.qty_reserved
+        return on_hand, reserved
 
     # --- guarded reservation updates ---
 
@@ -268,7 +437,11 @@ class FakeRepo:
         result = []
         for (product_id, _warehouse_id), level in self.levels.items():
             product = self.products.get(product_id)
-            if product is not None and level.qty_on_hand <= product.reorder_point:
+            if (
+                product is not None
+                and product.is_active
+                and level.qty_on_hand <= product.reorder_point
+            ):
                 result.append((level, product))
         return result
 
@@ -392,6 +565,303 @@ class TestCreateWarehouse:
         assert warehouse.id is not None
         assert repo.committed == 1
         assert audit.actions() == [WAREHOUSE_CREATED]
+
+
+class TestUpdateProduct:
+    async def test_partial_update_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        updated = await service.update_product(
+            TENANT, product.id, name="Renamed", sell_price=Money(Decimal("9.99"), "USD")
+        )
+        assert updated.name == "Renamed"
+        assert updated.sku == "SKU-1"  # untouched field stays
+        assert updated.sell_price == Money(Decimal("9.99"), "USD")
+        assert repo.committed == 1
+        assert audit.actions() == [PRODUCT_UPDATED]
+
+    async def test_same_sku_does_not_clash(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        updated = await service.update_product(TENANT, product.id, sku="SKU-1", name="Keep")
+        assert updated.sku == "SKU-1"
+        assert audit.actions() == [PRODUCT_UPDATED]
+
+    async def test_duplicate_sku_of_other_product_raises_409(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        await _seed_product(repo, sku="SKU-1")
+        other = await _seed_product(repo, sku="SKU-2")
+        with pytest.raises(DuplicateSkuError):
+            await service.update_product(TENANT, other.id, sku="SKU-1")
+        assert repo.committed == 0  # nothing committed for the failed edit
+
+    async def test_unknown_product_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.update_product(TENANT, uuid.uuid4(), name="Ghost")
+
+    async def test_empty_sku_rejected(self, service: InventoryService, repo: FakeRepo) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        with pytest.raises(ValidationError):
+            await service.update_product(TENANT, product.id, sku="  ")
+
+
+class TestUpdateWarehouse:
+    async def test_partial_update_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        warehouse = await _seed_warehouse(repo, name="Main")
+        updated = await service.update_warehouse(TENANT, warehouse.id, location="B2")
+        assert updated.name == "Main"
+        assert updated.location == "B2"
+        assert repo.committed == 1
+        assert audit.actions() == [WAREHOUSE_UPDATED]
+
+    async def test_unknown_warehouse_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.update_warehouse(TENANT, uuid.uuid4(), name="Ghost")
+
+
+class TestDeactivateProduct:
+    async def test_soft_deletes_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        deactivated = await service.deactivate_product(TENANT, product.id)
+        assert deactivated.is_active is False
+        assert repo.committed == 1
+        assert audit.actions() == [PRODUCT_DEACTIVATED]
+
+    async def test_allows_when_on_hand_remains(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("10"))
+
+        deactivated = await service.deactivate_product(TENANT, product.id)
+        assert deactivated.is_active is False
+        assert repo.committed == 1
+        assert audit.actions() == [PRODUCT_DEACTIVATED]
+        assert audit.entries[0]["details"] == {
+            "sku": "SKU-1",
+            "name": "Widget",
+            "on_hand_qty": "10",
+            "reserved_qty": "0",
+        }
+
+    async def test_blocks_when_reserved_remains(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("10"))
+        await service.reserve_stock(product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-DEL")
+
+        with pytest.raises(StockReservedError):
+            await service.deactivate_product(TENANT, product.id)
+        assert audit.actions() == []
+        assert repo.committed == 1  # only the reserve's commit — deactivate never commits
+        remaining = await repo.get_product(product.id, TENANT)
+        assert remaining is not None and remaining.is_active is True
+
+    async def test_unknown_product_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.deactivate_product(TENANT, uuid.uuid4())
+
+
+class TestDeactivateWarehouse:
+    async def test_soft_deletes_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        warehouse = await _seed_warehouse(repo, name="Main")
+        deactivated = await service.deactivate_warehouse(TENANT, warehouse.id)
+        assert deactivated.is_active is False
+        assert repo.committed == 1
+        assert audit.actions() == [WAREHOUSE_DEACTIVATED]
+
+    async def test_allows_when_on_hand_remains(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo)
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("5"))
+
+        deactivated = await service.deactivate_warehouse(TENANT, warehouse.id)
+        assert deactivated.is_active is False
+        assert repo.committed == 1
+        assert audit.actions() == [WAREHOUSE_DEACTIVATED]
+        assert audit.entries[0]["details"]["on_hand_qty"] == "5"
+
+    async def test_blocks_when_reserved_remains(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo)
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("10"))
+        await service.reserve_stock(
+            product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-WHDEL"
+        )
+
+        with pytest.raises(StockReservedError):
+            await service.deactivate_warehouse(TENANT, warehouse.id)
+        assert audit.actions() == []
+        remaining = await repo.get_warehouse(warehouse.id, TENANT)
+        assert remaining is not None and remaining.is_active is True
+
+    async def test_unknown_warehouse_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.deactivate_warehouse(TENANT, uuid.uuid4())
+
+
+class TestReactivateProduct:
+    async def test_reactivates_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        await repo.deactivate_product(product.id, TENANT)
+
+        reactivated = await service.reactivate_product(TENANT, product.id)
+        assert reactivated.is_active is True
+        assert repo.committed == 1
+        assert audit.actions() == [PRODUCT_REACTIVATED]
+
+    async def test_unknown_product_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.reactivate_product(TENANT, uuid.uuid4())
+
+
+class TestReactivateWarehouse:
+    async def test_reactivates_audits_and_commits(
+        self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
+    ) -> None:
+        warehouse = await _seed_warehouse(repo, name="Main")
+        await repo.deactivate_warehouse(warehouse.id, TENANT)
+
+        reactivated = await service.reactivate_warehouse(TENANT, warehouse.id)
+        assert reactivated.is_active is True
+        assert repo.committed == 1
+        assert audit.actions() == [WAREHOUSE_REACTIVATED]
+
+    async def test_unknown_warehouse_raises_404(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            await service.reactivate_warehouse(TENANT, uuid.uuid4())
+
+
+class TestPostingBlock:
+    async def test_transfer_on_inactive_product_rejected(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo)
+        await repo.deactivate_product(product.id, TENANT)
+        src = await _seed_warehouse(repo)
+        dst = await _seed_warehouse(repo, name="Other")
+
+        with pytest.raises(InactiveItemError):
+            await service.transfer_stock(
+                TENANT,
+                product_id=product.id,
+                from_warehouse_id=src.id,
+                to_warehouse_id=dst.id,
+                qty=Decimal("1"),
+                ref_id="TR-BLOCK",
+            )
+        assert repo.committed == 0
+
+    async def test_transfer_from_inactive_warehouse_rejected(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo)
+        src = await _seed_warehouse(repo)
+        await repo.deactivate_warehouse(src.id, TENANT)
+        dst = await _seed_warehouse(repo, name="Other")
+
+        with pytest.raises(InactiveItemError):
+            await service.transfer_stock(
+                TENANT,
+                product_id=product.id,
+                from_warehouse_id=src.id,
+                to_warehouse_id=dst.id,
+                qty=Decimal("1"),
+                ref_id="TR-BLOCK-WH",
+            )
+        assert repo.committed == 0
+
+    async def test_reserve_on_inactive_product_rejected(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo)
+        await repo.deactivate_product(product.id, TENANT)
+        warehouse = await _seed_warehouse(repo)
+
+        with pytest.raises(InactiveItemError):
+            await service.reserve_stock(
+                product.id, warehouse.id, Decimal("1"), TENANT, ref_id="SO-BLOCK"
+            )
+
+    async def test_fulfil_on_inactive_warehouse_rejected(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo)
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("10"))
+        await service.reserve_stock(
+            product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-FULFIL"
+        )
+        await repo.deactivate_warehouse(warehouse.id, TENANT)
+
+        with pytest.raises(InactiveItemError):
+            await service.fulfil_order(
+                product.id, warehouse.id, Decimal("4"), TENANT, ref_id="SO-FULFIL"
+            )
+
+    async def test_adjust_on_inactive_product_allowed_write_off(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo)
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("5"))
+        await repo.deactivate_product(product.id, TENANT)
+
+        movement = await service.adjust_stock(
+            TENANT,
+            product_id=product.id,
+            warehouse_id=warehouse.id,
+            qty=Decimal("-5"),
+            reason="write-off",
+            ref_id="ADJ-WRITEOFF",
+        )
+        assert movement.qty == Decimal("-5")
+        level = await repo.get_stock_level(product.id, warehouse.id, TENANT)
+        assert level is not None and level.qty_on_hand == Decimal("0")
+
+
+class TestAlertFiltering:
+    async def test_alerts_exclude_inactive_products(
+        self, service: InventoryService, repo: FakeRepo
+    ) -> None:
+        product = await _seed_product(repo, reorder=Decimal("5"))
+        warehouse = await _seed_warehouse(repo)
+        await _seed_receipt(repo, product.id, warehouse.id, Decimal("4"))
+        await repo.deactivate_product(product.id, TENANT)
+
+        alerts = await service.list_alerts(TENANT)
+        assert alerts == []
+        assert await service.count_alerts(TENANT) == 0
 
 
 class TestAdjustStock:

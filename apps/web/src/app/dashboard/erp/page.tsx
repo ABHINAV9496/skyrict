@@ -11,9 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { ErpOverviewSummary } from "@/components/dashboard/erp/erp-overview-summary";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
-import { reportsKpis } from "@/lib/mock/erp";
-import { cn } from "@/lib/utils";
 
 const quickLinks: {
   href: string;
@@ -21,8 +20,8 @@ const quickLinks: {
   description: string;
   icon: LucideIcon;
 }[] = [
-  { href: "/dashboard/erp/crm", title: "CRM", description: "Contacts, deals, and pipelines.", icon: Contact },
-  { href: "/dashboard/erp/sales", title: "Sales", description: "Orders and invoices.", icon: ShoppingCart },
+  { href: "/dashboard/erp/crm/leads", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
+  { href: "/dashboard/erp/orders", title: "Orders", description: "Sales orders and the fulfilment flow.", icon: ShoppingCart },
   { href: "/dashboard/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
   { href: "/dashboard/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
   { href: "/dashboard/erp/hr", title: "HR", description: "People and the team.", icon: Users },
@@ -42,26 +41,7 @@ export default function ErpPage() {
         <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
           At a glance
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {reportsKpis.slice(0, 3).map((kpi) => (
-            <div key={kpi.label} className="rounded-xl border border-border bg-card p-5">
-              <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                {kpi.label}
-              </p>
-              <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-foreground">
-                {kpi.value}
-              </p>
-              <p
-                className={cn(
-                  "mt-1 text-sm font-medium",
-                  kpi.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-                )}
-              >
-                {kpi.delta}
-              </p>
-            </div>
-          ))}
-        </div>
+        <ErpOverviewSummary />
       </section>
 
       <section className="space-y-4">

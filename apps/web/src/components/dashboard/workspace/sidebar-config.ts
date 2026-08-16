@@ -94,7 +94,7 @@ export const erpNavGroups: NavGroup[] = [
     items: [
       { href: "/dashboard/erp", label: "Dashboard", icon: LayoutDashboard, exact: true },
       { href: "/dashboard/erp/crm", label: "CRM", icon: Contact, permission: "erp.crm.read" },
-      { href: "/dashboard/erp/sales", label: "Sales", icon: ShoppingCart, permission: "erp.sales.read" },
+      { href: "/dashboard/erp/orders", label: "Orders", icon: ShoppingCart, permission: "erp.sales.read" },
       { href: "/dashboard/erp/inventory", label: "Inventory", icon: Package, permission: "erp.inventory.read" },
       { href: "/dashboard/erp/finance", label: "Finance", icon: Wallet, permission: "erp.finance.read" },
       { href: "/dashboard/erp/hr", label: "HR", icon: Blocks, permission: "erp.hr.read" },

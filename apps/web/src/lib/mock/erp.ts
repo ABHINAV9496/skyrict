@@ -18,45 +18,6 @@ export interface TablePayload {
   rows: Record<string, string | number | null>[];
 }
 
-export const crmData: TablePayload = {
-  columns: [
-    { key: "name", label: "Name" },
-    { key: "company", label: "Company" },
-    { key: "email", label: "Email" },
-    { key: "stage", label: "Stage" },
-    { key: "owner", label: "Owner" },
-    { key: "value", label: "Value", align: "right" },
-  ],
-  rows: [
-    { name: "Ava Whitmore", company: "Northwind Traders", email: "ava@northwind.dev", stage: "Qualified", owner: "Priya Shah", value: 42000 },
-    { name: "Liam Okafor", company: "Brightline Labs", email: "liam@brightline.io", stage: "Proposal", owner: "Marcus Chen", value: 87500 },
-    { name: "Sofia Reyes", company: "Harbor & Co", email: "sofia@harborco.com", stage: "Negotiation", owner: "Priya Shah", value: 124000 },
-    { name: "Noah Berg", company: "Alpine Supply", email: "noah@alpinesupply.net", stage: "Lead", owner: "Dana Kim", value: 18500 },
-    { name: "Mia Laurent", company: "Cascade Works", email: "mia@cascadeworks.io", stage: "Qualified", owner: "Marcus Chen", value: 63000 },
-    { name: "Ethan Brooks", company: "Vertex Robotics", email: "ethan@vertexrobotics.com", stage: "Closed won", owner: "Dana Kim", value: 210000 },
-    { name: "Zara Haddad", company: "Pavilion Group", email: "zara@paviliongroup.co", stage: "Lead", owner: "Priya Shah", value: 9200 },
-  ],
-};
-
-export const salesData: TablePayload = {
-  columns: [
-    { key: "order", label: "Order" },
-    { key: "customer", label: "Customer" },
-    { key: "status", label: "Status" },
-    { key: "date", label: "Date" },
-    { key: "amount", label: "Amount", align: "right" },
-  ],
-  rows: [
-    { order: "SO-1042", customer: "Northwind Traders", status: "Shipped", date: "2026-07-28", amount: 18240 },
-    { order: "SO-1043", customer: "Brightline Labs", status: "Processing", date: "2026-07-29", amount: 3475 },
-    { order: "SO-1044", customer: "Harbor & Co", status: "Delivered", date: "2026-07-25", amount: 9200 },
-    { order: "SO-1045", customer: "Alpine Supply", status: "Pending", date: "2026-07-30", amount: 5110 },
-    { order: "SO-1046", customer: "Cascade Works", status: "Shipped", date: "2026-07-29", amount: 27650 },
-    { order: "SO-1047", customer: "Vertex Robotics", status: "Delivered", date: "2026-07-22", amount: 48900 },
-    { order: "SO-1048", customer: "Pavilion Group", status: "Processing", date: "2026-07-30", amount: 1830 },
-  ],
-};
-
 export const inventoryData: TablePayload = {
   columns: [
     { key: "sku", label: "SKU" },

@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatDateTime, formatMoney, sumMoney } from "@/lib/finance/format";
+import { cn } from "@/lib/utils";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
 import { EntryStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
@@ -135,11 +136,12 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader
-          title="Journal entry"
-          description={entry.memo ?? "No memo."}
-          icon={NotebookPen}
-        />
+        <div>
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Journal entry</p>
+          <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-foreground">
+            {entry.memo ?? "No memo"}
+          </h1>
+        </div>
         <div className="flex items-center gap-2">
           <EntryStatusBadge status={entry.status} />
           {canPost ? (
@@ -176,7 +178,7 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
         </p>
       ) : null}
 
-      <dl className="grid gap-4 sm:grid-cols-3">
+      <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4">
           <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Date</dt>
           <dd className="mt-1 text-sm font-medium text-foreground">{formatDate(entry.entry_date)}</dd>
@@ -189,6 +191,18 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
           <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Created</dt>
           <dd className="mt-1 text-sm font-medium text-foreground">{formatDateTime(entry.created_at)}</dd>
         </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <dt className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            {entry.status === "posted" ? "Posted" : entry.status === "voided" ? "Voided" : "Status"}
+          </dt>
+          <dd className="mt-1 text-sm font-medium text-foreground">
+            {entry.status === "posted" && entry.posted_at
+              ? formatDateTime(entry.posted_at)
+              : entry.status === "voided" && entry.voided_at
+                ? formatDateTime(entry.voided_at)
+                : entry.status}
+          </dd>
+        </div>
       </dl>
 
       <FinanceTable
@@ -196,12 +210,26 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
         rows={entry.lines}
         getKey={(line) => line.id}
         footer={
-          <span className="flex justify-between gap-4">
-            <span className={balanced ? "text-foreground" : "font-medium text-destructive"}>
+          <span className="flex items-center justify-between gap-4">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs font-medium",
+                balanced
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-destructive",
+              )}
+            >
               {balanced ? "Balanced" : "Out of balance"}
             </span>
-            <span className="tabular-nums">
-              {formatMoney(totalDebit)} / {formatMoney(totalCredit)}
+            <span className="space-y-0.5 text-right">
+              <span className="flex justify-between gap-8">
+                <span className="text-muted-foreground">Debit</span>
+                <span className="font-medium tabular-nums text-foreground">{formatMoney(totalDebit)}</span>
+              </span>
+              <span className="flex justify-between gap-8">
+                <span className="text-muted-foreground">Credit</span>
+                <span className="font-medium tabular-nums text-foreground">{formatMoney(totalCredit)}</span>
+              </span>
             </span>
           </span>
         }

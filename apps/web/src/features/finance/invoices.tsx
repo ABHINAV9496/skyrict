@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useController, useFieldArray, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, LoaderCircle, Plus, ReceiptText, Trash2 } from "lucide-react";
@@ -25,8 +25,10 @@ import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   createInvoice,
+  listAccounts,
   listFiscalPeriods,
   listInvoices,
+  type Account,
   type FiscalPeriod,
   type Invoice,
 } from "@/lib/api/finance-api";
@@ -41,6 +43,8 @@ import {
 } from "@/features/finance/components/period-selector";
 import { InvoiceStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
+import { AccountCombobox } from "@/features/finance/components/account-combobox";
+import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
 
 type Status =
   | { state: "loading" }
@@ -70,14 +74,53 @@ const invoiceSchema = z.object({
 
 type InvoiceValues = z.infer<typeof invoiceSchema>;
 
+function InvoiceAccountRow({
+  control,
+  accounts,
+  index,
+  errorMessage,
+  inputRef,
+}: {
+  control: Control<InvoiceValues>;
+  accounts: Account[];
+  index: number;
+  errorMessage?: string;
+  inputRef?: (el: HTMLInputElement | null) => void;
+}) {
+  const { field } = useController({
+    control,
+    name: `lines.${index}.account_code`,
+  });
+  return (
+    <>
+      <AccountCombobox
+        accounts={accounts}
+        value={field.value}
+        onChange={field.onChange}
+        invalid={Boolean(errorMessage)}
+        inputRef={inputRef}
+      />
+      {errorMessage ? (
+        <p role="alert" className="text-xs font-medium text-destructive">
+          {errorMessage}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 function CreateInvoiceDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const accountInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const {
     register,
     handleSubmit,
     control,
+    watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<InvoiceValues>({
@@ -91,6 +134,29 @@ function CreateInvoiceDialog() {
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const lines = watch("lines");
+  const subtotal = useMemo(
+    () =>
+      lines.reduce((sum, line) => {
+        const quantity = Number(line.quantity);
+        const price = Number(line.unit_price);
+        return sum + (Number.isFinite(quantity) && Number.isFinite(price) ? quantity * price : 0);
+      }, 0),
+    [lines],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void listAccounts(true)
+      .then((fetched) => {
+        if (!cancelled) setAccounts(fetched);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   async function onSubmit(values: InvoiceValues) {
     if (values.due_date < values.invoice_date) {
@@ -118,6 +184,15 @@ function CreateInvoiceDialog() {
     }
   }
 
+  const lineColumns: LineItemColumn[] = [
+    { label: "Description" },
+    { label: "Account" },
+    { label: "Qty", align: "right", className: "w-20" },
+    { label: "Unit price", align: "right", className: "w-28" },
+    { label: "Amount", align: "right", className: "w-28" },
+    { label: "", className: "w-10" },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -126,14 +201,19 @@ function CreateInvoiceDialog() {
           New invoice
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>New invoice</DialogTitle>
-          <DialogDescription>
-            A draft manual invoice. Lines post to the revenue account codes you choose.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <DialogContent className="sm:max-w-3xl">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ReceiptText aria-hidden="true" className="size-5" />
+          </div>
+          <DialogHeader>
+            <DialogTitle>New invoice</DialogTitle>
+            <DialogDescription>
+              A draft manual invoice. Lines post to the revenue account codes you choose.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="max-h-[min(85vh,42rem)] space-y-4 overflow-y-auto pr-1">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-3">
               <Label htmlFor="invoice-customer">Customer ID</Label>
@@ -172,82 +252,103 @@ function CreateInvoiceDialog() {
 
           <div className="space-y-2">
             <Label>Lines</Label>
-            <div className="space-y-2">
-              {fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <Input
-                      placeholder="Description"
-                      aria-invalid={errors.lines?.[index]?.description ? true : undefined}
-                      {...register(`lines.${index}.description`)}
-                    />
-                    {errors.lines?.[index]?.description ? (
-                      <p role="alert" className="text-xs font-medium text-destructive">
-                        {errors.lines[index]?.description?.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="w-36 space-y-1.5">
-                    <Input
-                      placeholder="Account code"
-                      aria-invalid={errors.lines?.[index]?.account_code ? true : undefined}
-                      {...register(`lines.${index}.account_code`)}
-                    />
-                    {errors.lines?.[index]?.account_code ? (
-                      <p role="alert" className="text-xs font-medium text-destructive">
-                        {errors.lines[index]?.account_code?.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="w-24 space-y-1.5">
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="1"
-                      placeholder="Qty"
-                      aria-invalid={errors.lines?.[index]?.quantity ? true : undefined}
-                      {...register(`lines.${index}.quantity`)}
-                    />
-                    {errors.lines?.[index]?.quantity ? (
-                      <p role="alert" className="text-xs font-medium text-destructive">
-                        {errors.lines[index]?.quantity?.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="w-28 space-y-1.5">
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      placeholder="Price"
-                      aria-invalid={errors.lines?.[index]?.unit_price ? true : undefined}
-                      {...register(`lines.${index}.unit_price`)}
-                    />
-                    {errors.lines?.[index]?.unit_price ? (
-                      <p role="alert" className="text-xs font-medium text-destructive">
-                        {errors.lines[index]?.unit_price?.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Remove line"
-                    disabled={fields.length === 1}
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 aria-hidden="true" className="size-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ description: "", account_code: "", quantity: "1", unit_price: "" })}>
-              <Plus aria-hidden="true" className="size-3.5" />
-              Add line
-            </Button>
+            <LineItemsTable
+              columns={lineColumns}
+              footer={
+                <span className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-muted-foreground">Subtotal</span>
+                  <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
+                </span>
+              }
+              onAddRow={() => {
+                const nextIndex = fields.length;
+                append({ description: "", account_code: "", quantity: "1", unit_price: "" });
+                requestAnimationFrame(() => accountInputRefs.current[nextIndex]?.focus());
+              }}
+            >
+              {fields.map((field, index) => {
+                const quantity = Number(watch(`lines.${index}.quantity`) ?? "");
+                const price = Number(watch(`lines.${index}.unit_price`) ?? "");
+                const amount =
+                  Number.isFinite(quantity) && Number.isFinite(price) ? quantity * price : 0;
+                return (
+                  <tr key={field.id} className="border-b border-border/60 last:border-0">
+                    <td className="px-3 py-1">
+                      <Input
+                        placeholder="Description"
+                        aria-invalid={errors.lines?.[index]?.description ? true : undefined}
+                        {...register(`lines.${index}.description`)}
+                      />
+                      {errors.lines?.[index]?.description ? (
+                        <p role="alert" className="text-xs font-medium text-destructive">
+                          {errors.lines[index]?.description?.message}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-1">
+                      <InvoiceAccountRow
+                        control={control}
+                        accounts={accounts}
+                        index={index}
+                        errorMessage={errors.lines?.[index]?.account_code?.message}
+                        inputRef={(el) => {
+                          accountInputRefs.current[index] = el;
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-1 text-right">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="1"
+                        placeholder="1"
+                        className="ml-auto text-right"
+                        aria-invalid={errors.lines?.[index]?.quantity ? true : undefined}
+                        {...register(`lines.${index}.quantity`)}
+                      />
+                      {errors.lines?.[index]?.quantity ? (
+                        <p role="alert" className="text-xs font-medium text-destructive">
+                          {errors.lines[index]?.quantity?.message}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-1 text-right">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="ml-auto text-right"
+                        aria-invalid={errors.lines?.[index]?.unit_price ? true : undefined}
+                        {...register(`lines.${index}.unit_price`)}
+                      />
+                      {errors.lines?.[index]?.unit_price ? (
+                        <p role="alert" className="text-xs font-medium text-destructive">
+                          {errors.lines[index]?.unit_price?.message}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-1 text-right tabular-nums text-muted-foreground">
+                      {formatMoney(amount)}
+                    </td>
+                    <td className="px-3 py-1 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove line"
+                        disabled={fields.length === 1}
+                        onClick={() => remove(index)}
+                      >
+                        <Trash2 aria-hidden="true" className="size-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </LineItemsTable>
             {errors.lines?.message ? (
               <p role="alert" className="text-xs font-medium text-destructive">
                 {errors.lines.message}
@@ -262,6 +363,9 @@ function CreateInvoiceDialog() {
           ) : null}
 
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
@@ -306,7 +410,7 @@ const columns: FinanceColumn<Invoice>[] = [
   },
 ];
 
-export function FinanceInvoices() {
+function FinanceInvoices() {
   const { permissions } = useModuleAccess();
   const canWrite = hasPermission(permissions, "erp.finance.write");
   const [status, setStatus] = useState<Status>({ state: "loading" });
@@ -407,3 +511,5 @@ export function FinanceInvoices() {
     </div>
   );
 }
+
+export { CreateInvoiceDialog, FinanceInvoices };

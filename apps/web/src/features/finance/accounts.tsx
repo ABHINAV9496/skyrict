@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BookOpen, LoaderCircle, Plus } from "lucide-react";
+import { BookOpen, ChevronRight, LoaderCircle, Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,8 @@ import {
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { ACCOUNT_TYPE_LABELS, formatDate, formatMoney, toMoney } from "@/lib/finance/format";
-import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
+import { cn } from "@/lib/utils";
+import { TableToolbar } from "@/features/finance/components/table-toolbar";
 import { ActiveBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
 import {
@@ -217,6 +218,8 @@ export function FinanceAccounts() {
   const [asOf, setAsOf] = useState(today());
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<AccountType>>(new Set());
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -282,6 +285,15 @@ export function FinanceAccounts() {
     }
   }
 
+  function toggleType(type: AccountType) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
   if (status.state === "loading") {
     return (
       <div className="space-y-6">
@@ -308,48 +320,14 @@ export function FinanceAccounts() {
     );
   }
 
-  const actionColumn: FinanceColumn<Account> = {
-    label: "",
-    align: "right",
-    render: (account) =>
-      account.is_active && canWrite ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={status.busy !== null}
-          onClick={() => void onDeactivate(account.id)}
-        >
-          {status.busy === account.id ? (
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-          ) : null}
-          Deactivate
-        </Button>
-      ) : null,
-  };
-
-  const columns: FinanceColumn<Account>[] = [
-    { label: "Code", render: (account) => <code className="font-mono text-xs">{account.code}</code> },
-    { label: "Name", render: (account) => account.name },
-    {
-      label: "Normal",
-      render: (account) => (isDebitNormal(account.account_type) ? "Debit" : "Credit"),
-    },
-    {
-      label: "Balance",
-      align: "right",
-      render: (account) => {
-        if (balanceLoading) return "…";
-        const row = tbByAccount.get(account.id);
-        if (!row) return "—";
-        const balance = isDebitNormal(account.account_type)
-          ? row.debit - row.credit
-          : row.credit - row.debit;
-        return <span className="tabular-nums">{formatMoney(balance)}</span>;
-      },
-    },
-    { label: "Status", render: (account) => <ActiveBadge active={account.is_active} /> },
-  ];
+  const needle = query.trim().toLowerCase();
+  const visibleAccounts = needle
+    ? status.accounts.filter(
+        (account) =>
+          account.code.toLowerCase().includes(needle) ||
+          account.name.toLowerCase().includes(needle),
+      )
+    : status.accounts;
 
   return (
     <div className="space-y-6">
@@ -360,13 +338,20 @@ export function FinanceAccounts() {
           icon={BookOpen}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <PeriodSelector
-            value={periodValue}
-            onChange={setPeriodValue}
-            periods={periods}
-            label="Balance period"
+          <TableToolbar
+            searchPlaceholder="Search code or name…"
+            searchValue={query}
+            onSearchChange={setQuery}
+            period={
+              <PeriodSelector
+                value={periodValue}
+                onChange={setPeriodValue}
+                periods={periods}
+                label="Balance period"
+              />
+            }
+            actions={canWrite ? <CreateAccountDialog onCreated={() => void load()} /> : null}
           />
-          {canWrite ? <CreateAccountDialog onCreated={() => void load()} /> : null}
         </div>
       </div>
 
@@ -378,54 +363,137 @@ export function FinanceAccounts() {
         />
       ) : (
         <div className="space-y-6">
-          {COA_ORDER.map((type) => {
-            const group = status.accounts
-              .filter((account) => account.account_type === type)
-              .sort((a, b) => compareCodes(a.code, b.code));
-            if (group.length === 0) return null;
-            const groupBalance = group.reduce((sum, account) => {
-              const row = tbByAccount.get(account.id);
-              if (!row) return sum;
-              const balance = isDebitNormal(account.account_type)
-                ? toMoney(row.debit) - toMoney(row.credit)
-                : toMoney(row.credit) - toMoney(row.debit);
-              return sum + balance;
-            }, 0);
-            return (
-              <section key={type} className="space-y-2">
-                <h2 className="font-display text-sm font-semibold text-foreground">
-                  {ACCOUNT_TYPE_LABELS[type]}
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    {group.length}
-                  </span>
-                </h2>
-                <FinanceTable
-                  columns={[...columns, actionColumn]}
-                  rows={group}
-                  getKey={(account) => account.id}
-                  footer={
-                    <span className="flex justify-between gap-4">
-                      <span>Total {ACCOUNT_TYPE_LABELS[type].toLowerCase()}</span>
-                      <span className="tabular-nums">
-                        {balanceLoading ? "…" : formatMoney(groupBalance)}
-                      </span>
-                    </span>
-                  }
-                />
-              </section>
-            );
-          })}
-          <div className="space-y-1">
-            {balanceError ? (
-              <p role="alert" className="text-sm font-medium text-destructive">
-                {balanceError}
-              </p>
-            ) : null}
-            <p className="text-sm text-muted-foreground">
-              {status.accounts.filter((account) => account.is_active).length} active ·{" "}
-              {status.accounts.length} total · balances as of {formatDate(asOf)}
-            </p>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="max-h-[min(70vh,42rem)] overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-10 border-b border-border bg-muted">
+                    <th scope="col" className="px-4 py-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Code</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Name</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Normal</th>
+                    <th scope="col" className="px-4 py-3 text-right text-xs font-semibold tracking-wider text-muted-foreground uppercase">Balance</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Status</th>
+                    <th scope="col" className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {COA_ORDER.map((type) => {
+                    const group = visibleAccounts
+                      .filter((account) => account.account_type === type)
+                      .sort((a, b) => compareCodes(a.code, b.code));
+                    if (group.length === 0) return null;
+                    const groupBalance = group.reduce((sum, account) => {
+                      const row = tbByAccount.get(account.id);
+                      if (!row) return sum;
+                      const balance = isDebitNormal(account.account_type)
+                        ? toMoney(row.debit) - toMoney(row.credit)
+                        : toMoney(row.credit) - toMoney(row.debit);
+                      return sum + balance;
+                    }, 0);
+                    const isCollapsed = collapsed.has(type);
+                    return (
+                      <Fragment key={type}>
+                        <tr className="border-b border-border bg-muted/40">
+                          <td colSpan={6} className="px-2 py-1">
+                            <button
+                              type="button"
+                              onClick={() => toggleType(type)}
+                              aria-expanded={!isCollapsed}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/60"
+                            >
+                              <ChevronRight
+                                aria-hidden="true"
+                                className={cn(
+                                  "size-4 shrink-0 text-muted-foreground transition-transform",
+                                  !isCollapsed && "rotate-90",
+                                )}
+                              />
+                              <span className="font-display text-sm font-semibold text-foreground">
+                                {ACCOUNT_TYPE_LABELS[type]}
+                              </span>
+                              <span className="text-xs font-normal text-muted-foreground">
+                                {group.length}
+                              </span>
+                              <span className="ml-auto pr-2 text-sm font-medium tabular-nums text-foreground">
+                                {balanceLoading ? "…" : formatMoney(groupBalance)}
+                              </span>
+                            </button>
+                          </td>
+                        </tr>
+                        {!isCollapsed
+                          ? group.map((account) => (
+                              <tr key={account.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/30">
+                                <td className="px-4 py-3">
+                                  <code className="font-mono text-xs">{account.code}</code>
+                                </td>
+                                <td className="px-4 py-3 text-foreground">{account.name}</td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {isDebitNormal(account.account_type) ? "Debit" : "Credit"}
+                                </td>
+                                <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                                  {balanceLoading ? "…" : (() => {
+                                    const row = tbByAccount.get(account.id);
+                                    if (!row) return "—";
+                                    const balance = isDebitNormal(account.account_type)
+                                      ? row.debit - row.credit
+                                      : row.credit - row.debit;
+                                    return formatMoney(balance);
+                                  })()}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <ActiveBadge active={account.is_active} />
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {account.is_active && canWrite ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={status.busy !== null}
+                                      onClick={() => void onDeactivate(account.id)}
+                                    >
+                                      {status.busy === account.id ? (
+                                        <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                                      ) : null}
+                                      Deactivate
+                                    </Button>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            ))
+                          : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5 text-sm">
+              <span className="flex justify-between gap-4">
+                <span className="text-muted-foreground">
+                  {status.accounts.filter((account) => account.is_active).length} active ·{" "}
+                  {status.accounts.length} total · balances as of {formatDate(asOf)}
+                </span>
+                <span className="tabular-nums text-foreground">
+                  {balanceLoading ? "…" : formatMoney(
+                    status.accounts.reduce((sum, account) => {
+                      const row = tbByAccount.get(account.id);
+                      if (!row) return sum;
+                      const balance = isDebitNormal(account.account_type)
+                        ? toMoney(row.debit) - toMoney(row.credit)
+                        : toMoney(row.credit) - toMoney(row.debit);
+                      return sum + balance;
+                    }, 0),
+                  )}
+                </span>
+              </span>
+            </div>
           </div>
+          {balanceError ? (
+            <p role="alert" className="text-sm font-medium text-destructive">
+              {balanceError}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

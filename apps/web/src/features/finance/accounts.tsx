@@ -112,12 +112,17 @@ function CreateAccountDialog({ onCreated }: { onCreated: () => void }) {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New account</DialogTitle>
-          <DialogDescription>
-            Add a chart of accounts entry. Codes must be unique within the workspace.
-          </DialogDescription>
-        </DialogHeader>
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <BookOpen aria-hidden="true" className="size-5" />
+          </div>
+          <DialogHeader>
+            <DialogTitle>New account</DialogTitle>
+            <DialogDescription>
+              Add a chart of accounts entry. Codes must be unique within the workspace.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="account-code">Code</Label>
@@ -171,6 +176,9 @@ function CreateAccountDialog({ onCreated }: { onCreated: () => void }) {
             </p>
           ) : null}
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />

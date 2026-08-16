@@ -100,13 +100,18 @@ function ApplyPaymentDialog({
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Apply payment</DialogTitle>
-          <DialogDescription>
-            Record a cash receipt against invoice {invoice.invoice_number}. Marking it paid closes
-            the invoice.
-          </DialogDescription>
-        </DialogHeader>
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Banknote aria-hidden="true" className="size-5" />
+          </div>
+          <DialogHeader>
+            <DialogTitle>Apply payment</DialogTitle>
+            <DialogDescription>
+              Record a cash receipt against invoice {invoice.invoice_number}. Marking it paid closes
+              the invoice.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="payment-amount">Amount</Label>
@@ -154,6 +159,9 @@ function ApplyPaymentDialog({
             </p>
           ) : null}
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />

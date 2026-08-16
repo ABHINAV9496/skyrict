@@ -43,6 +43,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { ACCOUNT_TYPE_LABELS, formatDate, formatMoney, toMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
+import { CODE_RANGE_HINTS } from "@/lib/finance/account-classification";
 import { TableToolbar } from "@/features/finance/components/table-toolbar";
 import { ActiveBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
@@ -138,6 +139,13 @@ function CreateAccountDialog({ onCreated }: { onCreated: () => void }) {
                 {errors.code.message}
               </p>
             ) : null}
+            <p className="text-xs text-muted-foreground">
+              Recommended ranges:{" "}
+              {CODE_RANGE_HINTS.map(
+                (h, i) =>
+                  `${h.range} = ${h.label}${i < CODE_RANGE_HINTS.length - 1 ? ", " : ""}`,
+              )}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="account-name">Name</Label>

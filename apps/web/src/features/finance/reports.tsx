@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, LoaderCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
@@ -17,13 +17,22 @@ import {
     type FiscalPeriod,
     type ProfitAndLoss,
     type TrialBalance,
+    type TrialBalanceRow,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import {
     ACCOUNT_TYPE_LABELS,
+    type AccountType,
     formatMoney,
     toMoney,
 } from "@/lib/finance/format";
+import {
+    classifyAccount,
+    BS_SECTION_ORDER,
+    SECTION_LABELS,
+    TB_TYPE_ORDER,
+    type StatementSection,
+} from "@/lib/finance/account-classification";
 import {
     FinanceTable,
     type FinanceColumn,
@@ -98,10 +107,20 @@ function ReportToolbar({
     );
 }
 
+// ---------------------------------------------------------------------------
+// StatementTable (enhanced with indent + subtotal)
+// ---------------------------------------------------------------------------
+
 type StatementRow =
     | { kind: "section"; label: string }
-    | { kind: "line"; label: string; amount: number | string }
+    | {
+          kind: "line";
+          label: string;
+          amount: number | string;
+          indent?: boolean;
+      }
     | { kind: "total"; label: string; amount: number | string }
+    | { kind: "subtotal"; label: string; amount: number | string }
     | {
           kind: "net";
           label: string;
@@ -113,14 +132,26 @@ function StatementTable({
     rows,
     emptyLabel = "No data in this period.",
     generatedAt,
+    reportHeader,
 }: {
     rows: StatementRow[];
     emptyLabel?: string;
     generatedAt?: string;
+    reportHeader?: { title: string; subtitle: string };
 }) {
     const hasLines = rows.some((row) => row.kind === "line");
     return (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {reportHeader ? (
+                <div className="border-b border-border/60 px-4 py-3">
+                    <h3 className="text-sm font-display font-semibold text-foreground">
+                        {reportHeader.title}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                        {reportHeader.subtitle}
+                    </p>
+                </div>
+            ) : null}
             <table className="w-full text-sm">
                 <tbody>
                     {!hasLines ? (
@@ -146,6 +177,7 @@ function StatementTable({
                                     </tr>
                                 );
                             }
+                            const isSubtotal = row.kind === "subtotal";
                             const amountClass =
                                 row.kind === "net"
                                     ? cn(
@@ -154,21 +186,31 @@ function StatementTable({
                                               ? "text-destructive"
                                               : "text-primary",
                                       )
-                                    : row.kind === "total"
+                                    : isSubtotal
                                       ? "border-t border-border/70 font-semibold text-foreground"
-                                      : "tabular-nums text-muted-foreground";
+                                      : row.kind === "total"
+                                        ? "border-t border-border/70 font-bold text-foreground"
+                                        : "tabular-nums text-muted-foreground";
                             const labelClass =
                                 row.kind === "total"
-                                    ? "border-t border-border/70 font-medium text-foreground"
-                                    : row.kind === "net"
-                                      ? "border-t-2 border-double border-border font-display font-semibold text-foreground"
-                                      : "text-muted-foreground";
+                                    ? "border-t border-border/70 font-bold text-foreground"
+                                    : isSubtotal
+                                      ? "border-t border-border/70 font-medium text-foreground"
+                                      : row.kind === "net"
+                                        ? "border-t-2 border-double border-border font-display font-semibold text-foreground"
+                                        : "text-muted-foreground";
                             return (
                                 <tr
                                     key={index}
                                     className="border-b border-border/40 last:border-b-0"
                                 >
-                                    <td className={cn("px-4 py-2", labelClass)}>
+                                    <td
+                                        className={cn(
+                                            "px-4 py-2",
+                                            labelClass,
+                                            row.kind === "line" && row.indent && "pl-8",
+                                        )}
+                                    >
                                         {row.label}
                                     </td>
                                     <td
@@ -194,7 +236,59 @@ function StatementTable({
     );
 }
 
-const tbColumns: FinanceColumn<TrialBalance["rows"][number]>[] = [
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+type LineItem = { account_id: string; code: string; name: string };
+
+function groupBySection<T extends LineItem>(
+    items: T[],
+    accountType: AccountType,
+    sortOrder: Record<StatementSection, number>,
+): { section: StatementSection; lines: T[] }[] {
+    const map = new Map<StatementSection, T[]>();
+    for (const item of items) {
+        const section = classifyAccount(item.code, accountType);
+        const existing = map.get(section);
+        if (existing) {
+            existing.push(item);
+        } else {
+            map.set(section, [item]);
+        }
+    }
+    return [...map.entries()]
+        .sort(([a], [b]) => sortOrder[a] - sortOrder[b])
+        .map(([section, lines]) => ({
+            section,
+            lines: lines.sort((x, y) => x.code.localeCompare(y.code, undefined, { numeric: true })),
+        }));
+}
+
+function sumAmounts<T extends { amount?: number | string; balance?: number | string }>(
+    items: T[],
+    field: "amount" | "balance",
+): number {
+    return items.reduce<number>((sum, item) => {
+        const raw = item[field];
+        return sum + (raw === undefined ? 0 : toMoney(raw));
+    }, 0);
+}
+
+function fmtDateLong(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Trial Balance
+// ---------------------------------------------------------------------------
+
+const tbColumns: FinanceColumn<TrialBalanceRow & { _sorted: number }>[] = [
     {
         label: "Code",
         render: (row) => <code className="font-mono text-xs">{row.code}</code>,
@@ -242,6 +336,20 @@ function TrialBalanceView({ periods }: { periods: FiscalPeriod[] }) {
         void run(asOf);
     }, [asOf, run]);
 
+    const sortedRows = useMemo(() => {
+        if (!data) return [];
+        return [...data.rows].sort((a, b) => {
+            const typeDiff =
+                TB_TYPE_ORDER[a.account_type] - TB_TYPE_ORDER[b.account_type];
+            if (typeDiff !== 0) return typeDiff;
+            return a.code.localeCompare(b.code, undefined, { numeric: true });
+        });
+    }, [data]);
+
+    const isBalanced = data
+        ? Math.abs(toMoney(data.total_debit) - toMoney(data.total_credit)) < 0.01
+        : false;
+
     return (
         <div className="space-y-4">
             <PeriodSelector
@@ -275,27 +383,144 @@ function TrialBalanceView({ periods }: { periods: FiscalPeriod[] }) {
             {data && !loading ? (
                 <FinanceTable
                     columns={tbColumns}
-                    rows={data.rows}
+                    rows={sortedRows.map((row) => ({
+                        ...row,
+                        _sorted: 0,
+                    }))}
                     getKey={(row) => row.account_id}
                     emptyMessage="No posted entries in this period."
                     footer={
-                        <span className="flex justify-between gap-4">
-                            <span>Totals</span>
-                            <span className="tabular-nums">
-                                {formatMoney(data.total_debit)} /{" "}
-                                {formatMoney(data.total_credit)}
+                        <div className="space-y-2">
+                            <span className="flex justify-between gap-4">
+                                <span className="font-semibold">Totals</span>
+                                <span className="tabular-nums">
+                                    {formatMoney(data.total_debit)} /{" "}
+                                    {formatMoney(data.total_credit)}
+                                </span>
                             </span>
-                        </span>
+                            <div className="flex items-center justify-end gap-2">
+                                <span
+                                    className={cn(
+                                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                        isBalanced
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                                    )}
+                                >
+                                    {isBalanced
+                                        ? "\u2713 Balanced"
+                                        : `\u2717 Imbalance of ${formatMoney(Math.abs(toMoney(data.total_debit) - toMoney(data.total_credit)))}`}
+                                </span>
+                            </div>
+                        </div>
                     }
                 />
             ) : null}
-            {data && !loading ? (
-                <p className="text-xs text-muted-foreground">
-                    Generated {new Date().toLocaleString()}
-                </p>
-            ) : null}
         </div>
     );
+}
+
+// ---------------------------------------------------------------------------
+// Profit & Loss
+// ---------------------------------------------------------------------------
+
+function buildPnlRows(data: ProfitAndLoss): StatementRow[] {
+    const rows: StatementRow[] = [];
+
+    // Revenue section
+    rows.push({ kind: "section", label: "Revenue" });
+    const sortedRevenue = [...data.revenue].sort((a, b) =>
+        a.code.localeCompare(b.code, undefined, { numeric: true }),
+    );
+    for (const line of sortedRevenue) {
+        rows.push({
+            kind: "line",
+            label: `${line.code} \u00b7 ${line.name}`,
+            amount: line.amount,
+        });
+    }
+    rows.push({ kind: "total", label: "Total Revenue", amount: data.total_revenue });
+
+    // Split expenses by code range
+    const cogs: typeof data.expenses = [];
+    const operating: typeof data.expenses = [];
+    const otherIncome: typeof data.expenses = [];
+    const otherExpense: typeof data.expenses = [];
+
+    for (const line of data.expenses) {
+        const section = classifyAccount(line.code, "expense");
+        if (section === "cogs") cogs.push(line);
+        else if (section === "other_expense") otherExpense.push(line);
+        else operating.push(line); // operating_expense or fallback
+    }
+
+    // Cost of Goods Sold (only show if non-empty)
+    if (cogs.length > 0) {
+        cogs.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        const totalCogs = sumAmounts(cogs, "amount");
+        rows.push({ kind: "section", label: "Cost of Goods Sold" });
+        for (const line of cogs) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.amount,
+            });
+        }
+        rows.push({ kind: "total", label: "Total Cost of Goods Sold", amount: totalCogs });
+
+        const grossProfit = toMoney(data.total_revenue) - totalCogs;
+        rows.push({ kind: "subtotal", label: "Gross Profit", amount: grossProfit });
+    }
+
+    // Operating Expenses
+    if (operating.length > 0) {
+        operating.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        const totalOperating = sumAmounts(operating, "amount");
+        rows.push({ kind: "section", label: "Operating Expenses" });
+        for (const line of operating) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.amount,
+            });
+        }
+        rows.push({ kind: "total", label: "Total Operating Expenses", amount: totalOperating });
+    }
+
+    // Other Income / Expenses (only show if non-empty)
+    const hasOther = otherIncome.length > 0 || otherExpense.length > 0;
+    if (hasOther) {
+        rows.push({ kind: "section", label: "Other Income / Expenses" });
+        otherIncome.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        for (const line of otherIncome) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.amount,
+            });
+        }
+        otherExpense.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+        for (const line of otherExpense) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.amount,
+            });
+        }
+        const totalOther =
+            sumAmounts(otherIncome, "amount") - sumAmounts(otherExpense, "amount");
+        rows.push({ kind: "total", label: "Total Other", amount: totalOther });
+    }
+
+    // Net Income
+    rows.push({
+        kind: "net",
+        label: "Net Income",
+        amount: data.net_income,
+        negative: toMoney(data.net_income) < 0,
+    });
+
+    return rows;
 }
 
 function ProfitAndLossView({ periods }: { periods: FiscalPeriod[] }) {
@@ -327,6 +552,11 @@ function ProfitAndLossView({ periods }: { periods: FiscalPeriod[] }) {
     useEffect(() => {
         void run(fromDate, toDate);
     }, [fromDate, toDate, run]);
+
+    const rows = useMemo(
+        () => (data ? buildPnlRows(data) : []),
+        [data],
+    );
 
     if (loading) return <TableSkeleton rows={6} />;
     if (error)
@@ -375,41 +605,120 @@ function ProfitAndLossView({ periods }: { periods: FiscalPeriod[] }) {
                 running={loading}
             />
             <StatementTable
-                rows={[
-                    { kind: "section", label: "Revenue" },
-                    ...data.revenue.map((line) => ({
-                        kind: "line" as const,
-                        label: `${line.code} · ${line.name}`,
-                        amount: line.amount,
-                    })),
-                    {
-                        kind: "total",
-                        label: "Total revenue",
-                        amount: data.total_revenue,
-                    },
-                    { kind: "section", label: "Expenses" },
-                    ...data.expenses.map((line) => ({
-                        kind: "line" as const,
-                        label: `${line.code} · ${line.name}`,
-                        amount: line.amount,
-                    })),
-                    {
-                        kind: "total",
-                        label: "Total expenses",
-                        amount: data.total_expenses,
-                    },
-                    {
-                        kind: "net",
-                        label: "Net income",
-                        amount: data.net_income,
-                        negative: toMoney(data.net_income) < 0,
-                    },
-                ]}
+                rows={rows}
                 emptyLabel="No revenue or expenses posted in this period."
                 generatedAt={new Date().toLocaleString()}
+                reportHeader={{
+                    title: "Profit & Loss Statement",
+                    subtitle: `${fmtDateLong(fromDate)} \u2013 ${fmtDateLong(toDate)}`,
+                }}
             />
         </div>
     );
+}
+
+// ---------------------------------------------------------------------------
+// Balance Sheet
+// ---------------------------------------------------------------------------
+
+function buildBalanceSheetRows(data: BalanceSheet): StatementRow[] {
+    const rows: StatementRow[] = [];
+
+    // ---- Assets ----
+    rows.push({ kind: "section", label: "Assets" });
+
+    const assetGroups = groupBySection(data.assets, "asset", BS_SECTION_ORDER);
+    let totalAssets = 0;
+
+    for (const { section, lines } of assetGroups) {
+        const sectionTotal = sumAmounts(lines, "balance");
+        totalAssets += sectionTotal;
+        rows.push({
+            kind: "section",
+            label: SECTION_LABELS[section],
+        });
+        for (const line of lines) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.balance,
+                indent: true,
+            });
+        }
+        rows.push({
+            kind: "subtotal",
+            label: `Total ${SECTION_LABELS[section]}`,
+            amount: sectionTotal,
+        });
+    }
+    rows.push({ kind: "total", label: "Total Assets", amount: totalAssets });
+
+    // ---- Liabilities ----
+    rows.push({ kind: "section", label: "Liabilities" });
+
+    const liabGroups = groupBySection(
+        data.liabilities,
+        "liability",
+        BS_SECTION_ORDER,
+    );
+    let totalLiabilities = 0;
+
+    for (const { section, lines } of liabGroups) {
+        const sectionTotal = sumAmounts(lines, "balance");
+        totalLiabilities += sectionTotal;
+        rows.push({
+            kind: "section",
+            label: SECTION_LABELS[section],
+        });
+        for (const line of lines) {
+            rows.push({
+                kind: "line",
+                label: `${line.code} \u00b7 ${line.name}`,
+                amount: line.balance,
+                indent: true,
+            });
+        }
+        rows.push({
+            kind: "subtotal",
+            label: `Total ${SECTION_LABELS[section]}`,
+            amount: sectionTotal,
+        });
+    }
+    rows.push({
+        kind: "total",
+        label: "Total Liabilities",
+        amount: totalLiabilities,
+    });
+
+    // ---- Equity ----
+    rows.push({ kind: "section", label: "Equity" });
+
+    const sortedEquity = [...data.equity].sort((a, b) =>
+        a.code.localeCompare(b.code, undefined, { numeric: true }),
+    );
+    for (const line of sortedEquity) {
+        rows.push({
+            kind: "line",
+            label: `${line.code} \u00b7 ${line.name}`,
+            amount: line.balance,
+        });
+    }
+    rows.push({
+        kind: "total",
+        label: "Total Equity",
+        amount: data.total_equity,
+    });
+
+    // Total Liabilities & Equity
+    const totalLiabEq = totalLiabilities + toMoney(data.total_equity);
+    rows.push({
+        kind: "net",
+        label: "Total Liabilities & Equity",
+        amount: totalLiabEq,
+        negative: toMoney(totalAssets) - totalLiabEq !== 0,
+    });
+
+    return rows;
 }
 
 function BalanceSheetView({ periods }: { periods: FiscalPeriod[] }) {
@@ -436,12 +745,23 @@ function BalanceSheetView({ periods }: { periods: FiscalPeriod[] }) {
         void run(asOf);
     }, [asOf, run]);
 
+    const rows = useMemo(
+        () => (data ? buildBalanceSheetRows(data) : []),
+        [data],
+    );
+
     if (loading) return <TableSkeleton rows={6} />;
     if (error)
         return (
             <FinanceErrorState message={error} onRetry={() => void run(asOf)} />
         );
     if (!data) return null;
+
+    const diff =
+        toMoney(data.total_assets) -
+        toMoney(data.total_liabilities) -
+        toMoney(data.total_equity);
+    const isBalanced = Math.abs(diff) < 0.01;
 
     return (
         <div className="space-y-5">
@@ -467,55 +787,35 @@ function BalanceSheetView({ periods }: { periods: FiscalPeriod[] }) {
                 running={loading}
             />
             <StatementTable
-                rows={[
-                    { kind: "section", label: "Assets" },
-                    ...data.assets.map((line) => ({
-                        kind: "line" as const,
-                        label: `${line.code} · ${line.name}`,
-                        amount: line.balance,
-                    })),
-                    {
-                        kind: "total",
-                        label: "Total assets",
-                        amount: data.total_assets,
-                    },
-                    { kind: "section", label: "Liabilities" },
-                    ...data.liabilities.map((line) => ({
-                        kind: "line" as const,
-                        label: `${line.code} · ${line.name}`,
-                        amount: line.balance,
-                    })),
-                    {
-                        kind: "total",
-                        label: "Total liabilities",
-                        amount: data.total_liabilities,
-                    },
-                    { kind: "section", label: "Equity" },
-                    ...data.equity.map((line) => ({
-                        kind: "line" as const,
-                        label: `${line.code} · ${line.name}`,
-                        amount: line.balance,
-                    })),
-                    {
-                        kind: "total",
-                        label: "Total equity",
-                        amount: data.total_equity,
-                    },
-                    {
-                        kind: "net",
-                        label: "Balance check (assets − liabilities − equity)",
-                        amount:
-                            toMoney(data.total_assets) -
-                            toMoney(data.total_liabilities) -
-                            toMoney(data.total_equity),
-                    },
-                ]}
+                rows={rows}
                 emptyLabel="No balances in this period."
                 generatedAt={new Date().toLocaleString()}
+                reportHeader={{
+                    title: "Balance Sheet",
+                    subtitle: `As of ${fmtDateLong(asOf)}`,
+                }}
             />
+            <div className="flex items-center justify-end">
+                <span
+                    className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                        isBalanced
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                    )}
+                >
+                    {isBalanced
+                        ? "\u2713 Balanced"
+                        : `\u2717 Difference of ${formatMoney(Math.abs(diff))}`}
+                </span>
+            </div>
         </div>
     );
 }
+
+// ---------------------------------------------------------------------------
+// Root
+// ---------------------------------------------------------------------------
 
 export function FinanceReports() {
     const [report, setReport] = useState<ReportKey>("trial-balance");

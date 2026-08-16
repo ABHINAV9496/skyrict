@@ -168,7 +168,7 @@ export const erpNavGroups: NavGroup[] = [
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/reports",
+                        href: "/dashboard/erp/finance/statements",
                         label: "Statements",
                         icon: BarChart3,
                         permission: "erp.finance.read",

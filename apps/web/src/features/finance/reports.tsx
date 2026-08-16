@@ -90,9 +90,11 @@ type StatementRow =
 function StatementTable({
   rows,
   emptyLabel = "No data in this period.",
+  generatedAt,
 }: {
   rows: StatementRow[];
   emptyLabel?: string;
+  generatedAt?: string;
 }) {
   const hasLines = rows.some((row) => row.kind === "line");
   return (
@@ -124,13 +126,13 @@ function StatementTable({
                       row.negative ? "text-destructive" : "text-primary",
                     )
                   : row.kind === "total"
-                    ? "font-semibold text-foreground"
+                    ? "border-t border-border/70 font-semibold text-foreground"
                     : "tabular-nums text-muted-foreground";
               const labelClass =
                 row.kind === "total"
-                  ? "font-medium text-foreground"
+                  ? "border-t border-border/70 font-medium text-foreground"
                   : row.kind === "net"
-                    ? "font-display font-semibold text-foreground"
+                    ? "border-t-2 border-double border-border font-display font-semibold text-foreground"
                     : "text-muted-foreground";
               return (
                 <tr key={index} className="border-b border-border/40 last:border-b-0">
@@ -144,6 +146,11 @@ function StatementTable({
           )}
         </tbody>
       </table>
+      {generatedAt ? (
+        <p className="border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
+          Generated {generatedAt}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -217,6 +224,11 @@ function TrialBalanceView({ periods }: { periods: FiscalPeriod[] }) {
             </span>
           }
         />
+      ) : null}
+      {data && !loading ? (
+        <p className="text-xs text-muted-foreground">
+          Generated {new Date().toLocaleString()}
+        </p>
       ) : null}
     </div>
   );
@@ -300,6 +312,7 @@ function ProfitAndLossView({ periods }: { periods: FiscalPeriod[] }) {
           },
         ]}
         emptyLabel="No revenue or expenses posted in this period."
+        generatedAt={new Date().toLocaleString()}
       />
     </div>
   );
@@ -379,6 +392,7 @@ function BalanceSheetView({ periods }: { periods: FiscalPeriod[] }) {
           },
         ]}
         emptyLabel="No balances in this period."
+        generatedAt={new Date().toLocaleString()}
       />
     </div>
   );

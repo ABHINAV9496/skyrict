@@ -45,6 +45,7 @@ __all__ = [
     "DuplicateSkuError",
     "EmployeeTerminatedError",
     "IllegalStateTransitionError",
+    "InactiveItemError",
     "InsufficientStockError",
     "LeaveBalanceExceededError",
     "MovementImmutableError",
@@ -55,6 +56,7 @@ __all__ = [
     "SelfApprovalForbiddenError",
     "SkyrictError",
     "StartupError",
+    "StockReservedError",
     "TenantContextMissingError",
     "TenantDisabledError",
     "TenantMismatchError",
@@ -137,6 +139,32 @@ class MovementImmutableError(ConflictError):
 
     message = "Stock movements are immutable and cannot be replayed"
     code = "MOVEMENT_IMMUTABLE"
+
+
+class StockReservedError(ConflictError):
+    """Cannot deactivate an item that still has open reservations (409).
+
+    Mirrors the ERP rule that an item with open commitments cannot be
+    archived: reservations are promises to external documents and must be
+    released or fulfilled before the item can be deactivated. Plain on-hand
+    quantity is NOT blocked — it stays on the books and is written off via a
+    stock adjustment on the archived item.
+    """
+
+    message = "Cannot deactivate: reserved quantity still exists"
+    code = "STOCK_RESERVED"
+
+
+class InactiveItemError(ConflictError):
+    """Cannot post stock against an archived (inactive) item (409).
+
+    Production ERPs apply a "posting block" to deactivated items: new sales,
+    transfers and reservations are refused, but write-off adjustments remain
+    allowed so remaining on-hand quantity can be zeroed out.
+    """
+
+    message = "Cannot post stock against an inactive item"
+    code = "ITEM_INACTIVE"
 
 
 class TransferRequiresDistinctWarehousesError(ValidationError):

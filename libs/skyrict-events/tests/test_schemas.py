@@ -4,8 +4,11 @@ from skyrict_events.schemas import (
     AuthLoginFailed,
     AuthLoginSuccess,
     MFASuccess,
+    RbacRoleGranted,
+    RoleGrant,
     SessionCreated,
     TenantCreated,
+    TenantProvisioned,
     UserCreated,
 )
 
@@ -36,6 +39,45 @@ class TestTenantCreated:
         event = TenantCreated(tenant_id="t-1", name="Acme", slug="acme")
         assert event.name == "Acme"
         assert event.slug == "acme"
+
+
+class TestTenantProvisioned:
+    def test_fields(self):
+        grants = [
+            RoleGrant(role_id="r-1", role_name="tenant_owner", permissions=["*"], user_id="u-1"),
+            RoleGrant(role_id="r-2", role_name="standard_user", permissions=["erp.crm.read"]),
+        ]
+        event = TenantProvisioned(tenant_id="t-1", slug="acme", role_grants=grants)
+        assert event.event_type == "identity.tenant.provisioned"
+        assert event.slug == "acme"
+        assert event.role_grants[0].permissions == ["*"]
+        assert event.role_grants[0].user_id == "u-1"
+        assert event.role_grants[1].user_id is None
+
+    def test_round_trip_json(self):
+        event = TenantProvisioned(
+            tenant_id="t-1",
+            slug="acme",
+            role_grants=[RoleGrant(role_id="r-1", role_name="owner", permissions=["*"])],
+        )
+        restored = TenantProvisioned.model_validate_json(event.to_json())
+        assert restored.role_grants[0].role_name == "owner"
+
+
+class TestRbacRoleGranted:
+    def test_fields(self):
+        event = RbacRoleGranted(
+            tenant_id="t-1",
+            grant=RoleGrant(
+                role_id="r-1",
+                role_name="auditor",
+                permissions=["erp.inventory.read"],
+                user_id="u-1",
+                scope_id="t-1",
+            ),
+        )
+        assert event.event_type == "identity.rbac.role_granted"
+        assert event.grant.scope_id == "t-1"
 
 
 class TestSessionCreated:

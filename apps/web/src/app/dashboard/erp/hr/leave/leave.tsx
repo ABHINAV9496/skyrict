@@ -60,7 +60,7 @@ const STATUS_OPTIONS: { value: "all" | LeaveRequestStatus; label: string }[] = [
 
 const PAGE_SIZE = 20;
 
-export function LeaveClient() {
+export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestStatus }) {
   const { permissions } = useModuleAccess();
   const canApprove =
     permissions.includes("*") || permissions.includes("erp.hr.approve");
@@ -72,7 +72,7 @@ export function LeaveClient() {
   const [status, setStatus] = useState<PageStatus>({ state: "loading" });
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<"all" | LeaveRequestStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | LeaveRequestStatus>(initialStatus ?? "all");
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);

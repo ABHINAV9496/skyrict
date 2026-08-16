@@ -71,3 +71,17 @@ export function formatRate(value: string | number | null | undefined): string {
     maximumFractionDigits: 2,
   }).format(rate);
 }
+
+/**
+ * Count display for paginated list responses. The apiList probe (limit + 1)
+ * cannot distinguish "exactly N rows" from "at least N rows" past one page, so
+ * a trailing "+" is appended whenever a following page was detected rather than
+ * claiming an exact total.
+ */
+export function formatListCount(meta: {
+  total: number;
+  page: number;
+  total_pages: number;
+}): string {
+  return meta.total_pages > meta.page ? `${meta.total}+` : String(meta.total);
+}

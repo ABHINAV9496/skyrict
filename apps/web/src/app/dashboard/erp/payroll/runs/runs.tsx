@@ -54,7 +54,7 @@ const STATUS_OPTIONS: { value: "all" | PayrollRunStatus; label: string }[] = [
 
 const PAGE_SIZE = 20;
 
-export function RunsClient() {
+export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus }) {
   const router = useRouter();
   const { permissions } = useModuleAccess();
   const canWrite =
@@ -62,7 +62,7 @@ export function RunsClient() {
 
   const [status, setStatus] = useState<PageStatus>({ state: "loading" });
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<"all" | PayrollRunStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | PayrollRunStatus>(initialStatus ?? "all");
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);

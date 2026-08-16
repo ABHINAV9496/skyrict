@@ -8,6 +8,7 @@ import {
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
+import { PayrollOverview } from "./payroll-overview";
 
 const areas = [
   {
@@ -39,7 +40,12 @@ export default function PayrollHomePage() {
           description="Pay everyone on time — runs, compensation, and rules."
           icon={Receipt}
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <PayrollOverview />
+        <section className="space-y-3">
+          <h2 className="font-display text-sm font-semibold tracking-tight text-foreground">
+            Explore
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {areas.map((area) => (
             <Link
               key={area.href}
@@ -64,7 +70,8 @@ export default function PayrollHomePage() {
               </span>
             </Link>
           ))}
-        </div>
+          </div>
+        </section>
       </div>
     </ModuleAccessBoundary>
   );

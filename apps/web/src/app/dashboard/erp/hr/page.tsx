@@ -3,6 +3,7 @@ import { ArrowRight, Building2, CalendarDays, UserRound, Users } from "lucide-re
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
+import { HrOverview } from "./hr-overview";
 
 const areas = [
   {
@@ -34,7 +35,12 @@ export default function HrHomePage() {
           description="The people behind the business — employees, departments, and leave."
           icon={Users}
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <HrOverview />
+        <section className="space-y-3">
+          <h2 className="font-display text-sm font-semibold tracking-tight text-foreground">
+            Explore
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {areas.map((area) => (
             <Link
               key={area.href}
@@ -59,7 +65,8 @@ export default function HrHomePage() {
               </span>
             </Link>
           ))}
-        </div>
+          </div>
+        </section>
       </div>
     </ModuleAccessBoundary>
   );

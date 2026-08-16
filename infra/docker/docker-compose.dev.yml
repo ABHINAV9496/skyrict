@@ -48,7 +48,7 @@ services:
       # production sets this to the ingress/node CIDRs in the k8s overlays.
       # Tighten to the compose subnet (docker network inspect skyrict_default)
       # if the exposed :8000 port is reachable by untrusted hosts.
-      IDENTITY_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
       # Outbound email → MailHog container (Web UI: http://localhost:8025).
       IDENTITY_EMAIL_SMTP_HOST: mailhog
       IDENTITY_EMAIL_SMTP_PORT: "1025"

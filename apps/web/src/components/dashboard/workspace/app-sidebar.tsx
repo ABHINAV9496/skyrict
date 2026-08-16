@@ -155,17 +155,19 @@ function SidebarGroup({
 
   return (
     <div>
-      <div className="flex items-center gap-1">
+      <div
+        className={cn(
+          "flex items-center gap-1 rounded-lg transition-colors",
+          parentActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        )}
+      >
         <Link
           href={item.href}
           onClick={onCloseMobile}
           aria-current={parentActive ? "page" : undefined}
-          className={cn(
-            "group relative flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-            parentActive
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-          )}
+          className="relative flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-sm font-medium transition-colors"
         >
           {parentActive ? (
             <span
@@ -185,7 +187,7 @@ function SidebarGroup({
           aria-expanded={open}
           aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
           title={open ? "Collapse" : "Expand"}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none"
+          className="mr-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none"
         >
           <ChevronDown
             aria-hidden="true"
@@ -300,7 +302,7 @@ export function AppSidebar({
           </button>
         </header>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Dashboard">
+        <nav className="themed-scrollbar flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Dashboard">
           {navGroups.map((group) => (
             <div key={group.label} className="space-y-1">
               {collapsed ? (

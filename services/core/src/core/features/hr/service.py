@@ -803,6 +803,20 @@ class LeaveService:
         leave_type_row = await self._repo.get_leave_type(leave_type, tenant_id=tenant_id)
         if leave_type_row is None:
             raise ValueError(f"unknown leave type {leave_type!r}")
+        if leave_type_row.is_accrual:
+            # Rule 2 (docs §4.3): same balance-bucket lock + projected-balance
+            # check as approve — a manual adjustment must never drive the ledger
+            # negative. The lock serializes against concurrent approves so the
+            # re-read below sees the committed ledger, not a stale snapshot.
+            await self._repo.lock_leave_balance(employee_id, leave_type, tenant_id=tenant_id)
+            current_balance = await self._repo.recompute_balance(
+                employee_id, leave_type, tenant_id=tenant_id
+            )
+            projected = current_balance + qty
+            if projected < 0:
+                raise LeaveBalanceExceededError(
+                    f"adjusting balance by {qty} would drive balance below zero"
+                )
         await self._repo.add_leave_movement(
             ent.LeaveMovement(
                 tenant_id=tenant_id,

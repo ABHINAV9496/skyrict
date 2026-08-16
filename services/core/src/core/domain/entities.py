@@ -645,6 +645,7 @@ class Opportunity:
 
     tenant_id: uuid.UUID
     name: str
+    lead_id: uuid.UUID | None = None
     stage: OpportunityStage = OpportunityStage.PROSPECTING
     amount: Money | None = None
     probability: int = 0
@@ -672,6 +673,7 @@ class Customer:
     tenant_id: uuid.UUID
     customer_code: str
     name: str
+    source_opportunity_id: uuid.UUID | None = None
     email: str | None = None
     phone: str | None = None
     credit_limit: Money | None = None

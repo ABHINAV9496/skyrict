@@ -61,6 +61,12 @@ class ErpCrmCustomerModel(Base):
     )
     customer_code: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # source_opportunity_id: soft link to the won opportunity this customer was
+    # promoted from (plain UUID, NO FK — migration 0015, UNIQUE
+    # (tenant_id, source_opportunity_id)).
+    source_opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)

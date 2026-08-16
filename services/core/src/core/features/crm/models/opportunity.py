@@ -78,6 +78,9 @@ class ErpCrmOpportunityModel(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # lead_id: soft link to the lead that qualified into this opportunity
+    # (plain UUID, NO FK — migration 0015, UNIQUE (tenant_id, lead_id)).
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     stage: Mapped[OpportunityStage] = mapped_column(
         Enum(
             OpportunityStage,

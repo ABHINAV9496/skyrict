@@ -12,19 +12,35 @@ from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.tenant_context import TenantContext
 from core.db.session import async_session_factory, engine
 from core.models.tenant import TenantModel
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
+
+    from httpx import AsyncClient
 
 # "acme" is a reserved platform slug, so the canonical primary test tenant
 # uses a non-reserved slug (mirrors identity's suite).
 TENANT_ACME = "olympus"
 TENANT_GLOBEX = "globex"
 TENANT_DISABLED = "disabledco"
+
+# Permission-test identities (HR-BE-002 Gap 1): the admin sub is granted the
+# six ERP keys via core_user_roles; the "nobody" sub is deliberately ungranted
+# so 403 tests never mutate a granted identity mid-suite.
+ADMIN_ROLE = "organization_admin"
+
+
+def _admin_sub(slug: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"skyrict:test:{slug}:admin"))
+
+
+def _nobody_sub(slug: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"skyrict:test:{slug}:nobody"))
 
 
 @pytest.fixture(autouse=True)
@@ -78,7 +94,84 @@ async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str]
 
 
 @pytest.fixture
-async def client():
+async def seeded_hr_defaults(integration_db: dict[str, str]) -> None:
+    """Seed the olympus tenant's HR/Payroll defaults (leave types + settings).
+
+    Idempotent — safe to re-run across tests sharing the tenant.
+    """
+    from core.seed import seed_tenant_hr_defaults
+
+    await seed_tenant_hr_defaults(uuid.UUID(integration_db["acme_id"]))
+
+
+@pytest.fixture(autouse=True)
+async def seeded_test_rbac(integration_db: dict[str, str]) -> None:
+    """Grant the deterministic test-admin identities the six ERP keys.
+
+    Runs before every test: seeds the system roles for olympus and globex and
+    links each tenant's admin sub to ``organization_admin`` (all six
+    ``erp.hr.*`` / ``erp.payroll.*`` keys). Idempotent — the grant uses
+    ``ON CONFLICT DO NOTHING`` on the composite key. The "nobody" subs are
+    intentionally NOT granted so 403 tests use a distinct ungranted identity
+    instead of mutating a granted one mid-suite.
+    """
+    from core.models.core_role import CoreRoleModel
+    from core.models.core_user_role import CoreUserRoleModel
+    from core.seed import seed_core_roles_for_tenant
+
+    for slug, key in ((TENANT_ACME, "acme_id"), (TENANT_GLOBEX, "globex_id")):
+        tenant_id = uuid.UUID(integration_db[key])
+        await seed_core_roles_for_tenant(tenant_id)
+        async with async_session_factory() as session:
+            role_id = await session.scalar(
+                select(CoreRoleModel.id).where(
+                    CoreRoleModel.tenant_id == tenant_id,
+                    CoreRoleModel.name == ADMIN_ROLE,
+                )
+            )
+            assert role_id is not None, "organization_admin role must be seeded"
+            await session.execute(
+                pg_insert(CoreUserRoleModel)
+                .values(
+                    tenant_id=tenant_id,
+                    id=uuid.uuid4(),
+                    user_id=uuid.UUID(_admin_sub(slug)),
+                    role_id=role_id,
+                    scope_id=None,
+                )
+                .on_conflict_do_nothing()
+            )
+            await session.commit()
+
+
+@pytest.fixture
+def tenant_headers(
+    integration_db: dict[str, str], rsa_private_key: str
+) -> Callable[[str], dict[str, str]]:
+    """Headers factory — signed JWT bound to a tenant's UUID + its slug header.
+
+    Returns a stable admin identity (pre-granted all six ERP keys by
+    ``seeded_test_rbac``). Pass ``unprivileged=True`` for a deliberately
+    ungranted identity — the token is valid but resolves zero permissions, so
+    permission-gated endpoints return 403 without disturbing the admin grant.
+    """
+    from .helpers import make_tenant_headers
+
+    tenant_ids = {
+        "olympus": integration_db["acme_id"],
+        "globex": integration_db["globex_id"],
+        "disabledco": integration_db["disabled_id"],
+    }
+
+    def _headers(slug: str = "olympus", *, unprivileged: bool = False) -> dict[str, str]:
+        sub = _nobody_sub(slug) if unprivileged else _admin_sub(slug)
+        return make_tenant_headers(rsa_private_key, tenant_ids[slug], slug, sub=sub)
+
+    return _headers
+
+
+@pytest.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client against the FastAPI app (ASGI transport).
 
     Runs the REAL application lifespan (startup dependency verification +

@@ -196,6 +196,19 @@ Applied to every tenant-to-tenant FK: `erp_leave_requests → erp_employees`, `e
 - `services/core` verifies the **identity-issued access JWT** (RS256, shared public key, same issuer/audience). It never issues tokens.
 - **Permissions are resolved from the database at request time**, not from a JWT claim. `require_permission("erp.hr.read")` resolves the user's roles → permissions on every request, fail-closed.
 - `employee.user_id` (the optional identity-user link) is validated against the routed tenant through an injected port; HR stores only the UUID and never creates identity users.
+
+> **Accepted Phase-1 deviation (recorded, not incidental):** the concrete
+> identity validator is not wired in Phase 1. The composition root
+> (`services/core/src/core/api/deps.py::get_employee_service`) injects
+> `_NoopIdentityUserPort`, which **fails open** — it logs a warning
+> (`identity.validate_user_noop`) and accepts the `user_id` as-is, so
+> `POST /hr/employees` works without an identity round-trip. Consequences:
+> a hire may reference a user id that does not exist or belongs to another
+> tenant until the identity-integration ticket lands. The swap point is
+> intentionally the one composition-root line above; no test asserts the
+> no-op, and the security matrix's "validated" row for `user_id` is green
+> **only** under this deviation.
+
 - **Two permission families**:
 
 | Key | Meaning |
@@ -563,6 +576,36 @@ All rules are implemented in the **service layer** (`features/hr/service.py`, `f
 2. In **one transaction**: flip status `pending → approved` (atomic guard `WHERE status = 'pending'`) → write a `−days` movement (`ref_type=leave_request`) → recompute the balance → set `approved_by`/`approved_at`.
 3. If the balance would go negative (§4.2), the **entire transaction rolls back** — the request stays `pending`.
 4. Rejection writes no movement (nothing was deducted) and flips `pending → rejected` atomically.
+
+5. **Resolved — concurrent-approval race (HR-BE-002):** the single-request
+   atomicity above originally did **not** extend across two concurrent
+   approvals on *different* requests for the *same* employee: both could read
+   the same pre-approval balance, both pass the §4.2 check, and both write a
+   materialized `erp_leave_balances` row based only on their own transaction's
+   view — the ledger could go negative while the materialized balance still
+   read `>= 0` and `ck_erp_leave_balances_non_negative` could not see it. This
+   was **discovered, not designed**, and was a live correctness bug in the
+   leave-balance write path. **Fix:** every balance-mutating path now takes a
+   row lock on `erp_leave_balances (tenant_id, employee_id, leave_type)` before
+   reading/rechecking the balance. `HrRepository.lock_leave_balance`
+   (`services/core/src/core/features/hr/repository.py:502`) first seeds the
+   row (`INSERT ... ON CONFLICT DO NOTHING` on
+   `uq_erp_leave_balances_employee_type`, so a not-yet-created balance is still
+   locked — `SELECT ... FOR UPDATE` alone would lock nothing on a missing row)
+   and is then re-probed with a **fresh** recompute, never the pre-lock value.
+   `approve_leave_request` locks before its §4.2 check
+   (`hr/service.py:521`), cancellation of an approved request locks before its
+   reversal (`hr/service.py:663`), and the accrual path locks in
+   `accrue_leave_movement` (`hr/repository.py:518`). Multi-row callers — payroll
+   `compute_run`'s accrual loop (`payroll/service.py:308`) — acquire locks in a
+   stable deterministic order (`list_active_employees` sorts by
+   `employee_number`, `payroll/repository.py:647`) to avoid deadlock; this
+   ordering contract is documented at the call site. Regression coverage:
+   `test_concurrent_approve_cross_requests_invariant` passes deterministically
+   (no longer `xfail`), plus `..._stress_balance_exact`,
+   `test_concurrent_compute_with_approval_no_deadlock`, and
+   `test_concurrent_first_grant_single_movement` in
+   `services/core/tests/integration/api/test_concurrency_atomicity.py`.
 
 ### 4.4 Rule 4 — Leave accrual is explicit and idempotent
 

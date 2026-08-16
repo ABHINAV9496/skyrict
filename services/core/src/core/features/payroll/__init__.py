@@ -1,8 +1,9 @@
-"""Payroll feature package — salary history, runs, per-run entries, settings.
+"""Payroll feature package — runs, entries, compensation, settings.
 
-Layout follows the ERP feature convention (spec §2.1/§3.2): one model file per
-table under ``models/``. Shared ``Base``/mixins live in ``core.models.base``
-(identity convention — no ``db/base.py``). The one cross-module reference is
-``PayrollEntryModel.employee_id`` → ``features.hr.models.EmployeeModel``
-(one-way, for the composite FK ``erp_payroll_entries → erp_employees``).
+Feature-based layout: every ERP module owns its ``models/``, ``ports.py`` and
+``repository.py`` inside its own package under ``core.features``. The payroll
+service consumes ``LeaveLedgerPort`` (implemented by ``features.hr``) for the
+unpaid-leave proration input.
 """
+
+__all__: list[str] = []

@@ -40,11 +40,18 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "ConflictError",
+    "DuplicateRecordError",
     "DuplicateSkuError",
+    "EmployeeTerminatedError",
+    "IllegalStateTransitionError",
     "InsufficientStockError",
+    "LeaveBalanceExceededError",
     "MovementImmutableError",
     "NotFoundError",
+    "PayrollEntryImmutableError",
+    "PayrollPeriodConflictError",
     "PermissionDeniedError",
+    "SelfApprovalForbiddenError",
     "SkyrictError",
     "StartupError",
     "TenantContextMissingError",
@@ -66,6 +73,48 @@ class StartupError(RuntimeError):
     JWT public key. NOT a SkyrictError — it is never mapped to an HTTP
     response; the orchestrator sees the non-zero exit and restarts the pod.
     """
+
+
+# ---------------------------------------------------------------------------
+# HR & Payroll domain exceptions (HR-BE-002)
+#
+# Subclass ConflictError / ValidationError so every new exception inherits a
+# sensible generic mapping, and register each below with the exact problem
+# type URI from the spec's error table (docs/modules/hr-payroll.md §7).
+# ---------------------------------------------------------------------------
+
+
+class DuplicateRecordError(ConflictError):
+    """Duplicate employee number / department name / leave type code."""
+
+
+class IllegalStateTransitionError(ConflictError):
+    """A state-machine guard rejected the mutation (e.g. approve a paid run)."""
+
+
+class PayrollEntryImmutableError(ConflictError):
+    """An entry in an approved/paid run was edited."""
+
+
+class EmployeeTerminatedError(ConflictError):
+    """Activity blocked on a terminated employee (re-hire or post-termination)."""
+
+
+class PayrollPeriodConflictError(ConflictError):
+    """A payroll run overlaps another active run's period."""
+
+
+class LeaveBalanceExceededError(ValidationError):
+    """A negative movement would drive an accrual balance below zero."""
+
+
+class SelfApprovalForbiddenError(ValidationError):
+    """The actor is the requesting employee (no self-approval)."""
+
+
+# ---------------------------------------------------------------------------
+# Inventory domain exceptions (INV-BE-002)
+# ---------------------------------------------------------------------------
 
 
 class InsufficientStockError(ConflictError):
@@ -114,6 +163,14 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     NotFoundError: (404, f"{_PROBLEM_BASE}/not-found"),
     TenantNotFoundError: (404, f"{_PROBLEM_BASE}/tenant-not-found"),
     ValidationError: (422, f"{_PROBLEM_BASE}/validation-error"),
+    # HR & Payroll (docs/modules/hr-payroll.md §7 error table).
+    DuplicateRecordError: (409, f"{_PROBLEM_BASE}/duplicate-record"),
+    IllegalStateTransitionError: (409, f"{_PROBLEM_BASE}/illegal-state-transition"),
+    PayrollEntryImmutableError: (409, f"{_PROBLEM_BASE}/payroll-entry-immutable"),
+    EmployeeTerminatedError: (409, f"{_PROBLEM_BASE}/employee-terminated"),
+    PayrollPeriodConflictError: (409, f"{_PROBLEM_BASE}/payroll-period-conflict"),
+    LeaveBalanceExceededError: (422, f"{_PROBLEM_BASE}/leave-balance-exceeded"),
+    SelfApprovalForbiddenError: (422, f"{_PROBLEM_BASE}/self-approval-forbidden"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

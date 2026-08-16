@@ -208,7 +208,7 @@ function isDebitNormal(type: AccountType): boolean {
   return type === "asset" || type === "expense";
 }
 
-export function FinanceAccounts() {
+function FinanceAccounts() {
   const { permissions } = useModuleAccess();
   const canWrite = hasPermission(permissions, "erp.finance.write");
   const [status, setStatus] = useState<Status>({ state: "loading" });
@@ -499,3 +499,5 @@ export function FinanceAccounts() {
     </div>
   );
 }
+
+export { CreateAccountDialog, FinanceAccounts };

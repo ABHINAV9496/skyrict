@@ -21,6 +21,10 @@ import {
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
+import { CreateAccountDialog } from "@/features/finance/accounts";
+import { CreateInvoiceDialog } from "@/features/finance/invoices";
+import { CreateJournalEntryDialog } from "@/features/finance/journal-entries";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
 import {
   PeriodSelector,
@@ -110,6 +114,8 @@ const invoiceColumns: FinanceColumn<Invoice>[] = [
 ];
 
 export function FinanceOverview() {
+  const { permissions } = useModuleAccess();
+  const canWrite = hasPermission(permissions, "erp.finance.write");
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
 
@@ -213,6 +219,14 @@ export function FinanceOverview() {
           label="Overview period"
         />
       </div>
+
+      {canWrite ? (
+        <div className="flex flex-wrap gap-2">
+          <CreateInvoiceDialog />
+          <CreateJournalEntryDialog />
+          <CreateAccountDialog onCreated={() => void load()} />
+        </div>
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Net income" value={formatMoney(status.pnl.net_income)} hint="Selected period" />

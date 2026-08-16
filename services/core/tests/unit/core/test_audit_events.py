@@ -1,8 +1,8 @@
 """Audit event catalog consistency tests.
 
 Two catalogs coexist in the merged tree: ``core.core.audit_events`` holds the
-HR/payroll/finance vocabulary, and ``core.audit_events`` holds the inventory
-vocabulary (dev's shared-feature catalog). Each file guards its own catalog's
+HR/payroll/finance vocabulary, and ``core.audit_events`` holds the shared
+feature catalog (inventory + CRM + sales). Each file guards its own catalog's
 CATALOG <-> AUDIT_EVENT_MODULES consistency and canonical vocabulary.
 """
 
@@ -34,9 +34,10 @@ class TestAuditEventCatalog:
 
 
 class TestInventoryCatalogShape:
-    def test_all_events_are_inventory_namespaced(self) -> None:
+    def test_all_events_are_feature_namespaced(self) -> None:
+        module_namespaces = {key for key, _, _ in inventory_catalog.AUDIT_EVENT_MODULES}
         for event in inventory_catalog.CATALOG:
-            assert event.startswith("inventory.")
+            assert event.split(".", 1)[0] in module_namespaces
 
     def test_catalog_matches_all_events(self) -> None:
         assert frozenset(inventory_catalog.CATALOG) == inventory_catalog.ALL_AUDIT_EVENTS

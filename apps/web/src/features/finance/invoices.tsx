@@ -39,12 +39,14 @@ import {
   PeriodSelector,
   defaultPeriodValue,
   resolvePeriodRange,
+  today,
   type PeriodValue,
 } from "@/features/finance/components/period-selector";
 import { InvoiceStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
+import { TableToolbar } from "@/features/finance/components/table-toolbar";
 
 type Status =
   | { state: "loading" }
@@ -416,6 +418,8 @@ function FinanceInvoices() {
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [periods, setPeriods] = useState<FiscalPeriod[]>([]);
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
+  const [query, setQuery] = useState("");
+  const [statusTab, setStatusTab] = useState<string>("all");
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -470,40 +474,61 @@ function FinanceInvoices() {
     if (range.to && invoice.invoice_date > range.to) return false;
     return true;
   });
+  const isOpen = (invoice: Invoice) => invoice.status !== "paid" && invoice.status !== "voided";
+  const openInvoices = visibleInvoices.filter(isOpen);
+  const overdueInvoices = openInvoices.filter((invoice) => invoice.due_date < today());
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-4">
         <PageHeader
           title="Invoices"
           description="Bill customers and track each invoice through issue, approval, and payment."
           icon={ReceiptText}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <PeriodSelector
-            value={periodValue}
-            onChange={setPeriodValue}
-            periods={periods}
-            label="Invoice period"
-          />
-          {canWrite ? <CreateInvoiceDialog /> : null}
-        </div>
+        <TableToolbar
+          searchPlaceholder="Search invoice number…"
+          searchValue={query}
+          onSearchChange={setQuery}
+          tabs={[
+            { key: "all", label: "All", count: visibleInvoices.length },
+            { key: "open", label: "Open", count: openInvoices.length },
+            { key: "paid", label: "Paid", count: visibleInvoices.filter((i) => i.status === "paid").length },
+            { key: "overdue", label: "Overdue", count: overdueInvoices.length },
+          ]}
+          activeTab={statusTab}
+          onTabChange={setStatusTab}
+          period={
+            <PeriodSelector
+              value={periodValue}
+              onChange={setPeriodValue}
+              periods={periods}
+              label="Invoice period"
+            />
+          }
+          actions={canWrite ? <CreateInvoiceDialog /> : null}
+        />
       </div>
 
-      {visibleInvoices.length === 0 ? (
+      {status.invoices.length === 0 ? (
         <FinanceEmptyState
           icon={ReceiptText}
-          title={status.invoices.length === 0 ? "No invoices yet" : "No invoices in this period"}
-          description={
-            status.invoices.length === 0
-              ? "Create a draft invoice to start billing customers."
-              : "Try a different period — no invoices fall within the selected range."
-          }
+          title="No invoices yet"
+          description="Create a draft invoice to start billing customers."
         />
       ) : (
         <FinanceTable
           columns={columns}
-          rows={visibleInvoices}
+          rows={visibleInvoices.filter((invoice) => {
+            if (statusTab === "open" && !isOpen(invoice)) return false;
+            if (statusTab === "paid" && invoice.status !== "paid") return false;
+            if (statusTab === "overdue" && !overdueInvoices.includes(invoice)) return false;
+            if (query.trim()) {
+              const needle = query.trim().toLowerCase();
+              if (!invoice.invoice_number.toLowerCase().includes(needle)) return false;
+            }
+            return true;
+          })}
           getKey={(invoice) => invoice.id}
           footer={`${visibleInvoices.length} invoices in the selected period`}
         />

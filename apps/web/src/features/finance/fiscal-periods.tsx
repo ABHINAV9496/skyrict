@@ -30,6 +30,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { formatDate } from "@/lib/finance/format";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
+import { TableToolbar } from "@/features/finance/components/table-toolbar";
 import {
   PeriodSelector,
   defaultPeriodValue,
@@ -275,21 +276,23 @@ export function FinanceFiscalPeriods() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-4">
         <PageHeader
           title="Fiscal Periods"
           description="Open and closed accounting periods."
           icon={CalendarDays}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <PeriodSelector
-            value={periodValue}
-            onChange={setPeriodValue}
-            periods={status.periods}
-            label="Period"
-          />
-          {canWrite ? <CreateFiscalPeriodDialog onCreated={() => void load()} /> : null}
-        </div>
+        <TableToolbar
+          period={
+            <PeriodSelector
+              value={periodValue}
+              onChange={setPeriodValue}
+              periods={status.periods}
+              label="Period"
+            />
+          }
+          actions={canWrite ? <CreateFiscalPeriodDialog onCreated={() => void load()} /> : null}
+        />
       </div>
 
       {visiblePeriods.length === 0 ? (

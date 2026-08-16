@@ -300,6 +300,21 @@ export async function listRunEntries(
   return (items ?? []).map(mapPayrollEntry);
 }
 
+export async function updateRunEntry(
+  runId: string,
+  entryId: string,
+  adjustments: Record<string, unknown>,
+): Promise<PayrollEntry> {
+  const raw = await apiFetch<PayrollEntryPayload>(
+    `/api/v1/payroll/runs/${runId}/entries/${entryId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ adjustments }),
+    },
+  );
+  return mapPayrollEntry(raw ?? {});
+}
+
 export async function listCompensation(employeeId: string): Promise<Compensation[]> {
   const items = await apiFetch<CompensationPayload[]>(
     `/api/v1/payroll/compensation?employee_id=${encodeURIComponent(employeeId)}`,

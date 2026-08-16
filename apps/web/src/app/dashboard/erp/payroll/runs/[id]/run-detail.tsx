@@ -9,6 +9,7 @@ import {
   CircleX,
   LoaderCircle,
   Receipt,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
 
@@ -32,6 +33,7 @@ import {
   getPayrollRun,
   listRunEntries,
   markPayrollRunPaid,
+  updateRunEntry,
   voidPayrollRun,
   type PayrollEntry,
   type PayrollRun,
@@ -73,6 +75,10 @@ export function RunDetailClient({ runId }: { runId: string }) {
   const [busy, setBusy] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [voidReason, setVoidReason] = useState("");
+  const [adjustEntry, setAdjustEntry] = useState<PayrollEntry | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -157,6 +163,59 @@ export function RunDetailClient({ runId }: { runId: string }) {
     }
   }
 
+  async function onAdjust() {
+    if (status.state !== "ready" || !adjustEntry || adjustSaving) return;
+    const amount = adjustAmount.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(amount)) {
+      setAdjustError("Enter a numeric adjustment amount.");
+      return;
+    }
+    const delta = Number(amount);
+    const snapshot = status.entries;
+    setAdjustSaving(true);
+    setAdjustError(null);
+    setNotice(null);
+    setStatus({
+      state: "ready",
+      run: status.run,
+      entries: status.entries.map((entry) =>
+        entry.id === adjustEntry.id
+          ? {
+              ...entry,
+              adjustments: { ...(entry.adjustments ?? {}), amount },
+              net: {
+                amount: String(Math.round((Number(entry.net.amount) + delta) * 100) / 100),
+                currency: entry.net.currency,
+              },
+            }
+          : entry,
+      ),
+    });
+    try {
+      const updated = await updateRunEntry(runId, adjustEntry.id, { amount });
+      setStatus((current) =>
+        current.state === "ready"
+          ? {
+              ...current,
+              entries: current.entries.map((entry) =>
+                entry.id === updated.id ? updated : entry,
+              ),
+            }
+          : current,
+      );
+      setNotice({ tone: "success", text: "Entry adjusted." });
+      setAdjustEntry(null);
+      setAdjustAmount("");
+    } catch (error) {
+      setStatus({ state: "ready", run: status.run, entries: snapshot });
+      setAdjustError(
+        error instanceof ApiError ? error.message : "Could not adjust this entry.",
+      );
+    } finally {
+      setAdjustSaving(false);
+    }
+  }
+
   if (status.state === "loading") {
     return <ErpDataTableSkeleton columns={5} />;
   }
@@ -178,6 +237,12 @@ export function RunDetailClient({ runId }: { runId: string }) {
   }
 
   const { run, entries } = status;
+
+  const canCompute = canWrite && run.status === "draft";
+  const canApproveRun = canApprove && run.status === "computed";
+  const canPay = canApprove && run.status === "approved";
+  const canVoid = canApprove && (run.status === "computed" || run.status === "approved");
+  const canAdjust = canWrite && (run.status === "draft" || run.status === "computed");
 
   const columns: ErpColumn<PayrollEntry>[] = [
     {
@@ -237,12 +302,34 @@ export function RunDetailClient({ runId }: { runId: string }) {
         </span>
       ),
     },
+    ...(canAdjust
+      ? [
+          {
+            key: "id" as const,
+            label: "",
+            align: "right" as const,
+            render: (entry: PayrollEntry) => (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAdjustAmount(
+                    entry.adjustments?.amount != null ? String(entry.adjustments.amount) : "",
+                  );
+                  setAdjustError(null);
+                  setAdjustEntry(entry);
+                }}
+              >
+                <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+                Adjust
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ];
-
-  const canCompute = canWrite && run.status === "draft";
-  const canApproveRun = canApprove && run.status === "computed";
-  const canPay = canApprove && run.status === "approved";
-  const canVoid = canApprove && (run.status === "computed" || run.status === "approved");
 
   const confirmMeta: Record<
     Exclude<ConfirmAction, null>,
@@ -386,7 +473,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
           <UserRound aria-hidden="true" className="size-4 text-primary" />
           Entries
           <span className="ml-auto text-xs font-normal text-muted-foreground">
-            Read-only after compute
+            Read-only after approval
           </span>
         </h2>
         <div className="mt-4">
@@ -468,6 +555,50 @@ export function RunDetailClient({ runId }: { runId: string }) {
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : null}
               {confirmAction ? confirmMeta[confirmAction].button : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={adjustEntry !== null}
+        onOpenChange={(open) => !adjustSaving && !open && setAdjustEntry(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adjust entry</DialogTitle>
+            <DialogDescription>
+              Apply a flat adjustment to this entry&apos;s net pay. Negative amounts reduce it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-4">
+            <Label htmlFor="adjust-amount">Adjustment amount</Label>
+            <Input
+              id="adjust-amount"
+              type="number"
+              step="0.01"
+              value={adjustAmount}
+              onChange={(event) => setAdjustAmount(event.target.value)}
+              placeholder="e.g. 200 or -50"
+            />
+            {adjustError ? (
+              <p className="text-xs font-medium text-destructive">{adjustError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAdjustEntry(null)}
+              disabled={adjustSaving}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void onAdjust()} disabled={adjustSaving}>
+              {adjustSaving ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : null}
+              Save adjustment
             </Button>
           </DialogFooter>
         </DialogContent>

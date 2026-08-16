@@ -18,6 +18,7 @@ interface FinanceTableProps<T> {
   getKey: (row: T) => string;
   footer?: ReactNode;
   emptyMessage?: string;
+  subtitle?: ReactNode;
 }
 
 /** Typed table with the same visual language as the shared ERP DataTable. */
@@ -27,10 +28,12 @@ export function FinanceTable<T>({
   getKey,
   footer,
   emptyMessage,
+  subtitle,
 }: FinanceTableProps<T>) {
   if (rows.length === 0) {
     return (
       <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {subtitle ? <div className="border-b border-border/60 px-4 py-3 text-sm">{subtitle}</div> : null}
         <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
           <p className="text-sm text-muted-foreground">{emptyMessage ?? "Nothing here yet."}</p>
         </div>
@@ -40,13 +43,14 @@ export function FinanceTable<T>({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="overflow-x-auto">
+      {subtitle ? <div className="border-b border-border/60 px-4 py-3 text-sm">{subtitle}</div> : null}
+      <div className="max-h-[min(70vh,42rem)] overflow-y-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {columns.map((column) => (
+            <tr className="sticky top-0 z-10 border-b border-border bg-muted">
+              {columns.map((column, index) => (
                 <th
-                  key={column.label}
+                  key={`${column.label}-${index}`}
                   scope="col"
                   className={cn(
                     "px-4 py-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase",
@@ -65,9 +69,9 @@ export function FinanceTable<T>({
                 key={getKey(row)}
                 className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/30"
               >
-                {columns.map((column) => (
+                {columns.map((column, index) => (
                   <td
-                    key={column.label}
+                    key={`${column.label}-${index}`}
                     className={cn(
                       "px-4 py-3 text-foreground",
                       column.align === "right" && "text-right tabular-nums",

@@ -41,7 +41,7 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ModuleAccessBoundary module="erp">
-      <div className="flex h-dvh overflow-hidden bg-background theme-erp">
+      <div className="flex h-dvh overflow-hidden bg-background theme-erp" data-theme-world="erp">
         <AppSidebar
           collapsed={collapsed}
           mobileOpen={mobileOpen}

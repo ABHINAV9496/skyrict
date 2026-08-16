@@ -104,9 +104,9 @@ export function ensureSession(): Promise<HydratedSession | null> {
   return sessionPromise;
 }
 
-async function toResult<T>(response: Response): Promise<T> {
+async function toResult<T>(response: Response, unwrap: boolean): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as {
-    data?: T | null;
+    data?: unknown;
     detail?: { error?: { message?: string }; message?: string } | string;
   };
   if (!response.ok) {
@@ -117,10 +117,27 @@ async function toResult<T>(response: Response): Promise<T> {
       "Request failed. Please try again.";
     throw new ApiError(response.status, message);
   }
-  return payload.data as T;
+  return (unwrap ? payload.data : payload) as T;
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return apiFetchRaw<T>(path, options, true);
+}
+
+/**
+ * Fetch a BFF endpoint and return the WHOLE payload envelope (e.g.
+ * `{ data, meta }` for paged lists) instead of unwrapping `payload.data`.
+ * List consumers need the sibling `meta` (pagination), which the default
+ * unwrap discards.
+ */
+export async function apiFetchEnvelope<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  return apiFetchRaw<T>(path, options, false);
+}
+
+async function apiFetchRaw<T>(path: string, options: RequestInit, unwrap: boolean): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("X-Tenant-Slug", getTenantSlug());
   const token = getAccessToken();
@@ -159,7 +176,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     }
   }
 
-  return toResult<T>(response);
+  return toResult<T>(response, unwrap);
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {

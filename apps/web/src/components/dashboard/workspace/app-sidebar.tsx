@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Blocks,
+  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -37,11 +39,14 @@ function SidebarLink({
   collapsed,
   pathname,
   onCloseMobile,
+  subtle = false,
 }: {
   item: NavItem;
   collapsed: boolean;
   pathname: string;
   onCloseMobile: () => void;
+  /** Child-tier rendering: lighter weight, smaller glyph, muted text. */
+  subtle?: boolean;
 }) {
   const active = isActive(pathname, item);
   const Icon = item.icon;
@@ -78,7 +83,8 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+        "group relative flex items-center gap-3 rounded-lg transition-colors",
+        subtle ? "px-3 py-2 text-sm font-normal" : "text-sm font-medium",
         collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -93,10 +99,115 @@ function SidebarLink({
       ) : null}
       <Icon
         aria-hidden="true"
-        className={cn("size-[18px] shrink-0", active && "text-primary")}
+        className={cn("shrink-0", subtle ? "size-4" : "size-[18px]", active && "text-primary")}
       />
       {!collapsed ? <span className="truncate">{item.label}</span> : null}
     </Link>
+  );
+}
+
+/**
+ * A collapsible two-tier nav group (e.g. HR → Employees/Departments/Leave).
+ * The parent row keeps the flat top-level weight; children step down one notch
+ * in size, weight, and color. Groups expand/collapse independently and a group
+ * auto-expands when one of its children is the active page.
+ */
+function SidebarGroup({
+  item,
+  collapsed,
+  pathname,
+  onCloseMobile,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  pathname: string;
+  onCloseMobile: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const children = item.children ?? [];
+  const parentActive = isActive(pathname, item);
+  const hasActiveChild = children.some((child) => isActive(pathname, child));
+  const open = expanded || hasActiveChild;
+  const Icon = item.icon;
+
+  useEffect(() => {
+    if (hasActiveChild) setExpanded(true);
+  }, [hasActiveChild]);
+
+  if (collapsed) {
+    return (
+      <Link
+        href={item.href}
+        onClick={onCloseMobile}
+        title={item.label}
+        aria-current={parentActive ? "page" : undefined}
+        className={cn(
+          "group relative flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+          parentActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        )}
+      >
+        <Icon aria-hidden="true" className="size-[18px] shrink-0" />
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        <Link
+          href={item.href}
+          onClick={onCloseMobile}
+          aria-current={parentActive ? "page" : undefined}
+          className={cn(
+            "group relative flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            parentActive
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
+        >
+          {parentActive ? (
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+            />
+          ) : null}
+          <Icon
+            aria-hidden="true"
+            className={cn("size-[18px] shrink-0", parentActive && "text-primary")}
+          />
+          <span className="truncate">{item.label}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
+          title={open ? "Collapse" : "Expand"}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("size-4 transition-transform duration-200", open && "rotate-180")}
+          />
+        </button>
+      </div>
+      {open ? (
+        <div className="mt-0.5 space-y-0.5 pl-2">
+          {children.map((child) => (
+            <SidebarLink
+              key={child.href}
+              item={child}
+              collapsed={false}
+              pathname={pathname}
+              onCloseMobile={onCloseMobile}
+              subtle
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -199,15 +310,25 @@ export function AppSidebar({
                   {group.label}
                 </p>
               )}
-              {group.items.map((item) => (
-                <SidebarLink
-                  key={item.href}
-                  item={item}
-                  collapsed={collapsed}
-                  pathname={pathname}
-                  onCloseMobile={onCloseMobile}
-                />
-              ))}
+              {group.items.map((item) =>
+                item.children && item.children.length > 0 ? (
+                  <SidebarGroup
+                    key={item.href}
+                    item={item}
+                    collapsed={collapsed}
+                    pathname={pathname}
+                    onCloseMobile={onCloseMobile}
+                  />
+                ) : (
+                  <SidebarLink
+                    key={item.href}
+                    item={item}
+                    collapsed={collapsed}
+                    pathname={pathname}
+                    onCloseMobile={onCloseMobile}
+                  />
+                ),
+              )}
             </div>
           ))}
         </nav>

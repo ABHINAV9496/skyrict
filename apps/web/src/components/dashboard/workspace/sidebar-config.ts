@@ -1,14 +1,20 @@
 import {
   BarChart3,
+  BadgeDollarSign,
   Blocks,
+  Building2,
+  CalendarDays,
+  Coins,
   Contact,
   LayoutDashboard,
   Package,
   Plug,
+  Receipt,
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   UserPlus,
+  UserRound,
   Users,
   Wallet,
   type LucideIcon,
@@ -20,6 +26,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Permission key that gates this item (absent = always visible inside its world). */
   permission?: string;
+  /** Child items reveal a collapsible two-tier group under this item. */
+  children?: NavItem[];
   soon?: boolean;
   tour?: string;
   /** Match only the exact href, never child paths (e.g. module overviews). */
@@ -97,8 +105,61 @@ export const erpNavGroups: NavGroup[] = [
       { href: "/dashboard/erp/sales", label: "Sales", icon: ShoppingCart, permission: "erp.sales.read" },
       { href: "/dashboard/erp/inventory", label: "Inventory", icon: Package, permission: "erp.inventory.read" },
       { href: "/dashboard/erp/finance", label: "Finance", icon: Wallet, permission: "erp.finance.read" },
-      { href: "/dashboard/erp/hr", label: "HR", icon: Blocks, permission: "erp.hr.read" },
       { href: "/dashboard/erp/reports", label: "Reports", icon: BarChart3 },
+      {
+        href: "/dashboard/erp/hr",
+        label: "HR",
+        icon: Blocks,
+        permission: "erp.hr.read",
+        exact: true,
+        children: [
+          {
+            href: "/dashboard/erp/hr/employees",
+            label: "Employees",
+            icon: UserRound,
+            permission: "erp.hr.read",
+          },
+          {
+            href: "/dashboard/erp/hr/departments",
+            label: "Departments",
+            icon: Building2,
+            permission: "erp.hr.read",
+          },
+          {
+            href: "/dashboard/erp/hr/leave",
+            label: "Leave",
+            icon: CalendarDays,
+            permission: "erp.hr.read",
+          },
+        ],
+      },
+      {
+        href: "/dashboard/erp/payroll",
+        label: "Payroll",
+        icon: Receipt,
+        permission: "erp.payroll.read",
+        exact: true,
+        children: [
+          {
+            href: "/dashboard/erp/payroll/runs",
+            label: "Runs",
+            icon: BadgeDollarSign,
+            permission: "erp.payroll.read",
+          },
+          {
+            href: "/dashboard/erp/payroll/compensation",
+            label: "Compensation",
+            icon: Coins,
+            permission: "erp.payroll.read",
+          },
+          {
+            href: "/dashboard/erp/payroll/settings",
+            label: "Settings",
+            icon: SlidersHorizontal,
+            permission: "erp.payroll.read",
+          },
+        ],
+      },
     ],
   },
 ];
@@ -109,10 +170,17 @@ export function filterNavItemsByPermissions(
   permissions: string[],
 ): NavItem[] {
   const allowed = new Set(permissions);
-  return items.filter((item) => {
-    if (!item.permission) return true;
-    return allowed.has("*") || allowed.has(item.permission);
-  });
+  return items
+    .filter((item) => {
+      if (!item.permission) return true;
+      return allowed.has("*") || allowed.has(item.permission);
+    })
+    .map((item) =>
+      item.children
+        ? { ...item, children: filterNavItemsByPermissions(item.children, permissions) }
+        : item,
+    )
+    .filter((item) => !item.children || item.children.length > 0);
 }
 
 /** Filter nav groups, dropping groups that end up empty. */

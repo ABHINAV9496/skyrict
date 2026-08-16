@@ -1,0 +1,477 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Calculator,
+  CircleX,
+  LoaderCircle,
+  Receipt,
+  UserRound,
+} from "lucide-react";
+
+import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
+import { StatusBadge } from "@/components/dashboard/shared/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useModuleAccess } from "@/lib/access/modules";
+import {
+  approvePayrollRun,
+  computePayrollRun,
+  getPayrollRun,
+  listRunEntries,
+  markPayrollRunPaid,
+  voidPayrollRun,
+  type PayrollEntry,
+  type PayrollRun,
+  type SkippedEmployee,
+} from "@/lib/api/payroll-api";
+import { listEmployees, type Employee } from "@/lib/api/hr-api";
+import { ApiError } from "@/lib/api/http";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+type PageStatus =
+  | { state: "loading" }
+  | { state: "error"; message: string }
+  | { state: "ready"; run: PayrollRun; entries: PayrollEntry[] };
+
+type Notice = { tone: "success" | "error"; text: string };
+
+type ConfirmAction = "approve" | "pay" | "void" | null;
+
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium tabular-nums text-foreground">{value}</span>
+    </div>
+  );
+}
+
+export function RunDetailClient({ runId }: { runId: string }) {
+  const { permissions } = useModuleAccess();
+  const canWrite =
+    permissions.includes("*") || permissions.includes("erp.payroll.write");
+  const canApprove =
+    permissions.includes("*") || permissions.includes("erp.payroll.approve");
+
+  const [status, setStatus] = useState<PageStatus>({ state: "loading" });
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [voidReason, setVoidReason] = useState("");
+
+  const load = useCallback(async () => {
+    setStatus({ state: "loading" });
+    try {
+      const [run, entries, employeeList] = await Promise.all([
+        getPayrollRun(runId),
+        listRunEntries(runId),
+        listEmployees({ pageSize: 100 }),
+      ]);
+      setEmployees(employeeList.items);
+      setStatus({ state: "ready", run, entries });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "Could not load this payroll run.";
+      setStatus({ state: "error", message });
+    }
+  }, [runId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const employeeName = useMemo(() => {
+    const byId = new Map(employees.map((employee) => [employee.id, `${employee.firstName} ${employee.lastName}`]));
+    return (id: string) => byId.get(id) ?? null;
+  }, [employees]);
+
+  async function runAction(action: Exclude<ConfirmAction, null>) {
+    if (!status.state || busy) return;
+    if (action === "void" && !voidReason.trim()) {
+      setNotice({ tone: "error", text: "A reason is required to void a run." });
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      let updated: PayrollRun;
+      if (action === "approve") updated = await approvePayrollRun(runId);
+      else if (action === "pay") updated = await markPayrollRunPaid(runId);
+      else updated = await voidPayrollRun(runId);
+      setStatus((current) =>
+        current.state === "ready" ? { ...current, run: updated } : current,
+      );
+      setNotice({ tone: "success", text: `Run marked as ${updated.status}.` });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: error instanceof ApiError ? error.message : "The action failed.",
+      });
+    } finally {
+      setBusy(false);
+      setConfirmAction(null);
+      setVoidReason("");
+    }
+  }
+
+  async function onCompute() {
+    if (!status.state || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await computePayrollRun(runId);
+      setStatus({
+        state: "ready",
+        run: result.run,
+        entries: result.entries,
+      });
+      setNotice({
+        tone: "success",
+        text:
+          result.skipped.length > 0
+            ? `Run computed — ${result.skipped.length} employee(s) skipped.`
+            : "Run computed.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: error instanceof ApiError ? error.message : "Could not compute the run.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (status.state === "loading") {
+    return <ErpDataTableSkeleton columns={5} />;
+  }
+
+  if (status.state === "error" || !status.state) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-4 py-12 text-center">
+        <p className="text-sm font-medium text-destructive">
+          {status.state === "error" ? status.message : "Payroll run not found."}
+        </p>
+        <Button asChild variant="outline" size="sm" className="mt-3">
+          <Link href="/dashboard/erp/payroll/runs">
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back to runs
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const { run, entries } = status;
+
+  const columns: ErpColumn<PayrollEntry>[] = [
+    {
+      key: "employeeId",
+      label: "Employee",
+      render: (entry) => (
+        <span className="font-medium text-foreground">
+          {employeeName(entry.employeeId) ?? entry.employeeId}
+        </span>
+      ),
+    },
+    {
+      key: "baseSalary",
+      label: "Base salary",
+      align: "right",
+      render: (entry) => (
+        <span className="tabular-nums text-muted-foreground">
+          {formatMoney(entry.baseSalary.amount, entry.baseSalary.currency)}
+        </span>
+      ),
+    },
+    {
+      key: "payDays",
+      label: "Days",
+      align: "right",
+      render: (entry) => (
+        <span className="tabular-nums text-muted-foreground">{entry.payDays}</span>
+      ),
+    },
+    {
+      key: "gross",
+      label: "Gross",
+      align: "right",
+      render: (entry) => (
+        <span className="tabular-nums text-muted-foreground">
+          {formatMoney(entry.gross.amount, entry.gross.currency)}
+        </span>
+      ),
+    },
+    {
+      key: "deductions",
+      label: "Deductions",
+      align: "right",
+      render: (entry) => (
+        <span className="tabular-nums text-muted-foreground">
+          {formatMoney(entry.deductions.amount, entry.deductions.currency)}
+        </span>
+      ),
+    },
+    {
+      key: "net",
+      label: "Net",
+      align: "right",
+      render: (entry) => (
+        <span className="tabular-nums font-medium text-foreground">
+          {formatMoney(entry.net.amount, entry.net.currency)}
+        </span>
+      ),
+    },
+  ];
+
+  const canCompute = canWrite && run.status === "draft";
+  const canApproveRun = canApprove && run.status === "computed";
+  const canPay = canApprove && run.status === "approved";
+  const canVoid = canApprove && (run.status === "computed" || run.status === "approved");
+
+  const confirmMeta: Record<
+    Exclude<ConfirmAction, null>,
+    { title: string; description: string; button: string; destructive: boolean }
+  > = {
+    approve: {
+      title: "Approve this run?",
+      description: "Approval locks the numbers in. The run can still be voided before payment.",
+      button: "Approve run",
+      destructive: false,
+    },
+    pay: {
+      title: "Mark as paid?",
+      description: "This records payment for every entry in the run. It can't be undone.",
+      button: "Mark paid",
+      destructive: false,
+    },
+    void: {
+      title: "Void this run?",
+      description: "Voiding discards the run. Provide a reason so the audit trail stays clear.",
+      button: "Void run",
+      destructive: true,
+    },
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+          <Link href="/dashboard/erp/payroll/runs">
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Payroll runs
+          </Link>
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-5">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-xl font-semibold tracking-tight text-foreground">
+              {run.runCode}
+            </h1>
+            <StatusBadge status={run.status} />
+          </div>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {formatDate(run.periodStart)} → {formatDate(run.periodEnd)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {canCompute ? (
+            <Button type="button" disabled={busy} onClick={() => void onCompute()}>
+              {busy ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <Calculator aria-hidden="true" className="size-4" />
+              )}
+              Compute
+            </Button>
+          ) : null}
+          {canApproveRun ? (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmAction("approve")}
+            >
+              <BadgeCheck aria-hidden="true" className="size-4" />
+              Approve
+            </Button>
+          ) : null}
+          {canPay ? (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmAction("pay")}
+            >
+              <Receipt aria-hidden="true" className="size-4" />
+              Mark paid
+            </Button>
+          ) : null}
+          {canVoid ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() => setConfirmAction("void")}
+            >
+              <CircleX aria-hidden="true" className="size-4" />
+              Void
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {notice ? (
+        <div
+          role={notice.tone === "error" ? "alert" : "status"}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-sm font-medium",
+            notice.tone === "error"
+              ? "border-destructive/40 bg-destructive/5 text-destructive"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          )}
+        >
+          {notice.text}
+        </div>
+      ) : null}
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+          <Receipt aria-hidden="true" className="size-4 text-primary" />
+          Summary
+        </h2>
+        <div className="mt-3 divide-y divide-border">
+          <SummaryRow label="Employees in run" value={entries.length} />
+          <SummaryRow
+            label="Total gross"
+            value={run.totalGross ? formatMoney(run.totalGross.amount, run.totalGross.currency) : "—"}
+          />
+          <SummaryRow
+            label="Total net"
+            value={run.totalNet ? formatMoney(run.totalNet.amount, run.totalNet.currency) : "—"}
+          />
+          {run.computedAt ? (
+            <SummaryRow label="Computed" value={formatDateTime(run.computedAt)} />
+          ) : null}
+          {run.approvedAt ? (
+            <SummaryRow label="Approved" value={formatDateTime(run.approvedAt)} />
+          ) : null}
+          {run.paidAt ? (
+            <SummaryRow label="Paid" value={formatDateTime(run.paidAt)} />
+          ) : null}
+          {run.voidReason ? (
+            <SummaryRow label="Void reason" value={run.voidReason} />
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+          <UserRound aria-hidden="true" className="size-4 text-primary" />
+          Entries
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            Read-only after compute
+          </span>
+        </h2>
+        <div className="mt-4">
+          {entries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No entries yet. Compute the run to generate pay lines.
+            </p>
+          ) : (
+            <ErpDataTable
+              columns={columns}
+              rows={entries}
+              meta={{ total: entries.length, page: 1, page_size: entries.length, total_pages: 1 }}
+            />
+          )}
+        </div>
+      </section>
+
+      {run.skippedEmployees.length > 0 ? (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+            <CircleX aria-hidden="true" className="size-4 text-primary" />
+            Skipped employees
+          </h2>
+          <div className="mt-3 divide-y divide-border">
+            {run.skippedEmployees.map((skipped: SkippedEmployee) => (
+              <div
+                key={skipped.employeeId}
+                className="flex items-center justify-between gap-4 py-2"
+              >
+                <span className="text-sm font-medium text-foreground">
+                  {employeeName(skipped.employeeId) ?? skipped.employeeId}
+                </span>
+                <span className="text-sm text-muted-foreground">{skipped.reason}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <Dialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => !busy && !open && setConfirmAction(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmAction ? confirmMeta[confirmAction].title : ""}</DialogTitle>
+            <DialogDescription>
+              {confirmAction ? confirmMeta[confirmAction].description : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {confirmAction === "void" ? (
+            <div className="space-y-1.5 py-4">
+              <Label htmlFor="void-reason">Reason</Label>
+              <Input
+                id="void-reason"
+                value={voidReason}
+                onChange={(event) => setVoidReason(event.target.value)}
+                placeholder="e.g. Wrong pay period"
+                required
+              />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmAction(null)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={confirmAction && confirmMeta[confirmAction].destructive ? "destructive" : "default"}
+              disabled={busy}
+              onClick={() => confirmAction && void runAction(confirmAction)}
+            >
+              {busy ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : null}
+              {confirmAction ? confirmMeta[confirmAction].button : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

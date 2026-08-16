@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import {
   crmData,
   financeData,
-  hrData,
   inventoryData,
   reportsKpis,
   salesData,
@@ -18,7 +17,6 @@ const DATA: Record<string, TablePayload | { kpis: typeof reportsKpis }> = {
   sales: salesData,
   inventory: inventoryData,
   finance: financeData,
-  hr: hrData,
   reports: { kpis: reportsKpis },
 };
 

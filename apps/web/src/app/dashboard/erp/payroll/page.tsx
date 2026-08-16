@@ -1,38 +1,43 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CalendarDays, UserRound, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeDollarSign,
+  Receipt,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 
 const areas = [
   {
-    href: "/dashboard/erp/hr/employees",
-    title: "Employees",
-    description: "Hire, update, and manage everyone on the team.",
-    icon: UserRound,
+    href: "/dashboard/erp/payroll/runs",
+    title: "Runs",
+    description: "Create payroll periods, compute, approve, and pay.",
+    icon: Receipt,
   },
   {
-    href: "/dashboard/erp/hr/departments",
-    title: "Departments",
-    description: "Structure teams and assign managers.",
-    icon: Building2,
+    href: "/dashboard/erp/payroll/compensation",
+    title: "Compensation",
+    description: "Track salaries and changes over time.",
+    icon: BadgeDollarSign,
   },
   {
-    href: "/dashboard/erp/hr/leave",
-    title: "Leave",
-    description: "Requests, approvals, and balances.",
-    icon: CalendarDays,
+    href: "/dashboard/erp/payroll/settings",
+    title: "Settings",
+    description: "Currency, tax, provident fund, and rounding rules.",
+    icon: SlidersHorizontal,
   },
 ];
 
-export default function HrHomePage() {
+export default function PayrollHomePage() {
   return (
-    <ModuleAccessBoundary module="erp" permission="erp.hr.read">
+    <ModuleAccessBoundary module="erp" permission="erp.payroll.read">
       <div className="space-y-6">
         <PageHeader
-          title="HR"
-          description="The people behind the business — employees, departments, and leave."
-          icon={Users}
+          title="Payroll"
+          description="Pay everyone on time — runs, compensation, and rules."
+          icon={Receipt}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {areas.map((area) => (

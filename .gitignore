@@ -207,3 +207,9 @@ nohup.out
 
 # ---------- Private docs ----------
 docs/handbooks
+
+# ---------- HR-Payroll manual-test artifacts (HR-BE-002) ----------
+HR-Payroll-Manual-Test-Guide.md
+HR-Payroll-Manual-Tests.postman_collection.json
+HR-Payroll-Manual-Tests.postman_environment.json
+scripts/mint_core_token.py

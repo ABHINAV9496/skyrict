@@ -93,23 +93,6 @@ export const financeData: TablePayload = {
   ],
 };
 
-export const hrData: TablePayload = {
-  columns: [
-    { key: "name", label: "Name" },
-    { key: "role", label: "Role" },
-    { key: "department", label: "Department" },
-    { key: "status", label: "Status" },
-    { key: "start", label: "Started" },
-  ],
-  rows: [
-    { name: "Priya Shah", role: "Sales Lead", department: "Sales", status: "Active", start: "2024-03-11" },
-    { name: "Marcus Chen", role: "Account Executive", department: "Sales", status: "Active", start: "2024-08-02" },
-    { name: "Dana Kim", role: "Operations Manager", department: "Operations", status: "Active", start: "2023-11-20" },
-    { name: "Sam Osei", role: "Software Engineer", department: "Engineering", status: "Active", start: "2025-01-14" },
-    { name: "Elena Cruz", role: "Financial Analyst", department: "Finance", status: "On leave", start: "2024-05-06" },
-  ],
-};
-
 export interface Kpi {
   label: string;
   value: string;

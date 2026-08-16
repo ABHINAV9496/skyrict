@@ -10,7 +10,7 @@
  * require erp.inventory.adjust.approve — mirroring the core service default.
  */
 
-import { apiDelete, apiFetch, apiPatch, apiPost } from "@/lib/api/http";
+import { apiDelete, apiFetchEnvelope, apiPatch, apiPost } from "@/lib/api/http";
 import { getTenantSlug } from "@/lib/auth/session-store";
 
 /** Mirrors CORE_INVENTORY_ADJUST_APPROVE_THRESHOLD (core settings default). */
@@ -474,7 +474,7 @@ export async function listProducts(
         category: options.category,
         include_inactive: options.includeInactive ? "true" : undefined,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/products?${query}`,
         fetchOptions,
     );
@@ -548,7 +548,7 @@ export async function listWarehouses(
     const query = buildListParams(options, {
         include_inactive: options.includeInactive ? "true" : undefined,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/warehouses?${query}`,
         fetchOptions,
     );
@@ -614,7 +614,7 @@ export async function listStockLevels(
         product_id: options.productId,
         warehouse_id: options.warehouseId,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/stock?${query}`,
         fetchOptions,
     );
@@ -668,7 +668,7 @@ export async function listMovements(
         warehouse_id: options.warehouseId,
         movement_type: options.movementType,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/stock/movements?${query}`,
         fetchOptions,
     );
@@ -687,7 +687,7 @@ export async function listAlerts(
     fetchOptions: RequestInit = {},
 ): Promise<ListResponse<Alert>> {
     const query = buildListParams(options);
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/alerts?${query}`,
         fetchOptions,
     );

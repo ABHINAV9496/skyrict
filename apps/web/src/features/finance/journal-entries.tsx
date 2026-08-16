@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useController, useFieldArray, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, LoaderCircle, NotebookPen, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CircleCheck, LoaderCircle, NotebookPen, Plus, Trash2, TriangleAlert } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,10 @@ import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   createJournalEntry,
+  listAccounts,
   listFiscalPeriods,
   listJournalEntries,
+  type Account,
   type FiscalPeriod,
   type JournalEntry,
 } from "@/lib/api/finance-api";
@@ -42,6 +44,8 @@ import {
 import { EntryStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
 import { cn } from "@/lib/utils";
+import { AccountCombobox } from "@/features/finance/components/account-combobox";
+import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
 
 type Status =
   | { state: "loading" }
@@ -91,10 +95,48 @@ function isBalanced(lines: LineValues[]): boolean {
   return Math.abs(debit - credit) < 0.005;
 }
 
+function AccountRow({
+  control,
+  accounts,
+  index,
+  errorMessage,
+  inputRef,
+}: {
+  control: Control<EntryValues>;
+  accounts: Account[];
+  index: number;
+  errorMessage?: string;
+  inputRef?: (el: HTMLInputElement | null) => void;
+}) {
+  const { field } = useController({
+    control,
+    name: `lines.${index}.account_code`,
+  });
+  return (
+    <>
+      <AccountCombobox
+        accounts={accounts}
+        value={field.value}
+        onChange={field.onChange}
+        invalid={Boolean(errorMessage)}
+        inputRef={inputRef}
+      />
+      {errorMessage ? (
+        <p role="alert" className="text-xs font-medium text-destructive">
+          {errorMessage}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 function CreateJournalEntryDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const accountInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const {
     register,
     handleSubmit,
@@ -115,6 +157,20 @@ function CreateJournalEntryDialog() {
   const lines = watch("lines");
   const { debit, credit } = useMemo(() => totals(lines), [lines]);
   const balanced = isBalanced(lines);
+  const difference = debit - credit;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void listAccounts(true)
+      .then((fetched) => {
+        if (!cancelled) setAccounts(fetched);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   async function onSubmit(values: EntryValues) {
     if (!balanced) {
@@ -146,6 +202,13 @@ function CreateJournalEntryDialog() {
     }
   }
 
+  const lineColumns: LineItemColumn[] = [
+    { label: "Account" },
+    { label: "Debit", align: "right" },
+    { label: "Credit", align: "right" },
+    { label: "", className: "w-10" },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -154,15 +217,20 @@ function CreateJournalEntryDialog() {
           New entry
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>New journal entry</DialogTitle>
-          <DialogDescription>
-            A draft entry in the general ledger. Debits and credits must balance and reference
-            chart of accounts codes.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <DialogContent className="sm:max-w-3xl">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <NotebookPen aria-hidden="true" className="size-5" />
+          </div>
+          <DialogHeader>
+            <DialogTitle>New journal entry</DialogTitle>
+            <DialogDescription>
+              A draft entry in the general ledger. Debits and credits must balance and reference
+              chart of accounts codes.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="max-h-[min(85vh,42rem)] space-y-4 overflow-y-auto pr-1">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="entry-date">Entry date</Label>
@@ -185,34 +253,57 @@ function CreateJournalEntryDialog() {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Lines</Label>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                Debit {formatMoney(debit)} · Credit {formatMoney(credit)}
-              </span>
-            </div>
-            <div className="space-y-2">
+            <Label>Lines</Label>
+            <LineItemsTable
+              columns={lineColumns}
+              footer={
+                <span className="flex items-center justify-between gap-4">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-xs font-medium",
+                      balanced
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {balanced ? (
+                      <CircleCheck aria-hidden="true" className="size-3.5" />
+                    ) : (
+                      <TriangleAlert aria-hidden="true" className="size-3.5" />
+                    )}
+                    {balanced ? "Balanced" : `Off by ${formatMoney(Math.abs(difference))}`}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    Debit {formatMoney(debit)} · Credit {formatMoney(credit)}
+                  </span>
+                </span>
+              }
+              onAddRow={() => {
+                const nextIndex = fields.length;
+                append({ account_code: "", debit: "", credit: "" });
+                requestAnimationFrame(() => accountInputRefs.current[nextIndex]?.focus());
+              }}
+            >
               {fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <Input
-                      placeholder="Account code"
-                      aria-invalid={errors.lines?.[index]?.account_code ? true : undefined}
-                      {...register(`lines.${index}.account_code`)}
+                <tr key={field.id} className="border-b border-border/60 last:border-0">
+                  <td className="px-3 py-1">
+                    <AccountRow
+                      control={control}
+                      accounts={accounts}
+                      index={index}
+                      errorMessage={errors.lines?.[index]?.account_code?.message}
+                      inputRef={(el) => {
+                        accountInputRefs.current[index] = el;
+                      }}
                     />
-                    {errors.lines?.[index]?.account_code ? (
-                      <p role="alert" className="text-xs font-medium text-destructive">
-                        {errors.lines[index]?.account_code?.message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="w-28 space-y-1.5">
+                  </td>
+                  <td className="w-28 px-3 py-1">
                     <Input
                       type="number"
                       inputMode="decimal"
                       min="0"
                       step="0.01"
-                      placeholder="Debit"
+                      placeholder="0.00"
                       aria-invalid={errors.lines?.[index]?.debit ? true : undefined}
                       {...register(`lines.${index}.debit`)}
                     />
@@ -221,14 +312,14 @@ function CreateJournalEntryDialog() {
                         {errors.lines[index]?.debit?.message}
                       </p>
                     ) : null}
-                  </div>
-                  <div className="w-28 space-y-1.5">
+                  </td>
+                  <td className="w-28 px-3 py-1">
                     <Input
                       type="number"
                       inputMode="decimal"
                       min="0"
                       step="0.01"
-                      placeholder="Credit"
+                      placeholder="0.00"
                       aria-invalid={errors.lines?.[index]?.credit ? true : undefined}
                       {...register(`lines.${index}.credit`)}
                     />
@@ -237,38 +328,25 @@ function CreateJournalEntryDialog() {
                         {errors.lines[index]?.credit?.message}
                       </p>
                     ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Remove line"
-                    disabled={fields.length === 1}
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 aria-hidden="true" className="size-3.5" />
-                  </Button>
-                </div>
+                  </td>
+                  <td className="px-3 py-1 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Remove line"
+                      disabled={fields.length === 1}
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 aria-hidden="true" className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
               ))}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ account_code: "", debit: "", credit: "" })}>
-              <Plus aria-hidden="true" className="size-3.5" />
-              Add line
-            </Button>
+            </LineItemsTable>
             {errors.lines?.message ? (
               <p role="alert" className="text-xs font-medium text-destructive">
                 {errors.lines.message}
-              </p>
-            ) : null}
-            {!balanced ? (
-              <p
-                role="alert"
-                className={cn(
-                  "text-xs font-medium",
-                  errors.lines?.root ? "text-destructive" : "text-amber-600 dark:text-amber-400",
-                )}
-              >
-                Total debits must equal total credits.
               </p>
             ) : null}
           </div>
@@ -280,6 +358,9 @@ function CreateJournalEntryDialog() {
           ) : null}
 
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isSubmitting || !balanced}>
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
@@ -336,7 +417,7 @@ const columns: FinanceColumn<JournalEntry>[] = [
   },
 ];
 
-export function FinanceJournalEntries() {
+function FinanceJournalEntries() {
   const { permissions } = useModuleAccess();
   const canWrite = hasPermission(permissions, "erp.finance.write");
   const [status, setStatus] = useState<Status>({ state: "loading" });
@@ -452,3 +533,5 @@ export function FinanceJournalEntries() {
     </div>
   );
 }
+
+export { CreateJournalEntryDialog, FinanceJournalEntries };

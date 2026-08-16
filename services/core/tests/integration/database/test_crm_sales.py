@@ -13,9 +13,10 @@ Covers what a model/unit test cannot:
   - repository behavior: CRUD, OWNER/TEAM/ALL scoping, the soft dedupe probe,
     customer deactivation, atomic order state guards, unique order number
     translated to a 409 ConflictError;
-  - the module-scoped downgrade round-trip (``alembic downgrade -1`` ->
-    ``upgrade head``), declared LAST so every other test sees the head schema
-    and the chain is restored before any other module runs.
+  - the module-scoped downgrade round-trip (``alembic downgrade`` back to the
+    CRM migration's parent -> ``upgrade head``), declared LAST so every other
+    test sees the head schema and the chain is restored before any other
+    module runs.
 
 Skipped automatically when Postgres is unreachable (``migrated_schema``).
 """
@@ -1114,9 +1115,12 @@ class TestSalesRepository:
 class TestDowngradeRoundTrip:
     """Module-scoped downgrade round-trip — MUST stay the last class here.
 
-    ``alembic downgrade -1`` walks back migration 0003 (the current head), then
-    ``upgrade head`` re-applies it, so the version table is back at head before
-    any other test module runs.
+    ``alembic downgrade`` walks back to just before migration 0003 (its parent
+    revision, resolved dynamically), then ``upgrade head`` re-applies the
+    CRM/sales block and everything above it, so the version table is back at
+    head before any other test module runs. On this branch the HR/ERP
+    migrations 0010-0014 sit on top of 0003, so "0003 is the head" no longer
+    holds; the parent is derived from the script directory instead.
     """
 
     def _run_alembic(self, *args: str) -> None:
@@ -1131,7 +1135,10 @@ class TestDowngradeRoundTrip:
     async def test_downgrade_then_upgrade_restores_head(
         self, migrated_schema: None, crm_world: dict[str, str]
     ) -> None:
-        core_head = ScriptDirectory(str(_CORE_ALEMBIC_DIR)).get_current_head()
+        scripts = ScriptDirectory(str(_CORE_ALEMBIC_DIR))
+        core_head = scripts.get_current_head()
+        crm_parent = scripts.get_revision("0003").down_revision
+        assert isinstance(crm_parent, str)
 
         async with engine.connect() as conn:
             version = (
@@ -1140,7 +1147,7 @@ class TestDowngradeRoundTrip:
             assert version == core_head
         await engine.dispose()
 
-        self._run_alembic("downgrade", "-1")
+        self._run_alembic("downgrade", crm_parent)
 
         async with engine.connect() as conn:
             version = (

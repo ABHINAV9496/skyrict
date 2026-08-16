@@ -1,6 +1,9 @@
-"""HR feature package — employee records, leave ledger & balances.
+"""HR feature package — departments, employees, leave requests, leave ledger.
 
-Layout follows the ERP feature convention (spec §2.1/§3.2): one model file per
-table under ``models/``. Shared ``Base``/mixins live in ``core.models.base``
-(identity convention — no ``db/base.py``).
+Feature-based layout: every ERP module owns its ``models/``, ``ports.py`` and
+``repository.py`` inside its own package under ``core.features``. The HR
+repository (deferred to the integration phase) also implements the payroll
+``LeaveLedgerPort`` for approved unpaid-leave reads.
 """
+
+__all__: list[str] = []

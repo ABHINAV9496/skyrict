@@ -1,27 +1,50 @@
-"""Audit event catalog tests — the canonical inventory.* vocabulary.
+"""Audit event catalog consistency tests.
 
-Guards the single source of truth in ``core.audit_events``: the CATALOG must
-stay in sync with AUDIT_EVENT_MODULES (the module-body union assert already
-fails fast at import time), every event is namespaced ``inventory.*``, and
-``__all__`` re-exports the whole catalog so importers can't silently go stale.
+Two catalogs coexist in the merged tree: ``core.core.audit_events`` holds the
+HR/payroll/finance vocabulary, and ``core.audit_events`` holds the shared
+feature catalog (inventory + CRM + sales). Each file guards its own catalog's
+CATALOG <-> AUDIT_EVENT_MODULES consistency and canonical vocabulary.
 """
 
 from __future__ import annotations
 
-import core.audit_events as catalog
+import core.audit_events as inventory_catalog
+from core.core.audit_events import (
+    AUDIT_EVENT_MODULES,
+    CATALOG,
+    HR_LEAVE_APPROVED,
+    PAYROLL_RUN_APPROVED,
+)
 
 
-class TestCatalogShape:
-    def test_all_events_are_inventory_namespaced(self) -> None:
-        for event in catalog.CATALOG:
-            assert event.startswith("inventory.")
+class TestAuditEventCatalog:
+    def test_modules_cover_catalog_exactly(self) -> None:
+        module_keys = {key for _, _, keys in AUDIT_EVENT_MODULES for key in keys}
+        assert module_keys == set(CATALOG)
+
+    def test_catalog_has_no_duplicates(self) -> None:
+        assert len(CATALOG) == len(set(CATALOG))
+
+    def test_hr_payroll_events_follow_doc_vocabulary(self) -> None:
+        # docs/modules/hr-payroll.md step 4 canonical vocabulary.
+        assert HR_LEAVE_APPROVED == "hr.leave.approved"
+        assert PAYROLL_RUN_APPROVED == "payroll.run.approved"
+        assert "hr.department.created" in CATALOG
+        assert "payroll.settings.updated" in CATALOG
+
+
+class TestInventoryCatalogShape:
+    def test_all_events_are_feature_namespaced(self) -> None:
+        module_namespaces = {key for key, _, _ in inventory_catalog.AUDIT_EVENT_MODULES}
+        for event in inventory_catalog.CATALOG:
+            assert event.split(".", 1)[0] in module_namespaces
 
     def test_catalog_matches_all_events(self) -> None:
-        assert frozenset(catalog.CATALOG) == catalog.ALL_AUDIT_EVENTS
+        assert frozenset(inventory_catalog.CATALOG) == inventory_catalog.ALL_AUDIT_EVENTS
 
     def test_module_groups_union_equals_catalog(self) -> None:
-        module_keys = {key for _, _, keys in catalog.AUDIT_EVENT_MODULES for key in keys}
-        assert module_keys == set(catalog.CATALOG)
+        module_keys = {key for _, _, keys in inventory_catalog.AUDIT_EVENT_MODULES for key in keys}
+        assert module_keys == set(inventory_catalog.CATALOG)
 
     def test_expected_events_present(self) -> None:
         expected = {
@@ -32,18 +55,18 @@ class TestCatalogShape:
             "inventory.stock.transferred",
             "inventory.stock.reorder_alerted",
         }
-        assert expected <= set(catalog.CATALOG)
+        assert expected <= set(inventory_catalog.CATALOG)
 
     def test_all_exported(self) -> None:
-        for name in catalog.__all__:
-            assert hasattr(catalog, name)
+        for name in inventory_catalog.__all__:
+            assert hasattr(inventory_catalog, name)
 
 
-class TestConstantsMatchCatalog:
+class TestInventoryConstantsMatchCatalog:
     def test_constants_equal_catalog_entries(self) -> None:
-        assert catalog.PRODUCT_CREATED == "inventory.product.created"
-        assert catalog.PRODUCT_UPDATED == "inventory.product.updated"
-        assert catalog.WAREHOUSE_CREATED == "inventory.warehouse.created"
-        assert catalog.STOCK_ADJUSTED == "inventory.stock.adjusted"
-        assert catalog.STOCK_TRANSFERRED == "inventory.stock.transferred"
-        assert catalog.STOCK_REORDER_ALERTED == "inventory.stock.reorder_alerted"
+        assert inventory_catalog.PRODUCT_CREATED == "inventory.product.created"
+        assert inventory_catalog.PRODUCT_UPDATED == "inventory.product.updated"
+        assert inventory_catalog.WAREHOUSE_CREATED == "inventory.warehouse.created"
+        assert inventory_catalog.STOCK_ADJUSTED == "inventory.stock.adjusted"
+        assert inventory_catalog.STOCK_TRANSFERRED == "inventory.stock.transferred"
+        assert inventory_catalog.STOCK_REORDER_ALERTED == "inventory.stock.reorder_alerted"

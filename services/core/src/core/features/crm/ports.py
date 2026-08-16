@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 class CrmRepositoryPort(Protocol):
     """Persistence contract for leads, opportunities, and customers."""
 
+    # --- Document sequences (wired at the composition root) ---
+    async def next_customer_sequence(self, tenant_id: uuid.UUID) -> int: ...
+
     # --- Leads ---
     async def create_lead(self, lead: Lead) -> Lead: ...
 
@@ -53,6 +56,17 @@ class CrmRepositoryPort(Protocol):
         limit: int = 50,
     ) -> Sequence[Lead]: ...
 
+    async def count_leads(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        status: LeadStatus | None = None,
+        source: str | None = None,
+    ) -> int: ...
+
     async def find_leads_by_email(self, email: str, *, tenant_id: uuid.UUID) -> Sequence[Lead]: ...
 
     async def update_lead_status(
@@ -66,6 +80,17 @@ class CrmRepositoryPort(Protocol):
         team_id: uuid.UUID | None,
     ) -> Lead | None: ...
 
+    async def update_lead(
+        self,
+        lead_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        changes: dict[str, object],
+    ) -> Lead | None: ...
+
     # --- Opportunities ---
     async def create_opportunity(self, opportunity: Opportunity) -> Opportunity: ...
 
@@ -77,6 +102,10 @@ class CrmRepositoryPort(Protocol):
         scope: DataScope,
         user_id: uuid.UUID | None,
         team_id: uuid.UUID | None,
+    ) -> Opportunity | None: ...
+
+    async def get_opportunity_by_lead(
+        self, lead_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Opportunity | None: ...
 
     async def list_opportunities(
@@ -93,6 +122,18 @@ class CrmRepositoryPort(Protocol):
         limit: int = 50,
     ) -> Sequence[Opportunity]: ...
 
+    async def count_opportunities(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        stage: OpportunityStage | None = None,
+        from_close_date: date | None = None,
+        to_close_date: date | None = None,
+    ) -> int: ...
+
     async def update_opportunity_stage(
         self,
         opportunity_id: uuid.UUID,
@@ -107,6 +148,17 @@ class CrmRepositoryPort(Protocol):
         lost_reason: str | None = None,
     ) -> Opportunity | None: ...
 
+    async def update_opportunity(
+        self,
+        opportunity_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        changes: dict[str, object],
+    ) -> Opportunity | None: ...
+
     # --- Customers ---
     async def create_customer(self, customer: Customer) -> Customer: ...
 
@@ -116,6 +168,10 @@ class CrmRepositoryPort(Protocol):
 
     async def get_customer_by_code(self, code: str, *, tenant_id: uuid.UUID) -> Customer | None: ...
 
+    async def get_customer_by_source_opportunity(
+        self, opportunity_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Customer | None: ...
+
     async def list_customers(
         self,
         *,
@@ -124,6 +180,21 @@ class CrmRepositoryPort(Protocol):
         offset: int = 0,
         limit: int = 50,
     ) -> Sequence[Customer]: ...
+
+    async def count_customers(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        include_inactive: bool = False,
+    ) -> int: ...
+
+    async def update_customer(
+        self,
+        customer_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        changes: dict[str, object],
+    ) -> Customer | None: ...
 
     async def deactivate_customer(
         self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID

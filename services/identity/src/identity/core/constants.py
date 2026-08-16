@@ -185,6 +185,10 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.finance.write",
             "erp.hr.read",
             "erp.hr.write",
+            "erp.hr.approve",
+            "erp.payroll.read",
+            "erp.payroll.write",
+            "erp.payroll.approve",
             "agents:read",
             "intelligence:read",
             "billing.manage",
@@ -209,6 +213,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.finance.write",
             "erp.hr.read",
             "erp.hr.write",
+            "erp.payroll.read",
         ),
     ),
     (
@@ -237,6 +242,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.inventory.read",
             "erp.finance.read",
             "erp.hr.read",
+            "erp.payroll.read",
         ),
     ),
 )

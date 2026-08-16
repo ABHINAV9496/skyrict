@@ -25,7 +25,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.models.base import Base
@@ -89,6 +89,8 @@ class PayrollRunModel(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     void_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Employees excluded at compute time, with the reason (gap #6).
+    skipped_employees: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

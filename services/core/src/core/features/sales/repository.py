@@ -22,11 +22,11 @@ query carries an explicit ``tenant_id`` filter as defense in depth under RLS.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 
@@ -45,6 +45,11 @@ _UNIQUE_VIOLATION_MESSAGES: dict[str, str] = {
     "uq_erp_sales_orders_tenant_number": "An order with this number already exists",
 }
 _DEFAULT_CONFLICT_MESSAGE = "The resource conflicts with existing data"
+
+# Per-tenant document sequence claimed by this repository (wired at the
+# composition root — features never import core.db), mirroring the HR
+# repository's ``next_sequence``.
+_ORDER_NUMBER_SEQUENCE = "sales_order"
 
 
 def _conflict_or_reraise(exc: IntegrityError) -> None:
@@ -140,8 +145,24 @@ def _line_from_orm(model: ErpSalesOrderLineModel) -> SalesOrderLine:
 class SalesRepository:
     """Concrete SQLAlchemy implementation of :class:`SalesRepositoryPort`."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        next_sequence: Callable[[uuid.UUID, str], Awaitable[int]] | None = None,
+    ) -> None:
         self.session = session
+        self._next_sequence = next_sequence
+
+    async def next_order_sequence(self, tenant_id: uuid.UUID) -> int:
+        """Claim the next order-number sequence value (entity ``sales_order``).
+
+        Race-safe and never reused (row-locking counter); the service formats
+        the value into ``SO-{year}-{seq:05d}``.
+        """
+        if self._next_sequence is None:
+            raise RuntimeError("SalesRepository was not wired with a sequence callable")
+        return await self._next_sequence(tenant_id, _ORDER_NUMBER_SEQUENCE)
 
     # ------------------------------------------------------------------
     # Orders
@@ -199,6 +220,25 @@ class SalesRepository:
         result = await self.session.execute(stmt.offset(offset).limit(limit))
         return [_order_from_orm(model) for model in result.scalars().all()]
 
+    async def count_orders(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        status: OrderStatus | None = None,
+        customer_id: uuid.UUID | None = None,
+    ) -> int:
+        """Total rows matching :meth:`list_orders` filters (pagination meta)."""
+        stmt = (
+            select(func.count())
+            .select_from(ErpSalesOrderModel)
+            .where(ErpSalesOrderModel.tenant_id == tenant_id)
+        )
+        if status is not None:
+            stmt = stmt.where(ErpSalesOrderModel.status == status)
+        if customer_id is not None:
+            stmt = stmt.where(ErpSalesOrderModel.customer_id == customer_id)
+        return int((await self.session.execute(stmt)).scalar_one())
+
     async def list_order_lines(
         self, order_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> list[SalesOrderLine]:
@@ -209,6 +249,64 @@ class SalesRepository:
         stmt = stmt.order_by(ErpSalesOrderLineModel.created_at.asc())
         result = await self.session.execute(stmt)
         return [_line_from_orm(model) for model in result.scalars().all()]
+
+    async def update_draft_order(
+        self,
+        order_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        customer_id: uuid.UUID | None = None,
+        lines: Sequence[SalesOrderLine] | None = None,
+        totals: tuple[Money, Money, Money, Money] | None = None,
+    ) -> SalesOrder | None:
+        """PATCH a DRAFT order — change the customer and/or replace its lines.
+
+        Atomic guard: the header UPDATE carries ``WHERE status = 'draft'``, so
+        a confirmed/fulfilled/cancelled order is never mutated (rowcount 0 ->
+        None, the service re-probes and replies accordingly). When neither
+        field is provided the guard still runs and the current order returns
+        (no-op PATCH). Lines are replaced wholesale (delete + insert in the
+        same transaction) — never merged.
+
+        ``totals`` is ``(subtotal, discount, tax, total)`` — the service's
+        recomputed header money columns (clients never supply money); writing
+        them in the SAME guarded UPDATE keeps the header consistent with the
+        replaced lines atomically.
+        """
+        values: dict[str, object] = {
+            "customer_id": (
+                customer_id if customer_id is not None else ErpSalesOrderModel.customer_id
+            )
+        }
+        if totals is not None:
+            values["subtotal"] = totals[0].amount
+            values["discount"] = totals[1].amount
+            values["tax"] = totals[2].amount
+            values["total"] = totals[3].amount
+            values["currency_code"] = totals[0].currency
+        stmt = (
+            update(ErpSalesOrderModel)
+            .where(
+                ErpSalesOrderModel.tenant_id == tenant_id,
+                ErpSalesOrderModel.id == order_id,
+                ErpSalesOrderModel.status == OrderStatus.DRAFT,
+            )
+            .values(**values)
+        )
+        result = cast("CursorResult[Any]", await self.session.execute(stmt))
+        if result.rowcount == 0:
+            return None
+
+        if lines is not None:
+            await self.session.execute(
+                delete(ErpSalesOrderLineModel).where(
+                    ErpSalesOrderLineModel.tenant_id == tenant_id,
+                    ErpSalesOrderLineModel.order_id == order_id,
+                )
+            )
+            self.session.add_all([_line_to_orm(line, order_id=order_id) for line in lines])
+        await self.session.flush()
+        return await self.get_order(order_id, tenant_id=tenant_id)
 
     # ------------------------------------------------------------------
     # State transitions (atomic guards)
@@ -276,3 +374,30 @@ class SalesRepository:
         if result.rowcount == 0:
             return None
         return await self.get_order(order_id, tenant_id=tenant_id)
+
+    async def mark_credit_check_failed(
+        self, order_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> SalesOrder | None:
+        """Record a FAILED credit check on a draft order (informational).
+
+        The order STAYS in draft — the DB has no opinion on the check result;
+        the service re-runs the check on every confirm attempt, so raising the
+        customer's limit later makes the same order confirmable.
+        """
+        stmt = (
+            update(ErpSalesOrderModel)
+            .where(
+                ErpSalesOrderModel.tenant_id == tenant_id,
+                ErpSalesOrderModel.id == order_id,
+                ErpSalesOrderModel.status == OrderStatus.DRAFT,
+            )
+            .values(credit_check=CreditCheckResult.FAILED)
+        )
+        result = cast("CursorResult[Any]", await self.session.execute(stmt))
+        if result.rowcount == 0:
+            return None
+        return await self.get_order(order_id, tenant_id=tenant_id)
+
+    async def commit(self) -> None:
+        """Commit the current transaction — the service owns the transaction lifecycle."""
+        await self.session.commit()

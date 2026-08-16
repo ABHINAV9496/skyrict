@@ -281,6 +281,12 @@ export interface SessionInfo {
   expiresAt: string | null;
   device: string | null;
   deviceType: string | null;
+  browserName: string | null;
+  browserVersion: string | null;
+  osName: string | null;
+  osVersion: string | null;
+  deviceFamily: string | null;
+  deviceModel: string | null;
 }
 
 interface SessionPayload {
@@ -294,6 +300,12 @@ interface SessionPayload {
   expires_at?: unknown;
   device?: unknown;
   device_type?: unknown;
+  browser_name?: unknown;
+  browser_version?: unknown;
+  os_name?: unknown;
+  os_version?: unknown;
+  device_family?: unknown;
+  device_model?: unknown;
 }
 
 function mapSession(payload: SessionPayload): SessionInfo {
@@ -315,6 +327,13 @@ function mapSession(payload: SessionPayload): SessionInfo {
         : null,
     device: typeof payload.device === "string" ? payload.device : null,
     deviceType: typeof payload.device_type === "string" ? payload.device_type : null,
+    browserName: typeof payload.browser_name === "string" ? payload.browser_name : null,
+    browserVersion:
+      typeof payload.browser_version === "string" ? payload.browser_version : null,
+    osName: typeof payload.os_name === "string" ? payload.os_name : null,
+    osVersion: typeof payload.os_version === "string" ? payload.os_version : null,
+    deviceFamily: typeof payload.device_family === "string" ? payload.device_family : null,
+    deviceModel: typeof payload.device_model === "string" ? payload.device_model : null,
   };
 }
 

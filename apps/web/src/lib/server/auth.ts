@@ -118,11 +118,30 @@ interface BackendCallResult {
   payload: Record<string, unknown>;
 }
 
-/** Resolve the real client IP from the request, mirroring the backend. */
+/**
+ * Whether this Next.js process sits behind a trusted reverse proxy that
+ * appends the real client IP to X-Forwarded-For. Defaults to off so the BFF
+ * never forwards client-controlled IP headers unless explicitly deployed
+ * behind a trusted proxy.
+ */
+const TRUST_PROXY = process.env.TRUST_PROXY === "true";
+
+/** Resolve the real client IP, or null when it cannot be trusted.
+ *
+ * Without a trusted proxy in front, forwarded headers come straight from the
+ * client and must be ignored (spoofable). Behind a trusted proxy such as
+ * ingress-nginx, the *rightmost* X-Forwarded-For entry is the one the proxy
+ * appended — the left entries are attacker-controllable and never used.
+ */
 export function clientIp(request: NextRequest): string | null {
+  if (!TRUST_PROXY) return null;
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0]?.trim() ?? null;
+    const hops = forwarded
+      .split(",")
+      .map((hop) => hop.trim())
+      .filter(Boolean);
+    return hops[hops.length - 1] ?? null;
   }
   return request.headers.get("x-real-ip");
 }

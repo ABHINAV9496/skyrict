@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from identity.core.constants import SYSTEM_ROLE_NAMES
 from identity.core.permissions import CATALOG, WILDCARD
 from identity.domain.entities import Role, ScopeType
+from identity.events.producers.tenant_events import emit_rbac_role_granted
 from skyrict_common.exceptions import (
     AuthorizationError,
     NotFoundError,
@@ -177,6 +178,16 @@ class RoleManagementService:
             role_id=role_uuid,
             tenant_id=tenant_id,
             scope_type=scope_type,
+            scope_id=resolved_scope_id,
+        )
+
+        await emit_rbac_role_granted(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_id=role_uuid,
+            role_name=role.name,
+            permissions=role.permissions,
+            is_system_role=role.is_system_role,
             scope_id=resolved_scope_id,
         )
 

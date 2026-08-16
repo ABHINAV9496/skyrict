@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import uuid
 from pathlib import Path
@@ -94,6 +95,45 @@ def seed(
         await _verify()
         if tenant_id:
             await _seed_tenant()
+
+    asyncio.run(_run())
+
+
+@app.command()
+def provision_rbac(
+    tenant_id: str = typer.Option(
+        ...,
+        "--tenant-id",
+        help="UUID of the tenant to provision core RBAC rows for",
+    ),
+    payload: str = typer.Option(
+        ...,
+        "--payload",
+        help=(
+            "Path to a JSON file (or inline JSON) with the role_grants snapshot "
+            "carried by the identity.tenant.provisioned / rbac.role_granted events"
+        ),
+    ),
+) -> None:
+    """Mirror identity roles + grants into core_roles / core_user_roles.
+
+    Applies the same idempotent handler the Kafka consumer will run once the
+    platform bus lands; the payload shape matches ``skyrict_events.schemas``
+    (``role_grants``: role_id, role_name, permissions, is_system_role,
+    user_id, scope_id).
+    """
+    import asyncio
+
+    from core.events.consumers.rbac import provision_tenant_rbac
+
+    raw = Path(payload).read_text() if Path(payload).exists() else payload
+    data = json.loads(raw)
+    role_grants = data["role_grants"] if isinstance(data, dict) else data
+
+    async def _run() -> None:
+        result = await provision_tenant_rbac(uuid.UUID(tenant_id), role_grants)
+        counts = result.as_dict()
+        typer.echo(f"provisioned tenant {tenant_id}: {counts}")
 
     asyncio.run(_run())
 

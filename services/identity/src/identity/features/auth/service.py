@@ -47,6 +47,7 @@ from identity.core.turnstile import TurnstileVerifier
 from identity.core.user_agent import parse_client_hints, parse_user_agent
 from identity.domain.entities import Role, Session, SessionStatus, Tenant, User
 from identity.domain.value_objects import TokenPair
+from identity.events.producers.tenant_events import emit_tenant_provisioned
 from identity.features.auth.captcha.captcha_store import CaptchaStore
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.verification_store import (
@@ -513,6 +514,24 @@ class AuthenticationService:
         )
 
         await self.verification_store.delete_verification_token(request.verification_token)
+
+        role_grants = [
+            {
+                "role_id": str(role.id),
+                "role_name": role.name,
+                "permissions": role.permissions,
+                "is_system_role": role.is_system_role,
+                "user_id": str(user.id) if role.name == "tenant_owner" else None,
+                "scope_id": str(tenant_id) if role.name == "tenant_owner" else None,
+            }
+            for role in roles.values()
+            if role.id is not None
+        ]
+        await emit_tenant_provisioned(
+            tenant_id=tenant_id,
+            slug=slug,
+            role_grants=role_grants,
+        )
 
         return {
             "status": "ok",

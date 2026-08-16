@@ -14,7 +14,12 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 PRODUCT_CREATED = "inventory.product.created"
 PRODUCT_UPDATED = "inventory.product.updated"
+PRODUCT_DEACTIVATED = "inventory.product.deactivated"
+PRODUCT_REACTIVATED = "inventory.product.reactivated"
 WAREHOUSE_CREATED = "inventory.warehouse.created"
+WAREHOUSE_UPDATED = "inventory.warehouse.updated"
+WAREHOUSE_DEACTIVATED = "inventory.warehouse.deactivated"
+WAREHOUSE_REACTIVATED = "inventory.warehouse.reactivated"
 STOCK_ADJUSTED = "inventory.stock.adjusted"
 STOCK_TRANSFERRED = "inventory.stock.transferred"
 STOCK_REORDER_ALERTED = "inventory.stock.reorder_alerted"
@@ -43,7 +48,12 @@ SALES_ORDER_CANCELLED = "sales.order.cancelled"
 CATALOG: tuple[str, ...] = (
     PRODUCT_CREATED,
     PRODUCT_UPDATED,
+    PRODUCT_DEACTIVATED,
+    PRODUCT_REACTIVATED,
     WAREHOUSE_CREATED,
+    WAREHOUSE_UPDATED,
+    WAREHOUSE_DEACTIVATED,
+    WAREHOUSE_REACTIVATED,
     STOCK_ADJUSTED,
     STOCK_TRANSFERRED,
     STOCK_REORDER_ALERTED,
@@ -76,7 +86,12 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         (
             PRODUCT_CREATED,
             PRODUCT_UPDATED,
+            PRODUCT_DEACTIVATED,
+            PRODUCT_REACTIVATED,
             WAREHOUSE_CREATED,
+            WAREHOUSE_UPDATED,
+            WAREHOUSE_DEACTIVATED,
+            WAREHOUSE_REACTIVATED,
             STOCK_ADJUSTED,
             STOCK_TRANSFERRED,
             STOCK_REORDER_ALERTED,
@@ -145,6 +160,8 @@ __all__ = [
     "CRM_OPPORTUNITY_UPDATED",
     "CRM_OPPORTUNITY_WON",
     "PRODUCT_CREATED",
+    "PRODUCT_DEACTIVATED",
+    "PRODUCT_REACTIVATED",
     "PRODUCT_UPDATED",
     "SALES_ORDER_CANCELLED",
     "SALES_ORDER_CONFIRMED",
@@ -155,4 +172,7 @@ __all__ = [
     "STOCK_REORDER_ALERTED",
     "STOCK_TRANSFERRED",
     "WAREHOUSE_CREATED",
+    "WAREHOUSE_DEACTIVATED",
+    "WAREHOUSE_REACTIVATED",
+    "WAREHOUSE_UPDATED",
 ]

@@ -59,6 +59,23 @@ class ProductCreate(BaseModel):
     reorder_point: Decimal = Field(default=Decimal("0"), ge=0)
 
 
+class ProductUpdate(BaseModel):
+    """PATCH /inventory/products/{id} — partial update of a product.
+
+    Every field is optional; only the fields present in the body are applied.
+    ``sku``, when provided, must stay unique within the tenant (excluding the
+    product being edited).
+    """
+
+    sku: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    category: str | None = Field(default=None, max_length=100)
+    unit: str | None = Field(default=None, max_length=32)
+    cost_price: MoneyInput | None = None
+    sell_price: MoneyInput | None = None
+    reorder_point: Decimal | None = Field(default=None, ge=0)
+
+
 class ProductResponse(BaseModel):
     """Product data returned in API responses."""
 
@@ -102,6 +119,13 @@ class WarehouseCreate(BaseModel):
     """POST /inventory/warehouses — create a warehouse."""
 
     name: str = Field(..., min_length=1, max_length=100)
+    location: str | None = Field(default=None, max_length=255)
+
+
+class WarehouseUpdate(BaseModel):
+    """PATCH /inventory/warehouses/{id} — partial update of a warehouse."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
     location: str | None = Field(default=None, max_length=255)
 
 

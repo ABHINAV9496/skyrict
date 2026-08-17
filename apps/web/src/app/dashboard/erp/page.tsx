@@ -20,7 +20,7 @@ const quickLinks: {
   description: string;
   icon: LucideIcon;
 }[] = [
-  { href: "/dashboard/erp/crm/leads", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
+  { href: "/dashboard/erp/crm/overview", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
   { href: "/dashboard/erp/orders", title: "Orders", description: "Sales orders and the fulfilment flow.", icon: ShoppingCart },
   { href: "/dashboard/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
   { href: "/dashboard/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },

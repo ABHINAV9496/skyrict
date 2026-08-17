@@ -59,7 +59,7 @@ function SidebarLink({
     const padding = collapsed
         ? "justify-center px-0 py-2.5"
         : indented
-          ? "h-8 px-2"
+          ? "h-9 px-3 rounded-lg"
           : "px-3 py-2";
 
     if (item.soon) {
@@ -94,8 +94,8 @@ function SidebarLink({
             title={collapsed ? item.label : undefined}
             aria-current={active ? "page" : undefined}
             className={cn(
-                "group relative flex items-center gap-2 rounded-md transition-colors",
-                indented ? "text-xs" : "text-sm font-medium",
+                "group relative flex items-center gap-2.5 rounded-md transition-colors",
+                indented ? "text-[13px] font-medium" : "text-sm font-medium",
                 padding,
                 active
                     ? indented
@@ -119,7 +119,7 @@ function SidebarLink({
                 />
             ) : null}
             {indented ? (
-                <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+                <Icon aria-hidden="true" className="size-4 shrink-0" />
             ) : (
                 <Icon
                     aria-hidden="true"
@@ -161,12 +161,10 @@ function CollapsibleNavItem({
     const hasActiveChild = children.some((child) => isActive(pathname, child));
 
     const handleParentClick = useCallback(
-        (e: React.MouseEvent) => {
-            e.preventDefault();
-            onToggle();
+        () => {
             onCloseMobile();
         },
-        [onToggle, onCloseMobile],
+        [onCloseMobile],
     );
 
     if (collapsed) {

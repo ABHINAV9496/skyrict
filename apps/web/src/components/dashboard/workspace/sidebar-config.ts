@@ -118,8 +118,8 @@ export const erpNavGroups: NavGroup[] = [
                 permission: "erp.crm.read",
             },
             {
-                href: "/dashboard/erp/sales",
-                label: "Sales",
+                href: "/dashboard/erp/orders",
+                label: "Orders",
                 icon: ShoppingCart,
                 permission: "erp.sales.read",
             },

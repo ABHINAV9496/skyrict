@@ -352,7 +352,6 @@ class FinanceRepository:
         offset: int = 0,
         limit: int = 50,
     ) -> Sequence[JournalEntry]:
-        """List entry HEADERS (lines are loaded by ``get_journal_entry``)."""
         stmt = select(ErpJournalEntryModel).where(ErpJournalEntryModel.tenant_id == tenant_id)
         if status is not None:
             stmt = stmt.where(ErpJournalEntryModel.status == status)
@@ -368,7 +367,26 @@ class FinanceRepository:
             .limit(limit)
         )
         result = await self.session.execute(stmt)
-        return [_journal_entry_from_orm(model, ()) for model in result.scalars().all()]
+        entry_models = list(result.scalars().all())
+        if not entry_models:
+            return []
+        entry_ids = [m.id for m in entry_models]
+        lines_stmt = (
+            select(ErpJournalLineModel)
+            .where(
+                ErpJournalLineModel.tenant_id == tenant_id,
+                ErpJournalLineModel.entry_id.in_(entry_ids),
+            )
+            .order_by(ErpJournalLineModel.entry_id, ErpJournalLineModel.id)
+        )
+        lines_result = await self.session.execute(lines_stmt)
+        lines_by_entry: dict[uuid.UUID, list[JournalLine]] = {}
+        for lm in lines_result.scalars().all():
+            lines_by_entry.setdefault(lm.entry_id, []).append(_journal_line_from_orm(lm))
+        return [
+            _journal_entry_from_orm(model, lines_by_entry.get(model.id, ()))
+            for model in entry_models
+        ]
 
     async def post_journal_entry(
         self,

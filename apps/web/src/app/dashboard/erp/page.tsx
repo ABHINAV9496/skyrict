@@ -5,6 +5,7 @@ import {
   Blocks,
   Contact,
   Package,
+  Receipt,
   ShoppingCart,
   Users,
   Wallet,
@@ -26,6 +27,7 @@ const quickLinks: {
   { href: "/dashboard/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
   { href: "/dashboard/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
   { href: "/dashboard/erp/hr", title: "HR", description: "People and the team.", icon: Users },
+  { href: "/dashboard/erp/payroll", title: "Payroll", description: "Runs, compensation, and pay rules.", icon: Receipt },
   { href: "/dashboard/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
 ];
 

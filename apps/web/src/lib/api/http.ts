@@ -208,3 +208,70 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 export async function apiDelete<T>(path: string): Promise<T> {
   return apiFetch<T>(path, { method: "DELETE" });
 }
+
+export interface Paginated<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+/**
+ * Serialize a query-string record, dropping null/undefined/empty values so a
+ * cleared filter is simply omitted rather than sent as a falsy literal.
+ */
+export function buildQueryString(
+  params: Record<string, string | number | boolean | null | undefined>,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+/**
+ * Fetch a list endpoint with the backend's `limit`/`offset` pagination and
+ * synthesize a frontend `PaginationMeta`.
+ *
+ * The core backend returns bare arrays (no envelope meta), so the client
+ * probes with `limit + 1` to detect a following page. When a full page is
+ * returned the probe reveals exactly one extra row — enough to know there IS a
+ * next page — and `total`/`total_pages` are reported honestly ("at least this
+ * many") rather than guessed. The probe is clamped to the backend's limit cap
+ * of 100, so page sizes at the cap report a single page.
+ */
+export async function apiList<T>(
+  path: string,
+  input: {
+    page?: number;
+    pageSize?: number;
+    query?: Record<string, string | number | boolean | null | undefined>;
+  } = {},
+): Promise<Paginated<T>> {
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.max(1, Math.min(input.pageSize ?? 20, 100));
+  const offset = (page - 1) * pageSize;
+  const probeLimit = Math.min(pageSize + 1, 100);
+
+  const rows = await apiFetch<T[]>(
+    `${path}${buildQueryString({
+      limit: probeLimit,
+      offset,
+      ...input.query,
+    })}`,
+  );
+  const all = rows ?? [];
+  const hasMore = all.length > pageSize;
+  const items = hasMore ? all.slice(0, pageSize) : all;
+
+  return {
+    items,
+    meta: {
+      total: offset + all.length,
+      page,
+      page_size: pageSize,
+      total_pages: hasMore ? page + 1 : page,
+    },
+  };
+}

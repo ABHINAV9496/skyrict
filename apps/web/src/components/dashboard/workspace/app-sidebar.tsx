@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     ArrowLeft,
     Blocks,
@@ -116,6 +116,12 @@ function SidebarLink({
     );
 }
 
+/**
+ * A collapsible two-tier nav item (e.g. HR → Employees/Departments/Leave).
+ * The parent row is a clickable Link that navigates to the overview AND toggles
+ * the dropdown open/closed. Children step down in size/weight and auto-expand
+ * when one of them is the active page.
+ */
 function CollapsibleNavItem({
     item,
     collapsed,
@@ -133,50 +139,86 @@ function CollapsibleNavItem({
 }) {
     const Icon = item.icon;
     const children = item.children ?? [];
-    const headerActive = children.some((child) => isActive(pathname, child));
+    const parentActive = isActive(pathname, item);
+    const hasActiveChild = children.some((child) => isActive(pathname, child));
+
+    const handleParentClick = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            onToggle();
+            onCloseMobile();
+        },
+        [onToggle, onCloseMobile],
+    );
+
+    if (collapsed) {
+        return (
+            <Link
+                href={item.href}
+                onClick={onCloseMobile}
+                title={item.label}
+                aria-current={parentActive ? "page" : undefined}
+                className={cn(
+                    "group relative flex items-center justify-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                    parentActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+            >
+                <Icon aria-hidden="true" className="size-[18px] shrink-0" />
+            </Link>
+        );
+    }
 
     return (
         <div className="space-y-1">
-            <button
-                type="button"
-                onClick={onToggle}
-                aria-expanded={open}
-                title={collapsed ? item.label : undefined}
+            <div
                 className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-lg text-sm font-semibold transition-colors",
-                    collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
-                    headerActive
+                    "flex items-center gap-1 rounded-lg transition-colors",
+                    hasActiveChild
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-foreground hover:bg-muted/60 hover:text-foreground",
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                 )}
             >
-                {headerActive ? (
-                    <span
-                        aria-hidden="true"
-                        className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
-                    />
-                ) : null}
-                <Icon
-                    aria-hidden="true"
-                    className={cn(
-                        "size-[18px] shrink-0",
-                        headerActive && "text-primary",
-                    )}
-                />
-                {!collapsed ? (
-                    <>
-                        <span className="truncate">{item.label}</span>
-                        <ChevronDown
+                <Link
+                    href={item.href}
+                    onClick={handleParentClick}
+                    aria-current={parentActive ? "page" : undefined}
+                    className="relative flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-sm font-semibold transition-colors"
+                >
+                    {hasActiveChild ? (
+                        <span
                             aria-hidden="true"
-                            className={cn(
-                                "ml-auto size-4 shrink-0 transition-transform",
-                                open && "rotate-180",
-                            )}
+                            className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
                         />
-                    </>
-                ) : null}
-            </button>
-            {!collapsed && open ? (
+                    ) : null}
+                    <Icon
+                        aria-hidden="true"
+                        className={cn(
+                            "size-[18px] shrink-0",
+                            hasActiveChild && "text-primary",
+                        )}
+                    />
+                    <span className="truncate">{item.label}</span>
+                </Link>
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    aria-expanded={open}
+                    aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
+                    title={open ? "Collapse" : "Expand"}
+                    className="mr-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none"
+                >
+                    <ChevronDown
+                        aria-hidden="true"
+                        className={cn(
+                            "size-4 transition-transform duration-200",
+                            open && "rotate-180",
+                        )}
+                    />
+                </button>
+            </div>
+            {open ? (
                 <div className="space-y-1">
                     {children.map((child) => (
                         <SidebarLink

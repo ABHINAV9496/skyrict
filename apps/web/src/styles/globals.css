@@ -440,6 +440,39 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Themed scrollbar
+ *
+ * A thin scrollbar drawn from the sidebar's own tokens so it reads as part of
+ * the chrome instead of the browser default. Tracks are transparent and the
+ * thumb follows the foreground at a low alpha, darkening on hover. Covers
+ * Firefox (scrollbar-width/scrollbar-color) and Chromium (::-webkit-*).
+ * ------------------------------------------------------------------------- */
+
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent) transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--sidebar-foreground) 42%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
  * Market analytics chart (GMIE home background)
  *
  * Decorative motion for the faded green graph behind the intelligence home

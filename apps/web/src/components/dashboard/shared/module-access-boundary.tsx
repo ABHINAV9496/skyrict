@@ -69,6 +69,31 @@ export function ModuleAccessDenied({ module }: { module: ModuleKey }) {
   );
 }
 
+const PERMISSION_LABEL: Record<string, string> = {
+  "erp.hr.read": "HR",
+  "erp.payroll.read": "Payroll",
+};
+
+/** Blocked state for a user who can reach a module but not a specific area. */
+export function ModulePermissionDenied({ permission }: { permission: string }) {
+  const label = PERMISSION_LABEL[permission] ?? "this area";
+  return (
+    <ModuleNotice
+      title={`No access to ${label}`}
+      description="Your roles don't include permission for this area. Ask a workspace owner to update your role or sign in with an account that has access."
+      icon={Lock}
+      action={
+        <Button asChild>
+          <Link href="/dashboard/erp">
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back to overview
+          </Link>
+        </Button>
+      }
+    />
+  );
+}
+
 export function ModuleAccessError({ module }: { module: ModuleKey }) {
   return (
     <ModuleNotice
@@ -87,18 +112,29 @@ export function ModuleAccessError({ module }: { module: ModuleKey }) {
 /**
  * Wraps a module world with the access check. Renders a themed skeleton while
  * permissions load, then either the module's chrome or an access-denied panel.
+ * An optional `permission` narrows the check to a specific key (e.g. a
+ * sub-module page inside an accessible world); when absent, only the module
+ * gate applies.
  */
 export function ModuleAccessBoundary({
   module,
+  permission,
   children,
 }: {
   module: ModuleKey;
+  permission?: string;
   children: React.ReactNode;
 }) {
-  const { status, access } = useModuleAccess();
+  const { status, access, permissions } = useModuleAccess();
 
   if (status === "loading") return <ModuleLoading module={module} />;
   if (status === "error") return <ModuleAccessError module={module} />;
   if (!access[module]) return <ModuleAccessDenied module={module} />;
+  if (
+    permission &&
+    !(permissions.includes("*") || permissions.includes(permission))
+  ) {
+    return <ModulePermissionDenied permission={permission} />;
+  }
   return <>{children}</>;
 }

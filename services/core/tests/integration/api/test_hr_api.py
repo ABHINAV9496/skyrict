@@ -114,6 +114,21 @@ class TestEmployeeLifecycle:
         assert len(search.json()["data"]) == 1
         assert search.json()["data"][0]["last_name"] == "Torvalds"
 
+    async def test_list_employees_includes_active_compensation(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        await hire_employee(client, headers, first_name="Grace", last_name="Hopper")
+
+        all_ = await client.get("/api/v1/hr/employees", headers=headers)
+        assert all_.status_code == 200, all_.text
+        listed = {e["last_name"]: e for e in all_.json()["data"]}
+        assert listed["Hopper"]["active_compensation"]["amount"] == "5000.00"
+        assert listed["Hopper"]["active_compensation"]["currency"] == "USD"
+
     async def test_status_transitions_and_termination(
         self,
         client: AsyncClient,

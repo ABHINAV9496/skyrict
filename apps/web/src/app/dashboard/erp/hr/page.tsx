@@ -1,17 +1,20 @@
 import { Users } from "lucide-react";
 
-import { ErpModuleTable } from "@/components/dashboard/erp/erp-module-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
+import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
+import { HrOverview } from "./hr-overview";
 
-export default function ErpHrPage() {
+export default function HrHomePage() {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="HR"
-        description="The people behind the business — roles, departments, and tenure."
-        icon={Users}
-      />
-      <ErpModuleTable module="hr" />
-    </div>
+    <ModuleAccessBoundary module="erp" permission="erp.hr.read">
+      <div className="space-y-6">
+        <PageHeader
+          title="HR"
+          description="The people behind the business — employees, departments, and leave."
+          icon={Users}
+        />
+        <HrOverview />
+      </div>
+    </ModuleAccessBoundary>
   );
 }

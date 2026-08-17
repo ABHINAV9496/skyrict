@@ -813,9 +813,7 @@ class CrmRepository:
         await self.session.refresh(model)
         return _contact_from_orm(model)
 
-    async def get_contact(
-        self, contact_id: uuid.UUID, *, tenant_id: uuid.UUID
-    ) -> Contact | None:
+    async def get_contact(self, contact_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Contact | None:
         stmt = select(ErpCrmContactModel).where(
             ErpCrmContactModel.tenant_id == tenant_id,
             ErpCrmContactModel.id == contact_id,
@@ -1316,10 +1314,7 @@ class CrmRepository:
         )
         if scoped is not None:
             stmt = stmt.where(scoped)
-        return [
-            (status, count)
-            for status, count in (await self.session.execute(stmt)).all()
-        ]
+        return [(status, count) for status, count in (await self.session.execute(stmt)).all()]
 
     async def lead_source_counts(
         self,
@@ -1390,9 +1385,7 @@ class CrmRepository:
             select(ErpCrmOpportunityModel.stage, func.count())
             .where(
                 ErpCrmOpportunityModel.tenant_id == tenant_id,
-                ErpCrmOpportunityModel.stage.in_(
-                    (OpportunityStage.WON, OpportunityStage.LOST)
-                ),
+                ErpCrmOpportunityModel.stage.in_((OpportunityStage.WON, OpportunityStage.LOST)),
             )
             .group_by(ErpCrmOpportunityModel.stage)
         )
@@ -1411,9 +1404,9 @@ class CrmRepository:
         total = int(
             (
                 await self.session.execute(
-                    select(func.count()).select_from(ErpCrmCustomerModel).where(
-                        ErpCrmCustomerModel.tenant_id == tenant_id
-                    )
+                    select(func.count())
+                    .select_from(ErpCrmCustomerModel)
+                    .where(ErpCrmCustomerModel.tenant_id == tenant_id)
                 )
             ).scalar_one()
         )
@@ -1443,9 +1436,13 @@ class CrmRepository:
         completed_since: datetime,
     ) -> dict[str, int]:
         """Follow-up window counts: today / overdue / upcoming / completed_30d."""
-        base = select(func.count()).select_from(ErpCrmActivityModel).where(
-            ErpCrmActivityModel.tenant_id == tenant_id,
-            ErpCrmActivityModel.completed_at.is_(None),
+        base = (
+            select(func.count())
+            .select_from(ErpCrmActivityModel)
+            .where(
+                ErpCrmActivityModel.tenant_id == tenant_id,
+                ErpCrmActivityModel.completed_at.is_(None),
+            )
         )
         scoped = _scope_filter(
             scope=scope,
@@ -1458,9 +1455,7 @@ class CrmRepository:
             base = base.where(scoped)
 
         async def _window_count(predicate: ColumnElement[bool]) -> int:
-            return int(
-                (await self.session.execute(base.where(predicate))).scalar_one()
-            )
+            return int((await self.session.execute(base.where(predicate))).scalar_one())
 
         counts: dict[str, int] = {
             "today": await _window_count(ErpCrmActivityModel.due_at >= today_start),
@@ -1525,9 +1520,7 @@ class CrmRepository:
             select(ErpCrmOpportunityModel)
             .where(
                 ErpCrmOpportunityModel.tenant_id == tenant_id,
-                ErpCrmOpportunityModel.stage.not_in(
-                    (OpportunityStage.WON, OpportunityStage.LOST)
-                ),
+                ErpCrmOpportunityModel.stage.not_in((OpportunityStage.WON, OpportunityStage.LOST)),
                 ErpCrmOpportunityModel.amount.is_not(None),
             )
             .order_by(ErpCrmOpportunityModel.amount.desc().nulls_last())
@@ -1934,8 +1927,10 @@ def _activity_status_filter(
     if status == "overdue" and day_start is not None:
         return open_rows & (ErpCrmActivityModel.due_at < day_start)
     if status == "today" and day_start is not None and day_end is not None:
-        return open_rows & (ErpCrmActivityModel.due_at >= day_start) & (
-            ErpCrmActivityModel.due_at < day_end
+        return (
+            open_rows
+            & (ErpCrmActivityModel.due_at >= day_start)
+            & (ErpCrmActivityModel.due_at < day_end)
         )
     if status == "upcoming" and day_end is not None:
         return open_rows & (ErpCrmActivityModel.due_at >= day_end)
@@ -1952,9 +1947,7 @@ def _lead_search_predicate(model: type[ErpCrmLeadModel], like: str) -> ColumnEle
     )
 
 
-def _customer_search_predicate(
-    model: type[ErpCrmCustomerModel], like: str
-) -> ColumnElement[bool]:
+def _customer_search_predicate(model: type[ErpCrmCustomerModel], like: str) -> ColumnElement[bool]:
     return or_(
         model.name.ilike(like),
         model.email.ilike(like),
@@ -1963,9 +1956,7 @@ def _customer_search_predicate(
     )
 
 
-def _contact_search_predicate(
-    model: type[ErpCrmContactModel], like: str
-) -> ColumnElement[bool]:
+def _contact_search_predicate(model: type[ErpCrmContactModel], like: str) -> ColumnElement[bool]:
     return or_(
         model.first_name.ilike(like),
         model.last_name.ilike(like),

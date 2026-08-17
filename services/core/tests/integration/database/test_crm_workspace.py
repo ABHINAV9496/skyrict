@@ -193,7 +193,14 @@ class TestCrmWorkspaceEnums:
                 .scalars()
                 .all()
             )
-            assert sorted(activity_kind) == ["call", "email", "follow_up", "meeting", "note", "task"]
+            assert sorted(activity_kind) == [
+                "call",
+                "email",
+                "follow_up",
+                "meeting",
+                "note",
+                "task",
+            ]
 
             entity_type = (
                 (
@@ -209,9 +216,7 @@ class TestCrmWorkspaceEnums:
             timeline_type = (
                 (
                     await conn.execute(
-                        text(
-                            "SELECT unnest(enum_range(NULL::erp_crm_timeline_event_type))::text"
-                        )
+                        text("SELECT unnest(enum_range(NULL::erp_crm_timeline_event_type))::text")
                     )
                 )
                 .scalars()
@@ -247,7 +252,10 @@ class TestCrmWorkspaceRls:
                     "(tenant_id, id, customer_id, first_name, email) "
                     "VALUES (:tid, gen_random_uuid(), :cust, 'Secret', 'secret@x.com')"
                 ),
-                {"tid": uuid.UUID(crm_workspace_world["tenant_a"]), "cust": uuid.UUID(crm_workspace_world["customer_a"])},
+                {
+                    "tid": uuid.UUID(crm_workspace_world["tenant_a"]),
+                    "cust": uuid.UUID(crm_workspace_world["customer_a"]),
+                },
             )
             await conn.execute(
                 text(
@@ -256,7 +264,10 @@ class TestCrmWorkspaceRls:
                     "VALUES (:tid, gen_random_uuid(), 'customer', :cust, "
                     "'customer.created', 'Customer created')"
                 ),
-                {"tid": uuid.UUID(crm_workspace_world["tenant_a"]), "cust": uuid.UUID(crm_workspace_world["customer_a"])},
+                {
+                    "tid": uuid.UUID(crm_workspace_world["tenant_a"]),
+                    "cust": uuid.UUID(crm_workspace_world["customer_a"]),
+                },
             )
             await conn.exec_driver_sql(f"SET ROLE {RLS_ROLE}")
 
@@ -349,7 +360,9 @@ class TestWorkspaceRepository:
 
             # A contact in tenant B is invisible.
             assert (
-                await repo.get_contact(created.id, tenant_id=uuid.UUID(crm_workspace_world["tenant_b"]))
+                await repo.get_contact(
+                    created.id, tenant_id=uuid.UUID(crm_workspace_world["tenant_b"])
+                )
                 is None
             )
 
@@ -594,7 +607,9 @@ class TestWorkspaceRepository:
 
             # Other-tenant and other-anchor isolation.
             assert (
-                await repo.get_note(created.id, tenant_id=uuid.UUID(crm_workspace_world["tenant_b"]))
+                await repo.get_note(
+                    created.id, tenant_id=uuid.UUID(crm_workspace_world["tenant_b"])
+                )
                 is None
             )
             other = await repo.list_notes(
@@ -602,7 +617,9 @@ class TestWorkspaceRepository:
             )
             assert all(note.id != created.id for note in other)
 
-            updated = await repo.update_note(created.id, tenant_id=tenant_a, changes={"body": "Renew Q4"})
+            updated = await repo.update_note(
+                created.id, tenant_id=tenant_a, changes={"body": "Renew Q4"}
+            )
             assert updated is not None
             assert updated.body == "Renew Q4"
             await repo.delete_note(created.id, tenant_id=tenant_a)
@@ -782,7 +799,9 @@ class TestWorkspaceRepository:
         async with async_session_factory() as session:
             repo = CrmRepository(session)
             await repo.create_lead(
-                Lead(tenant_id=tenant_a, first_name="Agg", email=f"agg-{uuid.uuid4().hex[:6]}@x.test")
+                Lead(
+                    tenant_id=tenant_a, first_name="Agg", email=f"agg-{uuid.uuid4().hex[:6]}@x.test"
+                )
             )
             won = await repo.create_opportunity(
                 Opportunity(
@@ -823,7 +842,9 @@ class TestWorkspaceRepository:
             funnel = await repo.opportunity_funnel(
                 tenant_id=tenant_a, scope=DataScope.ALL, user_id=None, team_id=None
             )
-            funnel_map = {(stage, currency): (count, amount) for stage, currency, count, amount in funnel}
+            funnel_map = {
+                (stage, currency): (count, amount) for stage, currency, count, amount in funnel
+            }
             assert (OpportunityStage.WON, "USD") in funnel_map
             assert funnel_map[(OpportunityStage.WON, "USD")] == (1, Decimal("10000.0000"))
             assert funnel_map[(OpportunityStage.PROSPECTING, "EUR")] == (1, Decimal("2500.0000"))

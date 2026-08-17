@@ -60,7 +60,15 @@ if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.ports import CrmWorkspaceRepositoryPort
 
-_ACTIVITY_KIND_MUTABLE = {"kind", "subject", "description", "due_at", "notes", "owner_id", "team_id"}
+_ACTIVITY_KIND_MUTABLE = {
+    "kind",
+    "subject",
+    "description",
+    "due_at",
+    "notes",
+    "owner_id",
+    "team_id",
+}
 
 
 @dataclass(frozen=True)
@@ -161,9 +169,7 @@ class CrmWorkspaceService:
     ) -> Contact:
         await self._require_customer(customer_id, tenant_id=tenant_id)
         if not any((first_name, last_name, email)):
-            raise ValidationError(
-                "A contact needs at least one of first name, last name, or email"
-            )
+            raise ValidationError("A contact needs at least one of first name, last name, or email")
         contact = Contact(
             tenant_id=tenant_id,
             customer_id=customer_id,
@@ -297,9 +303,7 @@ class CrmWorkspaceService:
             raise ValidationError("Activity subject is required")
         if due_at is not None and due_at.tzinfo is None:
             raise ValidationError("Activity due date must include a timezone")
-        await self._require_anchor(
-            entity_type, entity_id, tenant_id=tenant_id
-        )
+        await self._require_anchor(entity_type, entity_id, tenant_id=tenant_id)
         activity = Activity(
             tenant_id=tenant_id,
             kind=kind,
@@ -318,7 +322,11 @@ class CrmWorkspaceService:
             tenant_id=tenant_id,
             action=CRM_ACTIVITY_CREATED,
             target=f"activity:{created.id}",
-            details={"kind": kind.value, "entity_type": entity_type.value, "subject": created.subject},
+            details={
+                "kind": kind.value,
+                "entity_type": entity_type.value,
+                "subject": created.subject,
+            },
         )
         await emit_activity_created(
             activity_id=created.id,
@@ -668,13 +676,17 @@ class CrmWorkspaceService:
         status_counts = await self._repo.lead_status_counts(
             tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
         )
-        by_status = tuple(LeadStatusCount(status=status, count=count) for status, count in status_counts)
+        by_status = tuple(
+            LeadStatusCount(status=status, count=count) for status, count in status_counts
+        )
         lead_total = sum(count for _, count in status_counts)
 
         source_counts = await self._repo.lead_source_counts(
             tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
         )
-        by_source = tuple(LeadSourceCount(source=source, count=count) for source, count in source_counts)
+        by_source = tuple(
+            LeadSourceCount(source=source, count=count) for source, count in source_counts
+        )
 
         funnel = await self._repo.opportunity_funnel(
             tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
@@ -682,10 +694,18 @@ class CrmWorkspaceService:
         terminal = await self._repo.won_lost_counts(
             tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
         )
-        by_stage = tuple(_stage_bucket(stage, currency, count, amount) for stage, currency, count, amount in funnel)
-        open_count = sum(bucket.count for bucket in by_stage if bucket.stage not in _TERMINAL_STAGES)
+        by_stage = tuple(
+            _stage_bucket(stage, currency, count, amount)
+            for stage, currency, count, amount in funnel
+        )
+        open_count = sum(
+            bucket.count for bucket in by_stage if bucket.stage not in _TERMINAL_STAGES
+        )
         open_value = _merge_buckets(
-            value for bucket in by_stage if bucket.stage not in _TERMINAL_STAGES for value in bucket.value
+            value
+            for bucket in by_stage
+            if bucket.stage not in _TERMINAL_STAGES
+            for value in bucket.value
         )
         won_count = 0
         lost_count = 0
@@ -697,7 +717,10 @@ class CrmWorkspaceService:
                 lost_count = count
         won_value = list(
             _merge_buckets(
-                value for bucket in by_stage if bucket.stage is OpportunityStage.WON for value in bucket.value
+                value
+                for bucket in by_stage
+                if bucket.stage is OpportunityStage.WON
+                for value in bucket.value
             )
         )
         win_rate = None
@@ -788,7 +811,9 @@ class CrmWorkspaceService:
     ) -> None:
         """The anchor entity must exist in the tenant before attaching rows to it."""
         if entity_type is CrmEntityType.LEAD:
-            lead = await self._repo.get_lead(entity_id, tenant_id=tenant_id, scope=DataScope.ALL, user_id=None, team_id=None)
+            lead = await self._repo.get_lead(
+                entity_id, tenant_id=tenant_id, scope=DataScope.ALL, user_id=None, team_id=None
+            )
             if lead is None:
                 raise NotFoundError(f"Lead {entity_id} not found")
         elif entity_type is CrmEntityType.OPPORTUNITY:
@@ -846,7 +871,9 @@ class CrmWorkspaceService:
 _TERMINAL_STAGES = frozenset((OpportunityStage.WON, OpportunityStage.LOST))
 
 
-def _activity_windows(status: str | None) -> tuple[datetime | None, datetime | None, datetime | None]:
+def _activity_windows(
+    status: str | None,
+) -> tuple[datetime | None, datetime | None, datetime | None]:
     """UTC day boundaries for the follow-up window filters (None when unused)."""
     if status is None:
         return None, None, None

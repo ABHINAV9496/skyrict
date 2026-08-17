@@ -228,7 +228,13 @@ async def _create_activity(
 ) -> dict[str, Any]:
     response = await client.post(
         _ACTIVITIES_URL,
-        json={"kind": "task", "entity_type": entity_type, "entity_id": entity_id, "subject": subject, **extra},
+        json={
+            "kind": "task",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "subject": subject,
+            **extra,
+        },
         headers=headers,
     )
     assert response.status_code == 201, response.text
@@ -484,7 +490,9 @@ class TestNotes:
         assert note["author_id"] is not None
 
         listed = (
-            await client.get(_NOTES_URL, params={"entity_type": "lead", "entity_id": lead["id"]}, headers=headers)
+            await client.get(
+                _NOTES_URL, params={"entity_type": "lead", "entity_id": lead["id"]}, headers=headers
+            )
         ).json()
         assert any(item["id"] == note["id"] for item in listed["data"])
 
@@ -504,11 +512,15 @@ class TestNotes:
     ) -> None:
         olympus = tenant_headers()
         lead = await _create_lead(client, olympus)
-        note = await _create_note(client, olympus, entity_type="lead", entity_id=lead["id"], body="Private")
+        note = await _create_note(
+            client, olympus, entity_type="lead", entity_id=lead["id"], body="Private"
+        )
 
         globex = tenant_headers("globex")
         listed = (
-            await client.get(_NOTES_URL, params={"entity_type": "lead", "entity_id": lead["id"]}, headers=globex)
+            await client.get(
+                _NOTES_URL, params={"entity_type": "lead", "entity_id": lead["id"]}, headers=globex
+            )
         ).json()
         assert listed["data"] == []
         response = await client.get(f"{_NOTES_URL}/{note['id']}", headers=globex)
@@ -537,9 +549,15 @@ class TestTimeline:
         headers = tenant_headers()
         lead = await _create_lead(client, headers, email=f"merge-{_suffix()}@example.com")
         await _create_activity(
-            client, headers, entity_type="lead", entity_id=lead["id"], subject="Call to schedule demo"
+            client,
+            headers,
+            entity_type="lead",
+            entity_id=lead["id"],
+            subject="Call to schedule demo",
         )
-        await _create_note(client, headers, entity_type="lead", entity_id=lead["id"], body="Prefers email")
+        await _create_note(
+            client, headers, entity_type="lead", entity_id=lead["id"], body="Prefers email"
+        )
 
         items = await _timeline(client, headers, entity_type="lead", entity_id=lead["id"])
         assert "Lead created" in [item["title"] for item in items]
@@ -548,9 +566,7 @@ class TestTimeline:
         # The union is one ordered list, sources interleaved by occurred_at.
         assert {item["source"] for item in items} >= {"event", "activity", "note"}
 
-    async def test_timeline_requires_anchor(
-        self, client: AsyncClient, tenant_headers: Any
-    ) -> None:
+    async def test_timeline_requires_anchor(self, client: AsyncClient, tenant_headers: Any) -> None:
         headers = tenant_headers()
         response = await client.get(
             _TIMELINE_URL,
@@ -614,8 +630,7 @@ class TestOrderOnCustomerTimeline:
 
         items = await _timeline(client, headers, entity_type="customer", entity_id=customer["id"])
         assert any(
-            item["source"] == "event"
-            and item["title"] == f"Order {order['order_number']} created"
+            item["source"] == "event" and item["title"] == f"Order {order['order_number']} created"
             for item in items
         )
         # The anchor is the customer — never an 'order' entity type.
@@ -632,7 +647,9 @@ class TestOverview:
             client, headers, lead["id"], amount="10000.00", currency="USD", probability=80
         )
         await client.post(
-            f"{_CRM}/opportunities/{opportunity['id']}/stage", json={"stage": "won"}, headers=headers
+            f"{_CRM}/opportunities/{opportunity['id']}/stage",
+            json={"stage": "won"},
+            headers=headers,
         )
         await _create_activity(
             client,
@@ -687,9 +704,7 @@ class TestSearch:
         assert ("customer", customer["id"]) in hit_ids
         assert ("contact", contact["id"]) in hit_ids
 
-    async def test_search_type_filter(
-        self, client: AsyncClient, tenant_headers: Any
-    ) -> None:
+    async def test_search_type_filter(self, client: AsyncClient, tenant_headers: Any) -> None:
         headers = tenant_headers()
         tag = _suffix()
         await _create_lead(client, headers, email=f"{tag}-filtered@search.test")
@@ -703,17 +718,13 @@ class TestSearch:
         assert all(hit["entity_type"] == "customer" for hit in hits)
         assert any(hit["entity_id"] == customer["id"] for hit in hits)
 
-    async def test_search_requires_query(
-        self, client: AsyncClient, tenant_headers: Any
-    ) -> None:
+    async def test_search_requires_query(self, client: AsyncClient, tenant_headers: Any) -> None:
         response = await client.get(_SEARCH_URL, params={"q": ""}, headers=tenant_headers())
         assert response.status_code == 422, response.text
 
 
 class TestAuthorization:
-    async def test_unprivileged_gets_403(
-        self, client: AsyncClient, tenant_headers: Any
-    ) -> None:
+    async def test_unprivileged_gets_403(self, client: AsyncClient, tenant_headers: Any) -> None:
         headers = tenant_headers(unprivileged=True)
         response = await client.get(_ACTIVITIES_URL, headers=headers)
         assert response.status_code == 403, response.text

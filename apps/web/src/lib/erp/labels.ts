@@ -7,10 +7,13 @@
  */
 
 import type {
+  ActivityKind,
   CreditCheckResult,
+  CrmEntityType,
   LeadStatus,
   OpportunityStage,
   OrderStatus,
+  TimelineSource,
 } from "@/lib/api/crm-api";
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
@@ -40,6 +43,28 @@ export const CREDIT_CHECK_LABELS: Record<CreditCheckResult, string> = {
   pending: "Credit check pending",
   passed: "Credit check passed",
   failed: "Credit check failed",
+};
+
+export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  task: "Task",
+  call: "Call",
+  meeting: "Meeting",
+  follow_up: "Follow-up",
+  email: "Email",
+  note: "Note",
+};
+
+export const ENTITY_TYPE_LABELS: Record<CrmEntityType, string> = {
+  lead: "Lead",
+  opportunity: "Opportunity",
+  customer: "Customer",
+  contact: "Contact",
+};
+
+export const TIMELINE_SOURCE_LABELS: Record<TimelineSource, string> = {
+  activity: "Activity",
+  note: "Note",
+  event: "Event",
 };
 
 const NEUTRAL_BADGE = "bg-muted text-muted-foreground ring-1 ring-border";
@@ -104,4 +129,52 @@ export function creditCheckBadgeClass(result: CreditCheckResult): string {
     case "failed":
       return RED_BADGE;
   }
+}
+
+export function activityKindBadgeClass(kind: ActivityKind): string {
+  switch (kind) {
+    case "task":
+      return SKY_BADGE;
+    case "call":
+      return VIOLET_BADGE;
+    case "meeting":
+      return AMBER_BADGE;
+    case "follow_up":
+      return EMERALD_BADGE;
+    case "email":
+      return NEUTRAL_BADGE;
+    case "note":
+      return NEUTRAL_BADGE;
+  }
+}
+
+export function timelineSourceBadgeClass(source: TimelineSource): string {
+  switch (source) {
+    case "event":
+      return VIOLET_BADGE;
+    case "activity":
+      return SKY_BADGE;
+    case "note":
+      return NEUTRAL_BADGE;
+  }
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  "lead.created": "Lead created",
+  "lead.status_changed": "Lead status changed",
+  "lead.qualified": "Lead qualified",
+  "lead.disqualified": "Lead disqualified",
+  "opportunity.stage_changed": "Opportunity stage changed",
+  "opportunity.won": "Opportunity won",
+  "opportunity.lost": "Opportunity lost",
+  "customer.created": "Customer created",
+  "order.created": "Order created",
+  "contact.created": "Contact added",
+  "contact.deactivated": "Contact deactivated",
+};
+
+/** Human label for a timeline event kind (e.g. `opportunity.won` → "Opportunity won"). */
+export function timelineEventLabel(kind: string | null): string {
+  if (!kind) return "Event";
+  return EVENT_LABELS[kind] ?? (kind.replaceAll(".", " ").replace(/\b\w/g, (c) => c.toUpperCase()));
 }

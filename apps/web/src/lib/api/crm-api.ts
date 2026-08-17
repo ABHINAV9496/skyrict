@@ -11,7 +11,7 @@
  * BFF so the tenant slug stays server-derived and token refresh keeps working.
  */
 
-import { apiFetch, apiFetchEnvelope, apiPost } from "@/lib/api/http";
+import { apiFetch, apiFetchEnvelope, apiPatch, apiPost } from "@/lib/api/http";
 
 // ---------------------------------------------------------------------------
 // Domain enums (mirror `core.domain.value_objects`)
@@ -27,6 +27,22 @@ export type OpportunityStage =
   | "lost";
 export type OrderStatus = "draft" | "confirmed" | "fulfilled" | "cancelled";
 export type CreditCheckResult = "pending" | "passed" | "failed";
+
+/** The unified activity catalog — follow-ups are `follow_up` rows, not a model. */
+export type ActivityKind = "task" | "call" | "meeting" | "follow_up" | "email" | "note";
+
+/** CRM anchor entity types for activities, notes, and the timeline. */
+export type CrmEntityType = "lead" | "opportunity" | "customer" | "contact";
+
+/**
+ * Follow-up window labels the backend resolves to SQL on `due_at`/`completed_at`.
+ * `open` is the catch-all "not completed"; `today`/`overdue`/`upcoming` narrow
+ * it by due date; `completed` is everything with a completion timestamp.
+ */
+export type ActivityStatus = "open" | "overdue" | "today" | "upcoming" | "completed";
+
+/** Merged timeline row provenance — the DB-layer UNION branch that emitted it. */
+export type TimelineSource = "activity" | "note" | "event";
 
 // ---------------------------------------------------------------------------
 // Wire payloads (snake_case, defensive like identity-api.ts)
@@ -133,6 +149,99 @@ interface ProductPayload {
   is_active?: unknown;
 }
 
+interface ContactPayload {
+  id?: unknown;
+  tenant_id?: unknown;
+  customer_id?: unknown;
+  first_name?: unknown;
+  last_name?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  job_title?: unknown;
+  is_primary?: unknown;
+  is_active?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
+interface ActivityPayload {
+  id?: unknown;
+  tenant_id?: unknown;
+  kind?: unknown;
+  entity_type?: unknown;
+  entity_id?: unknown;
+  subject?: unknown;
+  description?: unknown;
+  due_at?: unknown;
+  completed_at?: unknown;
+  completed_by?: unknown;
+  notes?: unknown;
+  owner_id?: unknown;
+  team_id?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
+interface NotePayload {
+  id?: unknown;
+  tenant_id?: unknown;
+  entity_type?: unknown;
+  entity_id?: unknown;
+  body?: unknown;
+  author_id?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
+interface TimelineItemPayload {
+  source?: unknown;
+  id?: unknown;
+  entity_type?: unknown;
+  entity_id?: unknown;
+  kind?: unknown;
+  title?: unknown;
+  body?: unknown;
+  actor_id?: unknown;
+  occurred_at?: unknown;
+}
+
+interface MoneyBucketPayload {
+  currency?: unknown;
+  amount?: unknown;
+}
+
+interface LeadStatusCountPayload {
+  status?: unknown;
+  count?: unknown;
+}
+
+interface LeadSourceCountPayload {
+  source?: unknown;
+  count?: unknown;
+}
+
+interface StageBucketPayload {
+  stage?: unknown;
+  count?: unknown;
+  value?: unknown;
+}
+
+interface CrmOverviewPayload {
+  leads?: unknown;
+  opportunities?: unknown;
+  customers?: unknown;
+  activities?: unknown;
+  recent_won?: unknown;
+  top_opportunities?: unknown;
+}
+
+interface SearchHitPayload {
+  entity_type?: unknown;
+  entity_id?: unknown;
+  title?: unknown;
+  subtitle?: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Domain models (what the UI consumes)
 // ---------------------------------------------------------------------------
@@ -230,6 +339,101 @@ export interface OpportunityStageChange {
   customer: Customer | null;
 }
 
+export interface Contact {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  jobTitle: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface Activity {
+  id: string;
+  tenantId: string;
+  kind: ActivityKind;
+  entityType: CrmEntityType;
+  entityId: string;
+  subject: string;
+  description: string | null;
+  dueAt: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  notes: string | null;
+  ownerId: string | null;
+  teamId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CrmNote {
+  id: string;
+  tenantId: string;
+  entityType: CrmEntityType;
+  entityId: string;
+  body: string;
+  authorId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface TimelineItem {
+  source: TimelineSource;
+  id: string;
+  entityType: CrmEntityType;
+  entityId: string;
+  kind: string | null;
+  title: string | null;
+  body: string | null;
+  actorId: string | null;
+  occurredAt: string;
+}
+
+export interface MoneyBucket {
+  currency: string;
+  amount: string | null;
+}
+
+export interface StageBucket {
+  stage: OpportunityStage;
+  count: number;
+  value: MoneyBucket[];
+}
+
+export interface CrmOverview {
+  leads: {
+    total: number;
+    byStatus: { status: LeadStatus; count: number }[];
+    bySource: { source: string | null; count: number }[];
+  };
+  opportunities: {
+    openCount: number;
+    openValue: MoneyBucket[];
+    byStage: StageBucket[];
+    wonCount: number;
+    wonValue: MoneyBucket[];
+    lostCount: number;
+    winRate: number | null;
+  };
+  customers: { total: number; active: number };
+  activities: { today: number; overdue: number; upcoming: number; completed30d: number };
+  recentWon: Opportunity[];
+  topOpportunities: Opportunity[];
+}
+
+export interface SearchHit {
+  entityType: CrmEntityType;
+  entityId: string;
+  title: string;
+  subtitle: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Input shapes
 // ---------------------------------------------------------------------------
@@ -263,6 +467,43 @@ export interface CustomerInput {
 export interface OrderLineInput {
   productId: string;
   quantity: string;
+}
+
+export interface ContactInput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  jobTitle?: string;
+  isPrimary?: boolean;
+}
+
+export interface ActivityInput {
+  kind: ActivityKind;
+  entityType: CrmEntityType;
+  entityId: string;
+  subject: string;
+  description?: string;
+  dueAt?: string;
+  notes?: string;
+  ownerId?: string;
+  teamId?: string;
+}
+
+export interface ActivityUpdateInput {
+  kind?: ActivityKind;
+  subject?: string;
+  description?: string;
+  dueAt?: string;
+  notes?: string;
+  ownerId?: string;
+  teamId?: string;
+}
+
+export interface NoteInput {
+  entityType: CrmEntityType;
+  entityId: string;
+  body: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +640,156 @@ function mapProduct(raw: ProductPayload): Product {
   };
 }
 
+function mapContact(raw: ContactPayload): Contact {
+  return {
+    id: String(raw.id ?? ""),
+    tenantId: String(raw.tenant_id ?? ""),
+    customerId: String(raw.customer_id ?? ""),
+    firstName: optionalString(raw.first_name),
+    lastName: optionalString(raw.last_name),
+    email: optionalString(raw.email),
+    phone: optionalString(raw.phone),
+    jobTitle: optionalString(raw.job_title),
+    isPrimary: raw.is_primary === true,
+    isActive: raw.is_active !== false,
+    createdAt: optionalString(raw.created_at),
+    updatedAt: optionalString(raw.updated_at),
+  };
+}
+
+function mapActivity(raw: ActivityPayload): Activity {
+  return {
+    id: String(raw.id ?? ""),
+    tenantId: String(raw.tenant_id ?? ""),
+    kind: (String(raw.kind ?? "task") as ActivityKind) || "task",
+    entityType: (String(raw.entity_type ?? "customer") as CrmEntityType) || "customer",
+    entityId: String(raw.entity_id ?? ""),
+    subject: String(raw.subject ?? ""),
+    description: optionalString(raw.description),
+    dueAt: optionalString(raw.due_at),
+    completedAt: optionalString(raw.completed_at),
+    completedBy: optionalString(raw.completed_by),
+    notes: optionalString(raw.notes),
+    ownerId: optionalString(raw.owner_id),
+    teamId: optionalString(raw.team_id),
+    createdAt: optionalString(raw.created_at),
+    updatedAt: optionalString(raw.updated_at),
+  };
+}
+
+function mapNote(raw: NotePayload): CrmNote {
+  return {
+    id: String(raw.id ?? ""),
+    tenantId: String(raw.tenant_id ?? ""),
+    entityType: (String(raw.entity_type ?? "customer") as CrmEntityType) || "customer",
+    entityId: String(raw.entity_id ?? ""),
+    body: String(raw.body ?? ""),
+    authorId: optionalString(raw.author_id),
+    createdAt: optionalString(raw.created_at),
+    updatedAt: optionalString(raw.updated_at),
+  };
+}
+
+function mapTimelineItem(raw: TimelineItemPayload): TimelineItem {
+  const source = (String(raw.source ?? "event") as TimelineSource) || "event";
+  return {
+    source,
+    id: String(raw.id ?? ""),
+    entityType: (String(raw.entity_type ?? "customer") as CrmEntityType) || "customer",
+    entityId: String(raw.entity_id ?? ""),
+    kind: optionalString(raw.kind),
+    title: optionalString(raw.title),
+    body: optionalString(raw.body),
+    actorId: optionalString(raw.actor_id),
+    occurredAt: String(raw.occurred_at ?? ""),
+  };
+}
+
+function mapBucket(raw: MoneyBucketPayload): MoneyBucket {
+  return {
+    currency: String(raw.currency ?? "USD"),
+    amount: amountString(raw.amount),
+  };
+}
+
+function mapOverview(raw: CrmOverviewPayload): CrmOverview {
+  const leads = (raw.leads ?? {}) as Record<string, unknown>;
+  const opportunities = (raw.opportunities ?? {}) as Record<string, unknown>;
+  const customers = (raw.customers ?? {}) as Record<string, unknown>;
+  const activities = (raw.activities ?? {}) as Record<string, unknown>;
+
+  const byStatus = (Array.isArray(leads.by_status) ? leads.by_status : []).map(
+    (item) => item as LeadStatusCountPayload,
+  );
+  const bySource = (Array.isArray(leads.by_source) ? leads.by_source : []).map(
+    (item) => item as LeadSourceCountPayload,
+  );
+  const byStage = (Array.isArray(opportunities.by_stage) ? opportunities.by_stage : []).map(
+    (item) => item as StageBucketPayload,
+  );
+  const recentWon = (Array.isArray(raw.recent_won) ? raw.recent_won : []).map((item) =>
+    mapOpportunity(item as OpportunityPayload),
+  );
+  const topOpportunities = (Array.isArray(raw.top_opportunities) ? raw.top_opportunities : [])
+    .map((item) => mapOpportunity(item as OpportunityPayload));
+
+  return {
+    leads: {
+      total: Number(leads.total ?? 0),
+      byStatus: byStatus.map((item) => ({
+        status: (String(item.status ?? "new") as LeadStatus) || "new",
+        count: Number(item.count ?? 0),
+      })),
+      bySource: bySource.map((item) => ({
+        source: optionalString(item.source),
+        count: Number(item.count ?? 0),
+      })),
+    },
+    opportunities: {
+      openCount: Number(opportunities.open_count ?? 0),
+      openValue: (Array.isArray(opportunities.open_value) ? opportunities.open_value : []).map(
+        (item) => mapBucket(item as MoneyBucketPayload),
+      ),
+      byStage: byStage.map((item) => ({
+        stage: (String(item.stage ?? "prospecting") as OpportunityStage) || "prospecting",
+        count: Number(item.count ?? 0),
+        value: (Array.isArray(item.value) ? item.value : []).map((bucket) =>
+          mapBucket(bucket as MoneyBucketPayload),
+        ),
+      })),
+      wonCount: Number(opportunities.won_count ?? 0),
+      wonValue: (Array.isArray(opportunities.won_value) ? opportunities.won_value : []).map(
+        (item) => mapBucket(item as MoneyBucketPayload),
+      ),
+      lostCount: Number(opportunities.lost_count ?? 0),
+      winRate:
+        typeof opportunities.win_rate === "number" && Number.isFinite(opportunities.win_rate)
+          ? (opportunities.win_rate as number)
+          : opportunities.win_rate === null || opportunities.win_rate === undefined
+            ? null
+            : Number(String(opportunities.win_rate)),
+    },
+    customers: { total: Number(customers.total ?? 0), active: Number(customers.active ?? 0) },
+    activities: {
+      today: Number(activities.today ?? 0),
+      overdue: Number(activities.overdue ?? 0),
+      upcoming: Number(activities.upcoming ?? 0),
+      completed30d: Number(activities.completed_30d ?? 0),
+    },
+    recentWon,
+    topOpportunities,
+  };
+}
+
+function mapSearchHit(raw: SearchHitPayload): SearchHit {
+  return {
+    entityType: (String(raw.entity_type ?? "customer") as CrmEntityType) || "customer",
+    entityId: String(raw.entity_id ?? ""),
+    title: String(raw.title ?? ""),
+    subtitle: optionalString(raw.subtitle),
+  };
+}
+
 function mapList<T>(payload: { data?: unknown; meta?: unknown } | null, map: (raw: never) => T): ListResponse<T> {
   const data = Array.isArray(payload?.data) ? payload.data : [];
   const metaPayload = (payload?.meta ?? {}) as Record<string, unknown>;
@@ -482,6 +873,11 @@ export async function listOpportunities(
     `/api/v1/crm/opportunities${listQuery({ ...params })}`,
   );
   return mapList(raw, mapOpportunity);
+}
+
+export async function getOpportunity(opportunityId: string): Promise<Opportunity> {
+  const raw = await apiFetch<OpportunityPayload>(`/api/v1/crm/opportunities/${opportunityId}`);
+  return mapOpportunity(raw ?? {});
 }
 
 export async function changeOpportunityStage(
@@ -638,4 +1034,229 @@ export async function listProducts(params: ListProductsParams = {}): Promise<Lis
     `/api/v1/inventory/products${listQuery({ ...params })}`,
   );
   return mapList(raw, mapProduct);
+}
+
+// ---------------------------------------------------------------------------
+// Contacts
+// ---------------------------------------------------------------------------
+
+export interface ListContactsParams {
+  customerId?: string;
+  includeInactive?: boolean;
+  offset?: number;
+  limit?: number;
+}
+
+export async function listContacts(
+  params: ListContactsParams = {},
+): Promise<ListResponse<Contact>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/contacts${listQuery({
+      customer_id: params.customerId,
+      include_inactive: params.includeInactive,
+      offset: params.offset,
+      limit: params.limit,
+    })}`,
+  );
+  return mapList(raw, mapContact);
+}
+
+export async function createContact(customerId: string, input: ContactInput): Promise<Contact> {
+  const raw = await apiPost<ContactPayload>(`/api/v1/crm/customers/${customerId}/contacts`, {
+    first_name: input.firstName || null,
+    last_name: input.lastName || null,
+    email: input.email || null,
+    phone: input.phone || null,
+    job_title: input.jobTitle || null,
+    is_primary: input.isPrimary ?? false,
+  });
+  return mapContact(raw ?? {});
+}
+
+export async function getContact(contactId: string): Promise<Contact> {
+  const raw = await apiFetch<ContactPayload>(`/api/v1/crm/contacts/${contactId}`);
+  return mapContact(raw ?? {});
+}
+
+export async function updateContact(
+  contactId: string,
+  changes: Partial<ContactInput>,
+): Promise<Contact> {
+  const raw = await apiPatch<ContactPayload>(`/api/v1/crm/contacts/${contactId}`, {
+    first_name: changes.firstName ?? null,
+    last_name: changes.lastName ?? null,
+    email: changes.email ?? null,
+    phone: changes.phone ?? null,
+    job_title: changes.jobTitle ?? null,
+    is_primary: changes.isPrimary ?? null,
+  });
+  return mapContact(raw ?? {});
+}
+
+export async function deactivateContact(contactId: string): Promise<Contact> {
+  const raw = await apiFetch<ContactPayload>(`/api/v1/crm/contacts/${contactId}`, {
+    method: "DELETE",
+  });
+  return mapContact(raw ?? {});
+}
+
+// ---------------------------------------------------------------------------
+// Activities (the unified follow-up catalog)
+// ---------------------------------------------------------------------------
+
+export interface ListActivitiesParams {
+  entityType?: CrmEntityType;
+  entityId?: string;
+  kind?: ActivityKind;
+  status?: ActivityStatus;
+  assigneeId?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export async function listActivities(
+  params: ListActivitiesParams = {},
+): Promise<ListResponse<Activity>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/activities${listQuery({
+      entity_type: params.entityType,
+      entity_id: params.entityId,
+      kind: params.kind,
+      status: params.status,
+      assignee_id: params.assigneeId,
+      offset: params.offset,
+      limit: params.limit,
+    })}`,
+  );
+  return mapList(raw, mapActivity);
+}
+
+export async function createActivity(input: ActivityInput): Promise<Activity> {
+  const raw = await apiPost<ActivityPayload>("/api/v1/crm/activities", {
+    kind: input.kind,
+    entity_type: input.entityType,
+    entity_id: input.entityId,
+    subject: input.subject,
+    description: input.description || null,
+    due_at: input.dueAt || null,
+    notes: input.notes || null,
+    owner_id: input.ownerId || null,
+    team_id: input.teamId || null,
+  });
+  return mapActivity(raw ?? {});
+}
+
+export async function updateActivity(
+  activityId: string,
+  changes: ActivityUpdateInput,
+): Promise<Activity> {
+  const raw = await apiPatch<ActivityPayload>(`/api/v1/crm/activities/${activityId}`, {
+    kind: changes.kind ?? null,
+    subject: changes.subject ?? null,
+    description: changes.description ?? null,
+    due_at: changes.dueAt ?? null,
+    notes: changes.notes ?? null,
+    owner_id: changes.ownerId ?? null,
+    team_id: changes.teamId ?? null,
+  });
+  return mapActivity(raw ?? {});
+}
+
+export async function completeActivity(activityId: string): Promise<Activity> {
+  const raw = await apiPost<ActivityPayload>(`/api/v1/crm/activities/${activityId}/complete`, {});
+  return mapActivity(raw ?? {});
+}
+
+export async function deleteActivity(activityId: string): Promise<Activity> {
+  const raw = await apiFetch<ActivityPayload>(`/api/v1/crm/activities/${activityId}`, {
+    method: "DELETE",
+  });
+  return mapActivity(raw ?? {});
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+export interface ListNotesParams {
+  entityType?: CrmEntityType;
+  entityId?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export async function listNotes(params: ListNotesParams = {}): Promise<ListResponse<CrmNote>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/notes${listQuery({
+      entity_type: params.entityType,
+      entity_id: params.entityId,
+      offset: params.offset,
+      limit: params.limit,
+    })}`,
+  );
+  return mapList(raw, mapNote);
+}
+
+export async function createNote(input: NoteInput): Promise<CrmNote> {
+  const raw = await apiPost<NotePayload>("/api/v1/crm/notes", {
+    entity_type: input.entityType,
+    entity_id: input.entityId,
+    body: input.body,
+  });
+  return mapNote(raw ?? {});
+}
+
+export async function deleteNote(noteId: string): Promise<CrmNote> {
+  const raw = await apiFetch<NotePayload>(`/api/v1/crm/notes/${noteId}`, { method: "DELETE" });
+  return mapNote(raw ?? {});
+}
+
+// ---------------------------------------------------------------------------
+// Timeline (merged activities + notes + business events)
+// ---------------------------------------------------------------------------
+
+export interface ListTimelineParams {
+  offset?: number;
+  limit?: number;
+}
+
+export async function listTimeline(
+  entityType: CrmEntityType,
+  entityId: string,
+  params: ListTimelineParams = {},
+): Promise<ListResponse<TimelineItem>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/timeline${listQuery({
+      entity_type: entityType,
+      entity_id: entityId,
+      offset: params.offset,
+      limit: params.limit,
+    })}`,
+  );
+  return mapList(raw, mapTimelineItem);
+}
+
+// ---------------------------------------------------------------------------
+// Overview + search
+// ---------------------------------------------------------------------------
+
+export async function getCrmOverview(): Promise<CrmOverview> {
+  const raw = await apiFetch<CrmOverviewPayload>("/api/v1/crm/overview");
+  return mapOverview(raw ?? {});
+}
+
+export interface SearchCrmParams {
+  type?: CrmEntityType;
+  offset?: number;
+  limit?: number;
+}
+
+export async function searchCrm(
+  q: string,
+  params: SearchCrmParams = {},
+): Promise<ListResponse<SearchHit>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/search${listQuery({ q, type: params.type, offset: params.offset, limit: params.limit })}`,
+  );
+  return mapList(raw, mapSearchHit);
 }

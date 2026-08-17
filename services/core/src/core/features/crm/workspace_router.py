@@ -449,6 +449,24 @@ async def get_timeline(
     )
 
 
+@router.get("/timeline/recent", response_model=ListResponse[TimelineItemResponse])
+async def get_recent_timeline(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: dict[str, Any] = Depends(_require_crm_read),
+    svc: CrmWorkspaceService = Depends(get_crm_workspace_service),
+) -> ListResponse[TimelineItemResponse]:
+    items = await svc.get_global_timeline(
+        tenant_id=_tenant_id(current_user),
+        offset=offset,
+        limit=limit,
+    )
+    return ListResponse(
+        data=[_timeline_item_out(item) for item in items],
+        meta=PaginationMeta.create(total=len(items), page=1, page_size=limit),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Overview + search
 # ---------------------------------------------------------------------------

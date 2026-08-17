@@ -1249,6 +1249,20 @@ class CrmRepository:
         result = await self.session.execute(stmt.offset(offset).limit(limit))
         return [_timeline_item_from_row(row) for row in result.mappings().all()], total
 
+    async def get_global_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> list[TimelineItem]:
+        """Recent CRM activity across all entities — dashboard feed."""
+        union = _global_timeline_union(tenant_id)
+        merged = union.subquery()
+        stmt = select(merged).order_by(merged.c.occurred_at.desc(), merged.c.id.desc())
+        result = await self.session.execute(stmt.offset(offset).limit(limit))
+        return [_timeline_item_from_row(row) for row in result.mappings().all()]
+
     async def record_timeline_event(
         self,
         *,
@@ -1855,6 +1869,53 @@ def _timeline_union(
         ErpCrmTimelineEventModel.entity_type == entity_type,
         ErpCrmTimelineEventModel.entity_id == entity_id,
     )
+    return activities.union_all(notes, events)
+
+
+def _global_timeline_union(
+    tenant_id: uuid.UUID,
+) -> Any:
+    """UNION ALL over all CRM activity sources for the dashboard feed.
+
+    Unlike :func:`_timeline_union`, this has no entity filters — it returns
+    recent activity across the entire tenant, ordered by ``occurred_at DESC``.
+    """
+    activities = select(
+        literal("activity").label("source"),
+        ErpCrmActivityModel.id.label("id"),
+        ErpCrmActivityModel.tenant_id.label("tenant_id"),
+        cast(ErpCrmActivityModel.entity_type, String).label("entity_type"),
+        ErpCrmActivityModel.entity_id.label("entity_id"),
+        cast(ErpCrmActivityModel.kind, String).label("kind"),
+        ErpCrmActivityModel.subject.label("title"),
+        func.coalesce(ErpCrmActivityModel.notes, ErpCrmActivityModel.description).label("body"),
+        ErpCrmActivityModel.completed_by.label("actor_id"),
+        ErpCrmActivityModel.created_at.label("occurred_at"),
+    ).where(ErpCrmActivityModel.tenant_id == tenant_id)
+    notes = select(
+        literal("note").label("source"),
+        ErpCrmNoteModel.id.label("id"),
+        ErpCrmNoteModel.tenant_id.label("tenant_id"),
+        cast(ErpCrmNoteModel.entity_type, String).label("entity_type"),
+        ErpCrmNoteModel.entity_id.label("entity_id"),
+        cast(None, String).label("kind"),
+        cast(None, String).label("title"),
+        ErpCrmNoteModel.body.label("body"),
+        ErpCrmNoteModel.author_id.label("actor_id"),
+        ErpCrmNoteModel.created_at.label("occurred_at"),
+    ).where(ErpCrmNoteModel.tenant_id == tenant_id)
+    events = select(
+        literal("event").label("source"),
+        ErpCrmTimelineEventModel.id.label("id"),
+        ErpCrmTimelineEventModel.tenant_id.label("tenant_id"),
+        cast(ErpCrmTimelineEventModel.entity_type, String).label("entity_type"),
+        ErpCrmTimelineEventModel.entity_id.label("entity_id"),
+        cast(ErpCrmTimelineEventModel.event_type, String).label("kind"),
+        ErpCrmTimelineEventModel.title.label("title"),
+        cast(None, String).label("body"),
+        ErpCrmTimelineEventModel.actor_id.label("actor_id"),
+        ErpCrmTimelineEventModel.created_at.label("occurred_at"),
+    ).where(ErpCrmTimelineEventModel.tenant_id == tenant_id)
     return activities.union_all(notes, events)
 
 

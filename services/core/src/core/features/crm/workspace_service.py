@@ -633,6 +633,20 @@ class CrmWorkspaceService:
             limit=limit,
         )
 
+    async def get_global_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> list[TimelineItem]:
+        """Recent CRM activity across all entities — dashboard feed."""
+        return await self._repo.get_global_timeline(
+            tenant_id=tenant_id,
+            offset=offset,
+            limit=limit,
+        )
+
     # ------------------------------------------------------------------
     # Overview + search
     # ------------------------------------------------------------------

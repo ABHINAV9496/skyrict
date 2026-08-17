@@ -47,7 +47,14 @@ from core.audit_events import (
 from core.core.exceptions import IllegalStateTransitionError
 from core.core.tenant_context import TenantContext
 from core.domain.entities import Customer, Lead, Opportunity
-from core.domain.value_objects import DataScope, LeadStatus, Money, OpportunityStage
+from core.domain.value_objects import (
+    CrmEntityType,
+    CrmTimelineEventType,
+    DataScope,
+    LeadStatus,
+    Money,
+    OpportunityStage,
+)
 from core.events.producers.crm_events import (
     emit_customer_created,
     emit_lead_created,
@@ -60,7 +67,7 @@ from skyrict_common.exceptions import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
-    from core.features.crm.ports import CrmRepositoryPort
+    from core.features.crm.ports import CrmRepositoryPort, CrmTimelinePort
 
 _CUST_CODE_PREFIX = "CUST"
 
@@ -77,9 +84,15 @@ def _promote_from_lead(lead: Lead) -> str:
 class CrmService:
     """Implements the CRM business rules over :class:`CrmRepositoryPort`."""
 
-    def __init__(self, repository: CrmRepositoryPort, audit: AuditService) -> None:
+    def __init__(
+        self,
+        repository: CrmRepositoryPort,
+        audit: AuditService,
+        timeline: CrmTimelinePort,
+    ) -> None:
         self._repo = repository
         self._audit_service = audit
+        self._timeline = timeline
 
     # ------------------------------------------------------------------
     # Leads
@@ -129,6 +142,14 @@ class CrmService:
             details={"source": source, "email": email},
         )
         await emit_lead_created(lead_id=created.id, tenant_id=tenant_id, source=source, email=email)
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.LEAD,
+            entity_id=created.id,
+            event_type=CrmTimelineEventType.LEAD_CREATED,
+            title="Lead created",
+            payload={"source": source, "email": email},
+        )
         return created
 
     async def get_lead(
@@ -316,6 +337,14 @@ class CrmService:
             target=f"opportunity:{created.id}",
             details={"lead_id": str(lead_id), "name": created.name},
         )
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.LEAD,
+            entity_id=lead_id,
+            event_type=CrmTimelineEventType.LEAD_QUALIFIED,
+            title="Lead qualified",
+            payload={"opportunity_id": str(created.id), "name": created.name},
+        )
         return created
 
     async def disqualify_lead(
@@ -357,6 +386,13 @@ class CrmService:
             tenant_id=tenant_id,
             from_status=lead.status.value,
             to_status=LeadStatus.DISQUALIFIED.value,
+        )
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.LEAD,
+            entity_id=lead_id,
+            event_type=CrmTimelineEventType.LEAD_DISQUALIFIED,
+            title="Lead disqualified",
         )
         return updated
 
@@ -612,6 +648,30 @@ class CrmService:
                 from_stage=opportunity.stage.value,
                 to_stage=stage.value,
             )
+
+        if won:
+            event_type = CrmTimelineEventType.OPPORTUNITY_WON
+            timeline_title = "Opportunity won"
+            payload: dict[str, object] = {"from_stage": opportunity.stage.value}
+            if updated.amount is not None:
+                payload["amount"] = str(updated.amount.amount)
+                payload["currency"] = updated.amount.currency
+        elif lost:
+            event_type = CrmTimelineEventType.OPPORTUNITY_LOST
+            timeline_title = "Opportunity lost"
+            payload = {"from_stage": opportunity.stage.value, "lost_reason": lost_reason}
+        else:
+            event_type = CrmTimelineEventType.OPPORTUNITY_STAGE_CHANGED
+            timeline_title = f"Opportunity moved to {stage.value}"
+            payload = {"from_stage": opportunity.stage.value, "to_stage": stage.value}
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.OPPORTUNITY,
+            entity_id=opportunity_id,
+            event_type=event_type,
+            title=timeline_title,
+            payload=payload,
+        )
         return updated, customer
 
     async def _promote_to_customer(
@@ -662,6 +722,14 @@ class CrmService:
             tenant_id=tenant_id,
             name=created.name,
         )
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.CUSTOMER,
+            entity_id=created.id,
+            event_type=CrmTimelineEventType.CUSTOMER_CREATED,
+            title="Customer created",
+            payload={"customer_code": customer_code, "opportunity_id": str(opportunity.id)},
+        )
         return created
 
     # ------------------------------------------------------------------
@@ -702,6 +770,14 @@ class CrmService:
             customer_code=customer_code,
             tenant_id=tenant_id,
             name=created.name,
+        )
+        await self._record_timeline(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.CUSTOMER,
+            entity_id=created.id,
+            event_type=CrmTimelineEventType.CUSTOMER_CREATED,
+            title="Customer created",
+            payload={"customer_code": customer_code},
         )
         return created
 
@@ -780,6 +856,27 @@ class CrmService:
     # ------------------------------------------------------------------
     # Internal audit helper
     # ------------------------------------------------------------------
+
+    async def _record_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType,
+        entity_id: uuid.UUID,
+        event_type: CrmTimelineEventType,
+        title: str,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        """Append a business event to the curated timeline (same transaction)."""
+        await self._timeline.record_timeline_event(
+            tenant_id=tenant_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=event_type,
+            title=title,
+            actor_id=TenantContext.get_user_id(),
+            payload=payload,
+        )
 
     async def _audit(
         self,

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
+    from core.features.crm.workspace_service import CrmWorkspaceService
     from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -339,13 +340,34 @@ def get_crm_service(
     db: AsyncSession = Depends(get_db),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> CrmService:
-    """Composition root for the CRM feature."""
+    """Composition root for the CRM feature.
+
+    ``CrmRepository`` backs the CrmRepositoryPort (leads/opportunities/
+    customers) AND the CrmTimelinePort (curated timeline writes) — so the
+    repository instance is shared, not rebuilt, across the two roles.
+    """
     from core.db.sequence_repository import SequenceRepository
     from core.features.crm.repository import CrmRepository
     from core.features.crm.service import CrmService
 
+    crm_repo = CrmRepository(db, next_sequence=SequenceRepository(db).next_value)
     return CrmService(
-        repository=CrmRepository(db, next_sequence=SequenceRepository(db).next_value),
+        repository=crm_repo,
+        audit=audit_service,
+        timeline=crm_repo,
+    )
+
+
+def get_crm_workspace_service(
+    db: AsyncSession = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> CrmWorkspaceService:
+    """Composition root for the CRM workspace surface."""
+    from core.features.crm.repository import CrmRepository
+    from core.features.crm.workspace_service import CrmWorkspaceService
+
+    return CrmWorkspaceService(
+        repository=CrmRepository(db),
         audit=audit_service,
     )
 
@@ -359,10 +381,12 @@ def get_sales_service(
 
     Wires every port the service depends on without importing another feature
     module: the sales repository (with the shared per-tenant sequence), CRM's
-    repository as the customer port, inventory's repository for product and
-    warehouse resolution, inventory's service as the whole-order stock
-    lifecycle port, and finance's service as the invoicing port (so an order's
-    fulfilment creates the invoice in the same request transaction).
+    repository as the customer port AND the timeline port (an order creation
+    appends its business event to the customer's timeline), inventory's
+    repository for product and warehouse resolution, inventory's service as
+    the whole-order stock lifecycle port, and finance's service as the
+    invoicing port (so an order's fulfilment creates the invoice in the same
+    request transaction).
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.crm.repository import CrmRepository
@@ -371,12 +395,14 @@ def get_sales_service(
     from core.features.sales.service import SalesService
 
     inventory_repo = InventoryRepository(db)
+    crm_repo = CrmRepository(db)
     return SalesService(
         repository=SalesRepository(db, next_sequence=SequenceRepository(db).next_value),
-        customers=CrmRepository(db),
+        customers=crm_repo,
         stock=InventoryService(inventory_repo, audit_service),
         products=inventory_repo,
         warehouses=inventory_repo,
         invoice=finance,
         audit=audit_service,
+        timeline=crm_repo,
     )

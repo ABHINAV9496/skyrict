@@ -3,7 +3,6 @@ import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 import { PayrollOverview } from "./payroll-overview";
-import { PayrollSetup } from "./payroll-setup";
 
 export default function PayrollHomePage() {
   return (
@@ -14,7 +13,6 @@ export default function PayrollHomePage() {
           description="Pay everyone on time — runs, compensation, and rules."
           icon={Receipt}
         />
-        <PayrollSetup />
         <PayrollOverview />
       </div>
     </ModuleAccessBoundary>

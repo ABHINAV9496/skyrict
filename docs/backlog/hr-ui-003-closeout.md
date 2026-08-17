@@ -2,18 +2,19 @@
 
 HR/Payroll workspace UI: §7.1/§7.2 sidebar scrollbar + chevron-pill styling, §7.3
 HR/Payroll home overviews with click-through summaries, §7.4 dark-mode portal
-containment, §7.5 module-home setup checklists, §8.1 employment-status transitions
-and compensation current-rate/history, and §8.2 per-entry payroll adjustments. This
-document records the deliverables, the locked design decisions, the verification
-evidence, and the PR notes/caveats reviewers should know.
+containment, §8.1 employment-status transitions and compensation current-rate/history,
+and §8.2 per-entry payroll adjustments. §7.5 (setup checklists) was explored and
+**reverted** — explicit decision after seeing it rendered, plus it was rendering above
+the KPI row (wrong position). This document records the deliverables, the locked
+design decisions, the verification evidence, and the PR notes/caveats reviewers
+should know.
 
-Verification status: **all §7/§8 items delivered — rendered-UI gates 36/36 green**
-(`gates.js`), plus per-phase checkpoints `checkpoint-75.js` 16/16, `checkpoint-6.js`
-27/27 (read-only gating), `checkpoint-81.js` 12/12 (status transitions),
-`checkpoint-82.js` 12/12 (adjustments). Static gates (`tsc --noEmit`, `eslint .`,
-`next build`) green at HEAD; no new repository dependencies. Live stack: identity +
-core in Docker, Next dev server on `:3000`. Commit range `44963eb..HEAD` = 10
-commits.
+Verification status: **all §7/§8 items delivered — rendered-UI gates 28/28 green**
+(`gates.js`), plus per-phase checkpoints `checkpoint-6.js` 27/27 (read-only gating),
+`checkpoint-81.js` 12/12 (status transitions), `checkpoint-82.js` 12/12 (adjustments).
+Static gates (`tsc --noEmit`, `eslint .`, `next build`) green at HEAD; no new
+repository dependencies. Live stack: identity + core in Docker, Next dev server on
+`:3000`. Commit range `44963eb..HEAD` = 11 commits.
 
 ---
 
@@ -25,7 +26,7 @@ commits.
 | 7.2 | Chevron sits inside the active rounded row pill, no background of its own | Done | chevron button (`app-sidebar.tsx:184-196`) inside the `rounded-lg` pill (`:158-165`), `d334104`; Gate 5 asserts pill `rounded-lg` + `bg-sidebar-accent` + chevron has no `bg-` |
 | 7.3 | HR home overview + Payroll home overview with click-through summaries | Done | `hr-overview.tsx`, `payroll-overview.tsx`, shared `stat-card`/`status-breakdown`/`recent-activity-list` (`aa7bfce`); Gates 1/2/3/6 |
 | 7.4 | Radix Dialog/Select portals render inside the module theme world (dark mode) | Done | portal container resolution in `theme-world.ts` (`getThemeContainer`, `data-theme-world="erp"`), `0dbd14f`; Gate 4 asserts dialog + listbox inside the ERP theme world in dark and light |
-| 7.5 | Module-home setup checklists (HR + Payroll) | Done | shared `setup-checklist.tsx` + extracted `department-dialog`/`compensation-dialog`/`run-dialog` (`7f75197`); Gates 8 + `checkpoint-75.js` |
+| 7.5 | Module-home setup checklists (HR + Payroll) | **Removed** | Reverted after seeing rendered output — checklist was rendering above the KPI row (wrong position) and was not wanted. Commit `7f75197` + backend `6080d98` are historical; code deleted in this commit. |
 | 7.6 | Parent sidebar row stays a navigable Link with a chevron toggle | Done (no change) | user directive confirmed against the existing implementation — parent row is a Link, chevron toggles the group; re-verified 18/18, no code change |
 | 8.1 | Employment-status transitions (place on leave / reactivate) + compensation current rate & history | Done | employee-detail lifecycle actions (`c1b3f62`); current-rate line + history on the compensation page; Gate 9 + `checkpoint-81.js` |
 | 8.2 | Per-entry adjustments on draft/computed runs, sign convention, read-only after approval | Done | run-detail Adjust affordance + dialog (`4048bb3`), sign fix (`c6f6ba4`); Gate 10 + `checkpoint-82.js` |
@@ -47,15 +48,8 @@ commits.
 - Zero-data states render gracefully ("No records yet.", "No leave activity yet —
   hire a team member or create a leave request.").
 
-## §7.5 / §8 locked design decisions (as shipped)
+## §8 locked design decisions (as shipped)
 
-- **Setup checklists (§7.5).** The module home shows a checklist while the
-  tenant is not "done": HR = 3 steps (hire / department / leave request), Payroll
-  = 2 steps (compensation record / run), each with a "Done" badge or a primary
-  action (which the shared dialog triggers). A fully-done tenant renders no
-  checklist at all (`hr-setup.tsx`/`payroll-setup.tsx` return `null` while
-  loading, so the checklist mounts after the data fetch — the gate script waits
-  for the panel rather than the KPI grid).
 - **Compensation page (§8.1).** Shows the current rate line
   (`currently US$5,000.00/month`) and a History table; the current rate comes
   from `activeCompensation` on the employee list (backend enrichment, `6080d98`),
@@ -83,22 +77,20 @@ via `localStorage["skyrict:product-tour-seen"]`).
 | 4 | §7.4 — Dialog (dark), Select listbox (dark), Dialog (light) all render inside `[data-theme-world="erp"]` | PASS (`erp`) |
 | 5 | §7.1/§7.2 — nav has `themed-scrollbar`; chevron inside active `rounded-lg` pill with no own `bg-` | PASS |
 | 7 | §7.3 tenant isolation — bridgeon/olympus employee + department lists each contain only their own rows | PASS |
-| 8 | §7.5 — bridgeon HR checklist present with `2 of 3 done` + two Done badges; bridgeon payroll checklist `1 of 2 done`; olympus HR/payroll checklists hidden | PASS |
 | 9 | §8.1 — compensation current-rate line `currently US$5,000.00/month`; history rows render | PASS |
 | 10 | §8.2 — computed run: one Adjust per entry (4/4) + "Read-only after approval" hint; paid run: no Adjust buttons | PASS |
 | — | No error banners on olympus pages (excluding Next.js route announcer) | PASS (`0 alerts`) |
 
-**36/36 checks passed.** Screenshots (all captured): `gate6-hr-home-bridgeon.png`,
+**28/28 checks passed.** Screenshots (all captured): `gate6-hr-home-bridgeon.png`,
 `gate6-hr-home-olympus.png`, `gate2-leave-filtered.png`, `gate3-payroll-home-olympus.png`,
 `gate4-dialog-dark.png`, `gate4-select-dark.png`, `gate4-dialog-light.png`,
-`gate5-sidebar-hover.png`, `gate8-bridgeon-payroll-checklist.png`,
-`gate9-compensation-current-rate.png`, plus the phase checkpoints below.
+`gate5-sidebar-hover.png`, `gate9-compensation-current-rate.png`, plus the phase
+checkpoints below.
 
 ### Per-phase checkpoints (Playwright, same stack)
 
 | Script | Coverage | Result |
 |--------|----------|--------|
-| `checkpoint-75.js` | §7.5 — checklists on both homes, progress/done badges, panels hidden when done, shared dialogs open from checklist + list pages | 16/16 |
 | `checkpoint-6.js` | Read-only gating — auditor user (`ui.readonly@olympus.dev`) sees HR/Payroll but zero write actions anywhere; API GET 200 / POST 403; org-admin sees all write actions | 27/27 |
 | `checkpoint-81.js` | §8.1 — place-on-leave/reactivate buttons by status, no buttons for a terminated fixture, status restored | 12/12 |
 | `checkpoint-82.js` | §8.2 — Adjust per computed entry, sign convention, read-only approved/paid runs | 12/12 |
@@ -189,10 +181,15 @@ new repository dependencies.
     mapping: `GET /roles/me` returns `erp.hr.read`/`erp.payroll.read` only; the
     UI hides every write affordance and the BFF returns 403 for POSTs.
 
-13. **Checklist mount timing.** `hr-setup.tsx`/`payroll-setup.tsx` return `null`
-    while their data loads, so the checklist mounts well after the KPI grid —
-    gate assertions must wait for the panel itself (a cold dev-server restart
-    makes the first data fetch slow enough to fail immediate checks).
+13. **§7.5 checklist reverted.** The setup checklists (`7f75197`) were removed
+    after seeing them rendered — the checklist rendered above the KPI row (wrong
+    position, should have been below), and the section was not wanted at all.
+    The underlying component (`setup-checklist.tsx`), its consumers
+    (`hr-setup.tsx`, `payroll-setup.tsx`), and all gate-8/checkpoint-75 assertions
+    were deleted. The `active_compensation` backend fix (`6080d98`) remains since
+    it is useful independently. Dialog components (`department-dialog`,
+    `compensation-dialog`, `run-dialog`) were not checklist-only — they are
+    imported by the domain list pages and stay.
 
 ---
 
@@ -217,9 +214,11 @@ new repository dependencies.
 
 ## Commit range
 
-`git log --oneline 44963eb..HEAD` = **10 commits**:
+`git log --oneline 44963eb..HEAD` = **11 commits**:
 
 ```
+5243abc fix(web): [HR-UI-003] remove overview setup-checklist, restore KPI-first ordering
+16cf337 docs: [HR-UI-003] extend close-out to cover §7.5/§8 + gating verification (gates 36/36)
 6080d98 fix(core): [HR-UI-003 §7.5] populate active_compensation in employee list
 7f75197 feat(web): [HR-UI-003 §7.5] setup checklists on HR and payroll homes
 c1b3f62 feat(web): [HR-UI-003 §8.1] employment status transitions (place on leave / reactivate) on employee detail

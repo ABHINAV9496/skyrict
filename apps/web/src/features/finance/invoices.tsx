@@ -117,8 +117,8 @@ function CustomerCombobox({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setDropdownPos({
-      top: rect.bottom + window.scrollY + 4,
-      left: rect.left + window.scrollX,
+      top: rect.bottom + 4,
+      left: rect.left,
       width: rect.width,
     });
   }, []);
@@ -221,7 +221,7 @@ function CustomerCombobox({
               ref={listRef}
               role="listbox"
               style={{
-                position: "absolute",
+                position: "fixed",
                 top: dropdownPos.top,
                 left: dropdownPos.left,
                 width: dropdownPos.width,

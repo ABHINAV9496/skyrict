@@ -259,80 +259,108 @@ export function CrmOverview() {
         {/* Open Pipeline */}
         <Link
           href="/dashboard/erp/crm/opportunities"
-          className="group rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
+          className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
         >
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-              <TrendingUp className="size-4 text-primary" />
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+              <TrendingUp className="size-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Open pipeline
               </p>
-              <p className="mt-0.5 font-display text-xl font-bold tracking-tight text-foreground tabular-nums">
-                {multiCurrency(opportunities.openValue)}
+              <p className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                {formatMoney(
+                  opportunities.openValue.find((b) => b.currency?.toUpperCase() === "USD")?.amount
+                    ?? opportunities.openValue[0]?.amount,
+                  opportunities.openValue.find((b) => b.currency?.toUpperCase() === "USD")?.currency
+                    ?? opportunities.openValue[0]?.currency,
+                )}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {opportunities.openCount} open deal
                 {opportunities.openCount !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
-          {opportunities.openValue.length > 0 && (
-            <div className="mt-2.5 border-t border-border/50 pt-2">
-              <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                By currency
-              </p>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                {opportunities.openValue.map((b) => (
+          {opportunities.openValue.length > 1 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5">
+              {opportunities.openValue.map((b) => {
+                const code = b.currency?.toUpperCase();
+                const raw = typeof b.amount === "string" ? Number(b.amount) : Number(b.amount ?? 0);
+                const short = raw >= 1000 ? `${(raw / 1000).toFixed(raw >= 10000 ? 0 : 1)}K` : String(raw);
+                const colorClass =
+                  code === "USD"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : code === "CAD"
+                      ? "text-sky-600 dark:text-sky-400"
+                      : code === "EUR"
+                        ? "text-violet-600 dark:text-violet-400"
+                        : "text-muted-foreground";
+                const bgClass =
+                  code === "USD"
+                    ? "bg-emerald-500/10"
+                    : code === "CAD"
+                      ? "bg-sky-500/10"
+                      : code === "EUR"
+                        ? "bg-violet-500/10"
+                        : "";
+                return (
                   <span
                     key={b.currency}
-                    className="text-[11px] tabular-nums text-muted-foreground"
+                    className={`rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums ${bgClass} ${colorClass}`}
                   >
-                    {b.currency.toUpperCase()}{" "}
-                    {formatMoney(b.amount, b.currency)}
+                    {code} {short}
                   </span>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
         </Link>
 
         {/* Active Leads */}
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-              <Contact className="size-4 text-primary" />
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+              <Contact className="size-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Active leads
               </p>
-              <p className="mt-0.5 font-display text-xl font-bold tracking-tight text-foreground tabular-nums">
+              <p className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground tabular-nums">
                 {leads.total}
               </p>
-              <p className="text-[11px] text-muted-foreground">
-                {leads.byStatus.find((s) => s.status === "new")?.count ?? 0}{" "}
-                new
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {leads.byStatus.find((s) => s.status === "new")?.count ?? 0} new
+                {" · "}
+                {leads.byStatus.find((s) => s.status === "contacted")?.count ?? 0} contacted
               </p>
             </div>
+            {/* Mini sparkline from byStatus */}
+            <LeadSparkline byStatus={leads.byStatus} total={leads.total} />
           </div>
         </div>
 
         {/* Won Business */}
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-              <Trophy className="size-4 text-primary" />
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+              <Trophy className="size-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Won business
               </p>
-              <p className="mt-0.5 font-display text-xl font-bold tracking-tight text-foreground tabular-nums">
-                {multiCurrency(opportunities.wonValue)}
+              <p className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                {formatMoney(
+                  opportunities.wonValue.find((b) => b.currency?.toUpperCase() === "USD")?.amount
+                    ?? opportunities.wonValue[0]?.amount,
+                  opportunities.wonValue.find((b) => b.currency?.toUpperCase() === "USD")?.currency
+                    ?? opportunities.wonValue[0]?.currency,
+                )}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {opportunities.wonCount} deal
                 {opportunities.wonCount !== 1 ? "s" : ""} won
                 {opportunities.winRate !== null
@@ -340,6 +368,7 @@ export function CrmOverview() {
                   : ""}
               </p>
             </div>
+            <WonSparkline deals={recentWon} />
           </div>
         </div>
 
@@ -834,6 +863,141 @@ function CustomerDonut({
       <span className="absolute text-[8px] font-bold tabular-nums text-foreground">
         {Math.round(pct * 100)}
       </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lead sparkline (smooth area chart from byStatus data)
+// ---------------------------------------------------------------------------
+
+const STATUS_ORDER = ["new", "contacted", "qualified", "disqualified"] as const;
+
+function LeadSparkline({
+  byStatus,
+  total,
+}: {
+  byStatus: { status: string; count: number }[];
+  total: number;
+}) {
+  const values = STATUS_ORDER.map(
+    (s) => byStatus.find((b) => b.status === s)?.count ?? 0,
+  );
+  const max = Math.max(1, ...values);
+
+  const w = 64;
+  const h = 32;
+  const pad = 4;
+  const plotW = w - pad * 2;
+  const plotH = h - pad * 2;
+
+  const points = values.map((v, i) => ({
+    x: pad + (i / (values.length - 1)) * plotW,
+    y: pad + plotH - (v / max) * plotH,
+  }));
+
+  // Build smooth cubic bezier path
+  let line = `M${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx1 = prev.x + (curr.x - prev.x) * 0.4;
+    const cpx2 = curr.x - (curr.x - prev.x) * 0.4;
+    line += ` C${cpx1} ${prev.y} ${cpx2} ${curr.y} ${curr.x} ${curr.y}`;
+  }
+
+  // Area path closes to bottom
+  const area = `${line} L${points[points.length - 1].x} ${h} L${points[0].x} ${h} Z`;
+
+  return (
+    <div className="shrink-0">
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+        <defs>
+          <linearGradient id="lead-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#lead-area)" />
+        <path d={line} fill="none" stroke="#10b981" strokeOpacity="0.5" strokeWidth="1.5" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="2" fill="#10b981" fillOpacity="0.7" />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Won sparkline (smooth area chart from recentWon deals sorted by date)
+// ---------------------------------------------------------------------------
+
+function WonSparkline({ deals }: { deals: Opportunity[] }) {
+  const sorted = [...deals]
+    .filter((d) => d.amount)
+    .sort((a, b) => {
+      const ta = a.wonAt ? new Date(a.wonAt).getTime() : 0;
+      const tb = b.wonAt ? new Date(b.wonAt).getTime() : 0;
+      return ta - tb;
+    })
+    .slice(-8);
+
+  if (sorted.length === 0) return null;
+
+  const amounts = sorted.map((d) => Number(d.amount) || 0);
+  const max = Math.max(1, ...amounts);
+
+  const w = 72;
+  const h = 32;
+  const pad = 4;
+  const plotW = w - pad * 2;
+  const plotH = h - pad * 2;
+
+  const points = amounts.map((v, i) => ({
+    x: sorted.length === 1 ? w / 2 : pad + (i / (amounts.length - 1)) * plotW,
+    y: pad + plotH - (v / max) * plotH,
+  }));
+
+  // Single point: just show a dot + small area
+  if (points.length === 1) {
+    const p = points[0];
+    return (
+      <div className="shrink-0">
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+          <circle cx={p.x} cy={p.y} r="3" fill="#10b981" fillOpacity="0.3" />
+          <circle cx={p.x} cy={p.y} r="1.5" fill="#10b981" fillOpacity="0.8" />
+        </svg>
+      </div>
+    );
+  }
+
+  let line = `M${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const t = 0.35;
+    const cpx1 = prev.x + (curr.x - prev.x) * t;
+    const cpx2 = curr.x - (curr.x - prev.x) * t;
+    line += ` C${cpx1} ${prev.y} ${cpx2} ${curr.y} ${curr.x} ${curr.y}`;
+  }
+
+  const area = `${line} L${points[points.length - 1].x} ${h} L${points[0].x} ${h} Z`;
+
+  return (
+    <div className="shrink-0">
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+        <defs>
+          <linearGradient id="won-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#won-area)" />
+        <path d={line} fill="none" stroke="#10b981" strokeOpacity="0.6" strokeWidth="1.5" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="2" fill="#10b981" fillOpacity="0.8" />
+        ))}
+      </svg>
     </div>
   );
 }

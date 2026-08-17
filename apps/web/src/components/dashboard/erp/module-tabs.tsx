@@ -14,20 +14,34 @@ export interface ModuleTab {
 
 /**
  * Compact section-tab bar for CRM / ERP sub-navigation.
- * Active tab: green text + thin bottom indicator bar.
- * Inactive tabs: muted text, no background.
+ *
+ * Active state uses higher-contrast emerald instead of `text-primary`
+ * because the ERP theme's primary (#86efac) is too light for readable text.
  */
 export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
   const pathname = usePathname();
 
+  const isActive = (tabHref: string) => {
+    // Exact match
+    if (pathname === tabHref) return true;
+
+    // Prevent base/overview routes from matching all sub-routes
+    if (tabHref.endsWith("/overview")) {
+      return pathname === tabHref;
+    }
+
+    // Sub-route prefix match (e.g. /leads/123 matches /leads)
+    return pathname.startsWith(tabHref);
+  };
+
   return (
     <nav
       aria-label="Section navigation"
-      className="flex items-center gap-0.5 overflow-x-auto scrollbar-none"
+      className="flex items-center gap-1 overflow-x-auto border-b border-border/60"
+      style={{ scrollbarWidth: "none" }}
     >
       {tabs.map((tab) => {
-        const active =
-          pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        const active = isActive(tab.href);
         const Icon = tab.icon;
         return (
           <Link
@@ -35,21 +49,30 @@ export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+              "relative inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm font-medium transition-colors",
               active
-                ? "text-primary"
+                ? "text-emerald-600 dark:text-emerald-400"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {Icon ? <Icon className="size-3.5" /> : null}
-            {tab.label}
-            {active ? (
-              <span
+            {Icon ? (
+              <Icon
                 aria-hidden="true"
-                className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                style={{ backgroundColor: "var(--primary)" }}
+                className={cn(
+                  "size-4",
+                  active
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+                )}
               />
             ) : null}
+            {tab.label}
+            {active && (
+              <span
+                aria-hidden="true"
+                className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-emerald-500 dark:bg-emerald-400"
+              />
+            )}
           </Link>
         );
       })}

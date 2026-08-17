@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, LoaderCircle, X } from "lucide-react";
 
+import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
@@ -85,6 +86,7 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [adjust, setAdjust] = useState({ leaveType: "", qty: "", reason: "" });
   const [accruing, setAccruing] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -494,6 +496,14 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
                   type="button"
                   variant="outline"
                   size="sm"
+                  onClick={() => setLogOpen(true)}
+                >
+                  Log leave
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   disabled={selectedEmployeeId === null}
                   onClick={openAdjust}
                 >
@@ -624,6 +634,14 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
           </form>
         </DialogContent>
       </Dialog>
+
+      <LogLeaveDialog
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        employees={employees}
+        prefillEmployeeId={selectedEmployeeId}
+        onCreated={() => void load()}
+      />
     </div>
   );
 }

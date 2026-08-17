@@ -380,6 +380,23 @@ export async function listLeaveRequests(input: {
   return { items: result.items.map(mapLeaveRequest), meta: result.meta };
 }
 
+export async function createLeaveRequest(input: {
+  employeeId: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}): Promise<LeaveRequest> {
+  const raw = await apiPost<LeaveRequestPayload>("/api/v1/hr/leave/requests", {
+    employee_id: input.employeeId,
+    leave_type: input.leaveType,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    reason: input.reason,
+  });
+  return mapLeaveRequest(raw ?? {});
+}
+
 export async function approveLeaveRequest(requestId: string): Promise<LeaveRequest> {
   const raw = await apiPost<LeaveRequestPayload>(
     `/api/v1/hr/leave/requests/${requestId}/approve`,

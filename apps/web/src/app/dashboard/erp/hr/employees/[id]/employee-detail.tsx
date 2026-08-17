@@ -21,6 +21,7 @@ import {
   EmployeeFormDialog,
   TerminateEmployeeDialog,
 } from "@/components/dashboard/erp/hr/employee-dialogs";
+import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import {
   getEmployee,
   getLeaveBalances,
   listDepartments,
+  listEmployees,
   listLeaveMovements,
   type Department,
   type Employee,
@@ -59,18 +61,23 @@ function DetailItem({ label, value }: { label: string; value: React.ReactNode })
 function Card({
   title,
   icon: Icon,
+  actions,
   children,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-border bg-card p-5">
-      <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
-        <Icon aria-hidden="true" className="size-4 text-primary" />
-        {title}
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+          <Icon aria-hidden="true" className="size-4 text-primary" />
+          {title}
+        </h2>
+        {actions}
+      </div>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -93,6 +100,8 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [terminating, setTerminating] = useState(false);
   const [statusTarget, setStatusTarget] = useState<"active" | "on_leave" | null>(null);
 
@@ -154,6 +163,18 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
     setEmployee(updated);
     setNotice({ tone: "success", text });
     void load();
+  }
+
+  async function openLogLeave() {
+    if (allEmployees.length === 0) {
+      try {
+        const result = await listEmployees({ pageSize: 100 });
+        setAllEmployees(result.items);
+      } catch {
+        setAllEmployees([]);
+      }
+    }
+    setLogOpen(true);
   }
 
   if (status.state === "loading") {
@@ -357,7 +378,17 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
           </div>
         </Card>
 
-        <Card title="Leave balances" icon={CalendarDays}>
+        <Card
+          title="Leave balances"
+          icon={CalendarDays}
+          actions={
+            canWrite ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => void openLogLeave()}>
+                Log leave
+              </Button>
+            ) : undefined
+          }
+        >
           {balances.length === 0 ? (
             <p className="text-sm text-muted-foreground">No leave balances yet.</p>
           ) : (
@@ -451,6 +482,14 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         target={statusTarget}
         onOpenChange={(open) => !open && setStatusTarget(null)}
         onSaved={onSaved}
+      />
+
+      <LogLeaveDialog
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        employees={allEmployees}
+        prefillEmployeeId={employeeId}
+        onCreated={() => void load()}
       />
     </div>
   );

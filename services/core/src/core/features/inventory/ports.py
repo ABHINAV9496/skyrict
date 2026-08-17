@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
-from core.domain.value_objects import StockMovementType
+from core.domain.value_objects import Money, StockMovementType
 
 
 class InventoryRepositoryPort(Protocol):
@@ -30,7 +30,25 @@ class InventoryRepositoryPort(Protocol):
 
     async def get_product_by_sku(self, sku: str, tenant_id: uuid.UUID) -> Product | None: ...
 
+    async def update_product(
+        self,
+        product_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        sku: str | object = ...,
+        name: str | object = ...,
+        category: str | object | None = ...,
+        unit: str | object | None = ...,
+        cost_price: Money | object = ...,
+        sell_price: Money | object = ...,
+        reorder_point: Decimal | object = ...,
+    ) -> Product | None: ...
+
     async def deactivate_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Product | None: ...
+
+    async def reactivate_product(
         self, product_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Product | None: ...
 
@@ -59,7 +77,20 @@ class InventoryRepositoryPort(Protocol):
         self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Warehouse | None: ...
 
+    async def update_warehouse(
+        self,
+        warehouse_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        name: str | object = ...,
+        location: str | object | None = ...,
+    ) -> Warehouse | None: ...
+
     async def deactivate_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Warehouse | None: ...
+
+    async def reactivate_warehouse(
         self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Warehouse | None: ...
 
@@ -102,6 +133,14 @@ class InventoryRepositoryPort(Protocol):
         product_id: uuid.UUID | None = None,
         warehouse_id: uuid.UUID | None = None,
     ) -> int: ...
+
+    async def sum_stock_by_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]: ...
+
+    async def sum_stock_by_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]: ...
 
     async def list_low_stock(
         self,

@@ -35,6 +35,9 @@ if TYPE_CHECKING:
 # Movements that feed qty_reserved (and are EXCLUDED from qty_on_hand).
 _RESERVATION_TYPES = (StockMovementType.RESERVATION, StockMovementType.RELEASE)
 
+# Sentinel distinguishing "field not in the PATCH body" from "clear to null".
+_UNSET: object = object()
+
 
 def _product_to_orm(product: Product) -> ErpProductModel:
     kwargs: dict[str, object] = {
@@ -173,6 +176,61 @@ class InventoryRepository:
         await self.session.refresh(model)
         return _product_from_orm(model)
 
+    async def reactivate_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Product | None:
+        stmt = select(ErpProductModel).where(
+            ErpProductModel.tenant_id == tenant_id,
+            ErpProductModel.id == product_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        model.is_active = True
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _product_from_orm(model)
+
+    async def update_product(
+        self,
+        product_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        sku: str | object = _UNSET,
+        name: str | object = _UNSET,
+        category: str | object | None = _UNSET,
+        unit: str | object | None = _UNSET,
+        cost_price: Money | object = _UNSET,
+        sell_price: Money | object = _UNSET,
+        reorder_point: Decimal | object = _UNSET,
+    ) -> Product | None:
+        stmt = select(ErpProductModel).where(
+            ErpProductModel.tenant_id == tenant_id,
+            ErpProductModel.id == product_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        if sku is not _UNSET:
+            model.sku = cast("str", sku)
+        if name is not _UNSET:
+            model.name = cast("str", name)
+        if category is not _UNSET:
+            model.category = cast("str | None", category)
+        if unit is not _UNSET:
+            model.unit = cast("str | None", unit)
+        if cost_price is not _UNSET:
+            model.cost_price = cast("Money", cost_price).amount
+            model.cost_currency_code = cast("Money", cost_price).currency
+        if sell_price is not _UNSET:
+            model.sell_price = cast("Money", sell_price).amount
+            model.sell_currency_code = cast("Money", sell_price).currency
+        if reorder_point is not _UNSET:
+            model.reorder_point = cast("Decimal", reorder_point)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _product_from_orm(model)
+
     async def list_products(
         self,
         tenant_id: uuid.UUID,
@@ -242,6 +300,44 @@ class InventoryRepository:
         if model is None:
             return None
         model.is_active = False
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _warehouse_from_orm(model)
+
+    async def reactivate_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Warehouse | None:
+        stmt = select(ErpWarehouseModel).where(
+            ErpWarehouseModel.tenant_id == tenant_id,
+            ErpWarehouseModel.id == warehouse_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        model.is_active = True
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _warehouse_from_orm(model)
+
+    async def update_warehouse(
+        self,
+        warehouse_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        name: str | object = _UNSET,
+        location: str | object | None = _UNSET,
+    ) -> Warehouse | None:
+        stmt = select(ErpWarehouseModel).where(
+            ErpWarehouseModel.tenant_id == tenant_id,
+            ErpWarehouseModel.id == warehouse_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        if name is not _UNSET:
+            model.name = cast("str", name)
+        if location is not _UNSET:
+            model.location = cast("str | None", location)
         await self.session.flush()
         await self.session.refresh(model)
         return _warehouse_from_orm(model)
@@ -397,6 +493,34 @@ class InventoryRepository:
             stmt = stmt.where(ErpStockLevelModel.warehouse_id == warehouse_id)
         return int((await self.session.execute(stmt)).scalar_one())
 
+    async def sum_stock_by_product(
+        self, product_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]:
+        """Total on-hand / reserved quantity for a product across warehouses."""
+        stmt = select(
+            func.coalesce(func.sum(ErpStockLevelModel.qty_on_hand), 0).label("on_hand"),
+            func.coalesce(func.sum(ErpStockLevelModel.qty_reserved), 0).label("reserved"),
+        ).where(
+            ErpStockLevelModel.tenant_id == tenant_id,
+            ErpStockLevelModel.product_id == product_id,
+        )
+        row = (await self.session.execute(stmt)).one()
+        return Decimal(row.on_hand), Decimal(row.reserved)
+
+    async def sum_stock_by_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> tuple[Decimal, Decimal]:
+        """Total on-hand / reserved quantity for a warehouse across products."""
+        stmt = select(
+            func.coalesce(func.sum(ErpStockLevelModel.qty_on_hand), 0).label("on_hand"),
+            func.coalesce(func.sum(ErpStockLevelModel.qty_reserved), 0).label("reserved"),
+        ).where(
+            ErpStockLevelModel.tenant_id == tenant_id,
+            ErpStockLevelModel.warehouse_id == warehouse_id,
+        )
+        row = (await self.session.execute(stmt)).one()
+        return Decimal(row.on_hand), Decimal(row.reserved)
+
     async def list_low_stock(
         self,
         tenant_id: uuid.UUID,
@@ -416,6 +540,7 @@ class InventoryRepository:
             )
             .where(
                 ErpStockLevelModel.tenant_id == tenant_id,
+                ErpProductModel.is_active.is_(True),
                 ErpStockLevelModel.qty_on_hand <= ErpProductModel.reorder_point,
             )
             .order_by(ErpStockLevelModel.qty_on_hand.asc())
@@ -441,6 +566,7 @@ class InventoryRepository:
             )
             .where(
                 ErpStockLevelModel.tenant_id == tenant_id,
+                ErpProductModel.is_active.is_(True),
                 ErpStockLevelModel.qty_on_hand <= ErpProductModel.reorder_point,
             )
         )

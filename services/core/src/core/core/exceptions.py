@@ -40,10 +40,12 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "ConflictError",
+    "CreditLimitExceededError",
     "DuplicateRecordError",
     "DuplicateSkuError",
     "EmployeeTerminatedError",
     "IllegalStateTransitionError",
+    "InactiveItemError",
     "InsufficientStockError",
     "LeaveBalanceExceededError",
     "MovementImmutableError",
@@ -54,6 +56,7 @@ __all__ = [
     "SelfApprovalForbiddenError",
     "SkyrictError",
     "StartupError",
+    "StockReservedError",
     "TenantContextMissingError",
     "TenantDisabledError",
     "TenantMismatchError",
@@ -138,11 +141,49 @@ class MovementImmutableError(ConflictError):
     code = "MOVEMENT_IMMUTABLE"
 
 
+class StockReservedError(ConflictError):
+    """Cannot deactivate an item that still has open reservations (409).
+
+    Mirrors the ERP rule that an item with open commitments cannot be
+    archived: reservations are promises to external documents and must be
+    released or fulfilled before the item can be deactivated. Plain on-hand
+    quantity is NOT blocked — it stays on the books and is written off via a
+    stock adjustment on the archived item.
+    """
+
+    message = "Cannot deactivate: reserved quantity still exists"
+    code = "STOCK_RESERVED"
+
+
+class InactiveItemError(ConflictError):
+    """Cannot post stock against an archived (inactive) item (409).
+
+    Production ERPs apply a "posting block" to deactivated items: new sales,
+    transfers and reservations are refused, but write-off adjustments remain
+    allowed so remaining on-hand quantity can be zeroed out.
+    """
+
+    message = "Cannot post stock against an inactive item"
+    code = "ITEM_INACTIVE"
+
+
 class TransferRequiresDistinctWarehousesError(ValidationError):
     """Transfer source and destination must be different warehouses (422)."""
 
     message = "Transfer source and destination warehouses must be different"
     code = "TRANSFER_REQUIRES_DISTINCT_WAREHOUSES"
+
+
+# ---------------------------------------------------------------------------
+# CRM & Sales domain exceptions (CRM-BE-002)
+# ---------------------------------------------------------------------------
+
+
+class CreditLimitExceededError(ValidationError):
+    """The customer's credit limit would be exceeded by this order (422)."""
+
+    message = "Customer credit limit would be exceeded"
+    code = "CREDIT_LIMIT_EXCEEDED"
 
 
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
@@ -171,6 +212,8 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     PayrollPeriodConflictError: (409, f"{_PROBLEM_BASE}/payroll-period-conflict"),
     LeaveBalanceExceededError: (422, f"{_PROBLEM_BASE}/leave-balance-exceeded"),
     SelfApprovalForbiddenError: (422, f"{_PROBLEM_BASE}/self-approval-forbidden"),
+    # CRM & Sales (docs/modules/sales-crm.md §7 error table).
+    CreditLimitExceededError: (422, f"{_PROBLEM_BASE}/credit-limit-exceeded"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

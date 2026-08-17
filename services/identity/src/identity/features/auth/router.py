@@ -18,6 +18,7 @@ from identity.api.deps import (
     get_token_service,
     get_user_repo,
 )
+from identity.core.client_ip import client_ip
 from identity.core.config import Environment, settings
 from identity.core.constants import (
     LOGIN_FAILED_MESSAGE,
@@ -28,6 +29,7 @@ from identity.core.constants import (
     SIGNUP_START_LIMIT_KEY,
     SIGNUP_VERIFY_LIMIT_KEY,
 )
+from identity.core.user_agent import CLIENT_HINT_HEADERS
 from identity.features.auth.captcha.captcha import generate_captcha, png_data_uri
 from identity.features.auth.captcha.captcha_store import CaptchaStore
 from identity.features.auth.schemas import (
@@ -66,13 +68,11 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        head = forwarded.split(",", 1)[0].strip()
-        if head:
-            return head
-    return request.client.host if request.client else "unknown"
+def _client_hints(request: Request) -> dict[str, str]:
+    """Collect the ``Sec-CH-UA*`` Client Hints headers sent by the browser."""
+    return {
+        name: request.headers[name] for name in CLIENT_HINT_HEADERS if request.headers.get(name)
+    }
 
 
 @router.post("/login", response_model=ResponseEnvelope[AuthResponse])
@@ -89,7 +89,7 @@ async def login(
     stuffing against the highest-value endpoint. The limiter fails open when
     Redis is unavailable so a Redis outage never becomes a login outage.
     """
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"login:{ip_address}:{body.email.lower()}",
         limit=settings.RATE_LIMIT_LOGIN,
@@ -106,6 +106,7 @@ async def login(
         body,
         ip_address=ip_address,
         user_agent=request.headers.get("user-agent"),
+        client_hints=_client_hints(request),
     )
     user = result.pop("user")
     return ResponseEnvelope(
@@ -127,7 +128,7 @@ async def verify_mfa_challenge(
 ) -> ResponseEnvelope[AuthResponse]:
     """Redeem a login mfaToken with a TOTP/backup code and issue the token pair."""
 
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"mfa-verify-ip:{ip_address}",
         limit=settings.RATE_LIMIT_MFA_VERIFY,
@@ -175,6 +176,7 @@ async def verify_mfa_challenge(
         tenant_id=challenge["tenant_id"],
         ip_address=ip_address,
         user_agent=request.headers.get("user-agent"),
+        client_hints=_client_hints(request),
         audit_action="auth.login.mfa_verified",
     )
     user_response = result.pop("user")
@@ -192,7 +194,7 @@ async def signup_start(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[SignupStartResponse]:
     """Gate the wizard: server-side Turnstile verification + per-IP throttling."""
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_START_LIMIT_KEY}:{ip_address}",
         limit=settings.SIGNUP_START_RATE_LIMIT,
@@ -210,7 +212,7 @@ async def signup_send_code(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[SendCodeResponse]:
     """Send a 6-digit OTP to the address (throttled per email and per IP)."""
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     email_key = body.email.lower()
     await limiter.enforce(
         key=f"{SIGNUP_CODE_LIMIT_KEY}:{email_key}",
@@ -250,7 +252,7 @@ async def signup_captcha(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[CaptchaResponse]:
     """Issue a text CAPTCHA challenge for the password step (rate-limited per IP)."""
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_CAPTCHA_LIMIT_KEY}:{ip_address}",
         limit=settings.SIGNUP_CAPTCHA_RATE_LIMIT,
@@ -294,7 +296,7 @@ async def signup_check_email(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[CheckEmailResponse]:
     """Expose email availability for the account step (rate-limited per IP)."""
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
         limit=settings.SIGNUP_CHECK_RATE_LIMIT,
@@ -312,7 +314,7 @@ async def signup_check_slug(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ResponseEnvelope[CheckSlugResponse]:
     """Expose workspace slug availability for the organization step."""
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await limiter.enforce(
         key=f"{SIGNUP_CHECK_LIMIT_KEY}:{ip_address}",
         limit=settings.SIGNUP_CHECK_RATE_LIMIT,
@@ -331,7 +333,7 @@ async def signup_organization(
     """Provision the tenant, roles, and verified owner in one transaction."""
     result = await authn.signup_create_organization(
         body,
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     return ResponseEnvelope(

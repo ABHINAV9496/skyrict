@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { getThemeContainer } from "@/lib/theme-world"
 import { XIcon } from "lucide-react"
+import { useThemeScopeContainer } from "@/lib/theme-scope"
 
 function Dialog({
   ...props
@@ -63,8 +64,9 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const container = useThemeScopeContainer()
   return (
-    <DialogPortal>
+    <DialogPortal container={container ?? undefined}>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"

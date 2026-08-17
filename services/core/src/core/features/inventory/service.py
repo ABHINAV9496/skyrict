@@ -38,22 +38,31 @@ from typing import TYPE_CHECKING
 
 from core.audit_events import (
     PRODUCT_CREATED,
+    PRODUCT_DEACTIVATED,
+    PRODUCT_REACTIVATED,
+    PRODUCT_UPDATED,
     STOCK_ADJUSTED,
     STOCK_REORDER_ALERTED,
     STOCK_TRANSFERRED,
     WAREHOUSE_CREATED,
+    WAREHOUSE_DEACTIVATED,
+    WAREHOUSE_REACTIVATED,
+    WAREHOUSE_UPDATED,
 )
 from core.core.config import settings
 from core.core.exceptions import (
     DuplicateSkuError,
+    InactiveItemError,
     InsufficientStockError,
     MovementImmutableError,
+    StockReservedError,
     TransferRequiresDistinctWarehousesError,
 )
 from core.core.tenant_context import TenantContext
-from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
+from core.domain.entities import Product, SalesOrderLine, StockLevel, StockMovement, Warehouse
 from core.domain.value_objects import Money, StockMovementType
 from core.features.inventory.events.producers import emit_stock_level_changed
+from core.features.inventory.repository import _UNSET
 from skyrict_common.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
 if TYPE_CHECKING:
@@ -143,10 +152,26 @@ class InventoryService:
             raise NotFoundError(f"Product {product_id} not found in tenant {tenant_id}")
         return product
 
+    async def _require_active_product(self, product_id: uuid.UUID, tenant_id: uuid.UUID) -> Product:
+        """Require a product that is archived-free (posting block on inactive)."""
+        product = await self._require_product(product_id, tenant_id)
+        if not product.is_active:
+            raise InactiveItemError(f"Product {product.sku} is inactive")
+        return product
+
     async def _require_warehouse(self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID) -> Warehouse:
         warehouse = await self.inventory_repo.get_warehouse(warehouse_id, tenant_id)
         if warehouse is None:
             raise NotFoundError(f"Warehouse {warehouse_id} not found in tenant {tenant_id}")
+        return warehouse
+
+    async def _require_active_warehouse(
+        self, warehouse_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Warehouse:
+        """Require a warehouse that is archived-free (posting block on inactive)."""
+        warehouse = await self._require_warehouse(warehouse_id, tenant_id)
+        if not warehouse.is_active:
+            raise InactiveItemError(f"Warehouse {warehouse.name} is inactive")
         return warehouse
 
     async def _current_on_hand(
@@ -274,6 +299,193 @@ class InventoryService:
         )
         return created
 
+    async def update_product(
+        self,
+        tenant_id: str | uuid.UUID,
+        product_id: uuid.UUID,
+        *,
+        sku: str | object | None = _UNSET,
+        name: str | object | None = _UNSET,
+        category: str | object | None = _UNSET,
+        unit: str | object | None = _UNSET,
+        cost_price: Money | object = _UNSET,
+        sell_price: Money | object = _UNSET,
+        reorder_point: Decimal | object = _UNSET,
+    ) -> Product:
+        tid = _as_uuid(tenant_id)
+        if sku is not _UNSET and not str(sku).strip():
+            raise ValidationError("Product SKU is required")
+        if name is not _UNSET and not str(name).strip():
+            raise ValidationError("Product name is required")
+        if reorder_point is not _UNSET and isinstance(reorder_point, Decimal) and reorder_point < 0:
+            raise ValidationError("Reorder point cannot be negative")
+
+        existing = await self.inventory_repo.get_product(product_id, tid)
+        if existing is None:
+            raise NotFoundError("Product not found")
+
+        if sku is not _UNSET:
+            clash = await self.inventory_repo.get_product_by_sku(str(sku), tid)
+            if clash is not None and clash.id != product_id:
+                raise DuplicateSkuError()
+
+        updated = await self.inventory_repo.update_product(
+            product_id,
+            tid,
+            sku=sku,
+            name=name,
+            category=category,
+            unit=unit,
+            cost_price=cost_price,
+            sell_price=sell_price,
+            reorder_point=reorder_point,
+        )
+        assert updated is not None
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=PRODUCT_UPDATED,
+            target=f"product:{product_id}",
+            details={"sku": updated.sku, "name": updated.name},
+        )
+        return updated
+
+    async def update_warehouse(
+        self,
+        tenant_id: str | uuid.UUID,
+        warehouse_id: uuid.UUID,
+        *,
+        name: str | object | None = _UNSET,
+        location: str | object | None = _UNSET,
+    ) -> Warehouse:
+        tid = _as_uuid(tenant_id)
+        if name is not _UNSET and not str(name).strip():
+            raise ValidationError("Warehouse name is required")
+
+        existing = await self.inventory_repo.get_warehouse(warehouse_id, tid)
+        if existing is None:
+            raise NotFoundError("Warehouse not found")
+
+        updated = await self.inventory_repo.update_warehouse(
+            warehouse_id,
+            tid,
+            name=name,
+            location=location,
+        )
+        assert updated is not None
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=WAREHOUSE_UPDATED,
+            target=f"warehouse:{warehouse_id}",
+            details={"name": updated.name},
+        )
+        return updated
+
+    async def deactivate_product(
+        self, tenant_id: str | uuid.UUID, product_id: uuid.UUID
+    ) -> Product:
+        """Archive a product (is_active = false).
+
+        ERP archive semantics: plain on-hand quantity does NOT block archiving
+        (it stays on the books and is written off via an adjustment on the
+        archived item), but any reserved quantity — an open commitment — does.
+        """
+        tid = _as_uuid(tenant_id)
+        product = await self._require_product(product_id, tid)
+        on_hand, reserved = await self.inventory_repo.sum_stock_by_product(product_id, tid)
+        if reserved > 0:
+            raise StockReservedError(
+                f"Cannot deactivate product {product.sku}: {reserved} unit(s) are "
+                "still reserved. Release or fulfil open reservations first."
+            )
+        deactivated = await self.inventory_repo.deactivate_product(product_id, tid)
+        assert deactivated is not None
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=PRODUCT_DEACTIVATED,
+            target=f"product:{product_id}",
+            details={
+                "sku": product.sku,
+                "name": product.name,
+                "on_hand_qty": str(on_hand),
+                "reserved_qty": str(reserved),
+            },
+        )
+        return deactivated
+
+    async def reactivate_product(
+        self, tenant_id: str | uuid.UUID, product_id: uuid.UUID
+    ) -> Product:
+        """Un-archive a product (is_active = true)."""
+        tid = _as_uuid(tenant_id)
+        reactivated = await self.inventory_repo.reactivate_product(product_id, tid)
+        if reactivated is None:
+            raise NotFoundError("Product not found")
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=PRODUCT_REACTIVATED,
+            target=f"product:{product_id}",
+            details={"sku": reactivated.sku, "name": reactivated.name},
+        )
+        return reactivated
+
+    async def deactivate_warehouse(
+        self, tenant_id: str | uuid.UUID, warehouse_id: uuid.UUID
+    ) -> Warehouse:
+        """Archive a warehouse (is_active = false).
+
+        Same ERP archive semantics as products: on-hand quantity may remain
+        (written off via adjustments), reserved quantity blocks archiving.
+        """
+        tid = _as_uuid(tenant_id)
+        warehouse = await self._require_warehouse(warehouse_id, tid)
+        on_hand, reserved = await self.inventory_repo.sum_stock_by_warehouse(warehouse_id, tid)
+        if reserved > 0:
+            raise StockReservedError(
+                f"Cannot deactivate warehouse {warehouse.name}: {reserved} unit(s) "
+                "are still reserved. Release or fulfil open reservations first."
+            )
+        deactivated = await self.inventory_repo.deactivate_warehouse(warehouse_id, tid)
+        assert deactivated is not None
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=WAREHOUSE_DEACTIVATED,
+            target=f"warehouse:{warehouse_id}",
+            details={
+                "name": warehouse.name,
+                "on_hand_qty": str(on_hand),
+                "reserved_qty": str(reserved),
+            },
+        )
+        return deactivated
+
+    async def reactivate_warehouse(
+        self, tenant_id: str | uuid.UUID, warehouse_id: uuid.UUID
+    ) -> Warehouse:
+        """Un-archive a warehouse (is_active = true)."""
+        tid = _as_uuid(tenant_id)
+        reactivated = await self.inventory_repo.reactivate_warehouse(warehouse_id, tid)
+        if reactivated is None:
+            raise NotFoundError("Warehouse not found")
+        await self.inventory_repo.commit()
+
+        await self._audit(
+            tenant_id=tid,
+            action=WAREHOUSE_REACTIVATED,
+            target=f"warehouse:{warehouse_id}",
+            details={"name": reactivated.name},
+        )
+        return reactivated
+
     # ------------------------------------------------------------------
     # Rule 2 — stock adjustments
     # ------------------------------------------------------------------
@@ -366,9 +578,9 @@ class InventoryService:
             raise ValidationError("Transfer quantity must be positive")
 
         await self._reject_replay("transfer", ref_id, from_warehouse_id, tid)
-        product = await self._require_product(product_id, tid)
-        await self._require_warehouse(from_warehouse_id, tid)
-        await self._require_warehouse(to_warehouse_id, tid)
+        product = await self._require_active_product(product_id, tid)
+        await self._require_active_warehouse(from_warehouse_id, tid)
+        await self._require_active_warehouse(to_warehouse_id, tid)
 
         from_before = await self._current_on_hand(product_id, from_warehouse_id, tid)
         to_before = await self._current_on_hand(product_id, to_warehouse_id, tid)
@@ -449,8 +661,8 @@ class InventoryService:
 
         ledger_ref = _step_ref(ref_id, _STEP_RESERVE)
         await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
-        await self._require_product(product_id, tid)
-        await self._require_warehouse(warehouse_id, tid)
+        await self._require_active_product(product_id, tid)
+        await self._require_active_warehouse(warehouse_id, tid)
 
         if not await self.inventory_repo.apply_reservation_qty(product_id, warehouse_id, qty, tid):
             raise InsufficientStockError()
@@ -488,8 +700,8 @@ class InventoryService:
 
         ledger_ref = _step_ref(ref_id, _STEP_RELEASE)
         await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
-        await self._require_product(product_id, tid)
-        await self._require_warehouse(warehouse_id, tid)
+        await self._require_active_product(product_id, tid)
+        await self._require_active_warehouse(warehouse_id, tid)
 
         if not await self.inventory_repo.apply_release_qty(product_id, warehouse_id, qty, tid):
             raise ValidationError("Cannot release more than the reserved quantity")
@@ -525,8 +737,8 @@ class InventoryService:
         if qty <= 0:
             raise ValidationError("Fulfilment quantity must be positive")
 
-        product = await self._require_product(product_id, tid)
-        await self._require_warehouse(warehouse_id, tid)
+        product = await self._require_active_product(product_id, tid)
+        await self._require_active_warehouse(warehouse_id, tid)
         before = await self._current_on_hand(product_id, warehouse_id, tid)
 
         # Consume the reservation atomically — serializes concurrent fulfils.
@@ -572,6 +784,155 @@ class InventoryService:
         return level
 
     # ------------------------------------------------------------------
+    # §5.4 — whole-order reservation lifecycle (bulk, single-commit)
+    #
+    # The per-line methods above commit after EVERY line, which breaks
+    # all-or-nothing atomicity for a multi-line order sharing one request
+    # session. These three methods apply the SAME per-line semantics but defer
+    # the single commit to the end: a partial order can never be persisted, a
+    # rollback touches nothing, and the one commit also persists the sales
+    # order state guard that ran just before in the same transaction.
+    # ------------------------------------------------------------------
+
+    async def reserve_order(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Reserve every line of one order in a SINGLE transaction."""
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Reservation quantity must be positive")
+            ledger_ref = _step_ref(ref_id, _STEP_RESERVE)
+            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
+            await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            if not await self.inventory_repo.apply_reservation_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise InsufficientStockError()
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RESERVATION,
+                    qty=line.quantity,
+                    ref_type=ref_type,
+                    ref_id=ledger_ref,
+                )
+            )
+        await self.inventory_repo.commit()
+
+    async def release_order(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Release every reserved line of one order in a SINGLE transaction."""
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Release quantity must be positive")
+            ledger_ref = _step_ref(ref_id, _STEP_RELEASE)
+            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid)
+            await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            if not await self.inventory_repo.apply_release_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise ValidationError("Cannot release more than the reserved quantity")
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RELEASE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=ledger_ref,
+                )
+            )
+        await self.inventory_repo.commit()
+
+    async def fulfil_order_lines(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID,
+        order_id: uuid.UUID,
+        lines: Sequence[SalesOrderLine],
+        ref_type: str = "sale_order",
+    ) -> None:
+        """Fulfil every line of one order in a SINGLE transaction.
+
+        Consumption is serialized per line (guarded ``qty_reserved`` update),
+        so a replay or a second concurrent fulfil fails with 409 before any
+        movement is written — the sales service re-probes first and never
+        reaches this method for an already-fulfilled order.
+        """
+        tid = _as_uuid(tenant_id)
+        ref_id = str(order_id)
+        emitted: list[tuple[Product, Decimal, Decimal]] = []
+        for line in lines:
+            if line.quantity <= 0:
+                raise ValidationError("Fulfilment quantity must be positive")
+            product = await self._require_active_product(line.product_id, tid)
+            await self._require_active_warehouse(warehouse_id, tid)
+            before = await self._current_on_hand(line.product_id, warehouse_id, tid)
+
+            if not await self.inventory_repo.apply_consume_qty(
+                line.product_id, warehouse_id, line.quantity, tid
+            ):
+                raise InsufficientStockError()
+
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.RELEASE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=_step_ref(ref_id, _STEP_RELEASE),
+                )
+            )
+            await self.inventory_repo.add_movement(
+                StockMovement(
+                    tenant_id=tid,
+                    product_id=line.product_id,
+                    warehouse_id=warehouse_id,
+                    movement_type=StockMovementType.ISSUE,
+                    qty=-line.quantity,
+                    ref_type=ref_type,
+                    ref_id=_step_ref(ref_id, _STEP_ISSUE),
+                )
+            )
+            emitted.append((product, before, line.quantity))
+
+        await self.inventory_repo.commit()
+
+        for product, before, qty in emitted:
+            await self._emit_level_changed(
+                tenant_id=tid,
+                product=product,
+                warehouse_id=warehouse_id,
+                before=before,
+                after=before - qty,
+            )
+
+    # ------------------------------------------------------------------
     # Reads (thin forwards — the router owns response shaping)
     # ------------------------------------------------------------------
 
@@ -579,31 +940,48 @@ class InventoryService:
         self,
         tenant_id: str | uuid.UUID,
         *,
+        include_inactive: bool = False,
         category: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> Sequence[Product]:
         return await self.inventory_repo.list_products(
             _as_uuid(tenant_id),
+            include_inactive=include_inactive,
             category=category,
             offset=offset,
             limit=limit,
         )
 
     async def count_products(
-        self, tenant_id: str | uuid.UUID, *, category: str | None = None
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        category: str | None = None,
     ) -> int:
-        return await self.inventory_repo.count_products(_as_uuid(tenant_id), category=category)
-
-    async def list_warehouses(
-        self, tenant_id: str | uuid.UUID, *, offset: int = 0, limit: int = 20
-    ) -> Sequence[Warehouse]:
-        return await self.inventory_repo.list_warehouses(
-            _as_uuid(tenant_id), offset=offset, limit=limit
+        return await self.inventory_repo.count_products(
+            _as_uuid(tenant_id), include_inactive=include_inactive, category=category
         )
 
-    async def count_warehouses(self, tenant_id: str | uuid.UUID) -> int:
-        return await self.inventory_repo.count_warehouses(_as_uuid(tenant_id))
+    async def list_warehouses(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        include_inactive: bool = False,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[Warehouse]:
+        return await self.inventory_repo.list_warehouses(
+            _as_uuid(tenant_id), include_inactive=include_inactive, offset=offset, limit=limit
+        )
+
+    async def count_warehouses(
+        self, tenant_id: str | uuid.UUID, *, include_inactive: bool = False
+    ) -> int:
+        return await self.inventory_repo.count_warehouses(
+            _as_uuid(tenant_id), include_inactive=include_inactive
+        )
 
     async def list_stock_levels(
         self,

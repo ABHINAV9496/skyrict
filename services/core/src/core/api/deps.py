@@ -22,6 +22,7 @@ from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
 from core.db.session import get_db
+from core.domain.value_objects import DataScope
 from core.features.audit.repository import AuditRepository
 from core.features.inventory.repository import InventoryRepository
 from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
@@ -29,12 +30,14 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
     from core.features.audit.service import AuditService
+    from core.features.crm.service import CrmService
     from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
     from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
     from core.features.inventory.service import InventoryService
     from core.features.payroll.service import PayrollService
+    from core.features.sales.service import SalesService
 
 logger = get_logger("core.deps")
 
@@ -310,3 +313,70 @@ def get_inventory_service(
     from core.features.inventory.service import InventoryService
 
     return InventoryService(inventory_repo, audit_service)
+
+
+# --- CRM & Sales deps ---
+
+
+async def get_current_scope(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> tuple[DataScope, uuid.UUID | None]:
+    """Resolve the request's effective data scope + team id from the DB grants.
+
+    CRM repository queries narrow owner/team-scoped rows by this pair, so the
+    scope is resolved ONCE here at the API boundary and never re-derived by
+    route handlers. ``scope_id`` (team id) is None when the caller holds no
+    team-scoped grant; ``DataScope.ALL`` callers ignore it.
+    """
+    return await RbacRepository(db).resolve_user_scope(
+        user_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
+
+
+def get_crm_service(
+    db: AsyncSession = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> CrmService:
+    """Composition root for the CRM feature."""
+    from core.db.sequence_repository import SequenceRepository
+    from core.features.crm.repository import CrmRepository
+    from core.features.crm.service import CrmService
+
+    return CrmService(
+        repository=CrmRepository(db, next_sequence=SequenceRepository(db).next_value),
+        audit=audit_service,
+    )
+
+
+def get_sales_service(
+    db: AsyncSession = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_service),
+    finance: FinanceService = Depends(get_finance_service),
+) -> SalesService:
+    """Composition root for the sales feature.
+
+    Wires every port the service depends on without importing another feature
+    module: the sales repository (with the shared per-tenant sequence), CRM's
+    repository as the customer port, inventory's repository for product and
+    warehouse resolution, inventory's service as the whole-order stock
+    lifecycle port, and finance's service as the invoicing port (so an order's
+    fulfilment creates the invoice in the same request transaction).
+    """
+    from core.db.sequence_repository import SequenceRepository
+    from core.features.crm.repository import CrmRepository
+    from core.features.inventory.service import InventoryService
+    from core.features.sales.repository import SalesRepository
+    from core.features.sales.service import SalesService
+
+    inventory_repo = InventoryRepository(db)
+    return SalesService(
+        repository=SalesRepository(db, next_sequence=SequenceRepository(db).next_value),
+        customers=CrmRepository(db),
+        stock=InventoryService(inventory_repo, audit_service),
+        products=inventory_repo,
+        warehouses=inventory_repo,
+        invoice=finance,
+        audit=audit_service,
+    )

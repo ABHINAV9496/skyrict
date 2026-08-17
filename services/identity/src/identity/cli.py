@@ -23,6 +23,7 @@ def serve(
         port=port,
         reload=reload,
         log_level=log_level,
+        proxy_headers=False,
     )
 
 

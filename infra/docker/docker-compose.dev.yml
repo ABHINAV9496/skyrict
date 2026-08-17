@@ -42,6 +42,13 @@ services:
       # services/identity/.env.
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       IDENTITY_REDIS_URL: redis://skyrict-redis:6379/0
+      # Trust the Docker network so the identity service reads the real client
+      # IP from X-Forwarded-For (appended by the nginx proxy) instead of
+      # recording nginx's own container IP on every session. Dev-only:
+      # production sets this to the ingress/node CIDRs in the k8s overlays.
+      # Tighten to the compose subnet (docker network inspect skyrict_default)
+      # if the exposed :8000 port is reachable by untrusted hosts.
+      IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
       # Outbound email → MailHog container (Web UI: http://localhost:8025).
       IDENTITY_EMAIL_SMTP_HOST: mailhog
       IDENTITY_EMAIL_SMTP_PORT: "1025"
@@ -49,6 +56,7 @@ services:
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
       # JWT RSA keys (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/identity, so the relative key
       # paths in services/identity/.env resolve to /app/services/identity/.dev/keys.
@@ -91,6 +99,7 @@ services:
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/core, so the relative key path in
       # services/core/.env resolves to /app/services/core/.dev/keys.

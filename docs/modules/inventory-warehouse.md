@@ -64,7 +64,7 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 | `cost_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) — landed cost |
 | `sell_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) — selling price |
 | `reorder_point` | Integer, NOT NULL default 0 | Threshold that triggers the low-stock alert (§4.4) |
-| `is_active` | Boolean, NOT NULL, default `true` | Soft-disable a product — never hard-delete (§10.6) |
+| `is_active` | Boolean, NOT NULL, default `true` | Archive flag — never hard-delete (§10.6). See Rule 5 (§4.5) |
 
 ### 3.2 `erp_warehouses` — where stock lives
 
@@ -73,7 +73,7 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 | `tenant_id` | UUID, NOT NULL, indexed | Ownership + RLS key |
 | `name` | String(256), NOT NULL | Warehouse display name |
 | `location` | String(256), nullable | Physical location |
-| `is_active` | Boolean, NOT NULL, default `true` | Soft-disable a warehouse |
+| `is_active` | Boolean, NOT NULL, default `true` | Archive flag — never hard-delete (§10.6). See Rule 5 (§4.5) |
 
 **Unique per tenant:** `UNIQUE (tenant_id, name)` named `uq_erp_warehouses_tenant_name`.
 
@@ -142,6 +142,21 @@ All rules are implemented in the **service layer** (`features/inventory/service.
 2. A **breach crossing** = level transitions from `> reorder_point` to `<= reorder_point`. Track the previous level (from before this movement).
 3. Fire **once** per crossing: emit `inventory.stock.level_changed` (§9) and write an audit row.
 4. Repeated writes while already `<= reorder_point` do **not** re-fire.
+5. `list_low_stock` / `count_low_stock` only consider **active** products — archived items never surface reorder alerts.
+
+### 4.5 Rule 5 — Archive semantics (production ERP model)
+Products and warehouses are **archived** (`is_active = false`), never hard-deleted. Deleting in a stock system must not strand money records or on-hand stock, so the deactivation rules mirror Odoo/NetSuite/SAP:
+
+1. **Deactivation** (`DELETE /products/{id}`, `DELETE /warehouses/{id}`):
+   - Succeeds (archives) even when the item still has on-hand stock — the write-off path stays available.
+   - **Blocked (409 `stock_reserved`)** while any open reservation (`qty_reserved > 0`) exists against the item. Reserved quantities are committed to confirmed orders; archiving would strand that commitment.
+   - The audit row records `on_hand_qty` / `reserved_qty` at archive time.
+   - Reorder alerts stop being emitted (§4.4.5) and the item disappears from default lists.
+2. **Posting block** — archived items reject new operational movements:
+   - `transfer_stock`, `reserve_stock`, `release_reservation`, `fulfil_order` → 409 `item_inactive` when the product **or** warehouse is inactive.
+   - **`adjust_stock` remains allowed** — a negative adjustment is the sanctioned write-off that zeroes out archived stock; a positive one corrects count errors found after archiving.
+3. **Reactivate** (`POST /products/{id}/reactivate`, `POST /warehouses/{id}/reactivate`) — flips `is_active` back to `true`, restoring normal posting. Audit event: `inventory.product.reactivated` / `inventory.warehouse.reactivated`.
+4. **Visibility** — list endpoints default to active items only. Pass `?include_inactive=true` to include archived rows (needed to resolve names on the stock report and movement ledger).
 
 ---
 
@@ -330,6 +345,34 @@ _require_inventory_write = require_permission(INVENTORY_WRITE)
 _require_inventory_approve = require_permission(INVENTORY_APPROVE)
 ```
 
+### 7.4 Cross-service RBAC provisioning (how core_roles get filled)
+`require_permission` resolves grants from **core's own** `core_roles` / `core_user_roles`
+tables (`core/db/rbac.py`), which are NOT the identity service's `roles` /
+`user_roles`. Identity owns tenancy + roles; core mirrors the subset it needs.
+Provisioning is **event-driven**:
+
+- **Identity emits** `identity.tenant.provisioned` (full role snapshot + owner
+  grant) from `signup_create_organization`, and `identity.rbac.role_granted`
+  from role assignment — envelopes defined in
+  `libs/skyrict-events/schemas` (`TenantProvisioned` / `RbacRoleGranted`, shared
+  `RoleGrant` shape).
+- **Core consumes** them via `core/events/consumers/` — the idempotent
+  `apply_role_grants` upsert (role by `(tenant_id, id)` with name-match
+  fallback; grant by `(tenant_id, user_id, role_id, scope_id)`).
+
+Phase 1 caveat: Kafka is intentionally deferred (see `infra/docker/docker-compose.yml`),
+so producers are log-only stubs and no broker consumer runs yet. Until the bus
+lands, provision a tenant with the CLI (same handler the consumer will call):
+
+```
+uv run --directory services/core python -m core.cli provision-rbac \
+  --tenant-id <uuid> --payload path/to/role_grants.json
+```
+
+The payload mirrors the event: `{"tenant_id": ..., "role_grants": [{role_id,
+role_name, permissions, is_system_role, user_id, scope_id}]}`. Without a
+provisioned role+grant, every ERP endpoint returns 403 `PermissionDeniedError`.
+
 ---
 
 ## 8. API surface
@@ -346,7 +389,13 @@ All endpoints are under `/api/v1/inventory`, require a valid access JWT + tenant
 | 6 | `POST /api/v1/inventory/stock/adjustments` | `erp.inventory.write`; delta > threshold → `erp.inventory.approve` | `StockAdjustmentCreate` (product, warehouse, qty, reason) → `StockMovementResponse` |
 | 7 | `POST /api/v1/inventory/stock/transfers` | `erp.inventory.write` | `StockTransferCreate` (product, from_warehouse_id, to_warehouse_id, qty) → two `StockMovementResponse` |
 | 8 | `GET /api/v1/inventory/stock/movements` | `erp.inventory.read` | `?product_id=&warehouse_id=&type=&page=&page_size=` → list |
-| 9 | `GET /api/v1/inventory/alerts` | `erp.inventory.read` | → list of products currently `qty_on_hand <= reorder_point` |
+| 9 | `GET /api/v1/inventory/alerts` | `erp.inventory.read` | → list of **active** products currently `qty_on_hand <= reorder_point` |
+| 10 | `DELETE /api/v1/inventory/products/{id}` | `erp.inventory.write` | → archived `ProductResponse`; 409 `stock_reserved` if any open reservation |
+| 11 | `DELETE /api/v1/inventory/warehouses/{id}` | `erp.inventory.write` | → archived `WarehouseResponse`; 409 `stock_reserved` if any open reservation |
+| 12 | `POST /api/v1/inventory/products/{id}/reactivate` | `erp.inventory.write` | → active `ProductResponse` |
+| 13 | `POST /api/v1/inventory/warehouses/{id}/reactivate` | `erp.inventory.write` | → active `WarehouseResponse` |
+
+List endpoints (`products`, `warehouses`) accept `?include_inactive=true` (default `false`) to include archived rows (Rule 5.4).
 
 ### 8.1 Schema shapes (abridged)
 ```python
@@ -420,10 +469,10 @@ Use **offset/limit** (matches identity; no cursor pagination exists):
 `PaginationParams(page=1, page_size=20)` from `skyrict-common`; responses wrapped in `ResponseEnvelope` / `ListResponse` with `PaginationMeta`.
 
 ### 10.5 Errors
-Reuse `skyrict_common` exceptions → RFC 7807 `{type, status, title, detail, instance}` via `core/exceptions.py`. Add service exceptions: `InsufficientStockError` (409), `DuplicateSkuError` (409), `MovementImmutableError` (409), `TransferRequiresDistinctWarehousesError` (422).
+Reuse `skyrict_common` exceptions → RFC 7807 `{type, status, title, detail, instance}` via `core/exceptions.py`. Add service exceptions: `InsufficientStockError` (409), `DuplicateSkuError` (409), `MovementImmutableError` (409), `TransferRequiresDistinctWarehousesError` (422), `StockReservedError` (409, `stock_reserved` — Rule 5.1), `InactiveItemError` (409, `item_inactive` — Rule 5.2).
 
-### 10.6 Soft delete
-Financial/order records are never hard-deleted: products/warehouses use `is_active = false`.
+### 10.6 Soft delete → archive
+Financial/order records are never hard-deleted. Products/warehouses are **archived** via `is_active = false` per Rule 5 — allowed with on-hand stock, blocked on open reservations, reversible via the reactivate endpoints, and subject to the posting block. Adjustments remain the sanctioned write-off path for archived stock.
 
 ---
 
@@ -469,6 +518,9 @@ Mirror `test_tenant_isolation.py`: real Postgres + `alembic upgrade head`, provi
 - [ ] Tenant isolation + per-warehouse isolation verified with two tenants
 - [ ] Every adjustment/transfer audited
 - [ ] Reservation flow satisfies `qty_reserved <= qty_on_hand`
+- [ ] Archive allowed with on-hand stock; blocked (409) while reserved; adjust-on-archived works as write-off
+- [ ] Posting block: transfer/reserve/release/fulfil on an archived item → 409; reactivate restores posting
+- [ ] Reorder alerts exclude archived items; `include_inactive=true` surfaces them in lists
 
 ---
 

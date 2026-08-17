@@ -18,6 +18,13 @@ export class ApiError extends Error {
   }
 }
 
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 let sessionLostRedirectPending = false;
@@ -105,8 +112,18 @@ export function ensureSession(): Promise<HydratedSession | null> {
 }
 
 async function toResult<T>(response: Response): Promise<T> {
+  return readPayload<T>(response).then(({ data }) => data);
+}
+
+interface Envelope<T> {
+  data: T;
+  meta: PaginationMeta | null;
+}
+
+async function readPayload<T>(response: Response): Promise<Envelope<T>> {
   const payload = (await response.json().catch(() => ({}))) as {
     data?: T | null;
+    meta?: PaginationMeta | null;
     detail?: { error?: { message?: string }; message?: string } | string;
   };
   if (!response.ok) {
@@ -117,10 +134,11 @@ async function toResult<T>(response: Response): Promise<T> {
       "Request failed. Please try again.";
     throw new ApiError(response.status, message);
   }
-  return payload.data as T;
+  return { data: payload.data as T, meta: payload.meta ?? null };
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+/** Fetch a `/api/v1` endpoint with session hydration/refresh, returning the full envelope. */
+async function fetchWithSession(path: string, options: RequestInit): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("X-Tenant-Slug", getTenantSlug());
   const token = getAccessToken();
@@ -159,7 +177,18 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     }
   }
 
-  return toResult<T>(response);
+  return response;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return toResult<T>(await fetchWithSession(path, options));
+}
+
+export async function apiFetchWithMeta<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<Envelope<T>> {
+  return readPayload<T>(await fetchWithSession(path, options));
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
@@ -169,11 +198,15 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
-export interface PaginationMeta {
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  return apiFetch<T>(path, { method: "DELETE" });
 }
 
 export interface Paginated<T> {

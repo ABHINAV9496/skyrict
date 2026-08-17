@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
 _MFA_SECRETS: dict[str, str] = {}
 
+_WIN11_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+)
+
 
 async def _delete_tenant_by_slug(slug: str) -> None:
     async with async_session_factory() as session:
@@ -42,10 +47,19 @@ async def _enroll_mfa(client: AsyncClient, *, slug: str, access_token: str) -> s
     return secret
 
 
-async def _login(client: AsyncClient, *, slug: str, email: str) -> tuple[str, str, str]:
+async def _login(
+    client: AsyncClient,
+    *,
+    slug: str,
+    email: str,
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[str, str, str]:
+    headers = {"X-Tenant-Slug": slug}
+    if extra_headers:
+        headers.update(extra_headers)
     login = await client.post(
         "/api/v1/auth/login",
-        headers={"X-Tenant-Slug": slug},
+        headers=headers,
         json={"email": email, "password": "TestPassword123!"},
     )
     assert login.status_code == 200
@@ -97,7 +111,12 @@ class TestSessionLifecycle:
             assert session["user_id"] == user_id
             assert session["status"] == "active"
             assert session["last_active_at"]
-            assert session["user_agent"]
+            assert session["user_agent"]  # httpx sends python-httpx/<version>
+            assert session["device_type"] == "service"
+            assert session["browser_name"] is None
+            assert session["os_name"] is None
+            assert session["device_family"] == "Python HTTPX"
+            assert session["device_model"] is None
         finally:
             await _delete_tenant_by_slug(slug)
 
@@ -177,5 +196,74 @@ class TestSessionLifecycle:
 
             remaining = await _list_sessions(client, slug=slug, access_token=access_b)
             assert len(remaining) == 1
+        finally:
+            await _delete_tenant_by_slug(slug)
+
+    async def test_login_captures_structured_device_fields(self, client: AsyncClient) -> None:
+        slug, email = await _provision(client)
+        _, access, _ = await _login(
+            client,
+            slug=slug,
+            email=email,
+            extra_headers={
+                "User-Agent": _WIN11_UA,
+                "Sec-CH-UA": '"Chromium";v="151", "Google Chrome";v="151"',
+                "Sec-CH-UA-Platform": '"Windows"',
+                "Sec-CH-UA-Platform-Version": '"15.0.0"',
+                "Sec-CH-UA-Mobile": "?0",
+            },
+        )
+        try:
+            sessions = await _list_sessions(client, slug=slug, access_token=access)
+            assert len(sessions) == 1
+            session = sessions[0]
+
+            assert session["user_agent"] == _WIN11_UA
+            assert session["device_type"] == "desktop"
+            assert session["browser_name"] == "Chrome"
+            assert session["browser_version"] == "151"
+            assert session["os_name"] == "Windows"
+            assert session["os_version"] == "11"
+            assert session["device_family"] == "Windows PC"
+            assert session["device_model"] is None
+        finally:
+            await _delete_tenant_by_slug(slug)
+
+    async def test_programmatic_client_login_is_a_service(self, client: AsyncClient) -> None:
+        slug, email = await _provision(client)
+        _, access, _ = await _login(
+            client,
+            slug=slug,
+            email=email,
+            extra_headers={"User-Agent": "node"},
+        )
+        try:
+            sessions = await _list_sessions(client, slug=slug, access_token=access)
+            assert len(sessions) == 1
+            session = sessions[0]
+
+            assert session["device_type"] == "service"
+            assert session["device_family"] == "Node.js"
+            assert session["browser_name"] is None
+            assert session["os_name"] is None
+            assert session["device"] == "Node.js"
+        finally:
+            await _delete_tenant_by_slug(slug)
+
+    async def test_spoofed_forwarded_header_is_ignored(self, client: AsyncClient) -> None:
+        slug, email = await _provision(client)
+        _, access, _ = await _login(
+            client,
+            slug=slug,
+            email=email,
+            extra_headers={"X-Forwarded-For": "8.8.8.8, 6.6.6.6"},
+        )
+        try:
+            sessions = await _list_sessions(client, slug=slug, access_token=access)
+            assert len(sessions) == 1
+            session = sessions[0]
+
+            assert session["ip_address"] != "8.8.8.8"
+            assert session["ip_address"] != "6.6.6.6"
         finally:
             await _delete_tenant_by_slug(slug)

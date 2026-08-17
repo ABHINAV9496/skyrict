@@ -116,6 +116,11 @@ class TestSeedCoreRolesForTenant:
             "erp.payroll.read",
             "erp.payroll.write",
             "erp.payroll.approve",
+            "erp.crm.read",
+            "erp.crm.write",
+            "erp.sales.read",
+            "erp.sales.write",
+            "erp.sales.approve",
         ]
         assert merged.is_system_role is True
         assert len(session.added) == len(CORE_SYSTEM_ROLES) - 1
@@ -130,7 +135,12 @@ class TestSeedCoreRolesForTenant:
         await seed_core_roles_for_tenant(uuid.uuid4())
 
         assert existing[0].is_system_role is True
-        assert existing[0].permissions == ["erp.hr.read", "erp.payroll.read"]
+        assert existing[0].permissions == [
+            "erp.hr.read",
+            "erp.payroll.read",
+            "erp.crm.read",
+            "erp.sales.read",
+        ]
 
 
 class TestCoreSystemRolesDefinition:
@@ -145,7 +155,25 @@ class TestCoreSystemRolesDefinition:
             "erp.payroll.read",
             "erp.payroll.write",
             "erp.payroll.approve",
+            "erp.crm.read",
+            "erp.crm.write",
+            "erp.sales.read",
+            "erp.sales.write",
+            "erp.sales.approve",
         }
-        assert by_name["department_manager"] == ("erp.hr.read", "erp.hr.write", "erp.payroll.read")
-        assert by_name["standard_user"] == ("erp.hr.read",)
-        assert by_name["auditor"] == ("erp.hr.read", "erp.payroll.read")
+        assert by_name["department_manager"] == (
+            "erp.hr.read",
+            "erp.hr.write",
+            "erp.payroll.read",
+            "erp.crm.read",
+            "erp.crm.write",
+            "erp.sales.read",
+            "erp.sales.write",
+        )
+        assert by_name["standard_user"] == ("erp.hr.read", "erp.crm.read", "erp.sales.read")
+        assert by_name["auditor"] == (
+            "erp.hr.read",
+            "erp.payroll.read",
+            "erp.crm.read",
+            "erp.sales.read",
+        )

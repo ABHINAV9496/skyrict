@@ -152,6 +152,44 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Scrollbars
+ *
+ * Thin, rounded, theme-aware scrollbars (WebKit + Firefox) so the sidebar
+ * nav and any overflowing surface match the UI instead of the platform
+ * default. The thumb uses the muted-foreground token so it reads correctly
+ * in light and dark themes.
+ * ------------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--muted-foreground) 65%, transparent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
  * Module themes
  *
  * Each module "world" re-tints the shadcn token set so the sidebar, topbar,

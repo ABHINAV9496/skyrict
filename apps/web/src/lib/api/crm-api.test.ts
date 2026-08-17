@@ -70,7 +70,10 @@ describe("listLeads", () => {
   });
 
   it("defaults missing fields defensively", async () => {
-    apiFetchMock.mockResolvedValue({ data: [{ id: "lead-2" }], meta: {} });
+    apiFetchMock.mockResolvedValue({
+      data: [{ id: "lead-2" }],
+      meta: { total: 0, page: 1, page_size: 50, total_pages: 0 },
+    });
 
     const result = await listLeads();
 

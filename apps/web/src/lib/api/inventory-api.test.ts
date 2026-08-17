@@ -47,7 +47,6 @@ describe("inventory list endpoints", () => {
 
   it("maps the products envelope into products with pagination", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [
         {
           id: "p-1",
@@ -94,7 +93,6 @@ describe("inventory list endpoints", () => {
 
   it("returns an empty list for an empty envelope", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [],
       meta: { total: 0, page: 1, page_size: 20, total_pages: 0 },
     });
@@ -107,7 +105,6 @@ describe("inventory list endpoints", () => {
 
   it("maps the warehouses envelope", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [
         {
           id: "w-1",
@@ -132,7 +129,6 @@ describe("inventory list endpoints", () => {
 
   it("maps the stock levels envelope", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [
         {
           id: "s-1",
@@ -162,7 +158,6 @@ describe("inventory list endpoints", () => {
 
   it("maps the movements envelope", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [
         {
           id: "m-1",
@@ -193,7 +188,6 @@ describe("inventory list endpoints", () => {
 
   it("maps the alerts envelope", async () => {
     httpMock.mockResolvedValue({
-      success: true,
       data: [
         {
           product_id: "p-1",

@@ -26,8 +26,8 @@ from core.domain.value_objects import (
     InvoiceStatus,
     OrderStatus,
     PaymentStatus,
+    StockMovementType,
 )
-
 from core.features.crm.models.customer import ErpCrmCustomerModel
 
 if TYPE_CHECKING:
@@ -380,18 +380,18 @@ PAYROLL_RUN_ROWS: tuple[dict[str, object], ...] = (
 
 # Products (seeded if not present)
 PRODUCT_ROWS: tuple[dict[str, object], ...] = (
-    {"sku": "PROD-001", "name": "Enterprise ERP License", "category": "Software", "unit": "license", "cost": Decimal("5000"), "sell": Decimal("25000"), "reorder": Decimal("0")},
-    {"sku": "PROD-002", "name": "CRM Module Add-on", "category": "Software", "unit": "license", "cost": Decimal("1500"), "sell": Decimal("8000"), "reorder": Decimal("0")},
-    {"sku": "PROD-003", "name": "HR Module Add-on", "category": "Software", "unit": "license", "cost": Decimal("1200"), "sell": Decimal("6500"), "reorder": Decimal("0")},
+    {"sku": "PROD-001", "name": "Enterprise ERP License", "category": "Software", "unit": "license", "cost": Decimal("5000"), "sell": Decimal("25000"), "reorder": Decimal("5")},
+    {"sku": "PROD-002", "name": "CRM Module Add-on", "category": "Software", "unit": "license", "cost": Decimal("1500"), "sell": Decimal("8000"), "reorder": Decimal("3")},
+    {"sku": "PROD-003", "name": "HR Module Add-on", "category": "Software", "unit": "license", "cost": Decimal("1200"), "sell": Decimal("6500"), "reorder": Decimal("3")},
     {"sku": "PROD-004", "name": "Implementation Service", "category": "Services", "unit": "hour", "cost": Decimal("75"), "sell": Decimal("200"), "reorder": Decimal("0")},
     {"sku": "PROD-005", "name": "Training Workshop", "category": "Services", "unit": "session", "cost": Decimal("500"), "sell": Decimal("1500"), "reorder": Decimal("0")},
     {"sku": "PROD-006", "name": "Premium Support Plan", "category": "Services", "unit": "month", "cost": Decimal("800"), "sell": Decimal("2500"), "reorder": Decimal("0")},
     {"sku": "PROD-007", "name": "Data Migration Package", "category": "Services", "unit": "package", "cost": Decimal("2000"), "sell": Decimal("5400"), "reorder": Decimal("0")},
     {"sku": "PROD-008", "name": "Custom Report Development", "category": "Services", "unit": "report", "cost": Decimal("600"), "sell": Decimal("2300"), "reorder": Decimal("0")},
-    {"sku": "PROD-009", "name": "API Gateway Setup", "category": "Infrastructure", "unit": "setup", "cost": Decimal("3000"), "sell": Decimal("14400"), "reorder": Decimal("0")},
+    {"sku": "PROD-009", "name": "API Gateway Setup", "category": "Infrastructure", "unit": "setup", "cost": Decimal("3000"), "sell": Decimal("14400"), "reorder": Decimal("2")},
     {"sku": "PROD-010", "name": "Security Audit", "category": "Services", "unit": "audit", "cost": Decimal("2500"), "sell": Decimal("8000"), "reorder": Decimal("0")},
-    {"sku": "PROD-011", "name": "Cloud Hosting (Annual)", "category": "Infrastructure", "unit": "year", "cost": Decimal("4800"), "sell": Decimal("12000"), "reorder": Decimal("0")},
-    {"sku": "PROD-012", "name": "Analytics Dashboard", "category": "Software", "unit": "license", "cost": Decimal("1000"), "sell": Decimal("4500"), "reorder": Decimal("0")},
+    {"sku": "PROD-011", "name": "Cloud Hosting (Annual)", "category": "Infrastructure", "unit": "year", "cost": Decimal("4800"), "sell": Decimal("12000"), "reorder": Decimal("10")},
+    {"sku": "PROD-012", "name": "Analytics Dashboard", "category": "Software", "unit": "license", "cost": Decimal("1000"), "sell": Decimal("4500"), "reorder": Decimal("5")},
 )
 
 # Sales orders: (order_number, status, subtotal, discount, tax, total, days_ago, lines)
@@ -501,6 +501,77 @@ SALES_ORDER_ROWS: tuple[dict[str, object], ...] = (
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
+# INVENTORY DATA
+# ═══════════════════════════════════════════════════════════════════════════
+
+WAREHOUSE_ROWS: tuple[dict[str, object], ...] = (
+    {"name": "Main Distribution Center", "location": "Riyadh Industrial City", "is_active": True},
+    {"name": "East Region Hub", "location": "Dammam, Eastern Province", "is_active": True},
+    {"name": "West Region Hub", "location": "Jeddah, Western Province", "is_active": True},
+    {"name": "Central Warehouse", "location": "Riyadh, Al Kharj Road", "is_active": True},
+    {"name": "Overflow Storage", "location": "Khobar, Eastern Province", "is_active": True},
+)
+
+# Stock levels: (product_idx, warehouse_idx, on_hand, reserved)
+# Some products below reorder to trigger alerts: PROD-002 (reorder 3, qty 1),
+# PROD-009 (reorder 2, qty 1), PROD-012 (reorder 5, qty 2).
+STOCK_LEVEL_ROWS: tuple[dict[str, object], ...] = (
+    # Warehouse 0: Main DC — primary stock
+    {"prod": 0, "wh": 0, "on_hand": Decimal("12"), "reserved": Decimal("2")},
+    {"prod": 1, "wh": 0, "on_hand": Decimal("1"), "reserved": Decimal("0")},
+    {"prod": 2, "wh": 0, "on_hand": Decimal("8"), "reserved": Decimal("1")},
+    {"prod": 9, "wh": 0, "on_hand": Decimal("5"), "reserved": Decimal("0")},
+    {"prod": 10, "wh": 0, "on_hand": Decimal("20"), "reserved": Decimal("3")},
+    {"prod": 11, "wh": 0, "on_hand": Decimal("2"), "reserved": Decimal("0")},
+    # Warehouse 1: East Region Hub
+    {"prod": 0, "wh": 1, "on_hand": Decimal("6"), "reserved": Decimal("1")},
+    {"prod": 2, "wh": 1, "on_hand": Decimal("4"), "reserved": Decimal("0")},
+    {"prod": 10, "wh": 1, "on_hand": Decimal("15"), "reserved": Decimal("2")},
+    # Warehouse 2: West Region Hub
+    {"prod": 1, "wh": 2, "on_hand": Decimal("3"), "reserved": Decimal("0")},
+    {"prod": 8, "wh": 2, "on_hand": Decimal("1"), "reserved": Decimal("0")},
+    {"prod": 9, "wh": 2, "on_hand": Decimal("3"), "reserved": Decimal("1")},
+    # Warehouse 3: Central Warehouse
+    {"prod": 0, "wh": 3, "on_hand": Decimal("4"), "reserved": Decimal("0")},
+    {"prod": 11, "wh": 3, "on_hand": Decimal("6"), "reserved": Decimal("1")},
+    {"prod": 10, "wh": 3, "on_hand": Decimal("8"), "reserved": Decimal("0")},
+    # Warehouse 4: Overflow Storage (sparse)
+    {"prod": 2, "wh": 4, "on_hand": Decimal("2"), "reserved": Decimal("0")},
+    {"prod": 10, "wh": 4, "on_hand": Decimal("5"), "reserved": Decimal("0")},
+)
+
+# Stock movements: immutable ledger entries
+# (product_idx, warehouse_idx, movement_type, qty, ref_type, ref_id, days_ago)
+STOCK_MOVEMENT_ROWS: tuple[dict[str, object], ...] = (
+    # Initial receipts at Main DC
+    {"prod": 0, "wh": 0, "type": StockMovementType.RECEIPT, "qty": Decimal("15"), "ref": "purchase_order", "ref_id": "PO-0001", "days": 90},
+    {"prod": 1, "wh": 0, "type": StockMovementType.RECEIPT, "qty": Decimal("5"), "ref": "purchase_order", "ref_id": "PO-0002", "days": 90},
+    {"prod": 2, "wh": 0, "type": StockMovementType.RECEIPT, "qty": Decimal("10"), "ref": "purchase_order", "ref_id": "PO-0003", "days": 85},
+    {"prod": 10, "wh": 0, "type": StockMovementType.RECEIPT, "qty": Decimal("25"), "ref": "purchase_order", "ref_id": "PO-0004", "days": 80},
+    {"prod": 11, "wh": 0, "type": StockMovementType.RECEIPT, "qty": Decimal("8"), "ref": "purchase_order", "ref_id": "PO-0005", "days": 75},
+    # Issues to sales orders
+    {"prod": 0, "wh": 0, "type": StockMovementType.ISSUE, "qty": Decimal("-2"), "ref": "sales_order", "ref_id": "SO-0001", "days": 60},
+    {"prod": 0, "wh": 1, "type": StockMovementType.ISSUE, "qty": Decimal("-1"), "ref": "sales_order", "ref_id": "SO-0003", "days": 30},
+    {"prod": 2, "wh": 0, "type": StockMovementType.ISSUE, "qty": Decimal("-1"), "ref": "sales_order", "ref_id": "SO-0002", "days": 45},
+    {"prod": 10, "wh": 0, "type": StockMovementType.ISSUE, "qty": Decimal("-3"), "ref": "sales_order", "ref_id": "SO-0005", "days": 25},
+    # Transfers between warehouses
+    {"prod": 10, "wh": 0, "type": StockMovementType.TRANSFER, "qty": Decimal("-7"), "ref": "transfer", "ref_id": "TRF-0001", "days": 50},
+    {"prod": 10, "wh": 1, "type": StockMovementType.TRANSFER, "qty": Decimal("7"), "ref": "transfer", "ref_id": "TRF-0001", "days": 50},
+    {"prod": 0, "wh": 0, "type": StockMovementType.TRANSFER, "qty": Decimal("-2"), "ref": "transfer", "ref_id": "TRF-0002", "days": 40},
+    {"prod": 0, "wh": 3, "type": StockMovementType.TRANSFER, "qty": Decimal("2"), "ref": "transfer", "ref_id": "TRF-0002", "days": 40},
+    # Reservations for confirmed orders
+    {"prod": 0, "wh": 0, "type": StockMovementType.RESERVATION, "qty": Decimal("-2"), "ref": "sales_order", "ref_id": "SO-0003", "days": 30},
+    {"prod": 0, "wh": 1, "type": StockMovementType.RESERVATION, "qty": Decimal("-1"), "ref": "sales_order", "ref_id": "SO-0009", "days": 18},
+    {"prod": 2, "wh": 0, "type": StockMovementType.RESERVATION, "qty": Decimal("-1"), "ref": "sales_order", "ref_id": "SO-0010", "days": 55},
+    {"prod": 10, "wh": 0, "type": StockMovementType.RESERVATION, "qty": Decimal("-3"), "ref": "sales_order", "ref_id": "SO-0012", "days": 12},
+    # Adjustments
+    {"prod": 8, "wh": 2, "type": StockMovementType.ADJUSTMENT, "qty": Decimal("1"), "ref": "adjustment", "ref_id": "ADJ-0001", "days": 20},
+    {"prod": 11, "wh": 3, "type": StockMovementType.RECEIPT, "qty": Decimal("4"), "ref": "purchase_order", "ref_id": "PO-0006", "days": 15},
+    # Release cancelled order reservation
+    {"prod": 1, "wh": 0, "type": StockMovementType.RELEASE, "qty": Decimal("1"), "ref": "sales_order", "ref_id": "SO-0008", "days": 40},
+)
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Seeding engine
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -517,29 +588,38 @@ async def _resolve_owner_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid
 
 async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[str, int]:
     """Seed demo data for all ERP modules. Idempotent unless force=True."""
+    from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+    from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
+    from core.features.finance.models.invoice import ErpInvoiceModel
+    from core.features.finance.models.invoice_line import ErpInvoiceLineModel
+    from core.features.finance.models.journal_entry import ErpJournalEntryModel
+    from core.features.finance.models.journal_line import ErpJournalLineModel
+    from core.features.finance.models.payment import ErpPaymentModel
     from core.features.hr.models.department import DepartmentModel
     from core.features.hr.models.employee import EmployeeModel
     from core.features.hr.models.leave_balance import LeaveBalanceModel
     from core.features.hr.models.leave_request import LeaveRequestModel
-    from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
-    from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
-    from core.features.finance.models.journal_entry import ErpJournalEntryModel
-    from core.features.finance.models.journal_line import ErpJournalLineModel
-    from core.features.finance.models.invoice import ErpInvoiceModel
-    from core.features.finance.models.invoice_line import ErpInvoiceLineModel
-    from core.features.finance.models.payment import ErpPaymentModel
-    from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
-    from core.features.payroll.models.payroll_entry import PayrollEntryModel
-    from core.features.payroll.models.compensation import CompensationModel
     from core.features.inventory.models.product import ErpProductModel
+    from core.features.inventory.models.stock_level import ErpStockLevelModel
+    from core.features.inventory.models.stock_movement import ErpStockMovementModel
+    from core.features.inventory.models.warehouse import ErpWarehouseModel
+    from core.features.payroll.models.compensation import CompensationModel
+    from core.features.payroll.models.payroll_entry import PayrollEntryModel
+    from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
     from core.features.sales.models.order import ErpSalesOrderModel
     from core.features.sales.models.order_line import ErpSalesOrderLineModel
 
     async with async_session_factory() as session:
         if force:
+            # Nullify circular FK (departments.manager_employee_id -> erp_employees)
+            # before bulk-delete so DELETE erp_employees isn't blocked.
+            await session.execute(
+                text("UPDATE erp_departments SET manager_employee_id = NULL WHERE tenant_id = :tid"),
+                {"tid": tenant_id},
+            )
             for model in (
                 ErpSalesOrderLineModel, ErpSalesOrderModel,
-                ErpProductModel,
+                ErpStockMovementModel, ErpStockLevelModel, ErpWarehouseModel, ErpProductModel,
                 PayrollEntryModel, PayrollRunModel, CompensationModel,
                 ErpPaymentModel, ErpInvoiceLineModel, ErpInvoiceModel,
                 ErpJournalLineModel, ErpJournalEntryModel,
@@ -911,6 +991,58 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 )
                 session.add(sol)
         counts["sales_orders"] = len(SALES_ORDER_ROWS)
+
+        # ── WAREHOUSES ──────────────────────────────────────────────
+        wh_ids: list[uuid.UUID] = []
+        for row in WAREHOUSE_ROWS:
+            wh = ErpWarehouseModel(
+                tenant_id=tenant_id,
+                name=row["name"],  # type: ignore
+                location=row.get("location"),  # type: ignore
+                is_active=row["is_active"],  # type: ignore
+            )
+            session.add(wh)
+            await session.flush()
+            wh_ids.append(wh.id)
+        counts["warehouses"] = len(wh_ids)
+
+        # ── UPDATE PRODUCT REORDER POINTS ────────────────────────────
+        for idx, row in enumerate(PRODUCT_ROWS):
+            reorder_val = row.get("reorder", Decimal("0"))  # type: ignore
+            if reorder_val:
+                await session.execute(
+                    text(
+                        "UPDATE erp_products SET reorder_point = :rp "
+                        "WHERE tenant_id = :tid AND id = :pid"
+                    ),
+                    {"rp": reorder_val, "tid": tenant_id, "pid": product_ids[idx]},
+                )
+
+        # ── STOCK LEVELS ────────────────────────────────────────────
+        for row in STOCK_LEVEL_ROWS:
+            sl = ErpStockLevelModel(
+                tenant_id=tenant_id,
+                product_id=product_ids[int(row["prod"])],  # type: ignore
+                warehouse_id=wh_ids[int(row["wh"])],  # type: ignore
+                qty_on_hand=row["on_hand"],  # type: ignore
+                qty_reserved=row["reserved"],  # type: ignore
+            )
+            session.add(sl)
+        counts["stock_levels"] = len(STOCK_LEVEL_ROWS)
+
+        # ── STOCK MOVEMENTS ──────────────────────────────────────────
+        for row in STOCK_MOVEMENT_ROWS:
+            sm = ErpStockMovementModel(
+                tenant_id=tenant_id,
+                product_id=product_ids[int(row["prod"])],  # type: ignore
+                warehouse_id=wh_ids[int(row["wh"])],  # type: ignore
+                movement_type=row["type"],  # type: ignore
+                qty=row["qty"],  # type: ignore
+                ref_type=row["ref"],  # type: ignore
+                ref_id=row["ref_id"],  # type: ignore
+            )
+            session.add(sm)
+        counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS)
 
         await session.commit()
         logger.info("seed.demo.complete", tenant_id=str(tenant_id), **counts)

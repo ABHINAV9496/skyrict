@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Columns3, LoaderCircle, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Columns3,
+  GripVertical,
+  LoaderCircle,
+  MoreHorizontal,
+  TrendingUp,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { ErrorState } from "@/components/dashboard/erp/error-state";
 import { EmptyState } from "@/components/dashboard/erp/empty-state";
@@ -39,6 +47,7 @@ function opportunityName(opportunity: Opportunity): string {
 }
 
 export function OpportunitiesBoard() {
+  const router = useRouter();
   const { permissions } = useModuleAccess();
   const canWrite = permissions.includes("*") || permissions.includes("erp.crm.write");
 
@@ -50,6 +59,9 @@ export function OpportunitiesBoard() {
     stage: OpportunityStage;
   } | null>(null);
   const [lostReason, setLostReason] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<OpportunityStage | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -91,6 +103,33 @@ export function OpportunitiesBoard() {
     } finally {
       setPending(null);
     }
+  }
+
+  /**
+   * Optimistic drag-drop move: flip the card locally first, then persist.
+   * The server stays authoritative — on any failure we reload so the board
+   * reverts to the real pipeline state and the error is surfaced above.
+   */
+  async function onDropTo(stage: OpportunityStage) {
+    const dragged = draggingId
+      ? status.state === "ready"
+        ? status.opportunities.find((item) => item.id === draggingId) ?? null
+        : null
+      : null;
+    setDragOverStage(null);
+    setDraggingId(null);
+    if (!dragged || !canWrite || isTerminalStage(stage) || dragged.stage === stage) return;
+    setStatus((current) =>
+      current.state === "ready"
+        ? {
+            ...current,
+            opportunities: current.opportunities.map((item) =>
+              item.id === dragged.id ? { ...item, stage } : item,
+            ),
+          }
+        : current,
+    );
+    await runMove(dragged, stage);
   }
 
   function onConfirm() {
@@ -140,14 +179,34 @@ export function OpportunitiesBoard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
           {PIPELINE_STAGES.map((stage) => {
             const opportunities = grouped.get(stage) ?? [];
+            const isDropTarget = canWrite && !isTerminalStage(stage);
+            const over = dragOverStage === stage;
             return (
-              <section key={stage} aria-label={OPPORTUNITY_STAGE_LABELS[stage]} className="min-w-0">
-                <header className="mb-3 flex items-center justify-between gap-2">
+              <section
+                key={stage}
+                aria-label={OPPORTUNITY_STAGE_LABELS[stage]}
+                className={cn(
+                  "min-w-0 rounded-xl transition-colors",
+                  isDropTarget && over && "bg-primary/5 ring-2 ring-primary/30",
+                )}
+                onDragOver={(event) => {
+                  if (!isDropTarget || !draggingId) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverStage(stage);
+                }}
+                onDragLeave={() => {
+                  if (dragOverStage === stage) setDragOverStage(null);
+                }}
+                onDrop={(event) => {
+                  if (!isDropTarget) return;
+                  event.preventDefault();
+                  void onDropTo(stage);
+                }}
+              >
+                <header className="mb-3 flex items-center justify-between gap-2 px-1">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Columns3
-                      aria-hidden="true"
-                      className="size-3.5 text-muted-foreground"
-                    />
+                    <Columns3 aria-hidden="true" className="size-3.5 text-muted-foreground" />
                     {OPPORTUNITY_STAGE_LABELS[stage]}
                   </h2>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
@@ -161,12 +220,30 @@ export function OpportunitiesBoard() {
                       opportunity={opportunity}
                       canWrite={canWrite}
                       pending={pending}
-                      onMove={(nextStage) => setConfirming({ opportunity, action: "move", stage: nextStage })}
+                      draggable={canWrite && !isTerminalStage(opportunity.stage)}
+                      dragging={draggingId === opportunity.id}
+                      menuOpen={menuFor === opportunity.id}
+                      onDragStart={() => {
+                        setDraggingId(opportunity.id);
+                        setMenuFor(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setDragOverStage(null);
+                      }}
+                      onOpenMenu={() => setMenuFor(opportunity.id)}
+                      onCloseMenu={() => setMenuFor(null)}
+                      onMove={(nextStage) =>
+                        setConfirming({ opportunity, action: "move", stage: nextStage })
+                      }
                       onWon={() => setConfirming({ opportunity, action: "won", stage: "won" })}
                       onLost={() => {
                         setLostReason("");
                         setConfirming({ opportunity, action: "lost", stage: "lost" });
                       }}
+                      onOpen={() =>
+                        router.push(`/dashboard/erp/crm/opportunities/${opportunity.id}`)
+                      }
                     />
                   ))}
                 </div>
@@ -176,7 +253,7 @@ export function OpportunitiesBoard() {
         </div>
       )}
 
-      {/* Confirm dialog for forward moves and the won/lost terminal transitions. */}
+      {/* Confirm dialog for stage moves and the won/lost terminal transitions. */}
       <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
         <DialogContent>
           <DialogHeader>
@@ -247,37 +324,135 @@ function OpportunityCard({
   opportunity,
   canWrite,
   pending,
+  draggable,
+  dragging,
+  menuOpen,
+  onDragStart,
+  onDragEnd,
+  onOpenMenu,
+  onCloseMenu,
   onMove,
   onWon,
   onLost,
+  onOpen,
 }: {
   opportunity: Opportunity;
   canWrite: boolean;
   pending: { id: string; stage: OpportunityStage } | null;
+  draggable: boolean;
+  dragging: boolean;
+  menuOpen: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
   onMove: (stage: OpportunityStage) => void;
   onWon: () => void;
   onLost: () => void;
+  onOpen: () => void;
 }) {
   const isBusy = pending?.id === opportunity.id;
   const stages = nextStages(opportunity.stage);
   const terminal = isTerminalStage(opportunity.stage);
+  const menuAnchor = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: MouseEvent | TouchEvent) {
+      if (menuAnchor.current && !menuAnchor.current.contains(event.target as Node)) {
+        onCloseMenu();
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [menuOpen, onCloseMenu]);
 
   return (
     <article
+      ref={menuAnchor}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={(event) => {
+        if (menuOpen) return;
+        if ((event.target as HTMLElement).closest("button")) return;
+        onOpen();
+      }}
       className={cn(
-        "rounded-xl border border-border bg-card p-3 transition-shadow hover:shadow-sm",
+        "relative rounded-xl border border-border bg-card p-3 transition-shadow hover:shadow-sm",
         opportunity.stage === "won" && "border-emerald-500/30",
         opportunity.stage === "lost" && "border-border opacity-80",
+        draggable && "cursor-grab active:cursor-grabbing",
+        dragging && "opacity-40",
       )}
     >
-      <div className="min-w-0">
-        <h3 className="truncate text-sm font-medium text-foreground">
-          {opportunityName(opportunity)}
-        </h3>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {opportunity.leadId ? "From qualified lead" : "Manual opportunity"}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-medium text-foreground">
+            {opportunityName(opportunity)}
+          </h3>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {opportunity.leadId ? "From qualified lead" : "Manual opportunity"}
+          </p>
+        </div>
+        {canWrite ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {draggable ? (
+              <GripVertical aria-hidden="true" className="size-3.5 text-muted-foreground/60" />
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Move ${opportunityName(opportunity)} to another stage`}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (menuOpen) onCloseMenu();
+                else onOpenMenu();
+              }}
+            >
+              <MoreHorizontal aria-hidden="true" className="size-3.5 text-muted-foreground" />
+            </Button>
+          </div>
+        ) : null}
       </div>
+
+      {menuOpen ? (
+        <div className="absolute top-10 right-3 z-20 min-w-44 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+          <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+            Move to stage
+          </p>
+          {stages.length === 0 ? (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">
+              {terminal ? "This deal is closed." : "No moves available."}
+            </p>
+          ) : (
+            stages.map((stage) => (
+              <button
+                key={stage}
+                type="button"
+                disabled={pending !== null}
+                onClick={() => {
+                  onCloseMenu();
+                  if (stage === "won") onWon();
+                  else if (stage === "lost") onLost();
+                  else onMove(stage);
+                }}
+                className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                {OPPORTUNITY_STAGE_LABELS[stage]}
+                {isBusy && pending?.stage === stage ? (
+                  <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
+                ) : null}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
 
       <div className="mt-3 space-y-1">
         <p className="min-w-0 font-display text-base font-semibold text-foreground tabular-nums">
@@ -322,27 +497,6 @@ function OpportunityCard({
               {OPPORTUNITY_STAGE_LABELS[stage]}
             </Button>
           ))}
-        </div>
-      ) : canWrite && opportunity.stage === "negotiation" ? (
-        <div className="mt-3 flex flex-wrap gap-1">
-          <Button type="button" variant="default" size="xs" disabled={pending !== null} onClick={onWon}>
-            {isBusy && pending?.stage === "won" ? (
-              <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
-            ) : null}
-            Mark won
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="xs"
-            disabled={pending !== null}
-            onClick={onLost}
-          >
-            {isBusy && pending?.stage === "lost" ? (
-              <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
-            ) : null}
-            Mark lost
-          </Button>
         </div>
       ) : canWrite && terminal ? (
         <div className="mt-3 h-6" aria-hidden="true" />

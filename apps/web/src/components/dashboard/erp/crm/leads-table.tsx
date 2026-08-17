@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, LoaderCircle, Plus, Search, UserPlus, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { ErpTable, type ErpColumn } from "@/components/dashboard/erp/erp-table";
 import { ErrorState } from "@/components/dashboard/erp/error-state";
@@ -56,6 +57,7 @@ function leadName(lead: Lead): string {
 }
 
 export function LeadsTable() {
+  const router = useRouter();
   const { permissions } = useModuleAccess();
   const canWrite =
     permissions.includes("*") || permissions.includes("erp.crm.write");
@@ -338,6 +340,7 @@ export function LeadsTable() {
           columns={columns}
           rows={visibleLeads}
           rowKey={(lead) => lead.id}
+          onRowClick={(lead) => router.push(`/dashboard/erp/crm/leads/${lead.id}`)}
           footer={
             <Pagination
               meta={offsetMeta(offset, PAGE_SIZE, status.total)}

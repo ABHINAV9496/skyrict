@@ -38,6 +38,8 @@ from core.features.inventory.schemas import (
     StockAdjustmentCreate,
     StockLevelResponse,
     StockMovementResponse,
+    StockReleaseCreate,
+    StockReserveCreate,
     StockTransferCreate,
     TransferResponse,
     WarehouseCreate,
@@ -353,6 +355,52 @@ async def transfer_stock(
     return ResponseEnvelope(
         data=TransferResponse.from_entities(out_movement, in_movement),
         message="Stock transferred",
+    )
+
+
+@router.post(
+    "/stock/reservations",
+    response_model=ResponseEnvelope[StockLevelResponse],
+    status_code=201,
+)
+async def reserve_stock(
+    body: StockReserveCreate,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[StockLevelResponse]:
+    """Reserve stock for a pending order (qty_reserved increases)."""
+    level = await service.reserve_stock(
+        body.product_id,
+        body.warehouse_id,
+        body.qty,
+        tenant_id,
+        ref_id=body.ref_id,
+    )
+    return ResponseEnvelope(data=StockLevelResponse.from_entity(level), message="Stock reserved")
+
+
+@router.post(
+    "/stock/releases",
+    response_model=ResponseEnvelope[StockLevelResponse],
+    status_code=201,
+)
+async def release_reservation(
+    body: StockReleaseCreate,
+    _: dict[str, object] = Depends(_require_inventory_write),
+    tenant_id: str = Depends(get_tenant_context),
+    service: InventoryService = Depends(get_inventory_service),
+) -> ResponseEnvelope[StockLevelResponse]:
+    """Release previously reserved stock (qty_reserved decreases)."""
+    level = await service.release_reservation(
+        body.product_id,
+        body.warehouse_id,
+        body.qty,
+        tenant_id,
+        ref_id=body.ref_id,
+    )
+    return ResponseEnvelope(
+        data=StockLevelResponse.from_entity(level), message="Reservation released"
     )
 
 

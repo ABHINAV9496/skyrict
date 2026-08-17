@@ -137,6 +137,20 @@ export interface TransferStockInput {
     refId?: string;
 }
 
+export interface ReserveStockInput {
+    productId: string;
+    warehouseId: string;
+    qty: number;
+    refId?: string;
+}
+
+export interface ReleaseStockInput {
+    productId: string;
+    warehouseId: string;
+    qty: number;
+    refId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Payload shapes (snake_case, as served by the backend)
 // ---------------------------------------------------------------------------
@@ -546,6 +560,36 @@ export async function transferStock(
         },
     );
     return mapTransfer(raw ?? {});
+}
+
+export async function reserveStock(
+    input: ReserveStockInput,
+): Promise<StockLevel> {
+    const raw = await apiPost<StockLevelPayload | null>(
+        "/api/v1/inventory/stock/reservations",
+        {
+            product_id: input.productId,
+            warehouse_id: input.warehouseId,
+            qty: input.qty,
+            ref_id: input.refId ?? newRefId(),
+        },
+    );
+    return mapStockLevel(raw ?? {});
+}
+
+export async function releaseStock(
+    input: ReleaseStockInput,
+): Promise<StockLevel> {
+    const raw = await apiPost<StockLevelPayload | null>(
+        "/api/v1/inventory/stock/releases",
+        {
+            product_id: input.productId,
+            warehouse_id: input.warehouseId,
+            qty: input.qty,
+            ref_id: input.refId ?? newRefId(),
+        },
+    );
+    return mapStockLevel(raw ?? {});
 }
 
 export async function listMovements(

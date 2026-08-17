@@ -340,6 +340,33 @@ export function CrmOverview() {
             {/* Mini sparkline from byStatus */}
             <LeadSparkline byStatus={leads.byStatus} total={leads.total} />
           </div>
+          {/* Bottom: status dot legend */}
+          {leads.total > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {STATUS_ORDER.map((s) => {
+                const count = leads.byStatus.find((b) => b.status === s)?.count ?? 0;
+                if (count === 0) return null;
+                const dotColor: Record<string, string> = {
+                  new: "bg-emerald-500",
+                  contacted: "bg-emerald-400",
+                  qualified: "bg-emerald-300",
+                  disqualified: "bg-emerald-200 dark:bg-emerald-700",
+                };
+                const labelMap: Record<string, string> = {
+                  new: "New",
+                  contacted: "Contacted",
+                  qualified: "Qualified",
+                  disqualified: "Lost",
+                };
+                return (
+                  <span key={s} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <span className={`inline-block size-1.5 rounded-full ${dotColor[s]}`} />
+                    {count} {labelMap[s]}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Won Business */}
@@ -370,25 +397,39 @@ export function CrmOverview() {
             </div>
             <WonSparkline deals={recentWon} />
           </div>
+          {/* Bottom: win rate progress bar */}
+          {opportunities.winRate !== null && (
+            <div className="mt-3 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-[width]"
+                  style={{ width: `${Math.round(opportunities.winRate * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatPercent(opportunities.winRate)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Customers */}
         <Link
           href="/dashboard/erp/crm/customers"
-          className="group rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
+          className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
         >
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-              <Users className="size-4 text-primary" />
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+              <Users className="size-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Customers
               </p>
-              <p className="mt-0.5 font-display text-xl font-bold tracking-tight text-foreground tabular-nums">
+              <p className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground tabular-nums">
                 {customers.active}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {customers.total} total
               </p>
             </div>
@@ -399,6 +440,22 @@ export function CrmOverview() {
               />
             )}
           </div>
+          {/* Bottom: quick stats row */}
+          {customers.total > 0 && (
+            <div className="mt-3 flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
+                {customers.active} active
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block size-1.5 rounded-full bg-muted" />
+                {customers.total - customers.active} inactive
+              </span>
+              <span className="ml-auto font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatPercent(customers.total > 0 ? customers.active / customers.total : 0)}
+              </span>
+            </div>
+          )}
         </Link>
       </section>
 
@@ -832,35 +889,47 @@ function CustomerDonut({
   active: number;
   total: number;
 }) {
-  const r = 13;
+  const size = 48;
+  const cx = size / 2;
+  const r = 18;
+  const strokeWidth = 4;
   const circumference = 2 * Math.PI * r;
   const pct = total > 0 ? active / total : 0;
   const offset = circumference * (1 - pct);
+  const gradientId = "cust-donut-grad";
 
   return (
-    <div className="relative flex size-9 shrink-0 items-center justify-center">
-      <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90">
+    <div className="relative flex size-12 shrink-0 items-center justify-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+            <stop offset="40%" stopColor="#34d399" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#059669" stopOpacity="1" />
+          </linearGradient>
+        </defs>
         <circle
-          cx="18"
-          cy="18"
+          cx={cx}
+          cy={cx}
           r={r}
           fill="none"
-          className="stroke-muted"
-          strokeWidth="3"
+          stroke="#e2e8f0"
+          strokeWidth={strokeWidth}
+          strokeOpacity="0.5"
         />
         <circle
-          cx="18"
-          cy="18"
+          cx={cx}
+          cy={cx}
           r={r}
           fill="none"
-          className="stroke-primary"
-          strokeWidth="3"
+          stroke={`url(#${gradientId})`}
+          strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
         />
       </svg>
-      <span className="absolute text-[8px] font-bold tabular-nums text-foreground">
+      <span className="absolute text-[10px] font-semibold tabular-nums text-foreground">
         {Math.round(pct * 100)}
       </span>
     </div>

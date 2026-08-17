@@ -91,8 +91,8 @@ function AccountCombobox({
     [onChange],
   );
 
-  // Native capture-phase listener to stop Radix Dialog DismissibleLayer from
-  // intercepting pointer events on the portaled dropdown.
+  // Capture-phase listener on window (fires before document-level Radix listener).
+  // stopImmediatePropagation prevents ALL subsequent listeners from firing.
   useEffect(() => {
     if (!open) return;
     const list = listRef.current;
@@ -100,12 +100,12 @@ function AccountCombobox({
 
     function handlePointerDownCapture(event: PointerEvent) {
       if (list && list.contains(event.target as Node)) {
-        event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     }
 
-    document.addEventListener("pointerdown", handlePointerDownCapture, true);
-    return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
+    window.addEventListener("pointerdown", handlePointerDownCapture, true);
+    return () => window.removeEventListener("pointerdown", handlePointerDownCapture, true);
   }, [open]);
 
   useEffect(() => {

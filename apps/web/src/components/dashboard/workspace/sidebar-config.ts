@@ -1,6 +1,8 @@
 import {
+    ArrowLeftRight,
     BadgeDollarSign,
     BarChart3,
+    BellRing,
     Blocks,
     BookOpen,
     Building2,
@@ -8,6 +10,7 @@ import {
     Coins,
     Contact,
     LayoutDashboard,
+    Layers,
     NotebookPen,
     Package,
     Plug,
@@ -20,6 +23,7 @@ import {
     UserRound,
     Users,
     Wallet,
+    Warehouse,
     type LucideIcon,
 } from "lucide-react";
 
@@ -128,6 +132,39 @@ export const erpNavGroups: NavGroup[] = [
                 label: "Inventory",
                 icon: Package,
                 permission: "erp.inventory.read",
+                exact: true,
+                children: [
+                    {
+                        href: "/dashboard/erp/inventory/products",
+                        label: "Products",
+                        icon: Package,
+                        permission: "erp.inventory.read",
+                    },
+                    {
+                        href: "/dashboard/erp/inventory/warehouses",
+                        label: "Warehouses",
+                        icon: Warehouse,
+                        permission: "erp.inventory.read",
+                    },
+                    {
+                        href: "/dashboard/erp/inventory/stock",
+                        label: "Stock",
+                        icon: Layers,
+                        permission: "erp.inventory.read",
+                    },
+                    {
+                        href: "/dashboard/erp/inventory/movements",
+                        label: "Movements",
+                        icon: ArrowLeftRight,
+                        permission: "erp.inventory.read",
+                    },
+                    {
+                        href: "/dashboard/erp/inventory/alerts",
+                        label: "Alerts",
+                        icon: BellRing,
+                        permission: "erp.inventory.read",
+                    },
+                ],
             },
             {
                 href: "/dashboard/erp/hr",

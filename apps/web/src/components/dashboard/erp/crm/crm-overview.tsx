@@ -561,16 +561,19 @@ export function CrmOverview() {
                     : "border-border/60 bg-muted/20",
                 )}
               >
-                <p
-                  className={cn(
-                    "font-display text-2xl font-bold tabular-nums",
-                    activities.overdue > 0
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-foreground",
-                  )}
-                >
-                  {activities.overdue}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="size-3 text-red-500" />
+                  <p
+                    className={cn(
+                      "font-display text-2xl font-bold tabular-nums",
+                      activities.overdue > 0
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-foreground",
+                    )}
+                  >
+                    {activities.overdue}
+                  </p>
+                </div>
                 <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Overdue
                 </p>
@@ -583,33 +586,42 @@ export function CrmOverview() {
                     : "border-border/60 bg-muted/20",
                 )}
               >
-                <p
-                  className={cn(
-                    "font-display text-2xl font-bold tabular-nums",
-                    activities.today > 0
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-foreground",
-                  )}
-                >
-                  {activities.today}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <CalendarClock className="size-3 text-amber-500" />
+                  <p
+                    className={cn(
+                      "font-display text-2xl font-bold tabular-nums",
+                      activities.today > 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-foreground",
+                    )}
+                  >
+                    {activities.today}
+                  </p>
+                </div>
                 <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Today
                 </p>
               </div>
               <div className="rounded-md border border-border/60 bg-muted/20 p-3">
-                <p className="font-display text-2xl font-bold tabular-nums text-foreground">
-                  {activities.upcoming}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="size-3 text-sky-500" />
+                  <p className="font-display text-2xl font-bold tabular-nums text-foreground">
+                    {activities.upcoming}
+                  </p>
+                </div>
                 <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Upcoming
                 </p>
               </div>
-              <div className="rounded-md border border-border/60 bg-muted/20 p-3">
-                <p className="font-display text-2xl font-bold tabular-nums text-foreground">
-                  {activities.completed30d}
-                </p>
-                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="size-3 text-emerald-500" />
+                  <p className="font-display text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {activities.completed30d}
+                  </p>
+                </div>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">
                   Done (30d)
                 </p>
               </div>

@@ -112,6 +112,23 @@ function CustomerCombobox({
     item?.scrollIntoView({ block: "nearest" });
   }, [highlighted, open]);
 
+  // Native capture-phase listener to stop Radix Dialog DismissibleLayer from
+  // intercepting pointer events on the portaled dropdown.
+  useEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    if (!list) return;
+
+    function handlePointerDownCapture(event: PointerEvent) {
+      if (list && list.contains(event.target as Node)) {
+        event.stopPropagation();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDownCapture, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
+  }, [open]);
+
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;

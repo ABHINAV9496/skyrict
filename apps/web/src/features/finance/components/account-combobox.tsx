@@ -33,7 +33,6 @@ function AccountCombobox({
 }: AccountComboboxProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const inputElRef = useRef<HTMLInputElement | null>(null);
   const justSelectedRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -91,6 +90,23 @@ function AccountCombobox({
     },
     [onChange],
   );
+
+  // Native capture-phase listener to stop Radix Dialog DismissibleLayer from
+  // intercepting pointer events on the portaled dropdown.
+  useEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    if (!list) return;
+
+    function handlePointerDownCapture(event: PointerEvent) {
+      if (list && list.contains(event.target as Node)) {
+        event.stopPropagation();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDownCapture, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -155,7 +171,6 @@ function AccountCombobox({
       <div ref={triggerRef} className="relative">
         <Input
           ref={(el) => {
-            inputElRef.current = el;
             if (inputRef) inputRef(el);
           }}
           id={id}

@@ -47,6 +47,11 @@ export function accessibleModules(access: ModuleAccess): ModuleKey[] {
   return MODULE_ORDER.filter((key) => access[key]);
 }
 
+/** True when the user holds the exact permission or the `*` wildcard. */
+export function hasPermission(permissions: string[], key: string): boolean {
+  return permissions.includes(WILDCARD) || permissions.includes(key);
+}
+
 const INITIAL_STATE: ModuleAccessState = {
   status: "loading",
   access: NO_ACCESS,

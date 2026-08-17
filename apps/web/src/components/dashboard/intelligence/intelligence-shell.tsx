@@ -63,7 +63,7 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ModuleAccessBoundary module="intelligence">
-      <div className="flex h-dvh flex-col overflow-hidden bg-background">
+      <div className="flex h-dvh flex-col overflow-hidden bg-background" data-theme-scope>
         <header className="shrink-0 border-b border-border/70 bg-card/85 backdrop-blur-md">
           <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 lg:px-6">
             <button

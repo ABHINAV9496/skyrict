@@ -53,7 +53,8 @@ _require_crm_write = require_permission(ERP_CRM_WRITE)
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
-    return uuid.UUID(current_user["tenant_id"])
+    val = current_user["tenant_id"]
+    return val if isinstance(val, uuid.UUID) else uuid.UUID(val)
 
 
 def _user_id(current_user: dict[str, Any]) -> uuid.UUID:

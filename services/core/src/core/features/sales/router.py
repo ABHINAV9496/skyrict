@@ -35,7 +35,8 @@ _require_sales_approve = require_permission(ERP_SALES_APPROVE)
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
-    return uuid.UUID(current_user["tenant_id"])
+    val = current_user["tenant_id"]
+    return val if isinstance(val, uuid.UUID) else uuid.UUID(val)
 
 
 def _order_out(order: ent.SalesOrder) -> OrderResponse:

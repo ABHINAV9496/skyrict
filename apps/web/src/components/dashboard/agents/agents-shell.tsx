@@ -44,7 +44,7 @@ export function AgentsShell({ children }: { children: React.ReactNode }) {
       }}
     >
       <ModuleAccessBoundary module="agents">
-        <div className="flex h-dvh gap-2 overflow-hidden bg-muted/30 p-2 theme-agents">
+        <div className="flex h-dvh gap-2 overflow-hidden bg-muted/30 p-2 theme-agents" data-theme-scope>
           <AgentsChatSidebar
             collapsed={collapsed}
             mobileOpen={mobileOpen}

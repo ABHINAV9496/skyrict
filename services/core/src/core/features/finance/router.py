@@ -47,11 +47,13 @@ require_finance_approve = require_permission("erp.finance.approve")
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
-    return uuid.UUID(current_user["tenant_id"])
+    val = current_user["tenant_id"]
+    return val if isinstance(val, uuid.UUID) else uuid.UUID(val)
 
 
 def _user_id(current_user: dict[str, Any]) -> uuid.UUID:
-    return uuid.UUID(current_user["user_id"])
+    val = current_user["user_id"]
+    return val if isinstance(val, uuid.UUID) else uuid.UUID(val)
 
 
 # ---------------------------------------------------------------------------

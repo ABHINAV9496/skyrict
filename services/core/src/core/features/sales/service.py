@@ -46,7 +46,13 @@ from core.audit_events import (
 from core.core.exceptions import CreditLimitExceededError, IllegalStateTransitionError
 from core.core.tenant_context import TenantContext
 from core.domain.entities import Customer, Product, SalesOrder, SalesOrderLine
-from core.domain.value_objects import CreditCheckResult, Money, OrderStatus
+from core.domain.value_objects import (
+    CreditCheckResult,
+    CrmEntityType,
+    CrmTimelineEventType,
+    Money,
+    OrderStatus,
+)
 from core.events.producers.sales_events import (
     emit_order_cancelled,
     emit_order_confirmed,
@@ -59,6 +65,7 @@ from skyrict_common.exceptions import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
+    from core.features.crm.ports import CrmTimelinePort
     from core.features.finance.ports import InvoicePort
     from core.features.sales.ports import (
         CustomerPort,
@@ -104,6 +111,7 @@ class SalesService:
         warehouses: WarehouseResolverPort,
         invoice: InvoicePort,
         audit: AuditService,
+        timeline: CrmTimelinePort,
     ) -> None:
         self._repo = repository
         self._customers = customers
@@ -112,6 +120,7 @@ class SalesService:
         self._warehouses = warehouses
         self._invoice = invoice
         self._audit_service = audit
+        self._timeline = timeline
 
     # ------------------------------------------------------------------
     # Draft lifecycle
@@ -163,6 +172,20 @@ class SalesService:
             customer_id=customer_id,
             total=str(created.total.amount),
             currency=currency,
+        )
+        await self._timeline.record_timeline_event(
+            tenant_id=tenant_id,
+            entity_type=CrmEntityType.CUSTOMER,
+            entity_id=customer_id,
+            event_type=CrmTimelineEventType.ORDER_CREATED,
+            title=f"Order {created.order_number} created",
+            actor_id=TenantContext.get_user_id(),
+            payload={
+                "order_id": str(created.id),
+                "order_number": created.order_number,
+                "total": str(created.total.amount),
+                "currency": currency,
+            },
         )
         return created
 

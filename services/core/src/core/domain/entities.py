@@ -18,7 +18,10 @@ from core.core.constants import (
     PayrollRunStatus,
 )
 from core.domain.value_objects import (
+    ActivityKind,
     CreditCheckResult,
+    CrmEntityType,
+    CrmTimelineEventType,
     LeadStatus,
     Money,
     OpportunityStage,
@@ -681,6 +684,129 @@ class Customer:
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Contact:
+    """A person on a customer account (a customer is the account).
+
+    Tenant-scoped like its customer (customers have no owner/team columns —
+    locked SKY-43 decision), soft-deleted via ``is_active``. ``customer_id``
+    is a plain UUID anchor (no FK, mirroring ``source_opportunity_id``).
+    """
+
+    tenant_id: uuid.UUID
+    customer_id: uuid.UUID
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    job_title: str | None = None
+    is_primary: bool = False
+    is_active: bool = True
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Activity:
+    """A unified CRM activity — task/call/meeting/follow-up/email/note.
+
+    Owner/team-scoped (mirroring leads/opportunities): the repository applies
+    the same OWNER/TEAM/ALL rule on ``owner_id``/``team_id``; rows created
+    without an owner (e.g. customer-anchored notes) are tenant-visible.
+
+    ``entity_type``/``entity_id`` anchor the activity to exactly one CRM
+    entity. ``due_at`` marks task/follow-up deadlines; ``completed_at`` +
+    ``completed_by`` are set together by the complete action.
+    """
+
+    tenant_id: uuid.UUID
+    kind: ActivityKind
+    entity_type: CrmEntityType
+    entity_id: uuid.UUID
+    subject: str
+    description: str | None = None
+    due_at: datetime | None = None
+    completed_at: datetime | None = None
+    completed_by: uuid.UUID | None = None
+    notes: str | None = None
+    owner_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Note:
+    """A persistent free-form note on a CRM entity.
+
+    Tenant-scoped; ``author_id`` records who wrote it. Anchored to exactly one
+    CRM entity via ``entity_type``/``entity_id``.
+    """
+
+    tenant_id: uuid.UUID
+    entity_type: CrmEntityType
+    entity_id: uuid.UUID
+    body: str
+    author_id: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class TimelineEvent:
+    """A curated CRM business event for the customer-facing timeline.
+
+    Distinct from the security/compliance ``audit_logs`` trail and from the
+    async ``crm.*`` domain events: this row IS the timeline record, written
+    transactionally in the same request as the business action. Anchored to
+    exactly one CRM entity (order creations anchor to the customer).
+    """
+
+    tenant_id: uuid.UUID
+    entity_type: CrmEntityType
+    entity_id: uuid.UUID
+    event_type: CrmTimelineEventType
+    title: str
+    actor_id: uuid.UUID | None = None
+    payload: dict[str, object] | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class TimelineItem:
+    """One merged row of the customer-facing timeline (DB-layer UNION).
+
+    Produced by the repository from activities + notes + timeline events —
+    never assembled in application code from three independently paged lists.
+    """
+
+    source: str
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    entity_type: CrmEntityType
+    entity_id: uuid.UUID
+    kind: str | None
+    title: str | None
+    body: str | None
+    actor_id: uuid.UUID | None
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
+class CrmSearchHit:
+    """One server-side search match across the CRM entities."""
+
+    tenant_id: uuid.UUID
+    entity_type: CrmEntityType
+    entity_id: uuid.UUID
+    title: str
+    subtitle: str | None = None
 
 
 # ---------------------------------------------------------------------------

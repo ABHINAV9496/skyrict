@@ -150,3 +150,82 @@ async def emit_customer_created(
         },
     )
     await apublish("crm.customer.created", event, key=str(tenant_id))
+
+
+async def emit_contact_created(
+    *,
+    contact_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    customer_id: uuid.UUID,
+    email: str | None,
+) -> None:
+    """Emit ``crm.contact.created`` (contact inserted)."""
+    metadata: dict[str, object] = {"contact_id": str(contact_id), "customer_id": str(customer_id)}
+    if email is not None:
+        metadata["email"] = email
+    event = BaseEvent(
+        event_type="crm.contact.created",
+        tenant_id=str(tenant_id),
+        metadata=metadata,
+    )
+    await apublish("crm.contact.created", event, key=str(tenant_id))
+
+
+async def emit_activity_created(
+    *,
+    activity_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    kind: str,
+    entity_type: str,
+    entity_id: uuid.UUID,
+) -> None:
+    """Emit ``crm.activity.created`` (activity inserted)."""
+    event = BaseEvent(
+        event_type="crm.activity.created",
+        tenant_id=str(tenant_id),
+        metadata={
+            "activity_id": str(activity_id),
+            "kind": kind,
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+        },
+    )
+    await apublish("crm.activity.created", event, key=str(tenant_id))
+
+
+async def emit_activity_completed(
+    *,
+    activity_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    completed_by: uuid.UUID | None,
+) -> None:
+    """Emit ``crm.activity.completed`` (task/follow-up finished)."""
+    metadata: dict[str, object] = {"activity_id": str(activity_id)}
+    if completed_by is not None:
+        metadata["completed_by"] = str(completed_by)
+    event = BaseEvent(
+        event_type="crm.activity.completed",
+        tenant_id=str(tenant_id),
+        metadata=metadata,
+    )
+    await apublish("crm.activity.completed", event, key=str(tenant_id))
+
+
+async def emit_note_created(
+    *,
+    note_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+) -> None:
+    """Emit ``crm.note.created`` (note inserted)."""
+    event = BaseEvent(
+        event_type="crm.note.created",
+        tenant_id=str(tenant_id),
+        metadata={
+            "note_id": str(note_id),
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+        },
+    )
+    await apublish("crm.note.created", event, key=str(tenant_id))

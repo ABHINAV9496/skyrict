@@ -154,7 +154,11 @@ async def list_employees(
         limit=limit,
         offset=offset,
     )
-    return ResponseEnvelope(data=[EmployeeOut.model_validate(e) for e in employees])
+    # Enrich each row with the active compensation so list payloads match the
+    # detail payload (the web client relies on it for compensation visibility).
+    return ResponseEnvelope(
+        data=[await _employee_out(e, employee_svc, tenant_id) for e in employees]
+    )
 
 
 @router.post("/employees", response_model=ResponseEnvelope[EmployeeOut], status_code=201)

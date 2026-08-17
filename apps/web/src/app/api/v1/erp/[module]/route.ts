@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 import {
     financeData,
-    hrData,
     reportsKpis,
     type TablePayload,
 } from "@/lib/mock/erp";
@@ -12,7 +11,6 @@ export const dynamic = "force-dynamic";
 
 const DATA: Record<string, TablePayload | { kpis: typeof reportsKpis }> = {
     finance: financeData,
-    hr: hrData,
     reports: { kpis: reportsKpis },
 };
 

@@ -18,6 +18,13 @@ export class ApiError extends Error {
   }
 }
 
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 let sessionLostRedirectPending = false;
@@ -104,9 +111,19 @@ export function ensureSession(): Promise<HydratedSession | null> {
   return sessionPromise;
 }
 
-async function toResult<T>(response: Response, unwrap: boolean): Promise<T> {
+async function toResult<T>(response: Response): Promise<T> {
+  return readPayload<T>(response).then(({ data }) => data);
+}
+
+interface Envelope<T> {
+  data: T;
+  meta: PaginationMeta | null;
+}
+
+async function readPayload<T>(response: Response): Promise<Envelope<T>> {
   const payload = (await response.json().catch(() => ({}))) as {
-    data?: unknown;
+    data?: T | null;
+    meta?: PaginationMeta | null;
     detail?: { error?: { message?: string }; message?: string } | string;
   };
   if (!response.ok) {
@@ -117,27 +134,11 @@ async function toResult<T>(response: Response, unwrap: boolean): Promise<T> {
       "Request failed. Please try again.";
     throw new ApiError(response.status, message);
   }
-  return (unwrap ? payload.data : payload) as T;
+  return { data: payload.data as T, meta: payload.meta ?? null };
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return apiFetchRaw<T>(path, options, true);
-}
-
-/**
- * Fetch a BFF endpoint and return the WHOLE payload envelope (e.g.
- * `{ data, meta }` for paged lists) instead of unwrapping `payload.data`.
- * List consumers need the sibling `meta` (pagination), which the default
- * unwrap discards.
- */
-export async function apiFetchEnvelope<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  return apiFetchRaw<T>(path, options, false);
-}
-
-async function apiFetchRaw<T>(path: string, options: RequestInit, unwrap: boolean): Promise<T> {
+/** Fetch a `/api/v1` endpoint with session hydration/refresh, returning the full envelope. */
+async function fetchWithSession(path: string, options: RequestInit): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("X-Tenant-Slug", getTenantSlug());
   const token = getAccessToken();
@@ -176,8 +177,21 @@ async function apiFetchRaw<T>(path: string, options: RequestInit, unwrap: boolea
     }
   }
 
-  return toResult<T>(response, unwrap);
+  return response;
 }
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return toResult<T>(await fetchWithSession(path, options));
+}
+
+export async function apiFetchWithMeta<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<Envelope<T>> {
+  return readPayload<T>(await fetchWithSession(path, options));
+}
+
+export { apiFetchWithMeta as apiFetchEnvelope };
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, {
@@ -195,4 +209,71 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 
 export async function apiDelete<T>(path: string): Promise<T> {
   return apiFetch<T>(path, { method: "DELETE" });
+}
+
+export interface Paginated<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+/**
+ * Serialize a query-string record, dropping null/undefined/empty values so a
+ * cleared filter is simply omitted rather than sent as a falsy literal.
+ */
+export function buildQueryString(
+  params: Record<string, string | number | boolean | null | undefined>,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+/**
+ * Fetch a list endpoint with the backend's `limit`/`offset` pagination and
+ * synthesize a frontend `PaginationMeta`.
+ *
+ * The core backend returns bare arrays (no envelope meta), so the client
+ * probes with `limit + 1` to detect a following page. When a full page is
+ * returned the probe reveals exactly one extra row — enough to know there IS a
+ * next page — and `total`/`total_pages` are reported honestly ("at least this
+ * many") rather than guessed. The probe is clamped to the backend's limit cap
+ * of 100, so page sizes at the cap report a single page.
+ */
+export async function apiList<T>(
+  path: string,
+  input: {
+    page?: number;
+    pageSize?: number;
+    query?: Record<string, string | number | boolean | null | undefined>;
+  } = {},
+): Promise<Paginated<T>> {
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.max(1, Math.min(input.pageSize ?? 20, 100));
+  const offset = (page - 1) * pageSize;
+  const probeLimit = Math.min(pageSize + 1, 100);
+
+  const rows = await apiFetch<T[]>(
+    `${path}${buildQueryString({
+      limit: probeLimit,
+      offset,
+      ...input.query,
+    })}`,
+  );
+  const all = rows ?? [];
+  const hasMore = all.length > pageSize;
+  const items = hasMore ? all.slice(0, pageSize) : all;
+
+  return {
+    items,
+    meta: {
+      total: offset + all.length,
+      page,
+      page_size: pageSize,
+      total_pages: hasMore ? page + 1 : page,
+    },
+  };
 }

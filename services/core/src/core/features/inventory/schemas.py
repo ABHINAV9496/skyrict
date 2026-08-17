@@ -187,6 +187,31 @@ class StockTransferCreate(BaseModel):
     ref_id: str = Field(..., min_length=1, max_length=64)
 
 
+class StockReserveCreate(BaseModel):
+    """POST /inventory/stock/reservations — reserve stock for a pending order.
+
+    ``qty`` must be positive and cannot exceed available (on-hand minus already
+    reserved).  The caller-supplied ``ref_id`` is replay-safe.
+    """
+
+    product_id: uuid.UUID
+    warehouse_id: uuid.UUID
+    qty: Decimal = Field(..., gt=0)
+    ref_id: str = Field(..., min_length=1, max_length=64)
+
+
+class StockReleaseCreate(BaseModel):
+    """POST /inventory/stock/releases — release previously reserved stock.
+
+    ``qty`` must be positive and cannot exceed the currently reserved quantity.
+    """
+
+    product_id: uuid.UUID
+    warehouse_id: uuid.UUID
+    qty: Decimal = Field(..., gt=0)
+    ref_id: str = Field(..., min_length=1, max_length=64)
+
+
 class StockLevelResponse(BaseModel):
     """Materialized current stock for one product in one warehouse."""
 

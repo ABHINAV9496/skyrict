@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Layers, PackagePlus } from "lucide-react";
+import { ArrowLeftRight, Layers, PackagePlus, Lock, Unlock } from "lucide-react";
 
 import { AdjustStockDialog } from "@/components/dashboard/erp/inventory/adjust-dialog";
 import { InventoryEmpty } from "@/components/dashboard/erp/inventory/inventory-empty";
@@ -9,7 +9,9 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/pagination";
+import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { ReleaseStockDialog } from "@/components/dashboard/erp/inventory/release-dialog";
+import { ReserveStockDialog } from "@/components/dashboard/erp/inventory/reserve-dialog";
 import { TransferStockDialog } from "@/components/dashboard/erp/inventory/transfer-dialog";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +77,16 @@ export function StockClient() {
     const [transferPreset, setTransferPreset] = useState<{
         productId: string;
         fromWarehouseId: string;
+    } | null>(null);
+    const [reserveOpen, setReserveOpen] = useState(false);
+    const [reservePreset, setReservePreset] = useState<{
+        productId: string;
+        warehouseId: string;
+    } | null>(null);
+    const [releaseOpen, setReleaseOpen] = useState(false);
+    const [releasePreset, setReleasePreset] = useState<{
+        productId: string;
+        warehouseId: string;
     } | null>(null);
 
     const abortRef = useRef<AbortController | null>(null);
@@ -152,6 +164,16 @@ export function StockClient() {
         setTransferOpen(true);
     }
 
+    function openReserve(preset?: { productId: string; warehouseId: string }) {
+        setReservePreset(preset ?? null);
+        setReserveOpen(true);
+    }
+
+    function openRelease(preset?: { productId: string; warehouseId: string }) {
+        setReleasePreset(preset ?? null);
+        setReleaseOpen(true);
+    }
+
     if (status.state === "loading") return <DataTableSkeleton rows={6} />;
 
     if (status.state === "error") {
@@ -181,6 +203,18 @@ export function StockClient() {
                         <Button onClick={() => openTransfer()}>
                             <ArrowLeftRight aria-hidden="true" />
                             Transfer stock
+                        </Button>
+                    ) : null}
+                    {canWrite ? (
+                        <Button variant="outline" onClick={() => openReserve()}>
+                            <Lock aria-hidden="true" />
+                            Reserve
+                        </Button>
+                    ) : null}
+                    {canWrite ? (
+                        <Button variant="outline" onClick={() => openRelease()}>
+                            <Unlock aria-hidden="true" />
+                            Release
                         </Button>
                     ) : null}
                 </div>
@@ -388,6 +422,28 @@ export function StockClient() {
                                                                 <ArrowLeftRight aria-hidden="true" />
                                                             </Button>
                                                         ) : null}
+                                                        {canWrite ? (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                disabled={
+                                                                    archived || reserved === 0
+                                                                }
+                                                                onClick={() =>
+                                                                    openRelease(
+                                                                        {
+                                                                            productId:
+                                                                                level.productId,
+                                                                            warehouseId:
+                                                                                level.warehouseId,
+                                                                        },
+                                                                    )
+                                                                }
+                                                                aria-label={`Release reserved stock for ${product?.name ?? level.productId} at ${warehouse?.name ?? "unknown warehouse"}`}
+                                                            >
+                                                                <Unlock aria-hidden="true" />
+                                                            </Button>
+                                                        ) : null}
                                                     </div>
                                                 </td>
                                             ) : null}
@@ -426,6 +482,33 @@ export function StockClient() {
                 warehouses={warehouses}
                 defaultProductId={transferPreset?.productId}
                 defaultFromWarehouseId={transferPreset?.fromWarehouseId}
+            />
+
+            <ReserveStockDialog
+                open={reserveOpen}
+                onOpenChange={setReserveOpen}
+                onReserved={() => {
+                    setNotice("Stock reserved.");
+                    void load();
+                }}
+                products={products}
+                warehouses={warehouses}
+                defaultProductId={reservePreset?.productId}
+                defaultWarehouseId={reservePreset?.warehouseId}
+            />
+
+            <ReleaseStockDialog
+                open={releaseOpen}
+                onOpenChange={setReleaseOpen}
+                onReleased={() => {
+                    setNotice("Reservation released.");
+                    void load();
+                }}
+                products={products}
+                warehouses={warehouses}
+                stockLevels={levels}
+                defaultProductId={releasePreset?.productId}
+                defaultWarehouseId={releasePreset?.warehouseId}
             />
         </div>
     );

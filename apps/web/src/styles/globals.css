@@ -152,6 +152,44 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Scrollbars
+ *
+ * Thin, rounded, theme-aware scrollbars (WebKit + Firefox) so the sidebar
+ * nav and any overflowing surface match the UI instead of the platform
+ * default. The thumb uses the muted-foreground token so it reads correctly
+ * in light and dark themes.
+ * ------------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--muted-foreground) 65%, transparent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
  * Module themes
  *
  * Each module "world" re-tints the shadcn token set so the sidebar, topbar,
@@ -399,6 +437,39 @@
   .skeleton::after {
     animation: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Themed scrollbar
+ *
+ * A thin scrollbar drawn from the sidebar's own tokens so it reads as part of
+ * the chrome instead of the browser default. Tracks are transparent and the
+ * thumb follows the foreground at a low alpha, darkening on hover. Covers
+ * Firefox (scrollbar-width/scrollbar-color) and Chromium (::-webkit-*).
+ * ------------------------------------------------------------------------- */
+
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent) transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--sidebar-foreground) 28%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--sidebar-foreground) 42%, transparent);
 }
 
 /* ---------------------------------------------------------------------------

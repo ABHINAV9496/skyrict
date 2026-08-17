@@ -5,7 +5,9 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { getThemeContainer } from "@/lib/theme-world"
 import { XIcon } from "lucide-react"
+import { useThemeScopeContainer } from "@/lib/theme-scope"
 
 function Dialog({
   ...props
@@ -20,9 +22,16 @@ function DialogTrigger({
 }
 
 function DialogPortal({
+  container,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+  return (
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      container={container ?? getThemeContainer()}
+      {...props}
+    />
+  )
 }
 
 function DialogClose({
@@ -55,8 +64,9 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const container = useThemeScopeContainer()
   return (
-    <DialogPortal>
+    <DialogPortal container={container ?? undefined}>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"

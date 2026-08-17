@@ -1,6 +1,5 @@
 import { LayoutDashboard } from "lucide-react";
 
-import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
 import { CrmSectionTabs } from "@/components/dashboard/erp/crm/crm-section-tabs";
 import { CrmOverview } from "@/components/dashboard/erp/crm/crm-overview";
@@ -8,12 +7,18 @@ import { CrmOverview } from "@/components/dashboard/erp/crm/crm-overview";
 export default function CrmOverviewPage() {
   return (
     <RequirePermission permission="erp.crm.read">
-      <div className="space-y-6">
-        <PageHeader
-          title="CRM overview"
-          description="The pipeline, customer base, and follow-up load in your workspace scope at a glance."
-          icon={LayoutDashboard}
-        />
+      <div className="space-y-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="size-5 text-primary" />
+            <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
+              CRM Overview
+            </h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pipeline, customers, leads, and follow-ups at a glance.
+          </p>
+        </div>
         <CrmSectionTabs />
         <CrmOverview />
       </div>

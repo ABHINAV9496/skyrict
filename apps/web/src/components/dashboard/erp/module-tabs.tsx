@@ -13,8 +13,9 @@ export interface ModuleTab {
 }
 
 /**
- * Horizontal section tabs for ERP modules (e.g. Leads / Opportunities /
- * Customers under CRM). Mirrors the sidebar's active-state styling.
+ * Compact section-tab bar for CRM / ERP sub-navigation.
+ * Active tab: green text + thin bottom indicator bar.
+ * Inactive tabs: muted text, no background.
  */
 export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
   const pathname = usePathname();
@@ -22,24 +23,33 @@ export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
   return (
     <nav
       aria-label="Section navigation"
-      className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1"
+      className="flex items-center gap-0.5 overflow-x-auto scrollbar-none"
     >
       {tabs.map((tab) => {
-        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        const active =
+          pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        const Icon = tab.icon;
         return (
           <Link
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors",
+              "relative flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
               active
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {tab.icon ? <tab.icon aria-hidden="true" className="size-4" /> : null}
+            {Icon ? <Icon className="size-3.5" /> : null}
             {tab.label}
+            {active ? (
+              <span
+                aria-hidden="true"
+                className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
+                style={{ backgroundColor: "var(--primary)" }}
+              />
+            ) : null}
           </Link>
         );
       })}

@@ -1236,6 +1236,18 @@ export async function listTimeline(
   return mapList(raw, mapTimelineItem);
 }
 
+export async function listRecentTimeline(
+  params: ListTimelineParams = {},
+): Promise<ListResponse<TimelineItem>> {
+  const raw = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(
+    `/api/v1/crm/timeline/recent${listQuery({
+      offset: params.offset,
+      limit: params.limit ?? 10,
+    })}`,
+  );
+  return mapList(raw, mapTimelineItem);
+}
+
 // ---------------------------------------------------------------------------
 // Overview + search
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { ReleaseStockDialog } from "@/components/dashboard/erp/inventory/release-dialog";
 import { ReserveStockDialog } from "@/components/dashboard/erp/inventory/reserve-dialog";
 import { TransferStockDialog } from "@/components/dashboard/erp/inventory/transfer-dialog";

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
     ArrowLeft,
     Blocks,
@@ -59,7 +59,7 @@ function SidebarLink({
     const padding = collapsed
         ? "justify-center px-0 py-2.5"
         : indented
-          ? "pl-[33px] pr-3 py-2"
+          ? "h-8 px-2"
           : "px-3 py-2";
 
     if (item.soon) {
@@ -94,23 +94,41 @@ function SidebarLink({
             title={collapsed ? item.label : undefined}
             aria-current={active ? "page" : undefined}
             className={cn(
-                "group relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+                "group relative flex items-center gap-2 rounded-md transition-colors",
+                indented ? "text-xs" : "text-sm font-medium",
                 padding,
                 active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    ? indented
+                        ? "bg-sidebar-accent/50 text-sidebar-accent-foreground font-medium"
+                        : "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : indented
+                      ? "text-muted-foreground hover:bg-sidebar-accent/25 hover:text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
         >
-            {active ? (
+            {!indented && active ? (
                 <span
                     aria-hidden="true"
                     className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
                 />
             ) : null}
-            <Icon
-                aria-hidden="true"
-                className={cn("size-[18px] shrink-0", active && "text-primary")}
-            />
+            {indented && active ? (
+                <span
+                    aria-hidden="true"
+                    className="absolute left-0 top-1/2 h-3.5 w-[3px] -translate-y-1/2 rounded-full bg-emerald-400"
+                />
+            ) : null}
+            {indented ? (
+                <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+            ) : (
+                <Icon
+                    aria-hidden="true"
+                    className={cn(
+                        "size-[18px] shrink-0",
+                        active && "text-primary",
+                    )}
+                />
+            )}
             {!collapsed ? <span className="truncate">{item.label}</span> : null}
         </Link>
     );
@@ -219,7 +237,7 @@ function CollapsibleNavItem({
                 </button>
             </div>
             {open ? (
-                <div className="space-y-1">
+                <div className="ml-4 space-y-0.5 border-l border-sidebar-border/30 pl-1.5">
                     {children.map((child) => (
                         <SidebarLink
                             key={child.href}

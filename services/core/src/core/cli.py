@@ -155,6 +155,60 @@ def seed_crm(
 
 
 @app.command()
+def seed_demo(
+    tenant_id: str = typer.Option(
+        None,
+        "--tenant-id",
+        help="UUID of a tenant to seed demo data (defaults to the first active tenant)",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Clear existing demo data for the tenant, then reseed",
+    ),
+) -> None:
+    """Seed 10+ demo records per ERP module (Finance, HR, Payroll, Sales).
+
+    Idempotent: without --force a tenant that already has departments is
+    left untouched.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from core.db.session import async_session_factory
+    from core.models.tenant import TenantModel
+
+    async def _run() -> None:
+        async with async_session_factory() as session:
+            if tenant_id:
+                target = uuid.UUID(tenant_id)
+            else:
+                found = (
+                    await session.execute(
+                        select(TenantModel)
+                        .where(TenantModel.is_active.is_(True))
+                        .order_by(TenantModel.created_at.asc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if found is None:
+                    typer.echo("No active tenant found; pass --tenant-id explicitly.")
+                    raise typer.Exit(code=1)
+                target = found.id
+                typer.echo(f"Using tenant {target} ({found.slug})")
+
+        from core.seed_demo import seed_demo_data
+
+        counts = await seed_demo_data(target, force=force)
+        typer.echo(f"seeded demo data for tenant {target}:")
+        for key, value in counts.items():
+            typer.echo(f"  {key}: {value}")
+
+    asyncio.run(_run())
+
+
+@app.command()
 def provision_rbac(
     tenant_id: str = typer.Option(
         ...,

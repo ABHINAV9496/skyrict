@@ -380,7 +380,7 @@ class FinanceRepository:
             .order_by(ErpJournalLineModel.entry_id, ErpJournalLineModel.id)
         )
         lines_result = await self.session.execute(lines_stmt)
-        lines_by_entry: dict[uuid.UUID, list] = {}
+        lines_by_entry: dict[uuid.UUID, list[JournalLine]] = {}
         for lm in lines_result.scalars().all():
             lines_by_entry.setdefault(lm.entry_id, []).append(_journal_line_from_orm(lm))
         return [

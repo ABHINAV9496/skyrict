@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useController, useFieldArray, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, LoaderCircle, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { ArrowRight, Check, ChevronsUpDown, LoaderCircle, Plus, ReceiptText, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -26,9 +27,11 @@ import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   createInvoice,
   listAccounts,
+  listCustomers,
   listFiscalPeriods,
   listInvoices,
   type Account,
+  type Customer,
   type FiscalPeriod,
   type Invoice,
 } from "@/lib/api/finance-api";
@@ -47,11 +50,226 @@ import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/compone
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
 import { TableToolbar } from "@/features/finance/components/table-toolbar";
+import { cn } from "@/lib/utils";
 
 type Status =
   | { state: "loading" }
   | { state: "error"; message: string }
   | { state: "ready"; invoices: Invoice[] };
+
+// ---------------------------------------------------------------------------
+// Customer combobox (searchable dropdown)
+// ---------------------------------------------------------------------------
+
+function CustomerCombobox({
+  customers,
+  value,
+  onChange,
+  invalid,
+}: {
+  customers: Customer[];
+  value: string;
+  onChange: (id: string) => void;
+  invalid?: boolean;
+}) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const justSelectedRef = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlighted, setHighlighted] = useState(0);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
+
+  const selected = useMemo(
+    () => customers.find((c) => c.id === value) ?? null,
+    [customers, value],
+  );
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return customers;
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(needle) ||
+        c.customer_code.toLowerCase().includes(needle) ||
+        (c.email ?? "").toLowerCase().includes(needle),
+    );
+  }, [customers, query]);
+
+  useEffect(() => {
+    setHighlighted(0);
+  }, [filtered.length, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[highlighted] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, open]);
+
+  const updatePosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.left + window.scrollX,
+      width: rect.width,
+    });
+  }, []);
+
+  const select = useCallback(
+    (customer: Customer) => {
+      justSelectedRef.current = true;
+      onChange(customer.id);
+      setQuery(`${customer.name} (${customer.customer_code})`);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        listRef.current && !listRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    function handleScroll() {
+      updatePosition();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setHighlighted((index) => Math.min(index + 1, Math.max(filtered.length - 1, 0)));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlighted((index) => Math.max(index - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const match =
+        filtered[highlighted] ??
+        filtered.find((c) => c.name.toLowerCase() === query.trim().toLowerCase());
+      if (match) select(match);
+      else setOpen(false);
+    } else if (event.key === "Escape") {
+      setOpen(false);
+    }
+  }
+
+  function handleBlur() {
+    setTimeout(() => {
+      if (justSelectedRef.current) {
+        justSelectedRef.current = false;
+        return;
+      }
+      setQuery(selected ? `${selected.name} (${selected.customer_code})` : "");
+    }, 150);
+  }
+
+  return (
+    <>
+      <div ref={triggerRef} className="relative">
+        <Input
+          value={query}
+          aria-invalid={invalid || undefined}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          placeholder="Search customer by name or code…"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setHighlighted(0);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            updatePosition();
+            setOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          className="pr-7"
+        />
+        <ChevronsUpDown
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+      </div>
+      {open
+        ? createPortal(
+            <div
+              ref={listRef}
+              role="listbox"
+              style={{
+                position: "absolute",
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+                width: dropdownPos.width,
+                zIndex: 9999,
+              }}
+              className="max-h-56 min-w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md outline-none"
+            >
+              {filtered.length === 0 ? (
+                <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+                  No matching customers
+                </p>
+              ) : (
+                filtered.map((customer, index) => (
+                  <button
+                    key={customer.id}
+                    type="button"
+                    role="option"
+                    aria-selected={customer.id === value}
+                    onMouseEnter={() => setHighlighted(index)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      select(customer);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      index === highlighted ? "bg-muted" : "hover:bg-muted",
+                    )}
+                  >
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium">{customer.name}</span>
+                      <span className="ml-1 text-muted-foreground">({customer.customer_code})</span>
+                      {customer.email ? (
+                        <span className="ml-1 text-xs text-muted-foreground">· {customer.email}</span>
+                      ) : null}
+                    </span>
+                    {customer.id === value ? (
+                      <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                    ) : null}
+                  </button>
+                ))
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
 
 const invoiceLineSchema = z.object({
   description: z.string().trim().min(1, "Description is required").max(500, "Max 500 characters"),
@@ -64,11 +282,7 @@ const invoiceSchema = z.object({
   customer_id: z
     .string()
     .trim()
-    .min(1, "Customer ID is required")
-    .regex(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      "Enter a valid customer UUID",
-    ),
+    .min(1, "Customer is required"),
   invoice_date: z.string().min(1, "Invoice date is required"),
   due_date: z.string().min(1, "Due date is required"),
   lines: z.array(invoiceLineSchema).min(1, "Add at least one line"),
@@ -116,6 +330,7 @@ function CreateInvoiceDialog() {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const accountInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const {
@@ -150,11 +365,14 @@ function CreateInvoiceDialog() {
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void listAccounts(true)
-      .then((fetched) => {
-        if (!cancelled) setAccounts(fetched);
-      })
-      .catch(() => undefined);
+    void Promise.all([listAccounts(true), listCustomers()]).then(
+      ([fetchedAccounts, fetchedCustomers]) => {
+        if (!cancelled) {
+          setAccounts(fetchedAccounts);
+          setCustomers(fetchedCustomers.filter((c) => c.is_active));
+        }
+      },
+    ).catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -218,12 +436,17 @@ function CreateInvoiceDialog() {
         <form onSubmit={handleSubmit(onSubmit)} className="max-h-[min(85vh,42rem)] space-y-4 overflow-y-auto pr-1">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-3">
-              <Label htmlFor="invoice-customer">Customer ID</Label>
-              <Input
-                id="invoice-customer"
-                placeholder="00000000-0000-0000-0000-000000000000"
-                aria-invalid={errors.customer_id ? true : undefined}
-                {...register("customer_id")}
+              <Label htmlFor="invoice-customer">Customer</Label>
+              <CustomerCombobox
+                customers={customers}
+                value={watch("customer_id")}
+                onChange={(id) => {
+                  // react-hook-form's register-based approach needs manual setValue
+                  // But we're using register, so we set via the hidden pattern
+                  const event = { target: { value: id, name: "customer_id" } };
+                  register("customer_id").onChange(event);
+                }}
+                invalid={Boolean(errors.customer_id)}
               />
               {errors.customer_id ? (
                 <p role="alert" className="text-xs font-medium text-destructive">

@@ -124,7 +124,7 @@ export function FinanceOverview() {
     try {
       const range = resolvePeriodRange(periodValue);
       const [accounts, entries, invoices, periods] = await Promise.all([
-        listAccounts(),
+        listAccounts(false),
         listJournalEntries({
           limit: 5,
           from_date: range.from ?? undefined,

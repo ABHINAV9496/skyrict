@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Popover } from "radix-ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { useThemeScopeContainer } from "@/lib/theme-scope";
 import type { Account } from "@/lib/api/finance-api";
 import { cn } from "@/lib/utils";
 
@@ -32,10 +31,18 @@ function AccountCombobox({
   autoFocus,
   inputRef,
 }: AccountComboboxProps) {
-  const container = useThemeScopeContainer();
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputElRef = useRef<HTMLInputElement | null>(null);
+  const justSelectedRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
 
   const selected = useMemo(
     () => accounts.find((account) => account.code === value) ?? null,
@@ -52,11 +59,63 @@ function AccountCombobox({
     );
   }, [accounts, query]);
 
-  function select(account: Account) {
-    onChange(account.code);
-    setQuery(`${account.code} · ${account.name}`);
-    setOpen(false);
-  }
+  useEffect(() => {
+    setHighlighted(0);
+  }, [filtered.length, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[highlighted] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, open]);
+
+  const updatePosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.left + window.scrollX,
+      width: rect.width,
+    });
+  }, []);
+
+  const select = useCallback(
+    (account: Account) => {
+      justSelectedRef.current = true;
+      onChange(account.code);
+      setQuery(`${account.code} \u00b7 ${account.name}`);
+      setOpen(false);
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        listRef.current && !listRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    function handleScroll() {
+      updatePosition();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
@@ -78,88 +137,111 @@ function AccountCombobox({
   }
 
   function handleBlur() {
-    if (query.trim()) {
-      const exact = accounts.find((account) => account.code === query.trim());
-      if (exact) onChange(exact.code);
-    }
-    setQuery(selected ? `${selected.code} · ${selected.name}` : value);
+    setTimeout(() => {
+      if (justSelectedRef.current) {
+        justSelectedRef.current = false;
+        return;
+      }
+      if (query.trim()) {
+        const exact = accounts.find((account) => account.code === query.trim());
+        if (exact) onChange(exact.code);
+      }
+      setQuery(selected ? `${selected.code} \u00b7 ${selected.name}` : value);
+    }, 150);
   }
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
-        <div className="relative">
-          <Input
-            ref={(el) => {
-              if (inputRef) inputRef(el);
-            }}
-            id={id}
-            value={query}
-            autoFocus={autoFocus}
-            disabled={disabled}
-            aria-invalid={invalid || undefined}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            placeholder={placeholder ?? "Select account"}
-            readOnly={!query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setHighlighted(0);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={handleKeyDown}
-            onBlur={handleBlur}
-            className="pr-7"
-          />
-          <ChevronsUpDown
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-          />
-        </div>
-      </Popover.Trigger>
-      <Popover.Portal container={container ?? undefined}>
-        <Popover.Content
-          sideOffset={4}
-          align="start"
-          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-64 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md outline-none"
+    <>
+      <div ref={triggerRef} className="relative">
+        <Input
+          ref={(el) => {
+            inputElRef.current = el;
+            if (inputRef) inputRef(el);
+          }}
+          id={id}
+          value={query}
+          autoFocus={autoFocus}
+          disabled={disabled}
+          aria-invalid={invalid || undefined}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          placeholder={placeholder ?? "Select account"}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setHighlighted(0);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            updatePosition();
+            setOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          className="pr-7"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            setOpen((prev) => !prev);
+          }}
         >
-          <div role="listbox" className="max-h-56 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-2 py-3 text-center text-sm text-muted-foreground">
-                No matching accounts
-              </p>
-            ) : (
-              filtered.map((account, index) => (
-                <button
-                  key={account.id}
-                  type="button"
-                  role="option"
-                  aria-selected={account.code === value}
-                  onMouseEnter={() => setHighlighted(index)}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    select(account);
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                    index === highlighted ? "bg-muted" : "hover:bg-muted",
-                  )}
-                >
-                  <span className="min-w-0 truncate">
-                    <code className="mr-2 font-mono text-xs">{account.code}</code>
-                    {account.name}
-                  </span>
-                  {account.code === value ? (
-                    <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
-                  ) : null}
-                </button>
-              ))
-            )}
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+          <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+        </button>
+      </div>
+      {open
+        ? createPortal(
+            <div
+              ref={listRef}
+              role="listbox"
+              style={{
+                position: "absolute",
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+                width: dropdownPos.width,
+                zIndex: 9999,
+              }}
+              className="max-h-56 min-w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md outline-none"
+            >
+              {filtered.length === 0 ? (
+                <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+                  No matching accounts
+                </p>
+              ) : (
+                filtered.map((account, index) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    role="option"
+                    aria-selected={account.code === value}
+                    onMouseEnter={() => setHighlighted(index)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      select(account);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      index === highlighted ? "bg-muted" : "hover:bg-muted",
+                    )}
+                  >
+                    <span className="min-w-0 truncate">
+                      <code className="mr-2 font-mono text-xs">{account.code}</code>
+                      {account.name}
+                    </span>
+                    {account.code === value ? (
+                      <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                    ) : null}
+                  </button>
+                ))
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

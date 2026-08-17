@@ -223,8 +223,8 @@ export interface BalanceSheet {
 
 // --- Chart of accounts ---
 
-export function listAccounts(includeInactive = false): Promise<Account[]> {
-  const search = includeInactive ? "?include_inactive=true" : "";
+export function listAccounts(activeOnly = true): Promise<Account[]> {
+  const search = activeOnly ? "" : "?include_inactive=true";
   return apiFetch<Account[]>(`${FINANCE}/accounts${search}`);
 }
 
@@ -328,4 +328,22 @@ export function getBalanceSheet(asOf: string): Promise<BalanceSheet> {
   return apiFetch<BalanceSheet>(
     `${FINANCE}/reports/balance-sheet${queryString({ as_of: asOf })}`,
   );
+}
+
+// --- Customers (CRM) ---
+
+export interface Customer {
+  id: string;
+  tenant_id: string;
+  customer_code: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  credit_limit: number | null;
+  currency: string | null;
+  is_active: boolean;
+}
+
+export function listCustomers(): Promise<Customer[]> {
+  return apiFetch<Customer[]>("/api/v1/crm/customers");
 }

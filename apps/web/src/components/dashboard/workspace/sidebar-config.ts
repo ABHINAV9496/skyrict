@@ -164,13 +164,6 @@ export const erpNavGroups: NavGroup[] = [
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/finance",
-                        label: "Overview",
-                        icon: Wallet,
-                        permission: "erp.finance.read",
-                        exact: true,
-                    },
-                    {
                         href: "/dashboard/erp/finance/accounts",
                         label: "Accounts",
                         icon: BookOpen,

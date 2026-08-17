@@ -403,7 +403,7 @@ export function AppSidebar({
                 </header>
 
                 <nav
-                    className="flex-1 space-y-1 overflow-y-auto px-3 py-4"
+                    className="flex-1 space-y-1 overflow-y-auto scrollbar-hide px-3 py-4"
                     aria-label="Dashboard"
                 >
                     {navGroups.map((group) => {

@@ -530,7 +530,9 @@ class CrmWorkspaceService:
             entity_type=entity_type,
             entity_id=entity_id,
             body=body.strip(),
-            author_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
+            author_id=uuid.UUID(TenantContext.get_user_id())
+            if TenantContext.get_user_id()
+            else None,
         )
         created = await self._repo.create_note(note)
         assert created.id is not None
@@ -851,7 +853,9 @@ class CrmWorkspaceService:
             entity_id=entity_id,
             event_type=event_type,
             title=title,
-            actor_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
+            actor_id=uuid.UUID(TenantContext.get_user_id())
+            if TenantContext.get_user_id()
+            else None,
             payload=payload,
         )
 

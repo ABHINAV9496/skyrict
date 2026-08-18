@@ -874,7 +874,9 @@ class CrmService:
             entity_id=entity_id,
             event_type=event_type,
             title=title,
-            actor_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
+            actor_id=uuid.UUID(TenantContext.get_user_id())
+            if TenantContext.get_user_id()
+            else None,
             payload=payload,
         )
 

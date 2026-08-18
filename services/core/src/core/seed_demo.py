@@ -1583,8 +1583,8 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 DepartmentModel,
             ):
                 await session.execute(
-                    delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id)
-                )  # type: ignore[arg-type]
+                    delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id)  # type: ignore[arg-type]
+                )
             await session.commit()
             logger.info("seed.demo.cleared", tenant_id=str(tenant_id))
 

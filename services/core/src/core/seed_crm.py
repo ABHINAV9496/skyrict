@@ -31,7 +31,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 
 from core.db.session import async_session_factory
 from core.domain.value_objects import (
@@ -797,7 +797,7 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                 ErpCrmOpportunityModel,
                 ErpCrmLeadModel,
             ):
-                await session.execute(model.__table__.delete().where(model.tenant_id == tenant_id))
+                await session.execute(delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id))  # type: ignore[arg-type]
             await session.commit()
             logger.info("seed.crm.cleared", tenant_id=str(tenant_id))
 
@@ -823,15 +823,15 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
         for row in LEAD_ROWS:
             lead = ErpCrmLeadModel(
                 tenant_id=tenant_id,
-                status=row["status"],  # type: ignore[arg-type]
-                source=row["source"],  # type: ignore[arg-type]
-                first_name=row["first_name"],  # type: ignore[arg-type]
-                last_name=row["last_name"],  # type: ignore[arg-type]
-                email=row["email"],  # type: ignore[arg-type]
-                phone=row["phone"],  # type: ignore[arg-type]
-                company=row["company"],  # type: ignore[arg-type]
+                status=row["status"],
+                source=row["source"],
+                first_name=row["first_name"],
+                last_name=row["last_name"],
+                email=row["email"],
+                phone=row["phone"],
+                company=row["company"],
                 owner_id=owner_id,
-                created_at=_ago(float(row["days_ago"])),
+                created_at=_ago(float(str(row["days_ago"]))),
             )
             session.add(lead)
             await session.flush()
@@ -853,27 +853,27 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                     linked_lead = lead_ids[lead_index]
                     qualified_by_company[str(from_company)] = lead_ids[lead_index]
 
-            stage = row["stage"]  # type: ignore[assignment]
-            stage_changed_days = float(row["days_ago"])
-            won_at = _ago(float(row["close_days"])) if stage == OpportunityStage.WON else None
-            lost_at = _ago(float(row["close_days"])) if stage == OpportunityStage.LOST else None
+            stage = row["stage"]
+            stage_changed_days = float(str(row["days_ago"]))
+            won_at = _ago(float(str(row["close_days"]))) if stage == OpportunityStage.WON else None
+            lost_at = _ago(float(str(row["close_days"]))) if stage == OpportunityStage.LOST else None
 
             amount_raw = row.get("amount")
             opportunity = ErpCrmOpportunityModel(
                 tenant_id=tenant_id,
-                name=row["name"],  # type: ignore[arg-type]
+                name=row["name"],
                 lead_id=linked_lead,
                 stage=stage,
                 amount=Decimal(str(amount_raw)) if amount_raw is not None else None,
-                currency_code=row.get("currency"),  # type: ignore[arg-type]
-                probability=int(row["probability"]),  # type: ignore[arg-type]
+                currency_code=row.get("currency"),
+                probability=int(str(row["probability"])),
                 expected_close_date=(
-                    (datetime.now(UTC) + timedelta(days=float(row["close_days"]))).date()
+                    (datetime.now(UTC) + timedelta(days=float(str(row["close_days"])))).date()
                 ),
                 owner_id=owner_id,
                 won_at=won_at,
                 lost_at=lost_at,
-                lost_reason=row.get("lost_reason"),  # type: ignore[arg-type]
+                lost_reason=row.get("lost_reason"),
                 created_at=_ago(stage_changed_days),
             )
             session.add(opportunity)
@@ -891,14 +891,14 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
             credit = row.get("credit_limit")
             customer = ErpCrmCustomerModel(
                 tenant_id=tenant_id,
-                customer_code=row["code"],  # type: ignore[arg-type]
-                name=row["name"],  # type: ignore[arg-type]
+                customer_code=row["code"],
+                name=row["name"],
                 source_opportunity_id=source_id,
-                email=row["email"],  # type: ignore[arg-type]
-                phone=row["phone"],  # type: ignore[arg-type]
+                email=row["email"],
+                phone=row["phone"],
                 credit_limit=Decimal(str(credit)) if credit is not None else None,
-                currency_code=row.get("currency"),  # type: ignore[arg-type]
-                created_at=_ago(float(row["days_ago"])),
+                currency_code=row.get("currency"),
+                created_at=_ago(float(str(row["days_ago"]))),
             )
             session.add(customer)
             await session.flush()
@@ -909,14 +909,14 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
         for row in _CONTACT_ROWS:
             contact = ErpCrmContactModel(
                 tenant_id=tenant_id,
-                customer_id=customer_ids[int(row["customer"])],
-                first_name=row["first"],  # type: ignore[arg-type]
-                last_name=row["last"],  # type: ignore[arg-type]
-                email=row["email"],  # type: ignore[arg-type]
-                phone=row["phone"],  # type: ignore[arg-type]
-                job_title=row["title"],  # type: ignore[arg-type]
+                customer_id=customer_ids[int(str(row["customer"]))],
+                first_name=row["first"],
+                last_name=row["last"],
+                email=row["email"],
+                phone=row["phone"],
+                job_title=row["title"],
                 is_primary=bool(row["primary"]),
-                created_at=_ago(float(row["customer"]) * 2 + 2),
+                created_at=_ago(float(str(row["customer"])) * 2 + 2),
             )
             session.add(contact)
             await session.flush()
@@ -935,41 +935,45 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
         # --- Activities ----------------------------------------------------
         completed_count = 0
         for index, row in enumerate(_ACTIVITY_ROWS):
+            anchor_type: str
+            anchor_index_value: str
             anchor_type, anchor_index_value = row["anchor"]  # type: ignore[misc]
             completed = bool(row["completed"])
-            due = _ago(float(row["due_days"]), hours=index % 4)
+            due = _ago(float(str(row["due_days"])), hours=index % 4)
             activity = ErpCrmActivityModel(
                 tenant_id=tenant_id,
-                kind=row["kind"],  # type: ignore[arg-type]
+                kind=row["kind"],
                 entity_type=CrmEntityType(anchor_type),
                 entity_id=anchor_index[(anchor_type, int(anchor_index_value))],
-                subject=row["subject"],  # type: ignore[arg-type]
-                description=row.get("description"),  # type: ignore[arg-type]
+                subject=row["subject"],
+                description=row.get("description"),
                 due_at=due if row["kind"] in (ActivityKind.TASK, ActivityKind.FOLLOW_UP) else None,
                 completed_at=_ago(2, hours=1) if completed else None,
                 completed_by=owner_id if completed else None,
                 owner_id=owner_id,
-                created_at=_ago(max(2, float(row["due_days"]) + 1)),
+                created_at=_ago(max(2, float(str(row["due_days"])) + 1)),
             )
             session.add(activity)
             completed_count += 1 if completed else 0
 
         # --- Notes ---------------------------------------------------------
         for row in _NOTE_ROWS:
-            anchor_type, anchor_index_value = row["anchor"]  # type: ignore[misc]
+            n_anchor_type: str
+            n_anchor_index_value: str
+            n_anchor_type, n_anchor_index_value = row["anchor"]  # type: ignore[misc]
             note = ErpCrmNoteModel(
                 tenant_id=tenant_id,
-                entity_type=CrmEntityType(anchor_type),
-                entity_id=anchor_index[(anchor_type, int(anchor_index_value))],
-                body=row["body"],  # type: ignore[arg-type]
+                entity_type=CrmEntityType(n_anchor_type),
+                entity_id=anchor_index[(n_anchor_type, int(n_anchor_index_value))],
+                body=row["body"],
                 author_id=owner_id,
-                created_at=_ago(max(1, 6 - int(anchor_index_value) % 5)),
+                created_at=_ago(max(1, 6 - int(n_anchor_index_value) % 5)),
             )
             session.add(note)
 
         # --- Timeline events ----------------------------------------------
         for i, lead_id in enumerate(lead_ids):
-            days = float(LEAD_ROWS[i]["days_ago"])
+            days = float(str(LEAD_ROWS[i]["days_ago"]))
             session.add(
                 ErpCrmTimelineEventModel(
                     tenant_id=tenant_id,
@@ -1002,9 +1006,9 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                         entity_type=CrmEntityType.OPPORTUNITY,
                         entity_id=opportunity_ids[index],
                         event_type=CrmTimelineEventType.OPPORTUNITY_STAGE_CHANGED,
-                        title=f"Stage changed to {row['stage'].value.replace('_', ' ')}",
+                        title=f"Stage changed to {OpportunityStage(str(row['stage'])).value.replace('_', ' ')}",
                         actor_id=owner_id,
-                        created_at=_ago(float(row["days_ago"])),
+                        created_at=_ago(float(str(row["days_ago"]))),
                     )
                 )
             if row["stage"] == OpportunityStage.WON:
@@ -1016,7 +1020,7 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                         event_type=CrmTimelineEventType.OPPORTUNITY_WON,
                         title="Opportunity won",
                         actor_id=owner_id,
-                        created_at=_ago(float(row["close_days"])),
+                        created_at=_ago(float(str(row["close_days"]))),
                     )
                 )
             if row["stage"] == OpportunityStage.LOST:
@@ -1029,7 +1033,7 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                         title="Opportunity lost",
                         actor_id=owner_id,
                         payload={"reason": row.get("lost_reason")},
-                        created_at=_ago(float(row["close_days"])),
+                        created_at=_ago(float(str(row["close_days"]))),
                     )
                 )
         for i, customer_id in enumerate(customer_ids):
@@ -1041,11 +1045,11 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                     event_type=CrmTimelineEventType.CUSTOMER_CREATED,
                     title="Customer created",
                     actor_id=owner_id,
-                    created_at=_ago(float(_CUSTOMER_ROWS[i]["days_ago"])),
+                    created_at=_ago(float(str(_CUSTOMER_ROWS[i]["days_ago"]))),
                 )
             )
         for row in _ORDER_EVENTS:
-            customer_index = int(row["customer"])
+            customer_index = int(str(row["customer"]))
             session.add(
                 ErpCrmTimelineEventModel(
                     tenant_id=tenant_id,
@@ -1055,7 +1059,7 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                     title="Order placed",
                     actor_id=owner_id,
                     payload={"order_number": row["order"], "total": row["total"]},
-                    created_at=_ago(float(row["days_ago"])),
+                    created_at=_ago(float(str(row["days_ago"]))),
                 )
             )
         for index in (0, 2, 4):
@@ -1067,7 +1071,7 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                     event_type=CrmTimelineEventType.CONTACT_CREATED,
                     title="Contact added",
                     actor_id=owner_id,
-                    created_at=_ago(float(_CUSTOMER_ROWS[index]["days_ago"]) - 2),
+                    created_at=_ago(float(str(_CUSTOMER_ROWS[index]["days_ago"])) - 2),
                 )
             )
 

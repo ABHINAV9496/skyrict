@@ -179,7 +179,7 @@ class SalesService:
             entity_id=customer_id,
             event_type=CrmTimelineEventType.ORDER_CREATED,
             title=f"Order {created.order_number} created",
-            actor_id=TenantContext.get_user_id(),
+            actor_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
             payload={
                 "order_id": str(created.id),
                 "order_number": created.order_number,

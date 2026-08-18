@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 
 from core.db.session import async_session_factory
 from core.domain.value_objects import (
@@ -1582,7 +1582,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 EmployeeModel,
                 DepartmentModel,
             ):
-                await session.execute(model.__table__.delete().where(model.tenant_id == tenant_id))
+                await session.execute(delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id))  # type: ignore[arg-type]
             await session.commit()
             logger.info("seed.demo.cleared", tenant_id=str(tenant_id))
 
@@ -1607,8 +1607,8 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in DEPARTMENT_ROWS:
             dept = DepartmentModel(
                 tenant_id=tenant_id,
-                name=row["name"],  # type: ignore
-                is_active=row["is_active"],  # type: ignore
+                name=row["name"],
+                is_active=row["is_active"],
             )
             session.add(dept)
             await session.flush()
@@ -1618,21 +1618,21 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         # ── EMPLOYEES ────────────────────────────────────────────────
         emp_ids: list[uuid.UUID] = []
         for row in EMPLOYEE_ROWS:
-            dept_idx = int(row["dept"])  # type: ignore
+            dept_idx = int(str(row["dept"]))
             term_date = None
-            if row["status"] == "terminated":  # type: ignore
-                term_date = _date_ago(int(row.get("term_days_ago", 30)))  # type: ignore
+            if row["status"] == "terminated":
+                term_date = _date_ago(int(str(row.get("term_days_ago", 30))))
             emp = EmployeeModel(
                 tenant_id=tenant_id,
-                employee_number=row["num"],  # type: ignore
-                first_name=row["first"],  # type: ignore
-                last_name=row["last"],  # type: ignore
-                email=row["email"],  # type: ignore
-                phone=row["phone"],  # type: ignore
+                employee_number=row["num"],
+                first_name=row["first"],
+                last_name=row["last"],
+                email=row["email"],
+                phone=row["phone"],
                 department_id=dept_ids[dept_idx],
-                job_title=row["title"],  # type: ignore
-                employment_status=row["status"],  # type: ignore
-                hire_date=_date_ago(int(row["hire_days_ago"])),  # type: ignore
+                job_title=row["title"],
+                employment_status=row["status"],
+                hire_date=_date_ago(int(str(row["hire_days_ago"]))),
                 termination_date=term_date,
             )
             session.add(emp)
@@ -1661,16 +1661,16 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
 
         # ── LEAVE REQUESTS ───────────────────────────────────────────
         for row in LEAVE_REQUEST_ROWS:
-            emp_idx = int(row["emp"])  # type: ignore
+            emp_idx = int(str(row["emp"]))
             lr = LeaveRequestModel(
                 tenant_id=tenant_id,
                 employee_id=emp_ids[emp_idx],
-                leave_type=row["type"],  # type: ignore
-                start_date=_date_ago(-int(row["start_days"])),  # type: ignore
-                end_date=_date_ago(-int(row["end_days"])),  # type: ignore
-                days=int(row["days"]),  # type: ignore
-                status=row["status"],  # type: ignore
-                reason=row.get("reason"),  # type: ignore
+                leave_type=row["type"],
+                start_date=_date_ago(-int(str(row["start_days"]))),
+                end_date=_date_ago(-int(str(row["end_days"]))),
+                days=int(str(row["days"])),
+                status=row["status"],
+                reason=row.get("reason"),
             )
             session.add(lr)
         counts["leave_requests"] = len(LEAVE_REQUEST_ROWS)
@@ -1695,9 +1695,9 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in ACCOUNT_ROWS:
             acct = ErpChartOfAccountModel(
                 tenant_id=tenant_id,
-                code=row["code"],  # type: ignore
-                name=row["name"],  # type: ignore
-                account_type=row["type"],  # type: ignore
+                code=row["code"],
+                name=row["name"],
+                account_type=row["type"],
             )
             session.add(acct)
             await session.flush()
@@ -1708,10 +1708,10 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in FISCAL_PERIOD_ROWS:
             fp = ErpFiscalPeriodModel(
                 tenant_id=tenant_id,
-                name=row["name"],  # type: ignore
-                start_date=date.fromisoformat(str(row["start"])),  # type: ignore
-                end_date=date.fromisoformat(str(row["end"])),  # type: ignore
-                is_closed=row["closed"],  # type: ignore
+                name=row["name"],
+                start_date=date.fromisoformat(str(row["start"])),
+                end_date=date.fromisoformat(str(row["end"])),
+                is_closed=row["closed"],
             )
             session.add(fp)
         counts["fiscal_periods"] = len(FISCAL_PERIOD_ROWS)
@@ -1720,20 +1720,20 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in JOURNAL_ENTRY_ROWS:
             je = ErpJournalEntryModel(
                 tenant_id=tenant_id,
-                entry_date=_date_ago(int(row["days_ago"])),  # type: ignore
-                memo=row["memo"],  # type: ignore
-                status=row["status"],  # type: ignore
-                source=row["source"],  # type: ignore
-                source_ref=row["source_ref"],  # type: ignore
-                posted_by_user_id=owner_id if row["status"] == EntryStatus.POSTED else None,  # type: ignore
-                posted_at=_ago(float(row["days_ago"]))
+                entry_date=_date_ago(int(str(row["days_ago"]))),
+                memo=row["memo"],
+                status=row["status"],
+                source=row["source"],
+                source_ref=row["source_ref"],
+                posted_by_user_id=owner_id if row["status"] == EntryStatus.POSTED else None,
+                posted_at=_ago(float(str(row["days_ago"])))
                 if row["status"] == EntryStatus.POSTED
-                else None,  # type: ignore
+                else None,
             )
             session.add(je)
             await session.flush()
 
-            for acct_idx, debit, credit in row["lines"]:  # type: ignore
+            for acct_idx, debit, credit in row["lines"]:  # type: ignore[attr-defined]
                 jl = ErpJournalLineModel(
                     tenant_id=tenant_id,
                     entry_id=je.id,
@@ -1778,29 +1778,29 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for idx, row in enumerate(INVOICE_ROWS):
             inv = ErpInvoiceModel(
                 tenant_id=tenant_id,
-                invoice_number=row["number"],  # type: ignore
+                invoice_number=row["number"],
                 customer_id=customer_ids[idx % len(customer_ids)],
-                invoice_date=_date_ago(int(row["days_ago"])),  # type: ignore
-                due_date=_date_ahead(int(row["due_ahead"])),  # type: ignore
-                status=row["status"],  # type: ignore
-                total=row["total"],  # type: ignore
+                invoice_date=_date_ago(int(str(row["days_ago"]))),
+                due_date=_date_ahead(int(str(row["due_ahead"]))),
+                status=row["status"],
+                total=row["total"],
                 source="manual",
-                source_ref=row["number"],  # type: ignore
+                source_ref=row["number"],
             )
             session.add(inv)
             await session.flush()
             invoice_ids.append(inv.id)
 
-            for li, line in enumerate(row["lines"], 1):  # type: ignore
+            for li, line in enumerate(row["lines"], 1):  # type: ignore[arg-type,var-annotated]
                 il = ErpInvoiceLineModel(
                     tenant_id=tenant_id,
                     invoice_id=inv.id,
                     line_no=li,
-                    description=line["desc"],  # type: ignore
-                    account_id=account_ids[int(line["account_idx"])],  # type: ignore
-                    quantity=line["qty"],  # type: ignore
-                    unit_price=line["price"],  # type: ignore
-                    amount=line["qty"] * line["price"],  # type: ignore
+                    description=line["desc"],
+                    account_id=account_ids[int(line["account_idx"])],
+                    quantity=line["qty"],
+                    unit_price=line["price"],
+                    amount=line["qty"] * line["price"],
                 )
                 session.add(il)
         counts["invoices"] = len(invoice_ids)
@@ -1809,14 +1809,14 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in PAYMENT_ROWS:
             pay = ErpPaymentModel(
                 tenant_id=tenant_id,
-                payment_number=row["number"],  # type: ignore
-                invoice_id=invoice_ids[int(row["invoice_idx"])],  # type: ignore
-                amount=row["amount"],  # type: ignore
-                method=row["method"],  # type: ignore
-                paid_at=_ago(float(row["days_ago"])),  # type: ignore
+                payment_number=row["number"],
+                invoice_id=invoice_ids[int(str(row["invoice_idx"]))],
+                amount=row["amount"],
+                method=row["method"],
+                paid_at=_ago(float(str(row["days_ago"]))),
                 status=PaymentStatus.APPLIED,
                 source="manual",
-                source_ref=row["number"],  # type: ignore
+                source_ref=row["number"],
             )
             session.add(pay)
         counts["payments"] = len(PAYMENT_ROWS)
@@ -1832,12 +1832,12 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             ).all()
         }
         for row in PRODUCT_ROWS:
-            if row["sku"] in existing_products:  # type: ignore
+            if row["sku"] in existing_products:
                 pid = (
                     await session.execute(
                         select(ErpProductModel.id).where(
                             ErpProductModel.tenant_id == tenant_id,
-                            ErpProductModel.sku == row["sku"],  # type: ignore
+                            ErpProductModel.sku == row["sku"],
                         )
                     )
                 ).scalar_one()
@@ -1845,13 +1845,13 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 continue
             prod = ErpProductModel(
                 tenant_id=tenant_id,
-                sku=row["sku"],  # type: ignore
-                name=row["name"],  # type: ignore
-                category=row.get("category"),  # type: ignore
-                unit=row.get("unit"),  # type: ignore
-                cost_price=row["cost"],  # type: ignore
-                sell_price=row["sell"],  # type: ignore
-                reorder_point=row.get("reorder", Decimal("0")),  # type: ignore
+                sku=row["sku"],
+                name=row["name"],
+                category=row.get("category"),
+                unit=row.get("unit"),
+                cost_price=row["cost"],
+                sell_price=row["sell"],
+                reorder_point=row.get("reorder", Decimal("0")),
             )
             session.add(prod)
             await session.flush()
@@ -1860,13 +1860,13 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
 
         # ── COMPENSATION ─────────────────────────────────────────────
         for row in COMPENSATION_ROWS:
-            emp_idx = int(row["emp"])  # type: ignore
+            emp_idx = int(str(row["emp"]))
             comp = CompensationModel(
                 tenant_id=tenant_id,
                 employee_id=emp_ids[emp_idx],
-                monthly_salary=row["monthly"],  # type: ignore
-                currency=row["currency"],  # type: ignore
-                effective_from=_date_ago(int(row["effective_days_ago"])),  # type: ignore
+                monthly_salary=row["monthly"],
+                currency=row["currency"],
+                effective_from=_date_ago(int(str(row["effective_days_ago"]))),
                 is_active=True,
             )
             session.add(comp)
@@ -1876,36 +1876,36 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for run_row in PAYROLL_RUN_ROWS:
             run = PayrollRunModel(
                 tenant_id=tenant_id,
-                run_code=run_row["code"],  # type: ignore
-                period_start=date.fromisoformat(str(run_row["start"])),  # type: ignore
-                period_end=date.fromisoformat(str(run_row["end"])),  # type: ignore
-                status=PayrollRunStatus(run_row["status"]),  # type: ignore
+                run_code=run_row["code"],
+                period_start=date.fromisoformat(str(run_row["start"])),
+                period_end=date.fromisoformat(str(run_row["end"])),
+                status=PayrollRunStatus(str(run_row["status"])),
             )
 
             gross = Decimal("0")
             net = Decimal("0")
 
-            if run_row["status"] in ("paid", "approved", "computed"):  # type: ignore
-                run.computed_at = _ago(float(run_row["days_ago"]))  # type: ignore
+            if run_row["status"] in ("paid", "approved", "computed"):
+                run.computed_at = _ago(float(str(run_row["days_ago"])))
                 run.computed_by = owner_id
-            if run_row["status"] in ("paid", "approved"):  # type: ignore
-                run.approved_at = _ago(float(run_row["days_ago"]) - 5)  # type: ignore
+            if run_row["status"] in ("paid", "approved"):
+                run.approved_at = _ago(float(str(run_row["days_ago"])) - 5)
                 run.approved_by = owner_id
-            if run_row["status"] == "paid":  # type: ignore
-                run.paid_at = _ago(float(run_row["days_ago"]) - 10)  # type: ignore
+            if run_row["status"] == "paid":
+                run.paid_at = _ago(float(str(run_row["days_ago"])) - 10)
                 run.paid_by = owner_id
 
             session.add(run)
             await session.flush()
 
-            if run_row["status"] in ("paid", "approved", "computed"):  # type: ignore
+            if run_row["status"] in ("paid", "approved", "computed"):
                 for emp_idx, comp_row in enumerate(COMPENSATION_ROWS):
                     if emp_idx >= len(emp_ids):
                         break
-                    emp_status = EMPLOYEE_ROWS[emp_idx]["status"]  # type: ignore
-                    if emp_status == "terminated":  # type: ignore
+                    emp_status = EMPLOYEE_ROWS[emp_idx]["status"]
+                    if emp_status == "terminated":
                         continue
-                    base = comp_row["monthly"]  # type: ignore
+                    base = Decimal(str(comp_row["monthly"]))
                     deductions = base * Decimal("0.15")
                     emp_gross = base
                     emp_net = base - deductions
@@ -1932,34 +1932,34 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for idx, row in enumerate(SALES_ORDER_ROWS):
             so = ErpSalesOrderModel(
                 tenant_id=tenant_id,
-                order_number=row["number"],  # type: ignore
+                order_number=row["number"],
                 customer_id=customer_ids[idx % len(customer_ids)],
-                status=row["status"],  # type: ignore
-                credit_check=row["credit"],  # type: ignore
-                subtotal=row["subtotal"],  # type: ignore
-                discount=row["discount"],  # type: ignore
-                tax=row["tax"],  # type: ignore
-                total=row["total"],  # type: ignore
+                status=row["status"],
+                credit_check=row["credit"],
+                subtotal=row["subtotal"],
+                discount=row["discount"],
+                tax=row["tax"],
+                total=row["total"],
                 currency_code="USD",
-                confirmed_at=_ago(float(row["days_ago"]))
+                confirmed_at=_ago(float(str(row["days_ago"])))
                 if row["status"] in (OrderStatus.CONFIRMED, OrderStatus.FULFILLED)
-                else None,  # type: ignore
+                else None,
             )
             session.add(so)
             await session.flush()
 
-            for line in row["lines"]:  # type: ignore
+            for line in row["lines"]:  # type: ignore[attr-defined]
                 sol = ErpSalesOrderLineModel(
                     tenant_id=tenant_id,
                     order_id=so.id,
-                    product_id=product_ids[int(line["prod"])],  # type: ignore
-                    product_name=line["name"],  # type: ignore
-                    sku=line["sku"],  # type: ignore
-                    quantity=line["qty"],  # type: ignore
-                    unit_price=line["price"],  # type: ignore
-                    discount=line["disc"],  # type: ignore
-                    tax=line["tax"],  # type: ignore
-                    line_total=line["total"],  # type: ignore
+                    product_id=product_ids[int(line["prod"])],
+                    product_name=line["name"],
+                    sku=line["sku"],
+                    quantity=line["qty"],
+                    unit_price=line["price"],
+                    discount=line["disc"],
+                    tax=line["tax"],
+                    line_total=line["total"],
                 )
                 session.add(sol)
         counts["sales_orders"] = len(SALES_ORDER_ROWS)
@@ -1969,9 +1969,9 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in WAREHOUSE_ROWS:
             wh = ErpWarehouseModel(
                 tenant_id=tenant_id,
-                name=row["name"],  # type: ignore
-                location=row.get("location"),  # type: ignore
-                is_active=row["is_active"],  # type: ignore
+                name=row["name"],
+                location=row.get("location"),
+                is_active=row["is_active"],
             )
             session.add(wh)
             await session.flush()
@@ -1980,7 +1980,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
 
         # ── UPDATE PRODUCT REORDER POINTS ────────────────────────────
         for idx, row in enumerate(PRODUCT_ROWS):
-            reorder_val = row.get("reorder", Decimal("0"))  # type: ignore
+            reorder_val = row.get("reorder", Decimal("0"))
             if reorder_val:
                 await session.execute(
                     text(
@@ -1994,10 +1994,10 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in STOCK_LEVEL_ROWS:
             sl = ErpStockLevelModel(
                 tenant_id=tenant_id,
-                product_id=product_ids[int(row["prod"])],  # type: ignore
-                warehouse_id=wh_ids[int(row["wh"])],  # type: ignore
-                qty_on_hand=row["on_hand"],  # type: ignore
-                qty_reserved=row["reserved"],  # type: ignore
+                product_id=product_ids[int(str(row["prod"]))],
+                warehouse_id=wh_ids[int(str(row["wh"]))],
+                qty_on_hand=row["on_hand"],
+                qty_reserved=row["reserved"],
             )
             session.add(sl)
         counts["stock_levels"] = len(STOCK_LEVEL_ROWS)
@@ -2006,12 +2006,12 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         for row in STOCK_MOVEMENT_ROWS:
             sm = ErpStockMovementModel(
                 tenant_id=tenant_id,
-                product_id=product_ids[int(row["prod"])],  # type: ignore
-                warehouse_id=wh_ids[int(row["wh"])],  # type: ignore
-                movement_type=row["type"],  # type: ignore
-                qty=row["qty"],  # type: ignore
-                ref_type=row["ref"],  # type: ignore
-                ref_id=row["ref_id"],  # type: ignore
+                product_id=product_ids[int(str(row["prod"]))],
+                warehouse_id=wh_ids[int(str(row["wh"]))],
+                movement_type=row["type"],
+                qty=row["qty"],
+                ref_type=row["ref"],
+                ref_id=row["ref_id"],
             )
             session.add(sm)
         counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS)

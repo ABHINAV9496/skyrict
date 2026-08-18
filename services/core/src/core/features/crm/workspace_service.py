@@ -19,6 +19,7 @@ Conventions:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -529,7 +530,7 @@ class CrmWorkspaceService:
             entity_type=entity_type,
             entity_id=entity_id,
             body=body.strip(),
-            author_id=TenantContext.get_user_id(),
+            author_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
         )
         created = await self._repo.create_note(note)
         assert created.id is not None
@@ -633,13 +634,14 @@ class CrmWorkspaceService:
     ) -> tuple[list[TimelineItem], int]:
         """Merged relationship timeline (activities + notes + business events)."""
         await self._require_anchor(entity_type, entity_id, tenant_id=tenant_id)
-        return await self._repo.get_timeline(
+        items, total = await self._repo.get_timeline(
             tenant_id=tenant_id,
             entity_type=entity_type,
             entity_id=entity_id,
             offset=offset,
             limit=limit,
         )
+        return list(items), total
 
     async def get_global_timeline(
         self,
@@ -649,11 +651,12 @@ class CrmWorkspaceService:
         limit: int = 10,
     ) -> list[TimelineItem]:
         """Recent CRM activity across all entities — dashboard feed."""
-        return await self._repo.get_global_timeline(
+        items = await self._repo.get_global_timeline(
             tenant_id=tenant_id,
             offset=offset,
             limit=limit,
         )
+        return list(items)
 
     # ------------------------------------------------------------------
     # Overview + search
@@ -781,7 +784,7 @@ class CrmWorkspaceService:
         query = query.strip()
         if not query:
             raise ValidationError("Search query is required")
-        return await self._repo.search(
+        hits, total = await self._repo.search(
             tenant_id=tenant_id,
             scope=scope,
             user_id=user_id,
@@ -791,6 +794,7 @@ class CrmWorkspaceService:
             offset=offset,
             limit=limit,
         )
+        return list(hits), total
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -847,7 +851,7 @@ class CrmWorkspaceService:
             entity_id=entity_id,
             event_type=event_type,
             title=title,
-            actor_id=TenantContext.get_user_id(),
+            actor_id=uuid.UUID(TenantContext.get_user_id()) if TenantContext.get_user_id() else None,
             payload=payload,
         )
 
@@ -895,7 +899,7 @@ def _stage_bucket(
     return StageBucket(stage=stage, count=count, value=value)
 
 
-def _merge_buckets(buckets: MoneyBucket) -> list[MoneyBucket]:
+def _merge_buckets(buckets: Iterable[MoneyBucket]) -> list[MoneyBucket]:
     """Combine per-currency sums into one bucket per currency (order-stable)."""
     merged: dict[str, Decimal] = {}
     order: list[str] = []

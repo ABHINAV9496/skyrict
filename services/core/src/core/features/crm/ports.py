@@ -494,3 +494,25 @@ class CrmWorkspaceRepositoryPort(CrmRepositoryPort, Protocol):
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[Sequence[CrmSearchHit], int]: ...
+
+    # --- Global timeline (dashboard feed) ---
+    async def get_global_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Sequence[TimelineItem]: ...
+
+    # --- Timeline event recording ---
+    async def record_timeline_event(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType,
+        entity_id: uuid.UUID,
+        event_type: CrmTimelineEventType,
+        title: str,
+        actor_id: uuid.UUID | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> TimelineEvent: ...

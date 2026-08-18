@@ -26,7 +26,7 @@ tenant-scoped only; ``is_active`` is their soft-delete flag.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -1245,7 +1245,7 @@ class CrmRepository:
         total = int((await self.session.execute(count_stmt)).scalar_one())
         stmt = select(merged).order_by(merged.c.occurred_at.desc(), merged.c.id.desc())
         result = await self.session.execute(stmt.offset(offset).limit(limit))
-        return [_timeline_item_from_row(row) for row in result.mappings().all()], total
+        return [_timeline_item_from_row(row) for row in result.mappings().all()], total  # type: ignore[arg-type]
 
     async def get_global_timeline(
         self,
@@ -1259,7 +1259,7 @@ class CrmRepository:
         merged = union.subquery()
         stmt = select(merged).order_by(merged.c.occurred_at.desc(), merged.c.id.desc())
         result = await self.session.execute(stmt.offset(offset).limit(limit))
-        return [_timeline_item_from_row(row) for row in result.mappings().all()]
+        return [_timeline_item_from_row(row) for row in result.mappings().all()]  # type: ignore[arg-type]
 
     async def record_timeline_event(
         self,
@@ -1620,7 +1620,7 @@ class CrmRepository:
             _contact_search_predicate(ErpCrmContactModel, like),
         )
 
-        selects = [
+        selects: list[tuple[CrmEntityType, Any]] = [
             (CrmEntityType.LEAD, lead_stmt),
             (CrmEntityType.OPPORTUNITY, opp_stmt),
             (CrmEntityType.CUSTOMER, customer_stmt),
@@ -1629,7 +1629,7 @@ class CrmRepository:
         if entity_type is not None:
             selects = [(kind, stmt) for kind, stmt in selects if kind == entity_type]
 
-        union = selects[0][1].union_all(*(stmt for _, stmt in selects[1:]))
+        union: Any = selects[0][1].union_all(*(stmt for _, stmt in selects[1:]))
 
         count_stmt = select(func.count()).select_from(union.subquery())
         total = int((await self.session.execute(count_stmt)).scalar_one())
@@ -1784,17 +1784,17 @@ def _timeline_event_from_orm(model: ErpCrmTimelineEventModel) -> TimelineEvent:
     )
 
 
-def _timeline_item_from_row(row: dict[str, object]) -> TimelineItem:
+def _timeline_item_from_row(row: "Mapping[str, Any]") -> TimelineItem:
     return TimelineItem(
         source=str(row["source"]),
-        id=row["id"],
-        tenant_id=row["tenant_id"],
-        entity_type=CrmEntityType(row["entity_type"]),
-        entity_id=row["entity_id"],
-        kind=row["kind"],
-        title=row["title"],
-        body=row["body"],
-        actor_id=row["actor_id"],
+        id=uuid.UUID(str(row["id"])),
+        tenant_id=uuid.UUID(str(row["tenant_id"])),
+        entity_type=CrmEntityType(str(row["entity_type"])),
+        entity_id=uuid.UUID(str(row["entity_id"])),
+        kind=str(row["kind"]) if row["kind"] is not None else None,
+        title=str(row["title"]) if row["title"] is not None else None,
+        body=str(row["body"]) if row["body"] is not None else None,
+        actor_id=uuid.UUID(str(row["actor_id"])) if row["actor_id"] is not None else None,
         occurred_at=row["occurred_at"],
     )
 

@@ -436,9 +436,11 @@ async def get_timeline(
     current_user: dict[str, Any] = Depends(_require_crm_read),
     svc: CrmWorkspaceService = Depends(get_crm_workspace_service),
 ) -> ListResponse[TimelineItemResponse]:
+    entity_type_param: CrmEntityType | None = _parse_entity_type(entity_type)
+    assert entity_type_param is not None  # required by Query(...)
     items, total = await svc.get_timeline(
         tenant_id=_tenant_id(current_user),
-        entity_type=_parse_entity_type(entity_type),
+        entity_type=entity_type_param,
         entity_id=entity_id,
         offset=offset,
         limit=limit,

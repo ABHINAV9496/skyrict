@@ -1784,7 +1784,7 @@ def _timeline_event_from_orm(model: ErpCrmTimelineEventModel) -> TimelineEvent:
     )
 
 
-def _timeline_item_from_row(row: "Mapping[str, Any]") -> TimelineItem:
+def _timeline_item_from_row(row: Mapping[str, Any]) -> TimelineItem:
     return TimelineItem(
         source=str(row["source"]),
         id=uuid.UUID(str(row["id"])),

@@ -60,22 +60,31 @@ const INITIAL_STATE: ModuleAccessState = {
 };
 
 let inFlight: Promise<ModuleAccessState> | null = null;
+let cachedState: ModuleAccessState | null = null;
 
 function fetchAccessState(): Promise<ModuleAccessState> {
   if (inFlight) return inFlight;
   inFlight = getMyRoles()
-    .then((data) => ({
-      status: "ready" as const,
-      access: resolveModuleAccess(data.permissions),
-      roles: data.roles,
-      permissions: data.permissions,
-    }))
-    .catch(() => ({
-      status: "error" as const,
-      access: NO_ACCESS,
-      roles: [],
-      permissions: [],
-    }))
+    .then((data) => {
+      const next: ModuleAccessState = {
+        status: "ready",
+        access: resolveModuleAccess(data.permissions),
+        roles: data.roles,
+        permissions: data.permissions,
+      };
+      cachedState = next;
+      return next;
+    })
+    .catch(() => {
+      const next: ModuleAccessState = {
+        status: "error",
+        access: NO_ACCESS,
+        roles: [],
+        permissions: [],
+      };
+      cachedState = next;
+      return next;
+    })
     .finally(() => {
       inFlight = null;
     });
@@ -90,9 +99,9 @@ export async function getModuleAccess(): Promise<ModuleAccessState> {
   return fetchAccessState();
 }
 
-/** Subscribe to module access. State settles once, then stays cached for the session. */
+/** Subscribe to module access. Returns cached state immediately if already resolved. */
 export function useModuleAccess(): ModuleAccessState {
-  const [state, setState] = useState<ModuleAccessState>(INITIAL_STATE);
+  const [state, setState] = useState<ModuleAccessState>(cachedState ?? INITIAL_STATE);
 
   useEffect(() => {
     let cancelled = false;

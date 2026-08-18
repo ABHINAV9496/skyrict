@@ -191,6 +191,8 @@ export async function apiFetchWithMeta<T>(
   return readPayload<T>(await fetchWithSession(path, options));
 }
 
+export { apiFetchWithMeta as apiFetchEnvelope };
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, {
     method: "POST",

@@ -320,7 +320,7 @@ class TestProducts:
             params={"category": category, "page": 1, "page_size": 2},
         )
         assert page1.status_code == 200
-        body = page1.json()["data"]
+        body = page1.json()
         assert body["meta"]["total"] == 3
         assert body["meta"]["total_pages"] == 2
         assert len(body["data"]) == 2
@@ -331,7 +331,7 @@ class TestProducts:
             params={"category": category, "page": 2, "page_size": 2},
         )
         assert page2.status_code == 200
-        assert len(page2.json()["data"]["data"]) == 1
+        assert len(page2.json()["data"]) == 1
 
     async def test_patch_product_updates_fields(
         self,
@@ -411,7 +411,7 @@ class TestProducts:
             "/api/v1/inventory/products",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert product["id"] not in [p["id"] for p in listed.json()["data"]["data"]]
+        assert product["id"] not in [p["id"] for p in listed.json()["data"]]
 
     async def test_delete_product_unknown_id_returns_404(
         self,
@@ -451,14 +451,14 @@ class TestProducts:
             "/api/v1/inventory/products",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert product["id"] not in [p["id"] for p in listed.json()["data"]["data"]]
+        assert product["id"] not in [p["id"] for p in listed.json()["data"]]
 
         including_archived = await client.get(
             "/api/v1/inventory/products",
             headers=_auth_olympus(rbac_tokens["full"]),
             params={"include_inactive": "true"},
         )
-        ids = [p["id"] for p in including_archived.json()["data"]["data"]]
+        ids = [p["id"] for p in including_archived.json()["data"]]
         assert product["id"] in ids
 
         # Archived stock stays visible in the stock report (name still resolves).
@@ -468,7 +468,7 @@ class TestProducts:
             params={"product_id": product["id"]},
         )
         assert levels.status_code == 200
-        assert Decimal(levels.json()["data"]["data"][0]["qty_on_hand"]) == Decimal("10")
+        assert Decimal(levels.json()["data"][0]["qty_on_hand"]) == Decimal("10")
 
     async def test_delete_product_blocked_while_reserved(
         self,
@@ -563,7 +563,7 @@ class TestWarehouses:
             headers=_auth_olympus(rbac_tokens["full"]),
         )
         assert response.status_code == 200
-        names = [w["name"] for w in response.json()["data"]["data"]]
+        names = [w["name"] for w in response.json()["data"]]
         assert name in names
 
     async def test_patch_warehouse_updates_fields(
@@ -611,7 +611,7 @@ class TestWarehouses:
             "/api/v1/inventory/warehouses",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]["data"]]
+        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]]
 
     async def test_delete_warehouse_unknown_id_returns_404(
         self,
@@ -651,14 +651,14 @@ class TestWarehouses:
             "/api/v1/inventory/warehouses",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]["data"]]
+        assert warehouse["id"] not in [w["id"] for w in listed.json()["data"]]
 
         including_archived = await client.get(
             "/api/v1/inventory/warehouses",
             headers=_auth_olympus(rbac_tokens["full"]),
             params={"include_inactive": "true"},
         )
-        ids = [w["id"] for w in including_archived.json()["data"]["data"]]
+        ids = [w["id"] for w in including_archived.json()["data"]]
         assert warehouse["id"] in ids
 
     async def test_delete_warehouse_blocked_while_reserved(
@@ -828,7 +828,7 @@ class TestArchivePostingBlock:
             headers=_auth_olympus(rbac_tokens["full"]),
             params={"product_id": product["id"]},
         )
-        assert Decimal(levels.json()["data"]["data"][0]["qty_on_hand"]) == Decimal("0")
+        assert Decimal(levels.json()["data"][0]["qty_on_hand"]) == Decimal("0")
 
     async def test_alerts_exclude_archived_product(
         self,
@@ -852,7 +852,7 @@ class TestArchivePostingBlock:
             "/api/v1/inventory/alerts",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert product["sku"] in [a["sku"] for a in alerts.json()["data"]["data"]]
+        assert product["sku"] in [a["sku"] for a in alerts.json()["data"]]
 
         await client.delete(
             f"/api/v1/inventory/products/{product['id']}",
@@ -862,7 +862,7 @@ class TestArchivePostingBlock:
             "/api/v1/inventory/alerts",
             headers=_auth_olympus(rbac_tokens["full"]),
         )
-        assert product["sku"] not in [a["sku"] for a in after.json()["data"]["data"]]
+        assert product["sku"] not in [a["sku"] for a in after.json()["data"]]
 
 
 class TestStockFlows:
@@ -895,7 +895,7 @@ class TestStockFlows:
             params={"product_id": product["id"], "warehouse_id": warehouse["id"]},
         )
         assert levels.status_code == 200
-        level = levels.json()["data"]["data"][0]
+        level = levels.json()["data"][0]
         assert Decimal(level["qty_on_hand"]) == Decimal("10")
         assert Decimal(level["qty_reserved"]) == Decimal("0")
 
@@ -905,8 +905,8 @@ class TestStockFlows:
             params={"product_id": product["id"], "warehouse_id": warehouse["id"]},
         )
         assert movements.status_code == 200
-        assert len(movements.json()["data"]["data"]) == 1
-        assert movements.json()["data"]["data"][0]["ref_id"] == ref
+        assert len(movements.json()["data"]) == 1
+        assert movements.json()["data"][0]["ref_id"] == ref
 
     async def test_insufficient_stock_returns_409(
         self,
@@ -1012,7 +1012,7 @@ class TestStockFlows:
             headers=_auth_olympus(rbac_tokens["full"]),
             params={"product_id": product["id"]},
         )
-        by_warehouse = {row["warehouse_id"]: row for row in levels.json()["data"]["data"]}
+        by_warehouse = {row["warehouse_id"]: row for row in levels.json()["data"]}
         assert Decimal(by_warehouse[src["id"]]["qty_on_hand"]) == Decimal("6")
         assert Decimal(by_warehouse[dst["id"]]["qty_on_hand"]) == Decimal("4")
 
@@ -1059,7 +1059,7 @@ class TestStockFlows:
             headers=_auth_olympus(rbac_tokens["full"]),
         )
         assert response.status_code == 200
-        skus = [a["sku"] for a in response.json()["data"]["data"]]
+        skus = [a["sku"] for a in response.json()["data"]]
         assert sku in skus
 
 
@@ -1142,7 +1142,7 @@ class TestTenantIsolation:
             },
         )
         assert response.status_code == 200
-        skus = [p["sku"] for p in response.json()["data"]["data"]]
+        skus = [p["sku"] for p in response.json()["data"]]
         assert sku not in skus
 
     async def test_globex_cannot_write_acme_data(

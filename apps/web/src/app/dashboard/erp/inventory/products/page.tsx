@@ -1,6 +1,5 @@
 import { Package } from "lucide-react";
 
-import { InventoryNav } from "@/components/dashboard/erp/inventory/inventory-nav";
 import { ProductsClient } from "@/components/dashboard/erp/inventory/products";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 
@@ -12,7 +11,6 @@ export default function ErpInventoryProductsPage() {
                 description="The catalog of what you track stock for, with costs and reorder points."
                 icon={Package}
             />
-            <InventoryNav />
             <ProductsClient />
         </div>
     );

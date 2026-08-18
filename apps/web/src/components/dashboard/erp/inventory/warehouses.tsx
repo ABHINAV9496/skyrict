@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
     Pencil,
@@ -15,7 +15,7 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import {
     createWarehouse,
     deleteWarehouse,
     formatDate,
+    invalidateCatalog,
     listWarehouses,
     reactivateWarehouse,
     updateWarehouse,
@@ -81,20 +82,30 @@ export function WarehousesClient() {
     const [deletingBusy, setDeletingBusy] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
+    const abortRef = useRef<AbortController | null>(null);
+
     const load = useCallback(async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setStatus({ state: "loading" });
         try {
-            const result = await listWarehouses({
-                page,
-                pageSize: PAGE_SIZE,
-                includeInactive,
-            });
+            const result = await listWarehouses(
+                {
+                    page,
+                    pageSize: PAGE_SIZE,
+                    includeInactive,
+                },
+                { signal: controller.signal },
+            );
+            if (controller.signal.aborted) return;
             setStatus({
                 state: "ready",
                 warehouses: result.data,
                 meta: result.meta,
             });
         } catch (error) {
+            if (controller.signal.aborted) return;
             const message =
                 error instanceof ApiError
                     ? error.message
@@ -105,6 +116,7 @@ export function WarehousesClient() {
 
     useEffect(() => {
         void load();
+        return () => abortRef.current?.abort();
     }, [load]);
 
     useEffect(() => {
@@ -148,6 +160,7 @@ export function WarehousesClient() {
                 await createWarehouse(input);
                 setNotice(`Created warehouse ${name}.`);
             }
+            invalidateCatalog();
             setDialogOpen(false);
             if (page !== 1) setPage(1);
             else void load();
@@ -170,6 +183,7 @@ export function WarehousesClient() {
         setDeleteError(null);
         try {
             await deleteWarehouse(deleting.id);
+            invalidateCatalog();
             setNotice(`Archived warehouse ${deleting.name}.`);
             setDeleting(null);
             if (page !== 1) setPage(1);
@@ -188,6 +202,7 @@ export function WarehousesClient() {
     async function handleReactivate(warehouse: Warehouse) {
         try {
             await reactivateWarehouse(warehouse.id);
+            invalidateCatalog();
             setNotice(`Reactivated warehouse ${warehouse.name}.`);
             if (page !== 1) setPage(1);
             else void load();

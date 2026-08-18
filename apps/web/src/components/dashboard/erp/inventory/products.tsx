@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Package, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 
@@ -9,7 +9,7 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
-import { Pagination } from "@/components/dashboard/erp/inventory/pagination";
+import { Pagination } from "@/components/dashboard/erp/pagination";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import {
     createProduct,
     deleteProduct,
     formatMoney,
+    invalidateCatalog,
     listProducts,
     reactivateProduct,
     updateProduct,
@@ -88,20 +89,30 @@ export function ProductsClient() {
     const [deletingBusy, setDeletingBusy] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
 
+    const abortRef = useRef<AbortController | null>(null);
+
     const load = useCallback(async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setStatus({ state: "loading" });
         try {
-            const result = await listProducts({
-                page,
-                pageSize: PAGE_SIZE,
-                includeInactive,
-            });
+            const result = await listProducts(
+                {
+                    page,
+                    pageSize: PAGE_SIZE,
+                    includeInactive,
+                },
+                { signal: controller.signal },
+            );
+            if (controller.signal.aborted) return;
             setStatus({
                 state: "ready",
                 products: result.data,
                 meta: result.meta,
             });
         } catch (error) {
+            if (controller.signal.aborted) return;
             const message =
                 error instanceof ApiError
                     ? error.message
@@ -112,6 +123,7 @@ export function ProductsClient() {
 
     useEffect(() => {
         void load();
+        return () => abortRef.current?.abort();
     }, [load]);
 
     useEffect(() => {
@@ -161,6 +173,7 @@ export function ProductsClient() {
                 await createProduct(input);
                 setNotice(`Created product ${sku}.`);
             }
+            invalidateCatalog();
             setDialogOpen(false);
             if (page !== 1) setPage(1);
             else void load();
@@ -183,6 +196,7 @@ export function ProductsClient() {
         setDeleteError(null);
         try {
             await deleteProduct(deleting.id);
+            invalidateCatalog();
             setNotice(`Archived product ${deleting.sku}.`);
             setDeleting(null);
             if (page !== 1) setPage(1);
@@ -201,6 +215,7 @@ export function ProductsClient() {
     async function handleReactivate(product: Product) {
         try {
             await reactivateProduct(product.id);
+            invalidateCatalog();
             setNotice(`Reactivated product ${product.sku}.`);
             if (page !== 1) setPage(1);
             else void load();

@@ -66,7 +66,7 @@ _require_inventory_adjust = require_permission(ERP_INVENTORY_ADJUST)
 # ---------------------------------------------------------------------------
 
 
-@router.get("/products", response_model=ResponseEnvelope[ListResponse[ProductResponse]])
+@router.get("/products", response_model=ListResponse[ProductResponse])
 async def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -75,7 +75,7 @@ async def list_products(
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
-) -> ResponseEnvelope[ListResponse[ProductResponse]]:
+) -> ListResponse[ProductResponse]:
     """List products (active by default; ``?include_inactive=true`` for archived)."""
     params = PaginationParams.create(page, page_size)
     products = await service.list_products(
@@ -88,11 +88,9 @@ async def list_products(
     total = await service.count_products(
         tenant_id, include_inactive=include_inactive, category=category
     )
-    return ResponseEnvelope(
-        data=ListResponse(
-            data=[ProductResponse.from_entity(p) for p in products],
-            meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
-        )
+    return ListResponse(
+        data=[ProductResponse.from_entity(p) for p in products],
+        meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
     )
 
 
@@ -176,7 +174,7 @@ async def reactivate_product(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/warehouses", response_model=ResponseEnvelope[ListResponse[WarehouseResponse]])
+@router.get("/warehouses", response_model=ListResponse[WarehouseResponse])
 async def list_warehouses(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -184,18 +182,16 @@ async def list_warehouses(
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
-) -> ResponseEnvelope[ListResponse[WarehouseResponse]]:
+) -> ListResponse[WarehouseResponse]:
     """List warehouses (active by default; ``?include_inactive=true`` for archived)."""
     params = PaginationParams.create(page, page_size)
     warehouses = await service.list_warehouses(
         tenant_id, include_inactive=include_inactive, offset=params.offset, limit=params.limit
     )
     total = await service.count_warehouses(tenant_id, include_inactive=include_inactive)
-    return ResponseEnvelope(
-        data=ListResponse(
-            data=[WarehouseResponse.from_entity(w) for w in warehouses],
-            meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
-        )
+    return ListResponse(
+        data=[WarehouseResponse.from_entity(w) for w in warehouses],
+        meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
     )
 
 
@@ -273,7 +269,7 @@ async def reactivate_warehouse(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/stock", response_model=ResponseEnvelope[ListResponse[StockLevelResponse]])
+@router.get("/stock", response_model=ListResponse[StockLevelResponse])
 async def list_stock_levels(
     product_id: str | None = Query(default=None),
     warehouse_id: str | None = Query(default=None),
@@ -282,7 +278,7 @@ async def list_stock_levels(
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
-) -> ResponseEnvelope[ListResponse[StockLevelResponse]]:
+) -> ListResponse[StockLevelResponse]:
     """List current stock levels, optionally filtered by product/warehouse."""
     from uuid import UUID
 
@@ -297,11 +293,9 @@ async def list_stock_levels(
         limit=params.limit,
     )
     total = await service.count_stock_levels(tenant_id, product_id=pid, warehouse_id=wid)
-    return ResponseEnvelope(
-        data=ListResponse(
-            data=[StockLevelResponse.from_entity(level) for level in levels],
-            meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
-        )
+    return ListResponse(
+        data=[StockLevelResponse.from_entity(level) for level in levels],
+        meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
     )
 
 
@@ -406,7 +400,7 @@ async def release_reservation(
 
 @router.get(
     "/stock/movements",
-    response_model=ResponseEnvelope[ListResponse[StockMovementResponse]],
+    response_model=ListResponse[StockMovementResponse],
 )
 async def list_movements(
     product_id: str | None = Query(default=None),
@@ -417,7 +411,7 @@ async def list_movements(
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
-) -> ResponseEnvelope[ListResponse[StockMovementResponse]]:
+) -> ListResponse[StockMovementResponse]:
     """List immutable ledger entries, newest first."""
     from uuid import UUID
 
@@ -438,29 +432,25 @@ async def list_movements(
     total = await service.count_movements(
         tenant_id, product_id=pid, warehouse_id=wid, movement_type=mtype
     )
-    return ResponseEnvelope(
-        data=ListResponse(
-            data=[StockMovementResponse.from_entity(m) for m in movements],
-            meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
-        )
+    return ListResponse(
+        data=[StockMovementResponse.from_entity(m) for m in movements],
+        meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
     )
 
 
-@router.get("/alerts", response_model=ResponseEnvelope[ListResponse[AlertResponse]])
+@router.get("/alerts", response_model=ListResponse[AlertResponse])
 async def list_alerts(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: dict[str, object] = Depends(_require_inventory_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
-) -> ResponseEnvelope[ListResponse[AlertResponse]]:
+) -> ListResponse[AlertResponse]:
     """List products currently at or below their reorder point."""
     params = PaginationParams.create(page, page_size)
     alerts = await service.list_alerts(tenant_id, offset=params.offset, limit=params.limit)
     total = await service.count_alerts(tenant_id)
-    return ResponseEnvelope(
-        data=ListResponse(
-            data=[AlertResponse.from_entities(level, product) for level, product in alerts],
-            meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
-        )
+    return ListResponse(
+        data=[AlertResponse.from_entities(level, product) for level, product in alerts],
+        meta=PaginationMeta.create(total=total, page=params.page, page_size=params.page_size),
     )

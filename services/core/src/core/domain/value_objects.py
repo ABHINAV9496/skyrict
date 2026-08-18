@@ -146,6 +146,60 @@ class OpportunityStage(StrEnum):
     LOST = "lost"
 
 
+class ActivityKind(StrEnum):
+    """Native PostgreSQL enum backing ``erp_crm_activities.kind``.
+
+    The unified CRM activity catalog (CRM workspace): actionable follow-ups
+    (``task``, ``follow_up``), interaction records (``call``, ``meeting``,
+    ``email``), and quick ``note`` interactions. Everything is a row in ONE
+    table — follow-ups are ``kind=follow_up`` rows, not a separate model.
+    """
+
+    TASK = "task"
+    CALL = "call"
+    MEETING = "meeting"
+    FOLLOW_UP = "follow_up"
+    EMAIL = "email"
+    NOTE = "note"
+
+
+class CrmEntityType(StrEnum):
+    """The CRM anchor entity types for activities, notes, and timeline events.
+
+    ``customer`` covers promoted accounts; ``contact`` is a person on a
+    customer. Deliberately NOT extensible to ``order`` — sales order records
+    are anchored to the related customer (``entity_type=customer``), so the
+    timeline never mixes a fifth anchor kind.
+    """
+
+    LEAD = "lead"
+    OPPORTUNITY = "opportunity"
+    CUSTOMER = "customer"
+    CONTACT = "contact"
+
+
+class CrmTimelineEventType(StrEnum):
+    """Native PostgreSQL enum backing ``erp_crm_timeline_events.event_type``.
+
+    The curated CRM business-event vocabulary — the customer-facing timeline
+    is Activities + Notes + these events. It is a SEPARATE concept from the
+    security/compliance ``audit_logs`` trail and from the async domain events
+    (``crm.*``), which remain bus-only.
+    """
+
+    LEAD_CREATED = "lead.created"
+    LEAD_STATUS_CHANGED = "lead.status_changed"
+    LEAD_QUALIFIED = "lead.qualified"
+    LEAD_DISQUALIFIED = "lead.disqualified"
+    OPPORTUNITY_STAGE_CHANGED = "opportunity.stage_changed"
+    OPPORTUNITY_WON = "opportunity.won"
+    OPPORTUNITY_LOST = "opportunity.lost"
+    CUSTOMER_CREATED = "customer.created"
+    ORDER_CREATED = "order.created"
+    CONTACT_CREATED = "contact.created"
+    CONTACT_DEACTIVATED = "contact.deactivated"
+
+
 class OrderStatus(StrEnum):
     """Native PostgreSQL enum backing ``erp_sales_orders.status``.
 

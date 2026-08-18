@@ -242,7 +242,7 @@ No direct DB access from API or event handlers. Tenant scoping is enforced in th
 
 ### 5.3 Feature package files (copy identity's conventions)
 
-- **`router.py`** — FastAPI `APIRouter`, module-level permission dependency singletons (e.g. `_require_inventory_read = require_permission(INVENTORY_READ)`), delegate to service, wrap responses in `ResponseEnvelope`.
+- **`router.py`** — FastAPI `APIRouter`, module-level permission dependency singletons (e.g. `_require_inventory_read = require_permission(INVENTORY_READ)`), delegate to service, wrap single-object responses in `ResponseEnvelope` and list responses in `ListResponse` (the platform convention from crm/sales/finance).
 - **`schemas.py`** — Pydantic request/response models (the API boundary).
 - **`service.py`** — takes ports + sibling services in the constructor (wired only in `api/deps.py`).
 - **`ports.py`** — `Protocol` classes; the service depends on these, not on the repository.
@@ -377,7 +377,7 @@ provisioned role+grant, every ERP endpoint returns 403 `PermissionDeniedError`.
 
 ## 8. API surface
 
-All endpoints are under `/api/v1/inventory`, require a valid access JWT + tenant context, and check permissions server-side. Responses wrapped in `ResponseEnvelope`. List endpoints use offset/limit pagination (§10.4).
+All endpoints are under `/api/v1/inventory`, require a valid access JWT + tenant context, and check permissions server-side. Single-object responses are wrapped in `ResponseEnvelope`; list endpoints return `ListResponse` directly with offset/limit pagination (§10.4) — matching the crm/sales/finance contract.
 
 | # | Method & Path | Permission | Request → Response |
 |---|---|---|---|
@@ -466,7 +466,7 @@ Canonical actions to add in `core/audit_events.py`: `inventory.product.created`,
 
 ### 10.4 Pagination
 Use **offset/limit** (matches identity; no cursor pagination exists):
-`PaginationParams(page=1, page_size=20)` from `skyrict-common`; responses wrapped in `ResponseEnvelope` / `ListResponse` with `PaginationMeta`.
+`PaginationParams(page=1, page_size=20)` from `skyrict-common`; list responses are `ListResponse(data, meta=PaginationMeta)` directly, single-object responses wrap in `ResponseEnvelope`.
 
 ### 10.5 Errors
 Reuse `skyrict_common` exceptions → RFC 7807 `{type, status, title, detail, instance}` via `core/exceptions.py`. Add service exceptions: `InsufficientStockError` (409), `DuplicateSkuError` (409), `MovementImmutableError` (409), `TransferRequiresDistinctWarehousesError` (422), `StockReservedError` (409, `stock_reserved` — Rule 5.1), `InactiveItemError` (409, `item_inactive` — Rule 5.2).

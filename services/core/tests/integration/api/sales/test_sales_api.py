@@ -418,7 +418,7 @@ class TestConfirm:
                 headers=headers,
                 params={"product_id": world["product_id"], "warehouse_id": world["warehouse_id"]},
             )
-        ).json()["data"]["data"]
+        ).json()["data"]
         assert stock[0]["qty_reserved"] == "3.0000"
 
     async def test_confirm_replay_is_idempotent(
@@ -575,7 +575,7 @@ class TestCancel:
                 headers=headers,
                 params={"product_id": world["product_id"], "warehouse_id": world["warehouse_id"]},
             )
-        ).json()["data"]["data"]
+        ).json()["data"]
         assert stock[0]["qty_reserved"] == "0.0000"
 
     async def test_cancel_replay_is_idempotent(

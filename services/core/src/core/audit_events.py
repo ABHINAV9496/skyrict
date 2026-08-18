@@ -38,6 +38,16 @@ CRM_OPPORTUNITY_LOST = "crm.opportunity.lost"
 CRM_CUSTOMER_CREATED = "crm.customer.created"
 CRM_CUSTOMER_UPDATED = "crm.customer.updated"
 CRM_CUSTOMER_DEACTIVATED = "crm.customer.deactivated"
+CRM_CONTACT_CREATED = "crm.contact.created"
+CRM_CONTACT_UPDATED = "crm.contact.updated"
+CRM_CONTACT_DEACTIVATED = "crm.contact.deactivated"
+CRM_ACTIVITY_CREATED = "crm.activity.created"
+CRM_ACTIVITY_UPDATED = "crm.activity.updated"
+CRM_ACTIVITY_COMPLETED = "crm.activity.completed"
+CRM_ACTIVITY_DELETED = "crm.activity.deleted"
+CRM_NOTE_CREATED = "crm.note.created"
+CRM_NOTE_UPDATED = "crm.note.updated"
+CRM_NOTE_DELETED = "crm.note.deleted"
 SALES_ORDER_CREATED = "sales.order.created"
 SALES_ORDER_UPDATED = "sales.order.updated"
 SALES_ORDER_CONFIRMED = "sales.order.confirmed"
@@ -68,6 +78,16 @@ CATALOG: tuple[str, ...] = (
     CRM_CUSTOMER_CREATED,
     CRM_CUSTOMER_UPDATED,
     CRM_CUSTOMER_DEACTIVATED,
+    CRM_CONTACT_CREATED,
+    CRM_CONTACT_UPDATED,
+    CRM_CONTACT_DEACTIVATED,
+    CRM_ACTIVITY_CREATED,
+    CRM_ACTIVITY_UPDATED,
+    CRM_ACTIVITY_COMPLETED,
+    CRM_ACTIVITY_DELETED,
+    CRM_NOTE_CREATED,
+    CRM_NOTE_UPDATED,
+    CRM_NOTE_DELETED,
     SALES_ORDER_CREATED,
     SALES_ORDER_UPDATED,
     SALES_ORDER_CONFIRMED,
@@ -112,6 +132,16 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             CRM_CUSTOMER_CREATED,
             CRM_CUSTOMER_UPDATED,
             CRM_CUSTOMER_DEACTIVATED,
+            CRM_CONTACT_CREATED,
+            CRM_CONTACT_UPDATED,
+            CRM_CONTACT_DEACTIVATED,
+            CRM_ACTIVITY_CREATED,
+            CRM_ACTIVITY_UPDATED,
+            CRM_ACTIVITY_COMPLETED,
+            CRM_ACTIVITY_DELETED,
+            CRM_NOTE_CREATED,
+            CRM_NOTE_UPDATED,
+            CRM_NOTE_DELETED,
         ),
     ),
     (
@@ -148,12 +178,22 @@ __all__ = [
     "ALL_AUDIT_EVENTS",
     "AUDIT_EVENT_MODULES",
     "CATALOG",
+    "CRM_ACTIVITY_COMPLETED",
+    "CRM_ACTIVITY_CREATED",
+    "CRM_ACTIVITY_DELETED",
+    "CRM_ACTIVITY_UPDATED",
+    "CRM_CONTACT_CREATED",
+    "CRM_CONTACT_DEACTIVATED",
+    "CRM_CONTACT_UPDATED",
     "CRM_CUSTOMER_CREATED",
     "CRM_CUSTOMER_DEACTIVATED",
     "CRM_CUSTOMER_UPDATED",
     "CRM_LEAD_CREATED",
     "CRM_LEAD_STATUS_CHANGED",
     "CRM_LEAD_UPDATED",
+    "CRM_NOTE_CREATED",
+    "CRM_NOTE_DELETED",
+    "CRM_NOTE_UPDATED",
     "CRM_OPPORTUNITY_CREATED",
     "CRM_OPPORTUNITY_LOST",
     "CRM_OPPORTUNITY_STAGE_CHANGED",

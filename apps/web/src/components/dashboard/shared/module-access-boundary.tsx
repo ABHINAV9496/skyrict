@@ -4,11 +4,6 @@ import Link from "next/link";
 import { ArrowLeft, LoaderCircle, Lock, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  AgentsWorldSkeleton,
-  ErpWorldSkeleton,
-  IntelligenceWorldSkeleton,
-} from "@/components/ui/page-skeletons";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
 
 const MODULE_LABEL: Record<ModuleKey, string> = {
@@ -17,11 +12,13 @@ const MODULE_LABEL: Record<ModuleKey, string> = {
   intelligence: "Market Intelligence",
 };
 
-/** Full-page loading state that mirrors each module world's real chrome. */
-export function ModuleLoading({ module }: { module: ModuleKey }) {
-  if (module === "agents") return <AgentsWorldSkeleton />;
-  if (module === "erp") return <ErpWorldSkeleton />;
-  return <IntelligenceWorldSkeleton />;
+/** Minimal loading indicator while permissions resolve. */
+export function ModuleLoading() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background">
+      <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+    </div>
+  );
 }
 
 function ModuleNotice({
@@ -127,7 +124,7 @@ export function ModuleAccessBoundary({
 }) {
   const { status, access, permissions } = useModuleAccess();
 
-  if (status === "loading") return <ModuleLoading module={module} />;
+  if (status === "loading") return <ModuleLoading />;
   if (status === "error") return <ModuleAccessError module={module} />;
   if (!access[module]) return <ModuleAccessDenied module={module} />;
   if (

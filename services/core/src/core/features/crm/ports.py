@@ -17,11 +17,29 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from core.domain.entities import Customer, Lead, Opportunity
-    from core.domain.value_objects import DataScope, LeadStatus, OpportunityStage
+    from core.domain.entities import (
+        Activity,
+        Contact,
+        CrmSearchHit,
+        Customer,
+        Lead,
+        Note,
+        Opportunity,
+        TimelineEvent,
+        TimelineItem,
+    )
+    from core.domain.value_objects import (
+        ActivityKind,
+        CrmEntityType,
+        CrmTimelineEventType,
+        DataScope,
+        LeadStatus,
+        OpportunityStage,
+    )
 
 
 class CrmRepositoryPort(Protocol):
@@ -199,3 +217,302 @@ class CrmRepositoryPort(Protocol):
     async def deactivate_customer(
         self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Customer | None: ...
+
+
+class CrmTimelinePort(Protocol):
+    """Persistence contract for the curated CRM timeline (business events).
+
+    Distinct from the security/compliance ``audit_logs`` trail and from the
+    async ``crm.*`` domain events. Writers call this transactionally inside
+    the same request as the business action.
+    """
+
+    async def record_timeline_event(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType,
+        entity_id: uuid.UUID,
+        event_type: CrmTimelineEventType,
+        title: str,
+        actor_id: uuid.UUID | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> TimelineEvent: ...
+
+
+class CrmWorkspaceRepositoryPort(CrmRepositoryPort, Protocol):
+    """Persistence contract for the CRM workspace surface.
+
+    Contacts, activities, notes, the merged timeline, overview aggregates, and
+    server-side search — plus the anchor probes from :class:`CrmRepositoryPort`
+    the workspace service uses to validate that an entity exists in the tenant.
+    """
+
+    # --- Contacts (tenant-scoped, like customers) ---
+    async def create_contact(self, contact: Contact) -> Contact: ...
+
+    async def get_contact(
+        self, contact_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Contact | None: ...
+
+    async def list_contacts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        customer_id: uuid.UUID | None = None,
+        include_inactive: bool = False,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Sequence[Contact]: ...
+
+    async def count_contacts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        customer_id: uuid.UUID | None = None,
+        include_inactive: bool = False,
+    ) -> int: ...
+
+    async def update_contact(
+        self,
+        contact_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        changes: dict[str, object],
+    ) -> Contact | None: ...
+
+    async def deactivate_contact(
+        self, contact_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Contact | None: ...
+
+    # --- Activities (owner/team-scoped) ---
+    async def create_activity(self, activity: Activity) -> Activity: ...
+
+    async def get_activity(
+        self,
+        activity_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Activity | None: ...
+
+    async def list_activities(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        entity_type: CrmEntityType | None = None,
+        entity_id: uuid.UUID | None = None,
+        kind: ActivityKind | None = None,
+        status: str | None = None,
+        assignee_id: uuid.UUID | None = None,
+        day_start: datetime | None = None,
+        day_end: datetime | None = None,
+        completed_since: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Sequence[Activity]: ...
+
+    async def count_activities(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        entity_type: CrmEntityType | None = None,
+        entity_id: uuid.UUID | None = None,
+        kind: ActivityKind | None = None,
+        status: str | None = None,
+        assignee_id: uuid.UUID | None = None,
+        day_start: datetime | None = None,
+        day_end: datetime | None = None,
+        completed_since: datetime | None = None,
+    ) -> int: ...
+
+    async def update_activity(
+        self,
+        activity_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        changes: dict[str, object],
+    ) -> Activity | None: ...
+
+    async def complete_activity(
+        self,
+        activity_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        completed_by: uuid.UUID,
+    ) -> Activity | None: ...
+
+    async def delete_activity(
+        self,
+        activity_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Activity | None: ...
+
+    # --- Notes (tenant-scoped) ---
+    async def create_note(self, note: Note) -> Note: ...
+
+    async def get_note(self, note_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Note | None: ...
+
+    async def list_notes(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType | None = None,
+        entity_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Sequence[Note]: ...
+
+    async def count_notes(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType | None = None,
+        entity_id: uuid.UUID | None = None,
+    ) -> int: ...
+
+    async def update_note(
+        self,
+        note_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        changes: dict[str, object],
+    ) -> Note | None: ...
+
+    async def delete_note(self, note_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Note | None: ...
+
+    # --- Timeline (DB-layer UNION of activities + notes + events) ---
+    async def get_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType,
+        entity_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[Sequence[TimelineItem], int]: ...
+
+    # --- Overview aggregates (real data only) ---
+    async def lead_status_counts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Sequence[tuple[LeadStatus, int]]: ...
+
+    async def lead_source_counts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Sequence[tuple[str | None, int]]: ...
+
+    async def opportunity_funnel(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Sequence[tuple[OpportunityStage, str | None, int, Decimal]]: ...
+
+    async def won_lost_counts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+    ) -> Sequence[tuple[OpportunityStage, int]]: ...
+
+    async def customer_counts(self, *, tenant_id: uuid.UUID) -> tuple[int, int]: ...
+
+    async def activity_window_counts(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        today_start: datetime,
+        today_end: datetime,
+        completed_since: datetime,
+    ) -> dict[str, int]: ...
+
+    async def recent_won_opportunities(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        limit: int = 5,
+    ) -> Sequence[Opportunity]: ...
+
+    async def top_opportunities(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        limit: int = 5,
+    ) -> Sequence[Opportunity]: ...
+
+    # --- Search (server-side) ---
+    async def search(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scope: DataScope,
+        user_id: uuid.UUID | None,
+        team_id: uuid.UUID | None,
+        query: str,
+        entity_type: CrmEntityType | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[Sequence[CrmSearchHit], int]: ...
+
+    # --- Global timeline (dashboard feed) ---
+    async def get_global_timeline(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Sequence[TimelineItem]: ...
+
+    # --- Timeline event recording ---
+    async def record_timeline_event(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: CrmEntityType,
+        entity_id: uuid.UUID,
+        event_type: CrmTimelineEventType,
+        title: str,
+        actor_id: uuid.UUID | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> TimelineEvent: ...

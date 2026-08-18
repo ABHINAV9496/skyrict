@@ -10,7 +10,8 @@
  * require erp.inventory.adjust.approve — mirroring the core service default.
  */
 
-import { apiDelete, apiFetch, apiPatch, apiPost } from "@/lib/api/http";
+import { apiDelete, apiFetchEnvelope, apiPatch, apiPost } from "@/lib/api/http";
+import { getTenantSlug } from "@/lib/auth/session-store";
 
 /** Mirrors CORE_INVENTORY_ADJUST_APPROVE_THRESHOLD (core settings default). */
 export const ADJUST_APPROVE_THRESHOLD = 100;
@@ -375,6 +376,102 @@ export async function listAllPages<T>(
 }
 
 // ---------------------------------------------------------------------------
+// Cached catalogs
+// ---------------------------------------------------------------------------
+
+interface CatalogSnapshot<T> {
+    tenant: string;
+    fetchedAt: number;
+    items: T[];
+}
+
+/**
+ * Stock/movement/alert lists only carry ids, so the UI joins product and
+ * warehouse display names client-side. Fetching the full catalog on every page
+ * or filter change fired dozens of parallel requests per interaction, so it is
+ * cached here per tenant for a short TTL and refreshed on demand via
+ * `invalidateCatalog` (called after product/warehouse mutations).
+ */
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+let productsSnapshot: CatalogSnapshot<Product> | null = null;
+let warehousesSnapshot: CatalogSnapshot<Warehouse> | null = null;
+let productsRequest: Promise<Product[]> | null = null;
+let warehousesRequest: Promise<Warehouse[]> | null = null;
+
+async function loadAllProducts(): Promise<Product[]> {
+    return listAllPages((page) =>
+        listProducts({ page, pageSize: 100, includeInactive: true }),
+    );
+}
+
+async function loadAllWarehouses(): Promise<Warehouse[]> {
+    return listAllPages((page) =>
+        listWarehouses({ page, pageSize: 100, includeInactive: true }),
+    );
+}
+
+/** Read the full (active + archived) product catalog, cached per tenant. */
+export async function getCatalogProducts(): Promise<Product[]> {
+    const tenant = getTenantSlug();
+    const cached = productsSnapshot;
+    if (
+        cached &&
+        cached.tenant === tenant &&
+        Date.now() - cached.fetchedAt < CATALOG_TTL_MS
+    ) {
+        return cached.items;
+    }
+    if (!productsRequest) {
+        productsRequest = loadAllProducts()
+            .then((items) => {
+                productsSnapshot = { tenant, fetchedAt: Date.now(), items };
+                return items;
+            })
+            .finally(() => {
+                productsRequest = null;
+            });
+    }
+    return productsRequest;
+}
+
+/** Read the full (active + archived) warehouse catalog, cached per tenant. */
+export async function getCatalogWarehouses(): Promise<Warehouse[]> {
+    const tenant = getTenantSlug();
+    const cached = warehousesSnapshot;
+    if (
+        cached &&
+        cached.tenant === tenant &&
+        Date.now() - cached.fetchedAt < CATALOG_TTL_MS
+    ) {
+        return cached.items;
+    }
+    if (!warehousesRequest) {
+        warehousesRequest = loadAllWarehouses()
+            .then((items) => {
+                warehousesSnapshot = {
+                    tenant,
+                    fetchedAt: Date.now(),
+                    items,
+                };
+                return items;
+            })
+            .finally(() => {
+                warehousesRequest = null;
+            });
+    }
+    return warehousesRequest;
+}
+
+/** Drop both cached catalogs so the next read refetches (after mutations). */
+export function invalidateCatalog(): void {
+    productsSnapshot = null;
+    warehousesSnapshot = null;
+    productsRequest = null;
+    warehousesRequest = null;
+}
+
+// ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 
@@ -385,13 +482,15 @@ export async function listProducts(
         category?: string;
         includeInactive?: boolean;
     } = {},
+    fetchOptions: RequestInit = {},
 ): Promise<ListResponse<Product>> {
     const query = buildListParams(options, {
         category: options.category,
         include_inactive: options.includeInactive ? "true" : undefined,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/products?${query}`,
+        fetchOptions,
     );
     return mapList(raw, mapProduct);
 }
@@ -458,12 +557,14 @@ export async function listWarehouses(
         pageSize?: number;
         includeInactive?: boolean;
     } = {},
+    fetchOptions: RequestInit = {},
 ): Promise<ListResponse<Warehouse>> {
     const query = buildListParams(options, {
         include_inactive: options.includeInactive ? "true" : undefined,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/warehouses?${query}`,
+        fetchOptions,
     );
     return mapList(raw, mapWarehouse);
 }
@@ -521,12 +622,16 @@ export async function listStockLevels(
         productId?: string;
         warehouseId?: string;
     } = {},
+    fetchOptions: RequestInit = {},
 ): Promise<ListResponse<StockLevel>> {
     const query = buildListParams(options, {
         product_id: options.productId,
         warehouse_id: options.warehouseId,
     });
-    const raw = await apiFetch<ListPayload>(`/api/v1/inventory/stock?${query}`);
+    const raw = await apiFetchEnvelope<ListPayload>(
+        `/api/v1/inventory/stock?${query}`,
+        fetchOptions,
+    );
     return mapList(raw, mapStockLevel);
 }
 
@@ -600,14 +705,16 @@ export async function listMovements(
         warehouseId?: string;
         movementType?: string;
     } = {},
+    fetchOptions: RequestInit = {},
 ): Promise<ListResponse<StockMovement>> {
     const query = buildListParams(options, {
         product_id: options.productId,
         warehouse_id: options.warehouseId,
         movement_type: options.movementType,
     });
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/stock/movements?${query}`,
+        fetchOptions,
     );
     return mapList(raw, mapStockMovement);
 }
@@ -621,10 +728,12 @@ export async function listAlerts(
         page?: number;
         pageSize?: number;
     } = {},
+    fetchOptions: RequestInit = {},
 ): Promise<ListResponse<Alert>> {
     const query = buildListParams(options);
-    const raw = await apiFetch<ListPayload>(
+    const raw = await apiFetchEnvelope<ListPayload>(
         `/api/v1/inventory/alerts?${query}`,
+        fetchOptions,
     );
     return mapList(raw, mapAlert);
 }

@@ -51,8 +51,9 @@ async function proxy(request: NextRequest) {
   });
 
   if (result.status === 0) {
+    const service = target === "core" ? "Core service" : "Identity service";
     return NextResponse.json(
-      { detail: "Identity service is unavailable. Please try again." },
+      { detail: `${service} is unavailable. Please try again.` },
       { status: 502 },
     );
   }

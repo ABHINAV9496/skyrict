@@ -704,12 +704,14 @@ class CrmRepository:
         """Batch-resolve customer names to avoid N+1 (CustomerPort)."""
         if not customer_ids:
             return {}
-        stmt = select(ErpCrmCustomerModel).where(
+        stmt = select(
+            ErpCrmCustomerModel.id, ErpCrmCustomerModel.name
+        ).where(
             ErpCrmCustomerModel.tenant_id == tenant_id,
             ErpCrmCustomerModel.id.in_(customer_ids),
         )
         result = await self.session.execute(stmt)
-        return {model.id: model.name for model in result.scalars().all()}
+        return {row[0]: row[1] for row in result.all()}
 
     async def get_customer_by_code(self, code: str, *, tenant_id: uuid.UUID) -> Customer | None:
         stmt = select(ErpCrmCustomerModel).where(

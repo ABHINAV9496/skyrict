@@ -258,6 +258,39 @@ class CustomerPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Cross-module COGS port (seam for sales/inventory)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CogsLine:
+    """One consumed product line for COGS posting.
+
+    ``unit_cost`` is the product's cost price at fulfilment time.
+    """
+
+    product_id: uuid.UUID
+    quantity: Decimal
+    unit_cost: Decimal
+
+
+class CogsPort(Protocol):
+    """Cost-of-goods-sold posting seam the sales service calls after stock consumption.
+
+    Implemented by the finance service (via ``FinanceService.post_cogs_for_order``).
+    """
+
+    async def post_cogs_for_order(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        order_id: str,
+        entry_date: date,
+        lines: Sequence[CogsLine],
+    ) -> None: ...
+
+
+# ---------------------------------------------------------------------------
 # Audit sink (implemented structurally by core.features.audit.repository)
 # ---------------------------------------------------------------------------
 

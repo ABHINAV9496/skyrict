@@ -36,8 +36,11 @@ from typing import TYPE_CHECKING
 from core.core import audit_events
 from core.core.constants import (
     AR_ACCOUNT_CODE,
+    COGS_ACCOUNT_CODE,
+    INVENTORY_ASSET_ACCOUNT_CODE,
     INVOICE_SOURCE_MANUAL,
     INVOICE_SOURCE_SALES_ORDER,
+    JOURNAL_SOURCE_COGS,
     JOURNAL_SOURCE_INVOICE,
     JOURNAL_SOURCE_MANUAL,
     PAYMENT_SOURCE_MANUAL,
@@ -64,6 +67,8 @@ if TYPE_CHECKING:
 
     from core.features.finance.ports import (
         AuditSink,
+        CogsLine,
+        CogsPort,
         CustomerPort,
         FinanceEventSink,
         FinanceRepositoryPort,
@@ -720,6 +725,74 @@ class FinanceService:
         if payment is None:
             raise NotFoundError(f"Payment {payment_id} not found")
         return payment
+
+    # ------------------------------------------------------------------
+    # COGS (cost-of-goods-sold) posting
+    # ------------------------------------------------------------------
+
+    async def post_cogs_for_order(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        order_id: str,
+        entry_date: date,
+        lines: Sequence[CogsLine],
+    ) -> None:
+        """Post a COGS journal entry after stock consumption (DR COGS / CR Inventory Asset).
+
+        Called by the sales service after ``fulfil_order_lines`` succeeds. The
+        entry is created as POSTED in the same transaction — the unique
+        ``(source, source_ref)`` lock on journal entries prevents double-posting
+        for the same order.
+        """
+        if not lines:
+            return
+
+        total_cogs = sum(
+            (line.quantity * line.unit_cost).quantize(_MONEY_QUANTUM) for line in lines
+        )
+        if total_cogs <= 0:
+            return
+
+        cogs_account = await self._repo.get_account_by_code(COGS_ACCOUNT_CODE, tenant_id)
+        if cogs_account is None:
+            raise NotFoundError(f"COGS account '{COGS_ACCOUNT_CODE}' not found")
+        assert cogs_account.id is not None
+
+        inv_asset_account = await self._repo.get_account_by_code(
+            INVENTORY_ASSET_ACCOUNT_CODE, tenant_id
+        )
+        if inv_asset_account is None:
+            raise NotFoundError(f"Inventory asset account '{INVENTORY_ASSET_ACCOUNT_CODE}' not found")
+        assert inv_asset_account.id is not None
+
+        entry = JournalEntry(
+            tenant_id=tenant_id,
+            entry_date=entry_date,
+            memo=f"COGS for sales order {order_id}",
+            status=EntryStatus.POSTED,
+            source=JOURNAL_SOURCE_COGS,
+            source_ref=order_id,
+            lines=(
+                JournalLine(account_id=cogs_account.id, debit=total_cogs),
+                JournalLine(account_id=inv_asset_account.id, credit=total_cogs),
+            ),
+            posted_at=datetime.now(UTC),
+        )
+        created = await self._repo.create_journal_entry(entry)
+        assert created.id is not None
+
+        await self._audit.log(
+            tenant_id=tenant_id,
+            user_id=None,
+            action=audit_events.FINANCE_JOURNAL_ENTRY_POSTED,
+            target=f"journal_entry:{created.id}",
+            details={
+                "source": JOURNAL_SOURCE_COGS,
+                "source_ref": order_id,
+                "total_cogs": str(total_cogs),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Reports (derived from posted lines — never stored)

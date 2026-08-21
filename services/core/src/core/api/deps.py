@@ -409,4 +409,5 @@ def get_sales_service(
         invoice=finance,
         audit=audit_service,
         timeline=crm_repo,
+        cogs=finance,
     )

@@ -58,7 +58,14 @@ from core.domain.entities import (
     ProfitAndLoss,
     TrialBalance,
 )
-from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
+from core.domain.value_objects import (
+    AccountType,
+    CrmEntityType,
+    CrmTimelineEventType,
+    EntryStatus,
+    InvoiceStatus,
+    PaymentStatus,
+)
 from skyrict_common.exceptions import ConflictError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
@@ -72,6 +79,7 @@ if TYPE_CHECKING:
         CustomerPort,
         FinanceEventSink,
         FinanceRepositoryPort,
+        FinanceTimelinePort,
         SalesOrderForInvoicing,
     )
 
@@ -109,12 +117,14 @@ class FinanceService:
         *,
         correlation_id: str | None = None,
         customers: CustomerPort | None = None,
+        timeline: FinanceTimelinePort | None = None,
     ) -> None:
         self._repo = repo
         self._audit = audit
         self._events = events
         self._correlation_id = correlation_id or str(uuid.uuid4())
         self._customers = customers
+        self._timeline = timeline
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -623,6 +633,19 @@ class FinanceService:
             tenant_id=tenant_id,
             correlation_id=self._correlation_id,
         )
+        if self._timeline is not None:
+            await self._timeline.record_timeline_event(
+                tenant_id=tenant_id,
+                entity_type=CrmEntityType.CUSTOMER,
+                entity_id=invoice.customer_id,
+                event_type=CrmTimelineEventType.INVOICE_APPROVED,
+                title=f"Invoice {approved.invoice_number} approved",
+                payload={
+                    "invoice_id": str(invoice_id),
+                    "invoice_number": approved.invoice_number,
+                    "total": str(invoice.total),
+                },
+            )
         return approved
 
     async def void_invoice(
@@ -718,6 +741,21 @@ class FinanceService:
             tenant_id=tenant_id,
             correlation_id=self._correlation_id,
         )
+        if self._timeline is not None:
+            await self._timeline.record_timeline_event(
+                tenant_id=tenant_id,
+                entity_type=CrmEntityType.CUSTOMER,
+                entity_id=invoice.customer_id,
+                event_type=CrmTimelineEventType.PAYMENT_APPLIED,
+                title=f"Payment {created.payment_number} applied to {invoice.invoice_number}",
+                payload={
+                    "payment_id": str(created.id),
+                    "payment_number": created.payment_number,
+                    "invoice_id": str(invoice_id),
+                    "amount": str(created.amount),
+                    "method": created.method,
+                },
+            )
         return created
 
     async def get_payment(self, tenant_id: uuid.UUID, payment_id: uuid.UUID) -> Payment:

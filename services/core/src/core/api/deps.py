@@ -271,6 +271,7 @@ def get_finance_service(
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
         correlation_id=correlation_id,
         customers=crm_repo,
+        timeline=crm_repo,
     )
 
 

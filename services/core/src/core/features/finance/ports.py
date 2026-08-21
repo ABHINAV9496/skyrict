@@ -291,6 +291,32 @@ class CogsPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Cross-module CRM timeline port (seam for writing finance events to CRM)
+# ---------------------------------------------------------------------------
+
+
+class FinanceTimelinePort(Protocol):
+    """Write curated finance events to the customer-facing CRM timeline.
+
+    Implemented structurally by ``CrmRepository.record_timeline_event`` —
+    the finance service never imports CRM modules. Events are anchored to
+    the customer entity (``entity_type='customer'``).
+    """
+
+    async def record_timeline_event(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: Any,
+        entity_id: uuid.UUID,
+        event_type: Any,
+        title: str,
+        actor_id: uuid.UUID | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
 # Audit sink (implemented structurally by core.features.audit.repository)
 # ---------------------------------------------------------------------------
 

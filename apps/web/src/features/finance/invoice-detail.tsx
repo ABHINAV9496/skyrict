@@ -346,7 +346,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
         <div className="grid gap-6 p-5 sm:grid-cols-2">
           <div>
             <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Bill to</p>
-            <p className="mt-1 font-mono text-sm break-all text-foreground">{invoice.customer_id}</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{invoice.customer_name ?? invoice.customer_id}</p>
           </div>
           <dl className="space-y-2 sm:text-right">
             <div className="flex justify-between gap-4 sm:flex-row-reverse">

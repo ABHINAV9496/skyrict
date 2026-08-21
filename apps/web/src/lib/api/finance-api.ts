@@ -123,6 +123,7 @@ export interface Invoice {
   tenant_id: string;
   invoice_number: string;
   customer_id: string;
+  customer_name?: string | null;
   invoice_date: string;
   due_date: string;
   status: InvoiceStatus;

@@ -317,6 +317,23 @@ class FinanceTimelinePort(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Cross-module order lookup port (seam for resolving source sales order)
+# ---------------------------------------------------------------------------
+
+
+class OrderLookupPort(Protocol):
+    """Resolve a sales order number from its UUID for display on invoice detail.
+
+    Implemented structurally by ``SalesRepository.get_order`` — finance never
+    imports the sales feature.
+    """
+
+    async def get_order(
+        self, order_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
 # Audit sink (implemented structurally by core.features.audit.repository)
 # ---------------------------------------------------------------------------
 

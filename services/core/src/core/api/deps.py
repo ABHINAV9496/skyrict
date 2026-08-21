@@ -262,9 +262,12 @@ def get_finance_service(
     from core.features.crm.repository import CrmRepository
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
+    from core.features.sales.repository import SalesRepository
+    from core.db.sequence_repository import SequenceRepository
 
     correlation_id = getattr(request.state, "request_id", None)
     crm_repo = CrmRepository(db)
+    sales_repo = SalesRepository(db, next_sequence=SequenceRepository(db).next_value)
     return FinanceService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
@@ -272,6 +275,7 @@ def get_finance_service(
         correlation_id=correlation_id,
         customers=crm_repo,
         timeline=crm_repo,
+        order_lookup=sales_repo,
     )
 
 

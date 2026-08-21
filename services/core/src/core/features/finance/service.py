@@ -80,6 +80,7 @@ if TYPE_CHECKING:
         FinanceEventSink,
         FinanceRepositoryPort,
         FinanceTimelinePort,
+        OrderLookupPort,
         SalesOrderForInvoicing,
     )
 
@@ -118,6 +119,7 @@ class FinanceService:
         correlation_id: str | None = None,
         customers: CustomerPort | None = None,
         timeline: FinanceTimelinePort | None = None,
+        order_lookup: OrderLookupPort | None = None,
     ) -> None:
         self._repo = repo
         self._audit = audit
@@ -125,6 +127,7 @@ class FinanceService:
         self._correlation_id = correlation_id or str(uuid.uuid4())
         self._customers = customers
         self._timeline = timeline
+        self._order_lookup = order_lookup
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -533,6 +536,26 @@ class FinanceService:
             ids = list({inv.customer_id for inv in invoices})
             names = await self._customers.get_customer_names(ids, tenant_id=tenant_id)
         return invoices, names
+
+    async def resolve_source_order_numbers(
+        self,
+        invoices: Sequence[Invoice],
+        tenant_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Batch-resolve source_ref -> order_number for sales-order invoices."""
+        if self._order_lookup is None:
+            return {}
+        result: dict[str, str] = {}
+        for inv in invoices:
+            if inv.source == INVOICE_SOURCE_SALES_ORDER and inv.source_ref:
+                try:
+                    order_id = uuid.UUID(inv.source_ref)
+                except (ValueError, TypeError):
+                    continue
+                order = await self._order_lookup.get_order(order_id, tenant_id=tenant_id)
+                if order is not None and hasattr(order, "order_number"):
+                    result[inv.source_ref] = order.order_number
+        return result
 
     async def issue_invoice(
         self,

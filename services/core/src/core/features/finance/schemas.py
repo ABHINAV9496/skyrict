@@ -151,6 +151,7 @@ class InvoiceResponse(BaseModel):
     total: Decimal
     source: str
     source_ref: str | None
+    source_order_number: str | None = None
     lines: list[InvoiceLineResponse]
     issued_at: datetime | None
     approved_at: datetime | None

@@ -130,6 +130,7 @@ export interface Invoice {
   total: number;
   source: string;
   source_ref: string | null;
+  source_order_number?: string | null;
   lines: InvoiceLine[];
   issued_at: string | null;
   approved_at: string | null;

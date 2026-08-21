@@ -273,14 +273,19 @@ async def list_invoices(
     current_user: dict[str, Any] = Depends(require_finance_read),
     svc: FinanceService = Depends(get_finance_service),
 ) -> ListResponse[InvoiceResponse]:
-    invoices = await svc.list_invoices(
+    invoices, customer_names = await svc.list_invoices_with_customer_names(
         _tenant_id(current_user),
         status=_parse_invoice_status(status),
         offset=offset,
         limit=limit,
     )
+    data = []
+    for inv in invoices:
+        resp = InvoiceResponse.model_validate(inv)
+        resp.customer_name = customer_names.get(inv.customer_id)
+        data.append(resp)
     return ListResponse(
-        data=[InvoiceResponse.model_validate(i) for i in invoices],
+        data=data,
         meta=PaginationMeta.create(
             total=len(invoices), page=(offset // limit) + 1 if limit else 1, page_size=limit
         ),
@@ -293,8 +298,12 @@ async def get_invoice(
     current_user: dict[str, Any] = Depends(require_finance_read),
     svc: FinanceService = Depends(get_finance_service),
 ) -> ResponseEnvelope[InvoiceResponse]:
-    invoice = await svc.get_invoice(_tenant_id(current_user), invoice_id)
-    return ResponseEnvelope(data=InvoiceResponse.model_validate(invoice))
+    invoice, customer_name = await svc.get_invoice_with_customer_name(
+        _tenant_id(current_user), invoice_id
+    )
+    resp = InvoiceResponse.model_validate(invoice)
+    resp.customer_name = customer_name
+    return ResponseEnvelope(data=resp)
 
 
 @router.post("/invoices/{invoice_id}/issue", response_model=ResponseEnvelope[InvoiceResponse])

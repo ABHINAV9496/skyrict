@@ -64,6 +64,7 @@ if TYPE_CHECKING:
 
     from core.features.finance.ports import (
         AuditSink,
+        CustomerPort,
         FinanceEventSink,
         FinanceRepositoryPort,
         SalesOrderForInvoicing,
@@ -102,11 +103,13 @@ class FinanceService:
         events: FinanceEventSink,
         *,
         correlation_id: str | None = None,
+        customers: CustomerPort | None = None,
     ) -> None:
         self._repo = repo
         self._audit = audit
         self._events = events
         self._correlation_id = correlation_id or str(uuid.uuid4())
+        self._customers = customers
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -476,6 +479,18 @@ class FinanceService:
             raise NotFoundError(f"Invoice {invoice_id} not found")
         return invoice
 
+    async def get_invoice_with_customer_name(
+        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> tuple[Invoice, str | None]:
+        """Return invoice + resolved customer name (avoids N+1 at the router)."""
+        invoice = await self.get_invoice(tenant_id, invoice_id)
+        name: str | None = None
+        if self._customers is not None:
+            name = await self._customers.get_customer_name(
+                invoice.customer_id, tenant_id=tenant_id
+            )
+        return invoice, name
+
     async def list_invoices(
         self,
         tenant_id: uuid.UUID,
@@ -485,6 +500,24 @@ class FinanceService:
         limit: int = 50,
     ) -> Sequence[Invoice]:
         return await self._repo.list_invoices(tenant_id, status=status, offset=offset, limit=limit)
+
+    async def list_invoices_with_customer_names(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[Sequence[Invoice], dict[uuid.UUID, str]]:
+        """Return invoices + batch-resolved customer names (avoids N+1)."""
+        invoices = await self.list_invoices(
+            tenant_id, status=status, offset=offset, limit=limit
+        )
+        names: dict[uuid.UUID, str] = {}
+        if self._customers is not None and invoices:
+            ids = list({inv.customer_id for inv in invoices})
+            names = await self._customers.get_customer_names(ids, tenant_id=tenant_id)
+        return invoices, names
 
     async def issue_invoice(
         self,

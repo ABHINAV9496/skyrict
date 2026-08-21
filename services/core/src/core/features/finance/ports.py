@@ -235,6 +235,33 @@ class InvoicePort(Protocol):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Cross-module customer port (seam for CRM)
+# ---------------------------------------------------------------------------
+
+
+class CustomerPort(Protocol):
+    """Customer name resolution port — finance reads customer names, never CRM tables.
+
+    Implemented by ``CrmRepository`` (via ``get_customer``). The service calls
+    ``get_customer_name`` to resolve a single customer, or the batch variant
+    ``get_customer_names`` for list endpoints to avoid N+1 queries.
+    """
+
+    async def get_customer_name(
+        self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> str | None: ...
+
+    async def get_customer_names(
+        self, customer_ids: Sequence[uuid.UUID], *, tenant_id: uuid.UUID
+    ) -> dict[uuid.UUID, str]: ...
+
+
+# ---------------------------------------------------------------------------
+# Audit sink (implemented structurally by core.features.audit.repository)
+# ---------------------------------------------------------------------------
+
+
 class AuditSink(Protocol):
     """Append-only audit trail for finance state changes.
 

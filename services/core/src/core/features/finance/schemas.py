@@ -144,6 +144,7 @@ class InvoiceResponse(BaseModel):
     tenant_id: uuid.UUID
     invoice_number: str
     customer_id: uuid.UUID
+    customer_name: str | None = None
     invoice_date: date
     due_date: date
     status: InvoiceStatus

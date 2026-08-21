@@ -251,22 +251,26 @@ def get_finance_service(
 ) -> FinanceService:
     """Composition root for the finance feature.
 
-    Wires the concrete repository, the shared audit sink, and the after-commit
-    event publisher onto ONE request-scoped session — so audit rows, the
-    business mutation, and (later) published events all commit atomically. The
-    request ID becomes the correlation ID stamped on money-moment events.
+    Wires the concrete repository, the shared audit sink, the after-commit
+    event publisher, and the CRM customer port onto ONE request-scoped
+    session — so audit rows, the business mutation, and (later) published
+    events all commit atomically. The request ID becomes the correlation ID
+    stamped on money-moment events.
     """
     from core.events.producers import get_event_producer
     from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
 
     correlation_id = getattr(request.state, "request_id", None)
+    crm_repo = CrmRepository(db)
     return FinanceService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
         correlation_id=correlation_id,
+        customers=crm_repo,
     )
 
 

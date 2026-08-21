@@ -26,7 +26,7 @@ tenant-scoped only; ``is_active`` is their soft-delete flag.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -690,6 +690,26 @@ class CrmRepository:
         result = await self.session.execute(stmt)
         model = result.scalar_one_or_none()
         return _customer_from_orm(model) if model is not None else None
+
+    async def get_customer_name(
+        self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> str | None:
+        """Return the customer's display name, or None if not found (CustomerPort)."""
+        customer = await self.get_customer(customer_id, tenant_id=tenant_id)
+        return customer.name if customer is not None else None
+
+    async def get_customer_names(
+        self, customer_ids: Sequence[uuid.UUID], *, tenant_id: uuid.UUID
+    ) -> dict[uuid.UUID, str]:
+        """Batch-resolve customer names to avoid N+1 (CustomerPort)."""
+        if not customer_ids:
+            return {}
+        stmt = select(ErpCrmCustomerModel).where(
+            ErpCrmCustomerModel.tenant_id == tenant_id,
+            ErpCrmCustomerModel.id.in_(customer_ids),
+        )
+        result = await self.session.execute(stmt)
+        return {model.id: model.name for model in result.scalars().all()}
 
     async def get_customer_by_code(self, code: str, *, tenant_id: uuid.UUID) -> Customer | None:
         stmt = select(ErpCrmCustomerModel).where(

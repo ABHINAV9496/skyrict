@@ -201,6 +201,8 @@ async def _hire(
         "last_name": "Test",
         "job_title": "Engineer",
         "hire_date": hire_date,
+        "email": f"race.test.{uuid.uuid4().hex[:8]}@example.com",
+        "phone": "+1 555 010 0000",
     }
     if overrides.pop("no_salary", False) is False:
         payload["monthly_salary"] = "5000.00"
@@ -622,6 +624,8 @@ class TestNoEventOnFailedTransaction:
                 "last_name": "Row",
                 "job_title": "Engineer",
                 "hire_date": "2026-01-05",
+                "email": "ghost.row@example.com",
+                "phone": "+1 555 010 0400",
                 "monthly_salary": "5000.00",
                 "department_id": foreign_department_id,
             },

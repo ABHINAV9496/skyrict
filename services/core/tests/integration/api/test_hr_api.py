@@ -173,6 +173,107 @@ class TestEmployeeLifecycle:
         assert update.json()["type"].endswith("/employee-terminated")
 
 
+class TestEmployeeCreateValidation:
+    """EmployeeCreate requires first/last name, email, and phone (422 otherwise)."""
+
+    async def _post(self, client: AsyncClient, headers: dict[str, str], payload: dict) -> None:
+        return await client.post("/api/v1/hr/employees", json=payload, headers=headers)
+
+    async def test_missing_email_is_rejected(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        response = await self._post(
+            client,
+            headers,
+            {
+                "first_name": "No",
+                "last_name": "Email",
+                "job_title": "Engineer",
+                "hire_date": "2026-01-05",
+                "phone": "+1 555 010 0000",
+            },
+        )
+        assert response.status_code == 422
+        assert any(
+            issue["loc"][-1] == "email" for issue in response.json()["errors"]
+        ), response.text
+
+    async def test_malformed_email_is_rejected(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        response = await self._post(
+            client,
+            headers,
+            {
+                "first_name": "Bad",
+                "last_name": "Email",
+                "job_title": "Engineer",
+                "hire_date": "2026-01-05",
+                "email": "not-an-email",
+                "phone": "+1 555 010 0000",
+            },
+        )
+        assert response.status_code == 422
+        assert any(
+            issue["loc"][-1] == "email" for issue in response.json()["errors"]
+        ), response.text
+
+    async def test_missing_phone_is_rejected(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        response = await self._post(
+            client,
+            headers,
+            {
+                "first_name": "No",
+                "last_name": "Phone",
+                "job_title": "Engineer",
+                "hire_date": "2026-01-05",
+                "email": "no.phone@example.com",
+            },
+        )
+        assert response.status_code == 422
+        assert any(
+            issue["loc"][-1] == "phone" for issue in response.json()["errors"]
+        ), response.text
+
+    async def test_blank_fields_are_rejected_after_strip(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        response = await self._post(
+            client,
+            headers,
+            {
+                "first_name": "   ",
+                "last_name": "Blank",
+                "job_title": "Engineer",
+                "hire_date": "2026-01-05",
+                "email": "blank@example.com",
+                "phone": "   ",
+            },
+        )
+        assert response.status_code == 422
+        locations = {issue["loc"][-1] for issue in response.json()["errors"]}
+        assert "first_name" in locations
+        assert "phone" in locations
+
+
 class TestLeaveLifecycle:
     async def test_balance_accrues_on_hire_and_approval_deducts(
         self,

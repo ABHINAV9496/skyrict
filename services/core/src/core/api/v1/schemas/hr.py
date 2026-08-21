@@ -12,7 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from core.api.v1.schemas.payroll import MoneyOut
 
@@ -44,14 +44,25 @@ class EmployeeCreate(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     job_title: str = Field(..., min_length=1, max_length=200)
     hire_date: date
-    email: str | None = Field(default=None, max_length=320)
-    phone: str | None = Field(default=None, max_length=50)
+    email: EmailStr = Field(..., max_length=320)
+    phone: str = Field(..., min_length=1, max_length=50)
     user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     monthly_salary: Decimal | None = Field(
         default=None, gt=0, description="initial gross monthly salary (optional)"
     )
     currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("first_name", "last_name", "email", "phone", mode="before")
+    @classmethod
+    def _strip_reject_blank(cls, value: object) -> object:
+        """Trim surrounding whitespace; whitespace-only values are invalid."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError("must not be blank")
+            return stripped
+        return value
 
 
 class EmployeeUpdate(BaseModel):

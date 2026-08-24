@@ -170,15 +170,21 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
     return artifacts
 
 
-async def _collect_remaining_tables(dsn: str) -> set[str]:
+async def _collect_downgrade_state(dsn: str) -> tuple[set[str], int]:
+    """Data tables still present after ``downgrade base`` + rows left in
+    the AI version table (Alembic never drops its own version table)."""
     conn = await asyncpg.connect(dsn)
     try:
-        rows = await conn.fetch(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
-            "AND tablename = ANY($1::text[])",
-            [*_AI_TABLES, "alembic_version_ai"],
-        )
-        return {row["tablename"] for row in rows}
+        tables = {
+            row["tablename"]
+            for row in await conn.fetch(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+                "AND tablename = ANY($1::text[])",
+                list(_AI_TABLES),
+            )
+        }
+        version_rows = int(await conn.fetchval("SELECT count(*) FROM alembic_version_ai"))
+        return tables, version_rows
     finally:
         await conn.close()
 
@@ -287,10 +293,12 @@ class TestAiMigrationRoundTrip:
             assert artifacts["checks"] >= _EXPECTED_CHECKS
             assert artifacts["tenant_fks"] == len(_TENANT_SCOPED_TABLES)
 
-            # Full unwind -> nothing survives.
+            # Full unwind -> nothing survives; the version table may remain
+            # but must be empty (same contract as core's roundtrip test).
             _alembic(_AI_ALEMBIC_INI, _ROOT, ai_env, "downgrade", "base")
-            remaining = asyncio.run(_collect_remaining_tables(scratch_dsn))
+            remaining, version_rows = asyncio.run(_collect_downgrade_state(scratch_dsn))
             assert remaining == set(), f"artifacts survived downgrade: {remaining}"
+            assert version_rows == 0, "alembic_version_ai still tracks revisions"
 
             # Re-apply proves the chain is repeatable after a full unwind.
             _alembic(_AI_ALEMBIC_INI, _ROOT, ai_env, "upgrade", "head")

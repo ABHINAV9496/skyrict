@@ -234,17 +234,24 @@ class TestAiMigrationRoundTrip:
             }
         )
 
-        def _alembic(ini: Path, cwd: Path, command: str, env: dict[str, str]) -> None:
-            subprocess.run(
-                [sys.executable, "-m", "alembic", "-c", str(ini), command],
+        def _alembic(ini: Path, cwd: Path, env: dict[str, str], *args: str) -> None:
+            """Run alembic in a fresh interpreter (same idiom as core's
+            test_migration_roundtrip). Revision arguments are REQUIRED -
+            bare ``alembic upgrade`` is an argparse error (exit 2) before
+            any database connection happens."""
+            result = subprocess.run(
+                [sys.executable, "-m", "alembic", "-c", str(ini), *args],
                 cwd=str(cwd),
                 env=env,
-                check=True,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 timeout=600,
+            )
+            assert result.returncode == 0, (
+                f"alembic {' '.join(args)} failed ({ini.name}):\n"
+                f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
         scratch_dsn = _to_dsn(scratch_url)
@@ -252,10 +259,10 @@ class TestAiMigrationRoundTrip:
         asyncio.run(_create_database(maint_dsn, dbname))
         try:
             # Identity's chain FIRST - it owns tenants + current_tenant_id().
-            _alembic(_IDENTITY_ALEMBIC_INI, _IDENTITY_ROOT, "upgrade", shared_env)
+            _alembic(_IDENTITY_ALEMBIC_INI, _IDENTITY_ROOT, shared_env, "upgrade", "head")
 
             # AI chain up -> sentinel probes.
-            _alembic(_AI_ALEMBIC_INI, _ROOT, "upgrade", ai_env)
+            _alembic(_AI_ALEMBIC_INI, _ROOT, ai_env, "upgrade", "head")
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
@@ -279,11 +286,11 @@ class TestAiMigrationRoundTrip:
             assert artifacts["tenant_fks"] == len(_TENANT_SCOPED_TABLES)
 
             # Full unwind -> nothing survives.
-            _alembic(_AI_ALEMBIC_INI, _ROOT, "base", ai_env)
+            _alembic(_AI_ALEMBIC_INI, _ROOT, ai_env, "downgrade", "base")
             remaining = asyncio.run(_collect_remaining_tables(scratch_dsn))
             assert remaining == set(), f"artifacts survived downgrade: {remaining}"
 
             # Re-apply proves the chain is repeatable after a full unwind.
-            _alembic(_AI_ALEMBIC_INI, _ROOT, "upgrade", ai_env)
+            _alembic(_AI_ALEMBIC_INI, _ROOT, ai_env, "upgrade", "head")
         finally:
             asyncio.run(_drop_database(maint_dsn, dbname))

@@ -38,6 +38,8 @@ skyrict/
 │
 ├── services/                # Deployable Python microservices
 │   ├── identity/            # AuthN, AuthZ, MFA, Sessions, Audit
+│   ├── core/                # ERP monolith: inventory, CRM, sales, finance, HR, payroll + /api/v1/ai proxy
+│   ├── ai-agent/            # Provider-agnostic AI service (NL query, restock suggestions, anomaly detection)
 │   └── _template/           # Scaffold copied for every new service, keeps structure consistent
 │
 ├── libs/                    # Shared Python packages
@@ -240,6 +242,34 @@ make help           # Show all available targets
 ```
 
 Pre-commit hooks: Ruff lint, Ruff format, mypy, YAML/JSON/TOML validation, large file check, direct push block, conventional commit lint.
+
+### AI Agent Service (local dev)
+
+The `ai-agent` service (port 8002) hosts the AI assistant features — natural-language inventory queries, restock suggestions, stock anomaly detection. It is provider-agnostic: any OpenAI-compatible endpoint works (OpenRouter, Groq, OpenAI, or a local Ollama via its OpenAI-compatible API). With no provider configured the service boots and serves health; AI calls then return a typed `503 ai_unavailable`.
+
+```bash
+# Required
+AI_DATABASE_URL=postgresql+asyncpg://...       # ai-agent's own DB (owns alembic branch ai_agent)
+AI_REDIS_URL=redis://localhost:6379/0          # distributed rate limiting
+AI_JWT_PUBLIC_KEY_PATH=./secrets/jwt_public.pem
+AI_JWKS_ISSUER=https://auth.skyrict.io
+AI_JWKS_AUDIENCE=api.skyrict.io
+
+# Core data plane (compose contract: unprefixed INVENTORY_SERVICE_URL)
+INVENTORY_SERVICE_URL=http://localhost:8001
+
+# Provider (optional at boot)
+AI_PROVIDER=openrouter                          # or groq/openai/omniroute/agentrouter/generic
+AI_MODEL=meta-llama/llama-3-8b-instruct
+AI_API_KEY=sk-or-...
+# AI_FALLBACK_PROVIDER / AI_FALLBACK_MODEL / AI_FALLBACK_API_KEY for failover
+
+# Run + migrate
+uv run ai-agent serve                                 # from services/ai-agent (typer CLI)
+uv run ai-agent migrate
+```
+
+Frontend/BFF never calls ai-agent directly: requests go through core (`/api/v1/ai/*`), which enforces `erp.ai.invoke` plus the module permission BEFORE forwarding and re-relays the caller's JWT (the AI service re-verifies it). Docker wiring lives in [infra/docker/docker-compose.dev.yml](infra/docker/docker-compose.dev.yml) (`skyrict-ai-agent`, port 8002→8000). Feature spec: [docs/modules/skyrict-ai/inventory-ai-features.md](docs/modules/skyrict-ai/inventory-ai-features.md).
 
 ### Branch Protection
 

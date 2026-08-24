@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from core.api import readiness
@@ -38,6 +39,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         log_level=settings.LOG_LEVEL,
     )
 
+    # Outbound HTTP client for /api/v1/ai/* proxying to the ai-agent
+    # microservice — one pooled client for the process lifetime.
+    app.state.ai_client = httpx.AsyncClient(
+        base_url=settings.AI_AGENT_URL,
+        timeout=settings.AI_AGENT_TIMEOUT_SECONDS,
+    )
+
     # Startup verification — fail-fast: any failure raises StartupError and
     # the process exits immediately (orchestrator restarts the pod).
     await readiness.verify_startup_dependencies()
@@ -45,8 +53,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("service.started", environment=settings.ENVIRONMENT.value)
 
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
-    # runs this context manager's exit, closing the readiness gate and the
-    # DB engine so in-flight work can drain cleanly.
+    # runs this context manager's exit, closing the readiness gate, the AI
+    # client and the DB engine so in-flight work can drain cleanly.
     yield
 
     readiness.mark_stopping()
@@ -54,4 +62,5 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from core.db.session import engine
 
+    await app.state.ai_client.aclose()
     await engine.dispose()

@@ -11,10 +11,16 @@ not silently dropped).
 
 The JWT is forwarded verbatim; ai-agent re-verifies it against the
 relayed tenant slug (spec §1.4: AI is a proxy, not an auth bypass).
+
+Path ids are typed ``uuid.UUID`` so FastAPI rejects anything else with
+422 before the handler runs — the forwarded URL only ever embeds the
+canonical hyphenated form (no ``/``, ``?`` or traversal sequences can
+reach the upstream request target).
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
 
 import httpx
@@ -128,7 +134,7 @@ async def proxy_suggestion_scan(
 @router.post("/suggestions/{suggestion_id}/approve")
 async def proxy_approve_suggestion(
     request: Request,
-    suggestion_id: str,
+    suggestion_id: uuid.UUID,
     _invoke: _InvokeDep,
     _write: _WriteDep,
     client: _ClientDep,
@@ -140,7 +146,7 @@ async def proxy_approve_suggestion(
 @router.post("/suggestions/{suggestion_id}/reject")
 async def proxy_reject_suggestion(
     request: Request,
-    suggestion_id: str,
+    suggestion_id: uuid.UUID,
     _invoke: _InvokeDep,
     _write: _WriteDep,
     client: _ClientDep,
@@ -177,7 +183,7 @@ async def proxy_anomaly_scan(
 @router.post("/anomalies/{anomaly_id}/resolve")
 async def proxy_resolve_anomaly(
     request: Request,
-    anomaly_id: str,
+    anomaly_id: uuid.UUID,
     _invoke: _InvokeDep,
     _write: _WriteDep,
     client: _ClientDep,
@@ -189,7 +195,7 @@ async def proxy_resolve_anomaly(
 @router.post("/anomalies/{anomaly_id}/dismiss")
 async def proxy_dismiss_anomaly(
     request: Request,
-    anomaly_id: str,
+    anomaly_id: uuid.UUID,
     _invoke: _InvokeDep,
     _write: _WriteDep,
     client: _ClientDep,
@@ -201,7 +207,7 @@ async def proxy_dismiss_anomaly(
 @router.post("/anomalies/{anomaly_id}/escalate")
 async def proxy_escalate_anomaly(
     request: Request,
-    anomaly_id: str,
+    anomaly_id: uuid.UUID,
     _invoke: _InvokeDep,
     _write: _WriteDep,
     client: _ClientDep,

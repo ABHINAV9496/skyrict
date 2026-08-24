@@ -24,7 +24,9 @@ from fastapi import FastAPI
 
 from ai_agent.api import readiness
 from ai_agent.core.config import settings
+from ai_agent.core.llm_router import LlmRouter
 from ai_agent.core.logging import configure_logging, get_logger
+from ai_agent.core.providers import build_providers_from_settings
 
 
 @asynccontextmanager
@@ -45,7 +47,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # the process exits immediately (orchestrator restarts the pod).
     await readiness.verify_startup_dependencies()
     readiness.mark_ready()
-    logger.info("service.started", environment=settings.ENVIRONMENT.value)
+
+    # Provider chain: built ONCE at startup; an unknown provider key raises
+    # StartupError and refuses boot. Zero providers is a VALID configuration —
+    # AI endpoints then degrade to typed 503s while health/readiness stay green.
+    llm_router = LlmRouter(build_providers_from_settings(settings))
+    app.state.llm_router = llm_router
+    logger.info(
+        "service.started",
+        environment=settings.ENVIRONMENT.value,
+        providers_configured=llm_router.provider_count,
+    )
 
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate and the

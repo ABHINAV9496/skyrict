@@ -44,6 +44,9 @@ class ProductRef:
     sku: str
     name: str
     reorder_point: Decimal
+    # Local-only money data (spec §5.5): used for local estimates, never
+    # sent to any LLM provider. None when core omits it.
+    cost_price: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +71,9 @@ class MovementRow:
     movement_type: str  # lowercase enum value from core
     qty: Decimal  # signed
     created_at: datetime
+    # Core echoes the originating document reference (purchase order id etc.);
+    # None when the movement has no reference. Used by duplicate-ref rules.
+    ref_id: str | None = None
 
 
 MovementType = Literal["receipt", "issue", "transfer", "adjustment", "reservation", "release"]
@@ -221,11 +227,17 @@ class HttpInventoryGateway:
 
 
 def _parse_product(item: dict[str, object]) -> ProductRef:
+    # Core serializes money as [amount-string, currency] tuples.
+    raw_cost = item.get("cost_price")
+    cost_price = (
+        Decimal(str(raw_cost[0])) if isinstance(raw_cost, list | tuple) and raw_cost else None
+    )
     return ProductRef(
         id=uuid.UUID(str(item["id"])),
         sku=str(item["sku"]),
         name=str(item["name"]),
         reorder_point=Decimal(str(item["reorder_point"])),
+        cost_price=cost_price,
     )
 
 
@@ -246,6 +258,7 @@ def _parse_movement(item: dict[str, object]) -> MovementRow:
     created_raw = str(item["created_at"])
     # Core serializes timestamps as ISO-8601; tolerate a trailing Z.
     created_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+    ref_id = item.get("ref_id")
     return MovementRow(
         id=uuid.UUID(str(item["id"])),
         product_id=uuid.UUID(str(item["product_id"])),
@@ -253,4 +266,5 @@ def _parse_movement(item: dict[str, object]) -> MovementRow:
         movement_type=str(item["movement_type"]),
         qty=Decimal(str(item["qty"])),
         created_at=created_at,
+        ref_id=None if ref_id is None else str(ref_id),
     )

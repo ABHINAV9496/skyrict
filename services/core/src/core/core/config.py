@@ -104,6 +104,20 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- AI agent microservice (docs/modules/skyrict-ai/... §6.4) ---
+    AI_AGENT_URL: str = Field(
+        default="http://localhost:8002",
+        description=(
+            "base URL of the ai-agent service for /api/v1/ai/* proxying. In "
+            "docker networks set CORE_AI_AGENT_URL=http://skyrict-ai-agent:8000."
+        ),
+    )
+    AI_AGENT_TIMEOUT_SECONDS: float = Field(
+        default=30.0,
+        gt=0,
+        description="per-request timeout for proxied AI calls (LLMs are slow)",
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
 

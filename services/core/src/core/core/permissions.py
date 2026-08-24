@@ -60,6 +60,11 @@ ERP_PAYROLL_READ = "erp.payroll.read"
 ERP_PAYROLL_WRITE = "erp.payroll.write"
 ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 
+# AI assistant (docs/modules/skyrict-ai/inventory-ai-features.md §6.3).
+# Gate checked by core BEFORE any /api/v1/ai/* request is forwarded to the
+# ai-agent microservice - permissionless calls never reach the AI service.
+ERP_AI_INVOKE = "erp.ai.invoke"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -86,6 +91,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
+    ERP_AI_INVOKE,
 )
 
 # Permission module groupings.
@@ -108,6 +114,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
+    ("ai", "AI assistant", (ERP_AI_INVOKE,)),
 )
 
 
@@ -130,6 +137,7 @@ _assert_catalog_union()
 
 __all__ = [
     "CATALOG",
+    "ERP_AI_INVOKE",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_APPROVE",

@@ -19,7 +19,7 @@ from fastapi.security import HTTPBearer
 
 from ai_agent.core.security import cross_check_jwt_tenant, verify_jwt
 from ai_agent.core.tenant_context import TenantContext
-from ai_agent.db.session import get_db  # noqa: F401  # re-exported as THE db dependency
+from ai_agent.db.session import get_db as get_db  # explicit re-export: THE db dependency
 from skyrict_common.exceptions import AuthenticationError
 
 security = HTTPBearer(auto_error=False)

@@ -44,8 +44,10 @@ COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 RUN uv sync --frozen --directory services/ai-agent
 
 # Copy source code (skyrict-common is imported directly by ai-agent at runtime
-# — uv installs workspace members editable)
+# - uv installs workspace members editable)
 COPY services/ai-agent/src services/ai-agent/src
+COPY services/ai-agent/alembic.ini services/ai-agent/
+COPY services/ai-agent/alembic services/ai-agent/alembic
 COPY libs/skyrict-common/src libs/skyrict-common/src
 
 # Copy tests (dev only — never reaches production)

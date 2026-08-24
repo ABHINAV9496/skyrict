@@ -70,6 +70,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application source (no tests)
 COPY services/ai-agent/src services/ai-agent/src
+COPY services/ai-agent/alembic.ini services/ai-agent/
+COPY services/ai-agent/alembic services/ai-agent/alembic
 COPY libs/skyrict-common/src libs/skyrict-common/src
 
 # Set ownership

@@ -1,0 +1,133 @@
+"""ORM metadata tests for the AI foundation tables (no database needed).
+
+These pin the schema contract at the SQLAlchemy metadata level: table names,
+composite PK shape, money precision, CHECK constraints, the partial unique
+pending index, insert-only tables, and the global agent registry.
+"""
+
+from __future__ import annotations
+
+import ai_agent.models  # noqa: F401  # registers every model on Base.metadata
+from ai_agent.models.agent_registry import AgentRegistryModel
+from ai_agent.models.ai_anomaly import AiAnomalyModel
+from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_query_log import AiQueryLogModel
+from ai_agent.models.ai_suggestion import AiSuggestionModel
+from ai_agent.models.base import Base
+
+
+class TestRegistry:
+    def test_all_expected_tables_registered(self) -> None:
+        expected = {
+            # read-only projection of identity's shared table
+            "tenants",
+            # AI-owned tables (this commit)
+            "ai_query_log",
+            "ai_suggestions",
+            "ai_anomalies",
+            "ai_audit_log",
+            "agent_registry",
+        }
+        assert expected == set(Base.metadata.tables.keys())
+
+    def test_tenant_tables_use_composite_pk(self) -> None:
+        for table in ("ai_query_log", "ai_suggestions", "ai_anomalies", "ai_audit_log"):
+            pk = list(Base.metadata.tables[table].primary_key.columns.keys())
+            assert pk == ["tenant_id", "id"], table
+
+
+class TestAiQueryLog:
+    def test_insert_only_table_has_no_updated_at(self) -> None:
+        assert "updated_at" not in AiQueryLogModel.__table__.columns
+
+    def test_parsed_intent_is_jsonb(self) -> None:
+        type_name = type(AiQueryLogModel.__table__.c.parsed_intent.type).__name__
+        assert type_name == "JSONB"
+
+
+class TestAiSuggestions:
+    def test_money_columns_are_numeric_18_4(self) -> None:
+        for column_name in (
+            "current_stock",
+            "reorder_point",
+            "suggested_qty",
+            "estimated_cost",
+        ):
+            column = AiSuggestionModel.__table__.columns[column_name]
+            assert column.type.precision == 18, column_name  # type: ignore[attr-defined]
+            assert column.type.scale == 4, column_name  # type: ignore[attr-defined]
+
+    def test_confidence_is_numeric_3_2(self) -> None:
+        confidence = AiSuggestionModel.__table__.c.confidence.type
+        assert confidence.precision == 3
+        assert confidence.scale == 2
+
+    def test_check_constraints_present(self) -> None:
+        names = {
+            constraint.name
+            for constraint in AiSuggestionModel.__table__.constraints
+            if constraint.name is not None and str(constraint.name).startswith("ck_")
+        }
+        assert {
+            "ck_ai_suggestions_status",
+            "ck_ai_suggestions_suggested_qty_positive",
+            "ck_ai_suggestions_confidence_range",
+        } <= names
+
+    def test_pending_unique_index_is_partial(self) -> None:
+        index = next(
+            index
+            for index in AiSuggestionModel.__table__.indexes
+            if index.name == "idx_ai_suggestions_pending_unique"
+        )
+        assert index.unique
+        where_sql = str(index.dialect_options["postgresql"]["where"]).lower()
+        assert "pending" in where_sql
+
+    def test_default_status_is_pending(self) -> None:
+        default = AiSuggestionModel.__table__.c.status.server_default.arg
+        assert str(default) == "'pending'"
+
+
+class TestAiAnomalies:
+    def test_severity_and_status_checks_present(self) -> None:
+        names = {
+            constraint.name
+            for constraint in AiAnomalyModel.__table__.constraints
+            if constraint.name is not None and str(constraint.name).startswith("ck_")
+        }
+        assert {"ck_ai_anomalies_severity", "ck_ai_anomalies_status"} <= names
+
+    def test_related_movement_ids_is_uuid_array(self) -> None:
+        type_name = type(AiAnomalyModel.__table__.c.related_movement_ids.type).__name__
+        assert type_name == "ARRAY"
+
+    def test_default_status_is_open(self) -> None:
+        default = AiAnomalyModel.__table__.c.status.server_default.arg
+        assert str(default) == "'open'"
+
+
+class TestAiAuditLog:
+    def test_insert_only_table_has_no_updated_at(self) -> None:
+        assert "updated_at" not in AiAuditLogModel.__table__.columns
+
+    def test_input_output_are_jsonb(self) -> None:
+        assert type(AiAuditLogModel.__table__.c.input.type).__name__ == "JSONB"
+        assert type(AiAuditLogModel.__table__.c.output.type).__name__ == "JSONB"
+
+
+class TestAgentRegistry:
+    def test_global_table_has_no_tenant_scoping(self) -> None:
+        assert "tenant_id" not in AgentRegistryModel.__table__.columns
+
+    def test_name_is_unique(self) -> None:
+        uniques = {
+            constraint.name
+            for constraint in AgentRegistryModel.__table__.constraints
+            if constraint.name is not None and str(constraint.name).startswith("uq_")
+        }
+        assert "uq_agent_registry_name" in uniques
+
+    def test_enabled_defaults_to_true(self) -> None:
+        default = AgentRegistryModel.__table__.c.enabled.server_default.arg
+        assert str(default).lower() == "true"

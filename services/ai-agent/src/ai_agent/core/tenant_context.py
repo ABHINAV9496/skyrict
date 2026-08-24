@@ -21,6 +21,7 @@ from skyrict_common.exceptions import TenantContextMissingError
 # Request-scoped context vars. Defaults are immutable (None) and every accessor
 # returns what was set — callers can never mutate shared state.
 _current_tenant_id: ContextVar[str | None] = ContextVar("current_tenant_id", default=None)
+_current_tenant_slug: ContextVar[str | None] = ContextVar("current_tenant_slug", default=None)
 _current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 
 
@@ -65,6 +66,22 @@ class TenantContext:
         """Get the current tenant ID without raising. Use sparingly."""
         return _current_tenant_id.get()
 
+    # --- tenant slug (optional — needed to forward calls to core) ---
+
+    @staticmethod
+    def set_tenant_slug(slug: str | None) -> None:
+        """Set the routed tenant slug (the X-Tenant-Slug / subdomain value).
+
+        Downstream HTTP gateways forward it so the core monolith resolves the
+        same tenant (its middleware accepts X-Tenant-Slug in dev/test).
+        """
+        _current_tenant_slug.set(slug)
+
+    @staticmethod
+    def get_tenant_slug() -> str | None:
+        """Get the routed tenant slug, or None when resolution skipped it."""
+        return _current_tenant_slug.get()
+
     # --- user_id (optional — set when a JWT was verified) ---
 
     @staticmethod
@@ -83,6 +100,7 @@ class TenantContext:
     def reset() -> None:
         """Clear the whole context — called by middleware at request end."""
         _current_tenant_id.set(None)
+        _current_tenant_slug.set(None)
         _current_user_id.set(None)
 
 

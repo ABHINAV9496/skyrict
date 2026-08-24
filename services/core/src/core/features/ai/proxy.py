@@ -9,6 +9,10 @@ Security posture:
   fingerprint headers are never forwarded.
 - ai-agent re-verifies the JWT and cross-checks it against the relayed
   slug (spec §1.4), so a spoofed slug cannot widen access.
+- The proxy only ever talks to the client's configured origin: the final
+  request target's host is checked against the client ``base_url`` host
+  before sending, so a crafted path can never redirect a relay to another
+  destination (SSRF defence in depth on top of UUID-validated path ids).
 - Transport failures (connect/timeout) raise the typed 503 problem the
   frontend mock-fallback policy consumes; upstream application errors
   pass through untouched (ai-agent speaks RFC 7807 already).
@@ -48,18 +52,26 @@ async def forward_to_ai_agent(
         AiServiceUnavailableError: On any transport-level failure
             (connection refused, DNS, TLS, timeout). Never on HTTP error
             statuses — those are valid upstream application responses.
+        ValueError: If the resolved request target points at a host other
+            than the client's configured origin — the proxy refuses to
+            relay anywhere else.
     """
     headers = build_forward_headers(authorization=authorization, tenant_slug=tenant_slug)
     if body is not None:
         headers["Content-Type"] = "application/json"
+    request = client.build_request(
+        method,
+        upstream_path,
+        content=body if body is not None else b"",
+        headers=headers,
+        params=params,
+    )
+    # Host allowlist: relative paths resolve against base_url, so any
+    # mismatch means the path escaped the configured origin.
+    if request.url.host != client.base_url.host:
+        raise ValueError(f"refusing to relay to non-configured host: {request.url.host!r}")
     try:
-        return await client.request(
-            method,
-            upstream_path,
-            content=body if body is not None else b"",
-            headers=headers,
-            params=params,
-        )
+        return await client.send(request)
     except httpx.TransportError as exc:
         raise AiServiceUnavailableError("AI agent service did not respond") from exc
 

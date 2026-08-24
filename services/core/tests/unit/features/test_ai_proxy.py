@@ -125,6 +125,21 @@ class TestForwardToAiAgent:
         assert response.status_code == 401
         assert seen["auth"] is None  # nothing fabricated upstream
 
+    async def test_target_on_non_configured_host_is_refused(self) -> None:
+        """An absolute upstream target escapes base_url — never relayed."""
+
+        def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+            return httpx.Response(200)
+
+        with pytest.raises(ValueError, match="non-configured host"):
+            await forward_to_ai_agent(
+                _client(handler),
+                method="POST",
+                upstream_path="http://evil.test/ai/suggestions/x/approve",
+                authorization="Bearer tok",
+                tenant_slug="acme",
+            )
+
 
 class TestRelayResponse:
     def test_status_body_and_content_type_carried(self) -> None:

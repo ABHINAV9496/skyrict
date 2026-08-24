@@ -16,6 +16,7 @@ import structlog
 from ai_agent.core.audit_events import (
     AI_ANOMALY_DETECTED,
     AI_ANOMALY_DISMISSED,
+    AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
 )
 from ai_agent.features.anomalies.rules import detect_all
@@ -113,9 +114,13 @@ class AnomalyService:
         await self._anomalies.record_review(
             row=row, status=decision, reviewed_by=user_id, resolution_note=note
         )
-        action = AI_ANOMALY_RESOLVED if decision == "resolved" else AI_ANOMALY_DISMISSED
+        decision_events = {
+            "resolved": AI_ANOMALY_RESOLVED,
+            "dismissed": AI_ANOMALY_DISMISSED,
+            "escalated": AI_ANOMALY_ESCALATED,
+        }
         await self._audit.log(
-            action=action,
+            action=decision_events[decision],
             tenant_id=tenant_id,
             user_id=user_id,
             input_payload={"anomaly_id": str(anomaly_id)},

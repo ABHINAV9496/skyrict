@@ -30,6 +30,14 @@ AI_ANOMALY_RESOLVED = "ai.anomaly.resolved"
 AI_ANOMALY_DISMISSED = "ai.anomaly.dismissed"
 """A human marked an anomaly as a false positive."""
 
+AI_ANOMALY_ESCALATED = "ai.anomaly.escalated"
+"""A human escalated an anomaly to an admin (spec §4.4 workflow).
+
+Not in the spec's Appendix B table - the workflow section defines
+escalation but the appendix omits its event. Added here so escalations
+are never mis-audited as dismissals; flagged for the next ADR pass.
+"""
+
 ALL_AI_AUDIT_EVENTS = frozenset(
     {
         AI_QUERY_EXECUTED,
@@ -39,6 +47,7 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_ANOMALY_DETECTED,
         AI_ANOMALY_RESOLVED,
         AI_ANOMALY_DISMISSED,
+        AI_ANOMALY_ESCALATED,
     }
 )
 """The complete, closed vocabulary accepted by the AuditService."""

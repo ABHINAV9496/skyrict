@@ -276,7 +276,7 @@ class TestReview:
         assert any(a.endswith("anomaly.dismissed") for a in audit.actions)
 
     async def test_escalate_allows_resolved_source(self) -> None:
-        service, _repo, _audit = _make_service([])
+        service, _repo, audit = _make_service([])
         row = self._row("resolved")
         seen = {}
 
@@ -298,6 +298,10 @@ class TestReview:
             note="needs admin",
         )
         assert seen["status"] == "escalated"
+        # Regression: escalation must audit as its own event, never as a
+        # dismissal (the pre-dedicated-constant bug).
+        assert "ai.anomaly.escalated" in audit.actions
+        assert all(a != "ai.anomaly.dismissed" for a in audit.actions)
 
     async def test_invalid_decision_raises(self) -> None:
 

@@ -1,7 +1,9 @@
 """Audit event catalog consistency tests (Appendix B of the spec).
 
 Guards the canonical vocabulary: exact string values, no duplicates, and
-ALL_AI_AUDIT_EVENTS covering exactly the seven documented constants.
+ALL_AI_AUDIT_EVENTS covering exactly the documented constants. The set is
+Appendix B PLUS ai.anomaly.escalated (workflow §4.4 defines escalation;
+the appendix omits its event - see the constant's docstring).
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from ai_agent.core import audit_events
 from ai_agent.core.audit_events import (
     AI_ANOMALY_DETECTED,
     AI_ANOMALY_DISMISSED,
+    AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
     AI_QUERY_EXECUTED,
     AI_SUGGESTION_APPROVED,
@@ -29,8 +32,10 @@ class TestAppendixBVocabulary:
         assert AI_ANOMALY_DETECTED == "ai.anomaly.detected"
         assert AI_ANOMALY_RESOLVED == "ai.anomaly.resolved"
         assert AI_ANOMALY_DISMISSED == "ai.anomaly.dismissed"
+        # Documented spec-gap addition (see module docstring).
+        assert AI_ANOMALY_ESCALATED == "ai.anomaly.escalated"
 
-    def test_all_events_covers_exactly_the_seven_constants(self) -> None:
+    def test_all_events_covers_exactly_the_documented_constants(self) -> None:
         expected = {
             audit_events.AI_QUERY_EXECUTED,
             audit_events.AI_SUGGESTION_CREATED,
@@ -39,6 +44,7 @@ class TestAppendixBVocabulary:
             audit_events.AI_ANOMALY_DETECTED,
             audit_events.AI_ANOMALY_RESOLVED,
             audit_events.AI_ANOMALY_DISMISSED,
+            audit_events.AI_ANOMALY_ESCALATED,
         }
         assert set(ALL_AI_AUDIT_EVENTS) == expected
 

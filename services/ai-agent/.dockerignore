@@ -1,0 +1,15 @@
+# Keep build context minimal — mirrors services/core/.dockerignore
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+services/ai-agent/tests
+services/ai-agent/.env
+.dev
+node_modules
+apps
+docs

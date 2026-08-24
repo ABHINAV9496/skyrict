@@ -133,7 +133,9 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
             row["policyname"]
             for row in await conn.fetch(
                 "SELECT policyname FROM pg_policies WHERE schemaname = 'public' "
-                "AND policyname LIKE 'tenant_isolation_%'"
+                "AND tablename = ANY($1::text[]) "
+                "AND policyname LIKE 'tenant_isolation_%'",
+                list(_TENANT_SCOPED_TABLES),
             )
         }
 

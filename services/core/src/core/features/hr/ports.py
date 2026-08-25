@@ -73,10 +73,16 @@ class HrRepositoryPort(Protocol):
         self, employee_number: str, tenant_id: uuid.UUID
     ) -> ent.Employee | None: ...
 
+    async def get_employee_by_user_id(
+        self, user_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ent.Employee | None: ...
+
     # --- Leave types ---
     async def get_leave_type(
         self, leave_type: str, tenant_id: uuid.UUID
     ) -> ent.LeaveType | None: ...
+
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> Sequence[ent.LeaveType]: ...
 
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
         """Return leave-type names that accrue annually (``accrues`` = true)."""
@@ -175,6 +181,25 @@ class HrRepositoryPort(Protocol):
         tenant_id: uuid.UUID,
         effective_for: date,
     ) -> ent.Compensation | None: ...
+
+    # --- Attendance (one row per employee per work day) ---
+    async def upsert_attendance_record(self, record: ent.AttendanceRecord) -> ent.AttendanceRecord: ...
+
+    async def get_attendance_record(
+        self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
+    ) -> ent.AttendanceRecord | None: ...
+
+    async def list_attendance_with_employee(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        employee_id: uuid.UUID | None = None,
+        status: str | None = None,
+        date_from: object | None = None,
+        date_to: object | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[tuple[ent.AttendanceRecord, str, str, str]]: ...
 
 
 class HrServiceDeps(Protocol):

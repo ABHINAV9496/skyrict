@@ -16,7 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from core.core import audit_events
 from core.core.audit_service import AuditService
-from core.core.constants import EmploymentStatus, LeaveRequestStatus
+from core.core.constants import AttendanceStatus, EmploymentStatus, LeaveRequestStatus, PayImpact
 from core.core.exceptions import (
     DuplicateRecordError,
     EmployeeTerminatedError,
@@ -28,6 +28,7 @@ from core.core.state_machine import InvalidTransitionError, StateMachine
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.events.producers.hr_events import (
+    emit_attendance_recorded,
     emit_department_created,
     emit_department_updated,
     emit_employee_created,
@@ -414,10 +415,19 @@ class EmployeeService:
         limit: int = 20,
         offset: int = 0,
     ) -> list[ent.Employee]:
+        """List employees; ``status`` accepts one value or a comma-separated
+        set (e.g. ``active,on_leave``) so callers can express exclusions."""
+        statuses: list[EmploymentStatus] | None = None
+        if status is not None:
+            tokens = [token.strip() for token in status.split(",") if token.strip()]
+            try:
+                statuses = [EmploymentStatus(token) for token in tokens]
+            except ValueError as exc:
+                raise ValueError(f"unknown employment status in {status!r}") from exc
         return list(
             await self._repo.list_employees(
                 tenant_id,
-                status=status,
+                status=statuses,
                 department_id=department_id,
                 q=q,
                 limit=limit,
@@ -449,6 +459,8 @@ class LeaveService:
         actor_user_id: uuid.UUID | None = None,
     ) -> ent.LeaveRequest:
         """Create a pending request; days computed server-side."""
+        if start_date < date.today():
+            raise ValueError("leave start_date cannot be in the past")
         if end_date < start_date:
             raise ValueError("end_date cannot precede start_date")
         days = (end_date - start_date).days + 1
@@ -979,6 +991,111 @@ class LeaveService:
         """LeaveLedgerPort read: leave types that accrue annually (Rule 4)."""
         return list(await self._repo.list_accrual_leave_types(tenant_id))
 
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> list[ent.LeaveType]:
+        """Full leave-type catalogue (portal: render every type, accrual or not)."""
+        return list(await self._repo.list_leave_types(tenant_id))
+
+
+_PAY_IMPACT_BY_STATUS: dict[AttendanceStatus, PayImpact] = {
+    AttendanceStatus.ON_TIME: PayImpact.FULL,
+    AttendanceStatus.LATE: PayImpact.HALF,
+    AttendanceStatus.ABSENT: PayImpact.NONE,
+}
+
+
+class AttendanceService:
+    """Daily attendance logging/correction (feeds payroll pay-impact rules).
+
+    One record per employee per work day — corrections upsert the same day.
+    ``pay_impact`` is derived here from the status (on_time -> full, late ->
+    half, absent -> none) and never trusted from clients.
+    """
+
+    def __init__(self, repository: HrRepositoryPort, audit: AuditService) -> None:
+        self._repo = repository
+        self._audit = audit
+
+    def repository(self) -> HrRepositoryPort:
+        return self._repo
+
+    async def record(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        work_date: date,
+        status: AttendanceStatus,
+        note: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.AttendanceRecord:
+        """Log or correct one day's attendance for an employee."""
+        employee = await self._repo.get_employee(employee_id, tenant_id)
+        if employee is None:
+            raise ValueError(f"employee {employee_id} not found")
+        record = ent.AttendanceRecord(
+            tenant_id=tenant_id,
+            employee_id=employee_id,
+            work_date=work_date,
+            status=status,
+            pay_impact=_PAY_IMPACT_BY_STATUS[status],
+            note=note,
+            id=uuid.uuid4(),
+        )
+        saved = await self._repo.upsert_attendance_record(record)
+        # Derive from the in-memory impact (the ORM returns pay_impact as a
+        # plain string — its column is VARCHAR with a CHECK, not a pg enum).
+        impact = record.pay_impact.value
+        await self._audit.log(
+            action=audit_events.HR_ATTENDANCE_RECORDED,
+            target=f"attendance:{saved.id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={
+                "employee_id": str(employee_id),
+                "work_date": work_date.isoformat(),
+                "status": status.value,
+                "pay_impact": impact,
+            },
+        )
+        await emit_attendance_recorded(
+            employee_id=employee_id,
+            work_date=work_date.isoformat(),
+            status=status.value,
+            pay_impact=impact,
+            tenant_id=tenant_id,
+        )
+        return saved
+
+    async def get(
+        self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
+    ) -> ent.AttendanceRecord | None:
+        """Fetch one employee's attendance for a specific day."""
+        return await self._repo.get_attendance_record(employee_id, work_date, tenant_id=tenant_id)
+
+    async def list_with_employee(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        employee_id: uuid.UUID | None = None,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[tuple[ent.AttendanceRecord, str, str, str]]:
+        """Attendance rows joined with ``(first_name, last_name, number)``."""
+        return list(
+            await self._repo.list_attendance_with_employee(
+                tenant_id,
+                employee_id=employee_id,
+                status=status,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
 
 def _round_half_up(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
@@ -1006,4 +1123,4 @@ def _is_unique_violation(exc: Exception) -> bool:
     return "23505" in str(orig)
 
 
-__all__ = ["DepartmentService", "EmployeeService", "LeaveService"]
+__all__ = ["AttendanceService", "DepartmentService", "EmployeeService", "LeaveService"]

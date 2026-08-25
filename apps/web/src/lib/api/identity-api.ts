@@ -117,10 +117,14 @@ export async function listInvitations(): Promise<InvitationSummary[]> {
 export async function createInvitation(
   email: string,
   roleName: string,
+  options?: { expiresInHours?: number },
 ): Promise<InvitationCreated> {
   const raw = await apiPost<InvitationPayload>("/api/v1/invitations", {
     email,
     role_name: roleName,
+    ...(options?.expiresInHours
+      ? { expires_in_hours: options.expiresInHours }
+      : {}),
   });
   return mapInvitationCreated(raw ?? {});
 }
@@ -135,6 +139,7 @@ const SYSTEM_ROLE_LABELS: Record<string, string> = {
   department_manager: "Manager",
   standard_user: "Member",
   auditor: "Auditor",
+  employee_self_service: "Self service",
 };
 
 const ROLE_BADGE_CLASSES: Record<string, string> = {

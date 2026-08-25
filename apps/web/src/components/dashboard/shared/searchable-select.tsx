@@ -4,57 +4,51 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { COUNTRIES } from "@/lib/hr/countries";
-import { CURRENCIES } from "@/lib/hr/currencies";
 import { cn } from "@/lib/utils";
 
-type Option = {
-  /** Value emitted by onChange: an ISO country code or a currency code. */
-  id: string;
-  /** Monospace badge shown at the start of the row ("+91" / "INR"). */
-  badge: string;
-  /** Main row text after the badge (country name; empty for currencies). */
-  primary: string;
-  /**
-   * Text shown in the input while resting (committed / blurred): dial code
-   * only for countries ("+91"), the code for currencies ("INR").
-   */
-  restingLabel: string;
-  /** Lowercase haystack used for filtering. */
-  haystack: string;
-  /** Lowercase names whose prefix promotes this option above infix matches. */
-  names: string[];
+export type SearchableSelectOption = {
+  /** Value emitted by onValueChange (an id, code, or enum value). */
+  value: string;
+  /** Main row text — also the committed/resting input label. */
+  label: string;
+  /** Optional secondary text shown at the row end. */
+  hint?: string;
+  /** Extra haystack text matched while searching but never displayed. */
+  keywords?: string;
 };
 
 /**
- * Searchable picker shared by the hire dialog's Phone-country and Currency
- * fields. The two fields are fully independent: the phone field emits country
- * codes and the currency field emits currency codes, and neither selection
- * rewrites the other.
+ * Generic searchable dropdown replacing native `<Select>` pickers whose
+ * option lists outgrow a few entries (employees, leave types, departments).
+ * Mirrors the battle-tested CountryCombobox interaction: the listbox renders
+ * inline under the input (staying inside Radix's scroll-lock scope), typing
+ * filters case-insensitively with prefix matches ranked first, and the
+ * committed value is always an option id — the visible text is just its
+ * resting label, reset on blur.
  *
- * The listbox is rendered inline (absolutely positioned under the input)
- * rather than through a portal: staying inside the DialogContent subtree
- * keeps it inside Radix's scroll-lock scope, so mouse-wheel scrolling works,
- * outside-click/focus dismissal never sees it, and it inherits the dialog's
- * theme tokens without any container lookup.
+ * Escape handling mirrors CountryCombobox: a document-capture listener
+ * swallows Escape while it targets this combobox so closing the listbox can
+ * never dismiss the surrounding Radix dialog.
  */
-export function CountryCombobox({
-  kind,
+export function SearchableSelect({
+  options,
   value,
-  onChange,
+  onValueChange,
   id,
   disabled,
   invalid,
   placeholder,
+  emptyMessage = "No matches",
   className,
 }: {
-  kind: "country" | "currency";
+  options: SearchableSelectOption[];
   value: string | null;
-  onChange: (id: string) => void;
+  onValueChange: (value: string) => void;
   id?: string;
   disabled?: boolean;
   invalid?: boolean;
   placeholder?: string;
+  emptyMessage?: string;
   className?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,46 +59,20 @@ export function CountryCombobox({
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
 
-  const options = useMemo<Option[]>(() => {
-    if (kind === "country") {
-      return COUNTRIES.filter((country) => country.dialCode !== null).map(
-        (country) => ({
-          id: country.code,
-          badge: `+${country.dialCode}`,
-          primary: country.name,
-          restingLabel: `+${country.dialCode}`,
-          haystack: `${country.name} ${country.code} +${country.dialCode}`.toLowerCase(),
-          names: [country.name.toLowerCase()],
-        }),
-      );
-    }
-    return CURRENCIES.map((currency) => ({
-      id: currency.code,
-      badge: currency.code,
-      primary: "",
-      restingLabel: currency.code,
-      haystack: `${currency.code} ${currency.countries.join(" ")}`.toLowerCase(),
-      names: currency.countries.map((name) => name.toLowerCase()),
-    }));
-  }, [kind]);
-
   const selected = useMemo(
-    () => (value ? options.find((option) => option.id === value) ?? null : null),
+    () =>
+      value != null && value !== ""
+        ? options.find((option) => option.value === value) ?? null
+        : null,
     [options, value],
   );
 
   // Keep the visible label in sync whenever the selection changes externally
-  // (form reset on open, edit-mode init).
+  // (dialog reset on open, edit-mode init, prefilled employee filters).
   useEffect(() => {
-    setQuery(selected ? selected.restingLabel : "");
+    setQuery(selected ? selected.label : "");
   }, [selected]);
 
-  /**
-   * Radix's DismissableLayer listens for Escape on `document` in the capture
-   * phase, so a bubble-phase stopPropagation can never shield the dialog.
-   * Register an earlier document-capture listener that swallows Escape while
-   * it targets this combobox — closing only the listbox, never the dialog.
-   */
   useEffect(() => {
     function handleCapture(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -120,35 +88,19 @@ export function CountryCombobox({
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle || needle === (selected?.restingLabel.toLowerCase() ?? "")) return options;
-    // Prefix matches rank ahead of substring matches, and within the prefix
-    // bucket the shortest matching name wins, so typing "ind" offers India
-    // (INR) before Indonesia (IDR) and British Indian Ocean Territory (USD).
-    const prefix: Option[] = [];
-    const infix: Option[] = [];
+    if (!needle || needle === (selected?.label.toLowerCase() ?? "")) return options;
+    const prefix: SearchableSelectOption[] = [];
+    const infix: SearchableSelectOption[] = [];
     for (const option of options) {
-      if (
-        option.haystack.startsWith(needle) ||
-        option.id.toLowerCase().startsWith(needle) ||
-        option.names.some((name) => name.startsWith(needle))
-      ) {
+      const haystack =
+        `${option.label} ${option.keywords ?? ""}`.toLowerCase();
+      if (option.label.toLowerCase().startsWith(needle)) {
         prefix.push(option);
-      } else if (option.haystack.includes(needle)) {
+      } else if (haystack.includes(needle)) {
         infix.push(option);
       }
     }
-    const rank = (option: Option) => {
-      if (option.haystack.startsWith(needle)) return 0;
-      if (option.id.toLowerCase().startsWith(needle)) return 1;
-      return (
-        Math.min(
-          ...option.names
-            .filter((name) => name.startsWith(needle))
-            .map((name) => name.length),
-        ) + 2
-      );
-    };
-    return prefix.sort((a, b) => rank(a) - rank(b)).concat(infix);
+    return prefix.concat(infix);
   }, [options, query, selected]);
 
   function scrollOptionIntoView(index: number, smooth = false) {
@@ -156,10 +108,7 @@ export function CountryCombobox({
     item?.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" });
   }
 
-  // New filter output: restart at the top row and reveal it. Pointer hover
-  // deliberately never scrolls — Chrome re-fires mouseenter for rows passing
-  // under a stationary cursor while the list scrolls, which would otherwise
-  // fight the user's wheel momentum.
+  // New filter output: restart at the top row and reveal it.
   useEffect(() => {
     setHighlighted(0);
     requestAnimationFrame(() => scrollOptionIntoView(0));
@@ -168,18 +117,13 @@ export function CountryCombobox({
   // Opening reveals the currently selected entry instead of always row 0.
   useEffect(() => {
     if (!open) return;
-    const index = options.findIndex((option) => option.id === value);
+    const index = options.findIndex((option) => option.value === value);
     const start = index >= 0 ? index : 0;
     setHighlighted(start);
     requestAnimationFrame(() => scrollOptionIntoView(start));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  /**
-   * Open the listbox and select the whole input text so the next keystroke
-   * replaces the display label instead of appending to it. Also clears a
-   * stale just-selected flag so a later blur still closes the list.
-   */
   const openListbox = useCallback(() => {
     justSelectedRef.current = false;
     setOpen(true);
@@ -187,18 +131,14 @@ export function CountryCombobox({
   }, []);
 
   const select = useCallback(
-    (option: Option) => {
+    (option: SearchableSelectOption) => {
       justSelectedRef.current = true;
-      // Set the label here rather than relying on the selected-sync effect:
-      // re-selecting the already-selected value never changes `selected`,
-      // so the effect would leave typed search text in the input.
-      setQuery(option.restingLabel);
-      onChange(option.id);
+      setQuery(option.label);
+      onValueChange(option.value);
       setOpen(false);
-      // Keep the full label pre-selected so typing right away replaces it.
       requestAnimationFrame(() => inputRef.current?.select());
     },
-    [onChange],
+    [onValueChange],
   );
 
   function moveHighlight(delta: number) {
@@ -232,8 +172,6 @@ export function CountryCombobox({
       event.preventDefault();
       if (open) commitHighlighted();
     } else if (event.key === "Escape") {
-      // Escape must never reach the Dialog's dismissable layer — with the
-      // list already closed it would otherwise close the entire dialog.
       event.stopPropagation();
       if (open) setOpen(false);
     }
@@ -246,7 +184,7 @@ export function CountryCombobox({
         return;
       }
       setOpen(false);
-      setQuery(selected ? selected.restingLabel : "");
+      setQuery(selected ? selected.label : "");
     }, 150);
   }
 
@@ -261,9 +199,7 @@ export function CountryCombobox({
         aria-haspopup="listbox"
         aria-expanded={open}
         autoComplete="off"
-        placeholder={
-          placeholder ?? (kind === "country" ? "Search country" : "Currency")
-        }
+        placeholder={placeholder}
         onChange={(event) => {
           setQuery(event.target.value);
           setHighlighted(0);
@@ -275,7 +211,7 @@ export function CountryCombobox({
         }}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        className={cn("pr-7", className)}
+        className={className}
       />
       {open ? (
         <div
@@ -285,15 +221,15 @@ export function CountryCombobox({
         >
           {filtered.length === 0 ? (
             <p className="px-2 py-3 text-center text-sm text-muted-foreground">
-              No matches
+              {emptyMessage}
             </p>
           ) : (
             filtered.map((option, index) => (
               <button
-                key={option.id}
+                key={option.value}
                 type="button"
                 role="option"
-                aria-selected={option.id === value}
+                aria-selected={option.value === value}
                 onMouseEnter={() => setHighlighted(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -304,11 +240,13 @@ export function CountryCombobox({
                   index === highlighted ? "bg-muted" : "hover:bg-muted",
                 )}
               >
-                <span className="min-w-0 truncate">
-                  <code className="mr-2 font-mono text-xs">{option.badge}</code>
-                  {option.primary}
-                </span>
-                {option.id === value ? (
+                <span className="min-w-0 truncate">{option.label}</span>
+                {option.hint ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {option.hint}
+                  </span>
+                ) : null}
+                {option.value === value ? (
                   <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
                 ) : null}
               </button>

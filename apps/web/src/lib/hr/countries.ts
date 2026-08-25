@@ -280,3 +280,67 @@ export const COUNTRIES: CountryEntry[] = [
 export function getCountryByCode(code: string): CountryEntry | undefined {
   return COUNTRIES.find((country) => country.code === code);
 }
+
+/**
+ * Dial codes shared by several countries. A stored number only pins the
+ * prefix ("+1 415…"), so the tie-break picks the most common owner for the
+ * picker's helper text; users can always re-pick a specific country.
+ */
+const DIAL_CODE_TIE_BREAKS: Record<string, string> = {
+  "1": "US", // United States over the other NANP members
+  "7": "RU", // Russia over Kazakhstan
+  "44": "GB", // United Kingdom over the Crown dependencies
+  "47": "NO", // Norway over Svalbard & Jan Mayen
+  "358": "FI", // Finland over Åland Islands
+};
+
+const MAX_DIAL_CODE_LENGTH = 4;
+
+const DIAL_GROUPS: Map<string, CountryEntry[]> = (() => {
+  const groups = new Map<string, CountryEntry[]>();
+  for (const country of COUNTRIES) {
+    if (country.dialCode === null) continue;
+    const bucket = groups.get(country.dialCode);
+    if (bucket) bucket.push(country);
+    else groups.set(country.dialCode, [country]);
+  }
+  return groups;
+})();
+
+/**
+ * Split a stored phone number into its dial-code country and the remainder.
+ * Accepts spaced, glued, and punctuated numbers ("+1 415 555 0101",
+ * "+14155550101", "+91-98765-43210"); returns null when the value carries no
+ * leading "+" or no recognizable dial code.
+ */
+export function splitDialCode(
+  phone: string,
+): { country: CountryEntry; rest: string } | null {
+  const trimmed = phone.trim();
+  if (!trimmed.startsWith("+")) return null;
+  const tail = trimmed.slice(1);
+  const digits = tail.replace(/[\s\-().]/g, "");
+  if (!digits || !/^\d+$/.test(digits)) return null;
+  const maxEnd = Math.min(digits.length, MAX_DIAL_CODE_LENGTH);
+  for (let end = maxEnd; end >= 1; end--) {
+    const bucket = DIAL_GROUPS.get(digits.slice(0, end));
+    if (!bucket) continue;
+    const preferred = DIAL_CODE_TIE_BREAKS[digits.slice(0, end)];
+    const country =
+      (preferred ? bucket.find((entry) => entry.code === preferred) : undefined) ??
+      bucket[0];
+    let seen = 0;
+    let index = 0;
+    while (index < tail.length && seen < end) {
+      if (/\d/.test(tail[index])) seen++;
+      index++;
+    }
+    return { country, rest: tail.slice(index).trim() };
+  }
+  return null;
+}
+
+/** Resolve just the country behind a stored phone number (null if unknown). */
+export function matchPhoneCountry(phone: string): CountryEntry | null {
+  return splitDialCode(phone)?.country ?? null;
+}

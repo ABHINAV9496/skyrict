@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Query
 
 from core.api.deps import (
+    get_attendance_service,
     get_department_service,
     get_employee_service,
     get_leave_service,
@@ -26,6 +27,8 @@ from core.api.deps import (
 )
 from core.api.v1.routers.errors import raise_from_service_error
 from core.api.v1.schemas import (
+    AttendanceRecordOut,
+    AttendanceUpsertRequest,
     DepartmentCreate,
     DepartmentOut,
     DepartmentUpdate,
@@ -43,11 +46,16 @@ from core.api.v1.schemas import (
     MoneyOut,
     TerminateRequest,
 )
-from core.core.constants import EmploymentStatus
+from core.core.constants import AttendanceStatus, EmploymentStatus
 from core.core.permissions import ERP_HR_APPROVE, ERP_HR_READ, ERP_HR_WRITE
 from core.domain import entities as ent
 from core.domain.value_objects import Money
-from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
+from core.features.hr.service import (
+    AttendanceService,
+    DepartmentService,
+    EmployeeService,
+    LeaveService,
+)
 from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
@@ -146,14 +154,17 @@ async def list_employees(
     employee_svc: EmployeeService = Depends(get_employee_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[EmployeeOut]]:
-    employees = await employee_svc.list(
-        tenant_id,
-        status=status,
-        department_id=department_id,
-        q=q,
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        employees = await employee_svc.list(
+            tenant_id,
+            status=status,
+            department_id=department_id,
+            q=q,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise_from_service_error(exc)
     # Enrich each row with the active compensation so list payloads match the
     # detail payload (the web client relies on it for compensation visibility).
     return ResponseEnvelope(
@@ -488,3 +499,103 @@ async def list_leave_movements(
         employee_id, tenant_id=tenant_id, leave_type=leave_type
     )
     return ResponseEnvelope(data=[LeaveMovementOut.model_validate(m) for m in movements])
+
+
+# ---------------------------------------------------------------------------
+# Attendance (one row per employee per work day; upserted in place)
+# ---------------------------------------------------------------------------
+
+_ATTENDANCE_STATUSES = ("on_time", "late", "absent")
+
+
+def _attendance_rows_out(
+    rows: list[tuple[ent.AttendanceRecord, str, str, str]],
+) -> list[AttendanceRecordOut]:
+    """Build ``AttendanceRecordOut`` rows including the joined employee fields."""
+    outs: list[AttendanceRecordOut] = []
+    for record, first_name, last_name, employee_number in rows:
+        out = AttendanceRecordOut.model_validate(record)
+        out.first_name = first_name
+        out.last_name = last_name
+        out.employee_number = employee_number
+        outs.append(out)
+    return outs
+
+
+@router.get("/attendance", response_model=ResponseEnvelope[list[AttendanceRecordOut]])
+async def list_attendance(
+    employee_id: uuid.UUID | None = Query(default=None),
+    status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
+    attendance_svc: AttendanceService = Depends(get_attendance_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[list[AttendanceRecordOut]]:
+    if status is not None and status not in _ATTENDANCE_STATUSES:
+        raise NotFoundError(f"unknown attendance status {status!r}")
+    rows = await attendance_svc.list_with_employee(
+        tenant_id,
+        employee_id=employee_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return ResponseEnvelope(data=_attendance_rows_out(rows))
+
+
+@router.get(
+    "/employees/{employee_id}/attendance",
+    response_model=ResponseEnvelope[list[AttendanceRecordOut]],
+)
+async def list_employee_attendance(
+    employee_id: uuid.UUID,
+    status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: dict[str, Any] = Depends(_require_hr_read),
+    attendance_svc: AttendanceService = Depends(get_attendance_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[list[AttendanceRecordOut]]:
+    if status is not None and status not in _ATTENDANCE_STATUSES:
+        raise NotFoundError(f"unknown attendance status {status!r}")
+    rows = await attendance_svc.list_with_employee(
+        tenant_id,
+        employee_id=employee_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return ResponseEnvelope(data=_attendance_rows_out(rows))
+
+
+@router.put("/attendance", response_model=ResponseEnvelope[AttendanceRecordOut])
+async def upsert_attendance(
+    body: AttendanceUpsertRequest,
+    current_user: dict[str, Any] = Depends(_require_hr_write),
+    attendance_svc: AttendanceService = Depends(get_attendance_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[AttendanceRecordOut]:
+    try:
+        record = await attendance_svc.record(
+            tenant_id=tenant_id,
+            employee_id=body.employee_id,
+            work_date=body.work_date,
+            status=AttendanceStatus(body.status),
+            note=body.note,
+            actor_user_id=current_user["user_id"],
+        )
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(
+        data=AttendanceRecordOut.model_validate(record),
+        message="Attendance recorded",
+    )

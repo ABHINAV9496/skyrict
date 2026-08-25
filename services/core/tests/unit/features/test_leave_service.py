@@ -7,7 +7,7 @@ DB CHECK backstop are integration-only by design.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
@@ -303,14 +303,14 @@ async def _request(
     days: int = 2,
     employee_id: uuid.UUID = EMPLOYEE_1,
 ) -> ent.LeaveRequest:
-    start = date(2024, 5, 1)
+    start = date.today() + timedelta(days=1)
     await repo.create_employee(_employee(employee_id=employee_id))
     return await service.request(
         tenant_id=TENANT,
         employee_id=employee_id,
         leave_type=leave_type,
         start_date=start,
-        end_date=date(2024, 5, 1 + days - 1),
+        end_date=start + timedelta(days=days - 1),
     )
 
 
@@ -535,8 +535,8 @@ class TestRequest:
                 tenant_id=TENANT,
                 employee_id=EMPLOYEE_1,
                 leave_type="annual",
-                start_date=date(2024, 5, 1),
-                end_date=date(2024, 5, 2),
+                start_date=date.today() + timedelta(days=1),
+                end_date=date.today() + timedelta(days=2),
             )
         assert not repo.requests
 

@@ -36,6 +36,7 @@ from core.core.permissions import (
     ERP_HR_APPROVE,
     ERP_HR_READ,
     ERP_HR_WRITE,
+    ERP_LEAVE_SELF,
     ERP_PAYROLL_APPROVE,
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
@@ -70,6 +71,7 @@ LEAVE_TYPE_DEFAULTS: tuple[LeaveTypeDefault, ...] = (
     LeaveTypeDefault("annual", "Annual Leave", True, 20),
     LeaveTypeDefault("sick", "Sick Leave", False, None),
     LeaveTypeDefault("unpaid", "Unpaid Leave", False, None),
+    LeaveTypeDefault("casual", "Casual Leave", True, 12),
 )
 
 
@@ -168,6 +170,10 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("standard_user", (ERP_HR_READ, ERP_CRM_READ, ERP_SALES_READ)),
     ("auditor", (ERP_HR_READ, ERP_PAYROLL_READ, ERP_CRM_READ, ERP_SALES_READ)),
+    # Employee self-service: portal-only role (own leave balances/requests).
+    # Deliberately holds zero dashboard permissions; mirrors identity's
+    # SYSTEM_ROLE_DEFINITIONS so invite grants stay portable.
+    ("employee_self_service", (ERP_LEAVE_SELF,)),
 )
 
 

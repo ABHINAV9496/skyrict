@@ -215,15 +215,17 @@ async def _hire(
 async def _create_leave_request(
     client: AsyncClient, headers: dict[str, str], employee_id: str, days: int
 ) -> str:
-    start = f"2026-02-{1:02d}"
-    end = f"2026-03-{days:02d}" if days > 28 else f"2026-02-{days:02d}"
+    from datetime import date, timedelta
+
+    start_date = date.today() + timedelta(days=1)
+    end_date = start_date + timedelta(days=days - 1)
     response = await client.post(
         "/api/v1/hr/leave/requests",
         json={
             "employee_id": employee_id,
             "leave_type": "annual",
-            "start_date": start,
-            "end_date": end,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         },
         headers=headers,
     )

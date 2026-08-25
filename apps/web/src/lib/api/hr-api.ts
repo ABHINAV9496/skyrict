@@ -40,6 +40,19 @@ export interface Employee {
   createdAt: string;
 }
 
+/** "First Last" — the one canonical way to render an employee's name. */
+export function employeeName(employee: Pick<Employee, "firstName" | "lastName">): string {
+  return `${employee.firstName} ${employee.lastName}`;
+}
+
+/** Alphabetical by name — dropdown options read naturally regardless of list order. */
+export function byEmployeeName(
+  a: Pick<Employee, "firstName" | "lastName">,
+  b: Pick<Employee, "firstName" | "lastName">,
+): number {
+  return employeeName(a).localeCompare(employeeName(b));
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -78,6 +91,24 @@ export interface LeaveMovement {
   refId: string | null;
   reason: string | null;
   occurredAt: string | null;
+}
+
+export type AttendanceStatus = "on_time" | "late" | "absent";
+
+export type PayImpact = "full" | "half" | "none";
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  workDate: string;
+  status: AttendanceStatus;
+  payImpact: PayImpact;
+  note: string | null;
+  createdAt: string;
+  /** Joined display fields — null on single-employee reads. */
+  firstName: string | null;
+  lastName: string | null;
+  employeeNumber: string | null;
 }
 
 interface MoneyPayload {
@@ -140,6 +171,19 @@ interface LeaveMovementPayload {
   ref_id?: unknown;
   reason?: unknown;
   occurred_at?: unknown;
+}
+
+interface AttendanceRecordPayload {
+  id?: unknown;
+  employee_id?: unknown;
+  work_date?: unknown;
+  status?: unknown;
+  pay_impact?: unknown;
+  note?: unknown;
+  created_at?: unknown;
+  first_name?: unknown;
+  last_name?: unknown;
+  employee_number?: unknown;
 }
 
 function mapMoney(payload: MoneyPayload | null | undefined): Money | null {
@@ -223,9 +267,26 @@ function mapLeaveMovement(payload: LeaveMovementPayload): LeaveMovement {
   };
 }
 
+function mapAttendanceRecord(payload: AttendanceRecordPayload): AttendanceRecord {
+  return {
+    id: String(payload.id ?? ""),
+    employeeId: String(payload.employee_id ?? ""),
+    workDate: String(payload.work_date ?? ""),
+    status: String(payload.status ?? "on_time") as AttendanceStatus,
+    payImpact: String(payload.pay_impact ?? "full") as PayImpact,
+    note: typeof payload.note === "string" ? payload.note : null,
+    createdAt: String(payload.created_at ?? ""),
+    firstName: typeof payload.first_name === "string" ? payload.first_name : null,
+    lastName: typeof payload.last_name === "string" ? payload.last_name : null,
+    employeeNumber:
+      typeof payload.employee_number === "string" ? payload.employee_number : null,
+  };
+}
+
 export interface EmployeeListFilters {
   q?: string;
-  status?: EmployeeStatus;
+  /** A single status or a set (sent comma-separated, e.g. "active,on_leave"). */
+  status?: EmployeeStatus | EmployeeStatus[];
   departmentId?: string;
 }
 
@@ -234,12 +295,16 @@ export async function listEmployees(input: {
   pageSize?: number;
   filters?: EmployeeListFilters;
 } = {}): Promise<Paginated<Employee>> {
+  const rawStatus = input.filters?.status;
+  const status = Array.isArray(rawStatus)
+    ? rawStatus.join(",")
+    : rawStatus;
   const result = await apiList<EmployeePayload>("/api/v1/hr/employees", {
     page: input.page,
     pageSize: input.pageSize,
     query: {
       q: input.filters?.q,
-      status: input.filters?.status,
+      status,
       department_id: input.filters?.departmentId,
     },
   });
@@ -470,4 +535,58 @@ export async function listLeaveMovements(
     })}`,
   );
   return (items ?? []).map(mapLeaveMovement);
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+export interface AttendanceListFilters {
+  employeeId?: string;
+  status?: AttendanceStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export async function listAttendance(input: {
+  page?: number;
+  pageSize?: number;
+  filters?: AttendanceListFilters;
+} = {}): Promise<Paginated<AttendanceRecord>> {
+  const result = await apiList<AttendanceRecordPayload>("/api/v1/hr/attendance", {
+    page: input.page,
+    pageSize: input.pageSize,
+    query: {
+      employee_id: input.filters?.employeeId,
+      status: input.filters?.status,
+      date_from: input.filters?.dateFrom,
+      date_to: input.filters?.dateTo,
+    },
+  });
+  return { items: result.items.map(mapAttendanceRecord), meta: result.meta };
+}
+
+export async function listEmployeeAttendance(
+  employeeId: string,
+  filters: Omit<AttendanceListFilters, "employeeId"> = {},
+): Promise<Paginated<AttendanceRecord>> {
+  return listAttendance({ filters: { ...filters, employeeId } });
+}
+
+export async function upsertAttendance(input: {
+  employeeId: string;
+  workDate: string;
+  status: AttendanceStatus;
+  note?: string | null;
+}): Promise<AttendanceRecord> {
+  const raw = await apiFetch<AttendanceRecordPayload>("/api/v1/hr/attendance", {
+    method: "PUT",
+    body: JSON.stringify({
+      employee_id: input.employeeId,
+      work_date: input.workDate,
+      status: input.status,
+      note: input.note ?? null,
+    }),
+  });
+  return mapAttendanceRecord(raw ?? {});
 }

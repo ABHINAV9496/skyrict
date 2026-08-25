@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,16 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { createLeaveRequest, type Employee } from "@/lib/api/hr-api";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
+import { byEmployeeName, createLeaveRequest, employeeName, type Employee } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
 
 const LEAVE_TYPES = [
@@ -77,6 +75,21 @@ export function LogLeaveDialog({
   }));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const employeeOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      [...employees]
+        .sort(byEmployeeName)
+        .map((emp) => ({
+          value: emp.id,
+          label: employeeName(emp),
+          keywords: emp.employeeNumber,
+        })),
+    [employees],
+  );
+  const leaveTypeOptions = useMemo<SearchableSelectOption[]>(
+    () => LEAVE_TYPES.map((lt) => ({ value: lt.value, label: lt.label })),
+    [],
+  );
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -105,6 +118,11 @@ export function LogLeaveDialog({
     }
     if (!form.startDate || !form.endDate) {
       setError("Start and end dates are required.");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (form.startDate < today) {
+      setError("Start date cannot be in the past.");
       return;
     }
     if (form.endDate < form.startDate) {
@@ -151,60 +169,46 @@ export function LogLeaveDialog({
           <div className="grid gap-4 py-4">
             <div className="space-y-1.5">
               <Label htmlFor="log-employee">Employee</Label>
-              <Select
-                value={form.employeeId}
+              <SearchableSelect
+                id="log-employee"
+                options={employeeOptions}
+                value={form.employeeId || null}
                 onValueChange={(value) => updateField("employeeId", value)}
                 disabled={!!prefillEmployeeId}
-              >
-                <SelectTrigger id="log-employee" className="w-full">
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select employee"
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="log-type">Leave type</Label>
-              <Select
-                value={form.leaveType}
+              <SearchableSelect
+                id="log-type"
+                options={leaveTypeOptions}
+                value={form.leaveType || null}
                 onValueChange={(value) => updateField("leaveType", value)}
-              >
-                <SelectTrigger id="log-type" className="w-full">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LEAVE_TYPES.map((lt) => (
-                    <SelectItem key={lt.value} value={lt.value}>
-                      {lt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select type"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="log-start">Start date</Label>
-                <Input
+                <DatePicker
                   id="log-start"
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => updateField("startDate", e.target.value)}
+                  value={form.startDate || null}
+                  onChange={(iso) => updateField("startDate", iso ?? "")}
+                  min={new Date().toISOString().slice(0, 10)}
+                  lockYear
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="log-end">End date</Label>
-                <Input
+                <DatePicker
                   id="log-end"
-                  type="date"
-                  value={form.endDate}
-                  onChange={(e) => updateField("endDate", e.target.value)}
+                  value={form.endDate || null}
+                  onChange={(iso) => updateField("endDate", iso ?? "")}
+                  min={form.startDate || new Date().toISOString().slice(0, 10)}
+                  lockYear
                 />
               </div>
             </div>

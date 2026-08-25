@@ -12,6 +12,7 @@ import {
   loginEmailPassword,
   verifyMfa,
 } from "@/lib/api/auth-api";
+import { resolveHandoffDestination } from "@/lib/auth/handoff";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { AuthInput } from "@/lib/auth/AuthInput";
 import { OtpInput } from "@/lib/auth/OtpInput";
@@ -57,7 +58,7 @@ function LoginForm({
 
   async function finish() {
     setHandingOff(true);
-    await completeHandoff("/");
+    await completeHandoff(await resolveHandoffDestination());
   }
 
   async function onSubmitCredentials(values: CredentialsValues) {
@@ -102,7 +103,7 @@ function LoginForm({
       setVerifyingMfa(false);
       if (result.status === "ok") {
         setHandingOff(true);
-        await completeHandoff("/");
+        await completeHandoff(await resolveHandoffDestination());
       } else {
         setMfaError(true);
         setMfaCode("");

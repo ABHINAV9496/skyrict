@@ -56,6 +56,7 @@ _ENUM_TYPES = (
     "erp_payroll_run_status",
     "erp_payroll_rounding",
     "erp_stock_movement_type",
+    "erp_attendance_status",
 )
 _ERP_PERMISSION_KEYS = (
     "erp.hr.read",
@@ -129,7 +130,17 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0016", f"head is {version}, expected 0016"
+            assert version == "0018", f"head is {version}, expected 0018"
+
+            # 0018: erp.leave.self is a first-class catalog permission.
+            perm_row = (
+                await conn.execute(
+                    text(
+                        "SELECT description FROM core_permissions WHERE key = 'erp.leave.self'"
+                    )
+                )
+            ).scalar_one_or_none()
+            assert perm_row is not None, "0018 must register erp.leave.self"
 
             row = (
                 await conn.execute(
@@ -170,6 +181,35 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).scalar_one()
             assert policy_count == 1
+
+            attendance_policy_count = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_attendance_records'"
+                    )
+                )
+            ).scalar_one()
+            assert attendance_policy_count == 1, (
+                "attendance RLS policy missing after upgrade head"
+            )
+
+            attendance_unique_count = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_attendance_records' "
+                        "AND indexdef LIKE '%UNIQUE%'"
+                        "AND indexdef LIKE '%employee_id%'"
+                        "AND indexdef LIKE '%work_date%'"
+                    )
+                )
+            ).scalar_one()
+            assert attendance_unique_count >= 1, (
+                "(tenant_id, employee_id, work_date) unique constraint missing"
+            )
 
             key_count = (
                 await conn.execute(

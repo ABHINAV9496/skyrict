@@ -1,6 +1,8 @@
 .PHONY: help setup dev test lint migrate seed clean benchmark format check \
 	core-dev test-core test-unit-core test-integration-core test-cov-core \
-	migrate-core migrate-create-core seed-core build-core lint-core
+	migrate-core migrate-create-core seed-core build-core lint-core \
+	ai-agent-dev test-ai-agent test-unit-ai-agent lint-ai-agent \
+	migrate-ai-agent build-ai-agent
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -74,6 +76,29 @@ lint-core: ## Lint core only (ruff + mypy + import-linter)
 	uv run mypy services/core/src/
 	uv run lint-imports --config services/core/import-linter.toml
 
+# ---------- AI Agent Service ----------
+
+ai-agent-dev: ## Start the AI agent service in dev mode (live reload, port 8002)
+	uv run --directory services/ai-agent ai-agent serve --reload
+
+test-ai-agent: ## Run all AI agent service tests
+	uv run pytest services/ai-agent/tests/ -v --tb=short
+
+test-unit-ai-agent: ## Run AI agent unit tests only
+	uv run pytest services/ai-agent/tests/unit/ -v --tb=short -m unit
+
+migrate-ai-agent: ## Run AI agent Alembic migrations (shared DB, alembic_version_ai)
+	uv run --directory services/ai-agent ai-agent migrate
+
+build-ai-agent: ## Build AI agent service Docker image
+	docker build -t skyrict/ai-agent:latest -f services/ai-agent/Dockerfile .
+
+lint-ai-agent: ## Lint AI agent only (ruff + mypy + import-linter)
+	uv run ruff check services/ai-agent/
+	uv run ruff format --check services/ai-agent/
+	uv run mypy services/ai-agent/src/
+	uv run lint-imports --config services/ai-agent/import-linter.toml
+
 # ---------- Linting ----------
 
 lint: ## Run ruff check + ruff format check + mypy
@@ -141,4 +166,4 @@ hooks: ## Install git hooks
 
 # ---------- CI ----------
 
-check: lint test lint-core test-core ## Run full CI check locally (lint + test + core)
+check: lint test lint-core test-core lint-ai-agent test-ai-agent ## Run full CI check locally (lint + test + core + ai-agent)

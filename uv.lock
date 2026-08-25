@@ -9,12 +9,48 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "ai-agent",
     "core",
     "identity",
     "skyrict",
     "skyrict-common",
     "skyrict-events",
     "skyrict-testing",
+]
+
+[[package]]
+name = "ai-agent"
+version = "0.1.0"
+source = { editable = "services/ai-agent" }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-jose", extra = ["cryptography"] },
+    { name = "redis" },
+    { name = "skyrict-common" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
+    { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = ">=0.30,<1" },
+    { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "pydantic", specifier = ">=2.7,<3" },
+    { name = "pydantic-settings", specifier = ">=2.3,<3" },
+    { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4" },
+    { name = "redis", specifier = ">=5.0,<6" },
+    { name = "skyrict-common", editable = "libs/skyrict-common" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
+    { name = "structlog", specifier = ">=24.0,<25" },
+    { name = "typer", specifier = ">=0.12,<1" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
 ]
 
 [[package]]

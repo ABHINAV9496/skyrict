@@ -1,0 +1,52 @@
+# ai-agent service import-linter configuration — enforced architecture.
+#
+# Run from the repo root:
+#   uv run lint-imports --config services/ai-agent/import-linter.toml
+#
+# Mirrors services/core but scoped to the ai_agent package so each service's
+# contracts evolve independently.
+
+[tool.importlinter]
+root_package = "ai_agent"
+include_external_packages = false
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Foundations never depend on features or api"
+type = "forbidden"
+source_modules = [
+    "ai_agent.core",
+    "ai_agent.db",
+    "ai_agent.models",
+    "ai_agent.domain",
+    "ai_agent.events",
+]
+forbidden_modules = ["ai_agent.features", "ai_agent.api"]
+
+[[tool.importlinter.contracts]]
+name = "Only repositories touch the database layer"
+type = "forbidden"
+source_modules = ["ai_agent.features"]
+forbidden_modules = ["ai_agent.models", "ai_agent.db"]
+# Feature ORM MODELS are the one sanctioned exception: they must inherit the
+# shared declarative Base/mixins from ai_agent.models.base (core convention —
+# no db/base.py), so importing ai_agent.models.** from features/**/models/** is
+# allowed. Repositories and everything else under ai_agent.features stay
+# forbidden. When the first slice ships ORM models (SKY-57 engine commits), add
+#   ignore_imports = ["ai_agent.features.**.models.** -> ai_agent.models.**"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure"
+type = "forbidden"
+source_modules = ["ai_agent.domain"]
+forbidden_modules = ["ai_agent.models", "ai_agent.db", "ai_agent.features", "ai_agent.api"]
+
+[[tool.importlinter.contracts]]
+name = "API never touches ORM models"
+type = "forbidden"
+source_modules = ["ai_agent.api"]
+forbidden_modules = ["ai_agent.models"]
+# Direct-import only: api.deps legitimately wires repositories (which touch
+# models) as the composition root, so indirect chains are not flagged.
+allow_indirect_imports = true

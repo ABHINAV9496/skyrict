@@ -194,9 +194,26 @@ def _make_service(movements):
 
 class TestScan:
     async def test_creates_rows_and_audit_events(self) -> None:
+        base = datetime.now(tz=UTC).replace(hour=14, minute=0, second=0, microsecond=0)
         movements = [
-            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20),
-            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4),
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="receipt",
+                qty=Decimal(100),
+                created_at=base,
+                ref_id=None,
+            ),
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="issue",
+                qty=Decimal(-80),
+                created_at=base + timedelta(hours=2),
+                ref_id=None,
+            ),
         ]
         service, repo, audit = _make_service(movements)
 
@@ -207,9 +224,26 @@ class TestScan:
         assert any(a.endswith("anomaly.detected") for a in audit.actions)
 
     async def test_open_anomaly_of_same_type_is_skipped(self) -> None:
+        base = datetime.now(tz=UTC).replace(hour=14, minute=0, second=0, microsecond=0)
         movements = [
-            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20),
-            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4),
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="receipt",
+                qty=Decimal(100),
+                created_at=base,
+                ref_id=None,
+            ),
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="issue",
+                qty=Decimal(-80),
+                created_at=base + timedelta(hours=2),
+                ref_id=None,
+            ),
         ]
         service, repo, _audit = _make_service(movements)
         repo.open_types.add("sudden_stock_drop")

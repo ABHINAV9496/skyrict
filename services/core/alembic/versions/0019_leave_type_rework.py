@@ -34,30 +34,20 @@ def upgrade() -> None:
 
     # Disable the append-only trigger so we can delete legacy annual rows
     op.execute(
-        "ALTER TABLE public.erp_leave_movements "
-        "DISABLE TRIGGER erp_leave_movements_append_only"
+        "ALTER TABLE public.erp_leave_movements DISABLE TRIGGER erp_leave_movements_append_only"
     )
-    op.execute(
-        "DELETE FROM public.erp_leave_movements WHERE leave_type = 'annual'"
-    )
+    op.execute("DELETE FROM public.erp_leave_movements WHERE leave_type = 'annual'")
     # Re-enable the trigger for all future writes
     op.execute(
-        "ALTER TABLE public.erp_leave_movements "
-        "ENABLE TRIGGER erp_leave_movements_append_only"
+        "ALTER TABLE public.erp_leave_movements ENABLE TRIGGER erp_leave_movements_append_only"
     )
 
-    op.execute(
-        "DELETE FROM public.erp_leave_balances WHERE leave_type = 'annual'"
-    )
-    op.execute(
-        "DELETE FROM public.erp_leave_requests WHERE leave_type = 'annual'"
-    )
+    op.execute("DELETE FROM public.erp_leave_balances WHERE leave_type = 'annual'")
+    op.execute("DELETE FROM public.erp_leave_requests WHERE leave_type = 'annual'")
 
     # --- Step 2: Remove the ``annual`` leave type ---
 
-    op.execute(
-        "DELETE FROM public.erp_leave_types WHERE code = 'annual'"
-    )
+    op.execute("DELETE FROM public.erp_leave_types WHERE code = 'annual'")
 
     # --- Step 3: Update sick to accrual (8 days/year) ---
 
@@ -71,14 +61,23 @@ def upgrade() -> None:
 
     op.create_table(
         "erp_leave_policies",
-        sa.Column("tenant_id", UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "tenant_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
         sa.Column("casual_days_per_year", sa.Integer(), nullable=False, server_default="12"),
         sa.Column("sick_days_per_year", sa.Integer(), nullable=False, server_default="8"),
         sa.Column("effective_from", sa.Date(), nullable=False),
         sa.Column("last_accrual_year", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.UniqueConstraint("tenant_id", name="uq_erp_leave_policies_tenant"),
     )
 

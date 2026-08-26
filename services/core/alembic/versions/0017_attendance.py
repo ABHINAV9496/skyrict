@@ -96,7 +96,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("ALTER TABLE public.erp_attendance_records DISABLE ROW LEVEL SECURITY")
-    op.execute("DROP POLICY IF EXISTS tenant_isolation_erp_attendance_records ON public.erp_attendance_records")
+    op.execute(
+        "DROP POLICY IF EXISTS tenant_isolation_erp_attendance_records ON public.erp_attendance_records"
+    )
 
     op.drop_index("ix_erp_attendance_records_tenant_date", table_name="erp_attendance_records")
     op.drop_table("erp_attendance_records")

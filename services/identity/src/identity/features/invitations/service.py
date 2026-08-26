@@ -296,9 +296,7 @@ class InvitationService:
                 )
                 row = (
                     await session.execute(
-                        text(
-                            "SELECT id FROM core_roles WHERE tenant_id = :tid AND name = :rname"
-                        ),
+                        text("SELECT id FROM core_roles WHERE tenant_id = :tid AND name = :rname"),
                         {"tid": tenant_id, "rname": role_name},
                     )
                 ).scalar_one()

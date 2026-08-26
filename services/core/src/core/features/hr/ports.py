@@ -60,7 +60,7 @@ class HrRepositoryPort(Protocol):
         self,
         tenant_id: uuid.UUID,
         *,
-        status: str | None = None,
+        status: str | Sequence[str] | None = None,
         department_id: uuid.UUID | None = None,
         q: str | None = None,
         limit: int = 20,
@@ -188,7 +188,9 @@ class HrRepositoryPort(Protocol):
     ) -> ent.Compensation | None: ...
 
     # --- Attendance (one row per employee per work day) ---
-    async def upsert_attendance_record(self, record: ent.AttendanceRecord) -> ent.AttendanceRecord: ...
+    async def upsert_attendance_record(
+        self, record: ent.AttendanceRecord
+    ) -> ent.AttendanceRecord: ...
 
     async def get_attendance_record(
         self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
@@ -200,8 +202,8 @@ class HrRepositoryPort(Protocol):
         *,
         employee_id: uuid.UUID | None = None,
         status: str | None = None,
-        date_from: object | None = None,
-        date_to: object | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> Sequence[tuple[ent.AttendanceRecord, str, str, str]]: ...

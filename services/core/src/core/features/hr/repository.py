@@ -518,7 +518,7 @@ class HrRepository:
             )
             await self.session.execute(stmt)
             await self.session.flush()
-            return (await self.get_leave_policy(policy.tenant_id))  # type: ignore[return-value]
+            return await self.get_leave_policy(policy.tenant_id)  # type: ignore[return-value]
         model = LeavePolicyModel(
             tenant_id=policy.tenant_id,
             casual_days_per_year=policy.casual_days_per_year,
@@ -879,9 +879,7 @@ class HrRepository:
     # Attendance (one row per employee per work day; upserted in place)
     # ------------------------------------------------------------------
 
-    async def upsert_attendance_record(
-        self, record: ent.AttendanceRecord
-    ) -> ent.AttendanceRecord:
+    async def upsert_attendance_record(self, record: ent.AttendanceRecord) -> ent.AttendanceRecord:
         """Insert or correct one day's attendance (unique per employee/day)."""
         stmt = (
             pg_insert(AttendanceRecordModel)
@@ -934,9 +932,7 @@ class HrRepository:
         limit: int = 20,
         offset: int = 0,
     ) -> Sequence[ent.AttendanceRecord]:
-        stmt = select(AttendanceRecordModel).where(
-            AttendanceRecordModel.tenant_id == tenant_id
-        )
+        stmt = select(AttendanceRecordModel).where(AttendanceRecordModel.tenant_id == tenant_id)
         if employee_id is not None:
             stmt = stmt.where(AttendanceRecordModel.employee_id == employee_id)
         if status:

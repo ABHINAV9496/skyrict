@@ -1567,7 +1567,9 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             # tenant can be wiped. ALTER TABLE is transactional in Postgres,
             # so a failed teardown rolls the disable back with everything else.
             await session.execute(
-                text("ALTER TABLE erp_leave_movements DISABLE TRIGGER erp_leave_movements_append_only")
+                text(
+                    "ALTER TABLE erp_leave_movements DISABLE TRIGGER erp_leave_movements_append_only"
+                )
             )
             for model in (
                 ErpSalesOrderLineModel,
@@ -1597,7 +1599,9 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                     delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id)  # type: ignore[arg-type]
                 )
             await session.execute(
-                text("ALTER TABLE erp_leave_movements ENABLE TRIGGER erp_leave_movements_append_only")
+                text(
+                    "ALTER TABLE erp_leave_movements ENABLE TRIGGER erp_leave_movements_append_only"
+                )
             )
             await session.commit()
             logger.info("seed.demo.cleared", tenant_id=str(tenant_id))

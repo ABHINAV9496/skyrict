@@ -6,8 +6,8 @@ it automatically via provisioning from ``SYSTEM_ROLE_DEFINITIONS``). The role
 deliberately holds ONLY ``erp.leave.self`` — holders get the /leave portal and
 nothing else; the login redirect routes sole holders away from /dashboard.
 
-Revision ID: 0018
-Revises: 0017
+Revision ID: 0019
+Revises: 0018
 Create Date: 2026-08-25
 """
 
@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0018"
-down_revision = "0017"
+revision = "0019"
+down_revision = "0018"
 branch_labels = None
 depends_on = None
 

@@ -272,7 +272,10 @@ class EmployeeService:
             return None  # Policy not yet in effect
         employee_id = _require_id(employee, "employee")
         last_movement: ent.LeaveMovement | None = None
-        for leave_type, annual_days in [("casual", policy.casual_days_per_year), ("sick", policy.sick_days_per_year)]:
+        for leave_type, annual_days in [
+            ("casual", policy.casual_days_per_year),
+            ("sick", policy.sick_days_per_year),
+        ]:
             remaining = _remaining_days_in_year(employee.hire_date, year)
             qty = _round_half_up(Decimal(annual_days) * Decimal(remaining) / Decimal(365))
             if qty < 1:
@@ -420,11 +423,11 @@ class EmployeeService:
     ) -> list[ent.Employee]:
         """List employees; ``status`` accepts one value or a comma-separated
         set (e.g. ``active,on_leave``) so callers can express exclusions."""
-        statuses: list[EmploymentStatus] | None = None
+        statuses: list[str] | None = None
         if status is not None:
             tokens = [token.strip() for token in status.split(",") if token.strip()]
             try:
-                statuses = [EmploymentStatus(token) for token in tokens]
+                statuses = [EmploymentStatus(token).value for token in tokens]
             except ValueError as exc:
                 raise ValueError(f"unknown employment status in {status!r}") from exc
         return list(
@@ -913,9 +916,7 @@ class LeaveService:
         if employee is None:
             raise ValueError(f"employee {employee_id} not found")
         remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(
-            Decimal(annual_days) * Decimal(remaining) / Decimal(365)
-        )
+        qty = _round_half_up(Decimal(annual_days) * Decimal(remaining) / Decimal(365))
         if qty < 1:
             return None
         movement = await self._repo.accrue_leave_movement(

@@ -518,7 +518,9 @@ async def update_leave_policy(
         )
     except ValueError as exc:
         raise_from_service_error(exc)
-    return ResponseEnvelope(data=LeavePolicyOut.model_validate(policy), message="Leave policy updated")
+    return ResponseEnvelope(
+        data=LeavePolicyOut.model_validate(policy), message="Leave policy updated"
+    )
 
 
 @router.get("/leave/movements", response_model=ResponseEnvelope[list[LeaveMovementOut]])

@@ -79,9 +79,7 @@ async def list_my_leave_requests(
     return ResponseEnvelope(data=[LeaveRequestOut.model_validate(r) for r in requests])
 
 
-@router.post(
-    "/leave/requests", response_model=ResponseEnvelope[LeaveRequestOut], status_code=201
-)
+@router.post("/leave/requests", response_model=ResponseEnvelope[LeaveRequestOut], status_code=201)
 async def submit_my_leave_request(
     body: PortalLeaveRequestCreate,
     current_user: dict[str, Any] = Depends(require_employee_self_service),

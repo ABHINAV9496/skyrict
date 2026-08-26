@@ -27,9 +27,7 @@ class LeavePolicyModel(Base):
     """One tenant's leave policy."""
 
     __tablename__ = "erp_leave_policies"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", name="uq_erp_leave_policies_tenant"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_erp_leave_policies_tenant"),)
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -25,6 +25,7 @@ def _future(days_offset: int = 1) -> str:
     """Return a future ISO date string for use in leave-request tests."""
     return (date.today() + timedelta(days=days_offset)).isoformat()
 
+
 pytestmark = pytest.mark.integration
 
 ANNUAL_BALANCE_ON_HIRE = 20
@@ -127,9 +128,15 @@ class TestEmployeeLifecycle:
         seeded_hr_defaults: None,
     ) -> None:
         headers = tenant_headers("olympus")
-        await hire_employee(client, headers, first_name="Old", last_name="Timer", hire_date="2024-06-01")
-        await hire_employee(client, headers, first_name="New", last_name="Blood", hire_date="2026-03-15")
-        await hire_employee(client, headers, first_name="Mid", last_name="Way", hire_date="2025-01-10")
+        await hire_employee(
+            client, headers, first_name="Old", last_name="Timer", hire_date="2024-06-01"
+        )
+        await hire_employee(
+            client, headers, first_name="New", last_name="Blood", hire_date="2026-03-15"
+        )
+        await hire_employee(
+            client, headers, first_name="Mid", last_name="Way", hire_date="2025-01-10"
+        )
 
         response = await client.get("/api/v1/hr/employees", headers=headers)
         assert response.status_code == 200, response.text
@@ -147,8 +154,12 @@ class TestEmployeeLifecycle:
         seeded_hr_defaults: None,
     ) -> None:
         headers = tenant_headers("olympus")
-        early = await hire_employee(client, headers, first_name="Bea", last_name="Early", hire_date="2025-01-05")
-        late = await hire_employee(client, headers, first_name="Bea", last_name="Late", hire_date="2025-02-05")
+        early = await hire_employee(
+            client, headers, first_name="Bea", last_name="Early", hire_date="2025-01-05"
+        )
+        late = await hire_employee(
+            client, headers, first_name="Bea", last_name="Late", hire_date="2025-02-05"
+        )
 
         for employee_id, termination_date in (
             (early["id"], "2026-08-01"),
@@ -315,9 +326,9 @@ class TestEmployeeCreateValidation:
             },
         )
         assert response.status_code == 422
-        assert any(
-            issue["loc"][-1] == "email" for issue in response.json()["errors"]
-        ), response.text
+        assert any(issue["loc"][-1] == "email" for issue in response.json()["errors"]), (
+            response.text
+        )
 
     async def test_malformed_email_is_rejected(
         self,
@@ -339,9 +350,9 @@ class TestEmployeeCreateValidation:
             },
         )
         assert response.status_code == 422
-        assert any(
-            issue["loc"][-1] == "email" for issue in response.json()["errors"]
-        ), response.text
+        assert any(issue["loc"][-1] == "email" for issue in response.json()["errors"]), (
+            response.text
+        )
 
     async def test_missing_phone_is_rejected(
         self,
@@ -362,9 +373,9 @@ class TestEmployeeCreateValidation:
             },
         )
         assert response.status_code == 422
-        assert any(
-            issue["loc"][-1] == "phone" for issue in response.json()["errors"]
-        ), response.text
+        assert any(issue["loc"][-1] == "phone" for issue in response.json()["errors"]), (
+            response.text
+        )
 
     async def test_blank_fields_are_rejected_after_strip(
         self,

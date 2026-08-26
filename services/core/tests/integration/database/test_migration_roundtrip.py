@@ -130,17 +130,21 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0018", f"head is {version}, expected 0018"
+            assert version == "0019", f"head is {version}, expected 0019"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
                 await conn.execute(
-                    text(
-                        "SELECT description FROM core_permissions WHERE key = 'erp.leave.self'"
-                    )
+                    text("SELECT description FROM core_permissions WHERE key = 'erp.leave.self'")
                 )
             ).scalar_one_or_none()
             assert perm_row is not None, "0018 must register erp.leave.self"
+
+            # 0019: erp_leave_policies table exists with seeded defaults.
+            policy_count = (
+                await conn.execute(text("SELECT count(*) FROM erp_leave_policies"))
+            ).scalar_one()
+            assert policy_count >= 2, "0019 must seed casual + sick leave policies"
 
             row = (
                 await conn.execute(
@@ -191,9 +195,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert attendance_policy_count == 1, (
-                "attendance RLS policy missing after upgrade head"
-            )
+            assert attendance_policy_count == 1, "attendance RLS policy missing after upgrade head"
 
             attendance_unique_count = (
                 await conn.execute(

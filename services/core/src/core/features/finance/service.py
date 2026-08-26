@@ -503,9 +503,7 @@ class FinanceService:
         invoice = await self.get_invoice(tenant_id, invoice_id)
         name: str | None = None
         if self._customers is not None:
-            name = await self._customers.get_customer_name(
-                invoice.customer_id, tenant_id=tenant_id
-            )
+            name = await self._customers.get_customer_name(invoice.customer_id, tenant_id=tenant_id)
         return invoice, name
 
     async def list_invoices(
@@ -527,9 +525,7 @@ class FinanceService:
         limit: int = 50,
     ) -> tuple[Sequence[Invoice], dict[uuid.UUID, str]]:
         """Return invoices + batch-resolved customer names (avoids N+1)."""
-        invoices = await self.list_invoices(
-            tenant_id, status=status, offset=offset, limit=limit
-        )
+        invoices = await self.list_invoices(tenant_id, status=status, offset=offset, limit=limit)
         names: dict[uuid.UUID, str] = {}
         if self._customers is not None and invoices:
             ids = list({inv.customer_id for inv in invoices})
@@ -823,7 +819,9 @@ class FinanceService:
             INVENTORY_ASSET_ACCOUNT_CODE, tenant_id
         )
         if inv_asset_account is None:
-            raise NotFoundError(f"Inventory asset account '{INVENTORY_ASSET_ACCOUNT_CODE}' not found")
+            raise NotFoundError(
+                f"Inventory asset account '{INVENTORY_ASSET_ACCOUNT_CODE}' not found"
+            )
         assert inv_asset_account.id is not None
 
         entry = JournalEntry(

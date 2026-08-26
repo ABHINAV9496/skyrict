@@ -704,9 +704,7 @@ class CrmRepository:
         """Batch-resolve customer names to avoid N+1 (CustomerPort)."""
         if not customer_ids:
             return {}
-        stmt = select(
-            ErpCrmCustomerModel.id, ErpCrmCustomerModel.name
-        ).where(
+        stmt = select(ErpCrmCustomerModel.id, ErpCrmCustomerModel.name).where(
             ErpCrmCustomerModel.tenant_id == tenant_id,
             ErpCrmCustomerModel.id.in_(customer_ids),
         )

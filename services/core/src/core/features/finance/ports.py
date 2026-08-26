@@ -328,9 +328,7 @@ class OrderLookupPort(Protocol):
     imports the sales feature.
     """
 
-    async def get_order(
-        self, order_id: uuid.UUID, *, tenant_id: uuid.UUID
-    ) -> Any: ...
+    async def get_order(self, order_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Any: ...
 
 
 # ---------------------------------------------------------------------------

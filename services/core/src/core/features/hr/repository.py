@@ -921,37 +921,6 @@ class HrRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _attendance_from_orm(model) if model is not None else None
 
-    async def list_attendance_records(
-        self,
-        tenant_id: uuid.UUID,
-        *,
-        employee_id: uuid.UUID | None = None,
-        status: str | None = None,
-        date_from: date | None = None,
-        date_to: date | None = None,
-        limit: int = 20,
-        offset: int = 0,
-    ) -> Sequence[ent.AttendanceRecord]:
-        stmt = select(AttendanceRecordModel).where(AttendanceRecordModel.tenant_id == tenant_id)
-        if employee_id is not None:
-            stmt = stmt.where(AttendanceRecordModel.employee_id == employee_id)
-        if status:
-            stmt = stmt.where(AttendanceRecordModel.status == status)
-        if date_from is not None:
-            stmt = stmt.where(AttendanceRecordModel.work_date >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(AttendanceRecordModel.work_date <= date_to)
-        stmt = (
-            stmt.order_by(
-                AttendanceRecordModel.work_date.desc(),
-                AttendanceRecordModel.created_at.desc(),
-            )
-            .offset(offset)
-            .limit(limit)
-        )
-        result = await self.session.execute(stmt)
-        return [_attendance_from_orm(model) for model in result.scalars().all()]
-
     async def list_attendance_with_employee(
         self,
         tenant_id: uuid.UUID,

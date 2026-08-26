@@ -209,17 +209,4 @@ class HrRepositoryPort(Protocol):
     ) -> Sequence[tuple[ent.AttendanceRecord, str, str, str]]: ...
 
 
-class HrServiceDeps(Protocol):
-    """HrService dependencies — repository, audit, and the identity validator."""
-
-    @property
-    def repositories(self) -> HrRepositoryPort: ...
-
-    @property
-    def audit(self) -> object: ...
-
-    @property
-    def identity(self) -> IdentityUserPort: ...
-
-
-__all__ = ["HrRepositoryPort", "HrServiceDeps", "IdentityUserPort"]
+__all__ = ["HrRepositoryPort", "IdentityUserPort"]

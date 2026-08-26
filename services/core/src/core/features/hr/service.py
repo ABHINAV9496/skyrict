@@ -1098,9 +1098,6 @@ class AttendanceService:
         self._repo = repository
         self._audit = audit
 
-    def repository(self) -> HrRepositoryPort:
-        return self._repo
-
     async def record(
         self,
         *,

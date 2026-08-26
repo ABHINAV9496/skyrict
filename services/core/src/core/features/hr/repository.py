@@ -424,16 +424,6 @@ class HrRepository:
     async def next_employee_number(self, tenant_id: uuid.UUID) -> int:
         return await self._next_sequence(tenant_id, "employee")
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
-    ) -> ent.Employee | None:
-        stmt = select(EmployeeModel).where(
-            EmployeeModel.tenant_id == tenant_id,
-            EmployeeModel.employee_number == employee_number,
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        return _employee_from_orm(model) if model is not None else None
-
     async def get_employee_by_user_id(
         self, user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.Employee | None:
@@ -676,17 +666,6 @@ class HrRepository:
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None:
-        stmt = select(LeaveBalanceModel).where(
-            LeaveBalanceModel.tenant_id == tenant_id,
-            LeaveBalanceModel.employee_id == employee_id,
-            LeaveBalanceModel.leave_type == leave_type,
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        return _leave_balance_from_orm(model) if model is not None else None
-
     async def list_balances(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Sequence[ent.LeaveBalance]:
@@ -748,34 +727,6 @@ class HrRepository:
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _leave_request_from_orm(model) if model is not None else None
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest:
-        if request.id is None:
-            raise ValueError("leave request is missing an id")
-        stmt = (
-            update(LeaveRequestModel)
-            .where(
-                LeaveRequestModel.tenant_id == request.tenant_id,
-                LeaveRequestModel.id == request.id,
-            )
-            .values(
-                employee_id=request.employee_id,
-                leave_type=request.leave_type,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                days=request.days,
-                status=LeaveRequestStatusModel(request.status.value),
-                reason=request.reason,
-                approved_by=request.approved_by,
-                approved_at=request.approved_at,
-                updated_at=func.now(),
-            )
-            .returning(LeaveRequestModel)
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        if model is None:
-            raise ValueError(f"leave request {request.id} not found")
-        return _leave_request_from_orm(model)
 
     async def transition_leave_status(
         self,

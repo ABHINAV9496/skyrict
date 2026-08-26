@@ -620,13 +620,6 @@ export async function listAttendance(input: {
   return { items: result.items.map(mapAttendanceRecord), meta: result.meta };
 }
 
-export async function listEmployeeAttendance(
-  employeeId: string,
-  filters: Omit<AttendanceListFilters, "employeeId"> = {},
-): Promise<Paginated<AttendanceRecord>> {
-  return listAttendance({ filters: { ...filters, employeeId } });
-}
-
 export async function upsertAttendance(input: {
   employeeId: string;
   workDate: string;

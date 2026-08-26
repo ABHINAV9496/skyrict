@@ -249,40 +249,6 @@ class PayrollRepository:
         currency = await self._currency_for(tenant_id)
         return self._run_from_orm(model, currency)
 
-    async def update_run(self, run: ent.PayrollRun) -> ent.PayrollRun:
-        if run.id is None:
-            raise ValueError("payroll run is missing an id")
-        stmt = (
-            update(PayrollRunModel)
-            .where(
-                PayrollRunModel.tenant_id == run.tenant_id,
-                PayrollRunModel.id == run.id,
-            )
-            .values(
-                run_code=run.run_code,
-                period_start=run.period_start,
-                period_end=run.period_end,
-                status=PayrollRunStatusModel(run.status.value),
-                total_gross=run.total_gross.amount if run.total_gross is not None else None,
-                total_net=run.total_net.amount if run.total_net is not None else None,
-                computed_by=run.computed_by,
-                approved_by=run.approved_by,
-                paid_by=run.paid_by,
-                computed_at=run.computed_at,
-                approved_at=run.approved_at,
-                paid_at=run.paid_at,
-                void_reason=run.void_reason,
-                skipped_employees=run.skipped_employees,
-                updated_at=func.now(),
-            )
-            .returning(PayrollRunModel)
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        if model is None:
-            raise ValueError(f"payroll run {run.id} not found")
-        currency = await self._currency_for(run.tenant_id)
-        return self._run_from_orm(model, currency)
-
     async def list_runs(
         self,
         tenant_id: uuid.UUID,
@@ -305,7 +271,6 @@ class PayrollRepository:
         *,
         period_start: date,
         period_end: date,
-        exclude_run_id: uuid.UUID | None = None,
     ) -> ent.PayrollRun | None:
         """First non-void run whose period overlaps ``[period_start, period_end]``.
 
@@ -319,8 +284,6 @@ class PayrollRepository:
             PayrollRunModel.period_start <= period_end,
             PayrollRunModel.period_end >= period_start,
         )
-        if exclude_run_id is not None:
-            stmt = stmt.where(PayrollRunModel.id != exclude_run_id)
         stmt = stmt.order_by(PayrollRunModel.period_start.asc()).limit(1)
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:

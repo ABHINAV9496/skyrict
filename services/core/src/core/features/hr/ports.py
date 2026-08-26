@@ -69,10 +69,6 @@ class HrRepositoryPort(Protocol):
 
     async def next_employee_number(self, tenant_id: uuid.UUID) -> int: ...
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
-    ) -> ent.Employee | None: ...
-
     async def get_employee_by_user_id(
         self, user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.Employee | None: ...
@@ -123,10 +119,6 @@ class HrRepositoryPort(Protocol):
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> int: ...
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None: ...
-
     async def approved_unpaid_days(
         self,
         employee_id: uuid.UUID,
@@ -150,8 +142,6 @@ class HrRepositoryPort(Protocol):
     async def get_leave_request(
         self, request_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.LeaveRequest | None: ...
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest: ...
 
     async def transition_leave_status(
         self,

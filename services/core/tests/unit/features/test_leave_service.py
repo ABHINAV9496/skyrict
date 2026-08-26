@@ -148,14 +148,6 @@ class FakeHrRepository:
         self.employee_numbers += 1
         return self.employee_numbers
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
-    ) -> ent.Employee | None:
-        for employee in self.employees.values():
-            if employee.employee_number == employee_number:
-                return employee
-        return None
-
     async def create_department(self, department: ent.Department) -> ent.Department:
         return department
 
@@ -225,20 +217,6 @@ class FakeHrRepository:
             if m.employee_id == employee_id and m.leave_type == leave_type
         )
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None:
-        balance = self.balances.get((employee_id, leave_type))
-        if balance is None:
-            return None
-        return ent.LeaveBalance(
-            tenant_id=tenant_id,
-            employee_id=employee_id,
-            leave_type=leave_type,
-            balance=balance,
-            id=uuid.uuid4(),
-        )
-
     async def upsert_balance(self, balance: ent.LeaveBalance) -> ent.LeaveBalance:
         self.balances[(balance.employee_id, balance.leave_type)] = balance.balance
         return balance
@@ -251,10 +229,6 @@ class FakeHrRepository:
         self, request_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.LeaveRequest | None:
         return self.requests.get(request_id)
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest:
-        self.requests[request.id] = request
-        return request
 
     async def transition_leave_status(
         self,

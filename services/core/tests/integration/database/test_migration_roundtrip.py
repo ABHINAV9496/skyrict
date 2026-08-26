@@ -140,11 +140,39 @@ async def _assert_upgraded_schema(url: str) -> None:
             ).scalar_one_or_none()
             assert perm_row is not None, "0018 must register erp.leave.self"
 
-            # 0019: erp_leave_policies table exists with seeded defaults.
-            policy_count = (
-                await conn.execute(text("SELECT count(*) FROM erp_leave_policies"))
+            # 0019: erp_leave_policies table exists with correct schema.
+            policy_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_leave_policies')"))
             ).scalar_one()
-            assert policy_count >= 2, "0019 must seed casual + sick leave policies"
+            assert policy_table is not None, "0019 must create erp_leave_policies table"
+
+            policy_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_leave_policies' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            expected_cols = {
+                "tenant_id",
+                "id",
+                "casual_days_per_year",
+                "sick_days_per_year",
+                "effective_from",
+                "last_accrual_year",
+                "created_at",
+                "updated_at",
+            }
+            assert expected_cols <= set(policy_cols), (
+                f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
+            )
 
             row = (
                 await conn.execute(

@@ -1,0 +1,317 @@
+"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
+
+Single source of truth for ALL configuration. Application code must never
+call os.getenv() directly — everything routes through the ``settings`` object.
+
+Prefix: ``AI_`` (set via .env or shell environment). CRITICAL vars (DATABASE_URL,
+REDIS_URL, JWT public key, JWKS issuer/audience) have NO defaults — the process
+refuses to start if they are missing.
+
+The service is provider-AGNOSTIC: provider credentials (AI_PROVIDER/AI_MODEL/
+AI_BASE_URL/AI_API_KEY and the AI_FALLBACK_* quartet) are optional at boot.
+With no providers configured, the service still starts and serves health —
+AI requests then fail with a typed 503 ai_unavailable instead of crashing.
+``INVENTORY_SERVICE_URL`` is accepted WITHOUT the prefix (compose contract
+from the AI infrastructure spec §6.4) via a validation alias.
+"""
+
+from __future__ import annotations
+
+import enum
+import sys
+from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Environment(enum.StrEnum):
+    """Deployment environments — exactly four, no ad-hoc values."""
+
+    DEV = "dev"
+    TEST = "test"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
+class Settings(BaseSettings):
+    """All configuration loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="AI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # --- Environment ---
+    ENVIRONMENT: Environment = Field(
+        default=Environment.DEV,
+        description="deployment environment: dev, test, staging, production",
+    )
+    DEBUG: bool = Field(default=False, description="enable debug mode")
+
+    # --- Database (CRITICAL — no default) ---
+    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
+
+    # --- Redis (CRITICAL — required for distributed rate limiting) ---
+    REDIS_URL: str = Field(
+        ...,
+        description="Redis connection URL used by the distributed rate limiter — REQUIRED",
+    )
+
+    # --- JWT verification (CRITICAL — all three required) ---
+    JWT_PUBLIC_KEY_PATH: Path = Field(
+        ..., description="path to RSA public key PEM for verifying identity tokens — REQUIRED"
+    )
+    JWKS_ISSUER: str = Field(
+        ..., description="JWT issuer claim (iss) — REQUIRED, e.g. https://auth.skyrict.io"
+    )
+    JWKS_AUDIENCE: str = Field(
+        ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
+    )
+
+    # --- CORS ---
+    CORS_ORIGINS: list[str] = Field(
+        default=[],
+        description="allowed CORS origins — must be explicit, never '*' in staging/production",
+    )
+
+    # --- Logging ---
+    LOG_LEVEL: str = Field(default="INFO", description="log level")
+    LOG_JSON: bool = Field(default=True, description="JSON log output")
+
+    # --- Multi-tenancy ---
+    BASE_DOMAIN: str = Field(
+        default="",
+        description=(
+            "production tenant base domain, e.g. 'skyrict.com' — the first "
+            "label of a Host like acme.skyrict.com is the tenant slug. Required "
+            "in staging/production; ignored in dev/test which resolve tenants "
+            "from the X-Tenant-Slug header injected by nginx."
+        ),
+    )
+
+    # --- Core (inventory) service — data plane for AI features ---
+    INVENTORY_SERVICE_URL: str = Field(
+        default="http://localhost:8001",
+        validation_alias="INVENTORY_SERVICE_URL",
+        description=(
+            "base URL of the core monolith (inventory endpoints). Accepts the "
+            "UNPREFIXED INVENTORY_SERVICE_URL per compose contract; in docker "
+            "networks set INVENTORY_SERVICE_URL=http://skyrict-core:8001."
+        ),
+    )
+    INVENTORY_SERVICE_TIMEOUT_SECONDS: float = Field(
+        default=10.0,
+        gt=0,
+        description="per-call timeout for core inventory reads",
+    )
+
+    # --- Provider configuration (ALL optional — see module docstring) ---
+    PROVIDER: str | None = Field(
+        default=None,
+        description=(
+            "primary provider key from the registry (openrouter, groq, openai, "
+            "omniroute, agentrouter, generic). None = no provider configured; "
+            "AI requests then return typed 503 ai_unavailable."
+        ),
+    )
+    MODEL: str = Field(
+        default="", description="primary model name, e.g. meta-llama/llama-3-8b-instruct"
+    )
+    BASE_URL: str = Field(
+        default="",
+        description=(
+            "optional override of the provider's API base URL. Required for "
+            "providers without a known preset (omniroute, agentrouter, generic)."
+        ),
+    )
+    API_KEY: str = Field(default="", description="primary provider API key — never logged")
+    PROVIDER_LOCAL_ONLY: bool = Field(
+        default=False,
+        description=(
+            "data-residency clearance of the primary provider: True when it runs "
+            "inside the trust boundary and may receive local-only data classes "
+            "(cost/sell prices, customer/supplier names, user IDs). Cloud "
+            "providers must keep this False."
+        ),
+    )
+
+    FALLBACK_PROVIDER: str | None = Field(
+        default=None,
+        description="fallback provider key from the registry (optional)",
+    )
+    FALLBACK_MODEL: str = Field(default="", description="fallback model name")
+    FALLBACK_BASE_URL: str = Field(
+        default="",
+        description="optional override of the fallback provider's API base URL",
+    )
+    FALLBACK_API_KEY: str = Field(
+        default="", description="fallback provider API key — never logged"
+    )
+    FALLBACK_LOCAL_ONLY: bool = Field(
+        default=False,
+        description="data-residency clearance of the fallback provider (see PROVIDER_LOCAL_ONLY)",
+    )
+
+    PROVIDER_TIMEOUT_SECONDS: float = Field(
+        default=20.0,
+        gt=0,
+        description="per-provider total timeout for generation calls",
+    )
+
+    # --- AI behaviour thresholds ---
+    CONFIDENCE_THRESHOLD: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "abstention threshold — AI results below this confidence are returned "
+            "as low-confidence abstentions instead of answers"
+        ),
+    )
+    SUGGESTION_EXPIRY_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description="days before a pending restock suggestion auto-expires (spec §3.4)",
+    )
+    ANOMALY_AUTO_CLOSE_DAYS: int = Field(
+        default=30,
+        ge=1,
+        description="days before an open anomaly auto-closes (spec §4.4)",
+    )
+
+    # --- Rate limits (spec §5.4) ---
+    RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
+        default=30, ge=1, description="NL queries per minute per user"
+    )
+    RATE_LIMIT_APPROVAL_PER_MIN: int = Field(
+        default=10, ge=1, description="suggestion approvals/rejections per minute per user"
+    )
+    RATE_LIMIT_ANOMALY_REVIEW_PER_MIN: int = Field(
+        default=10, ge=1, description="anomaly resolve/dismiss/escalate per minute per user"
+    )
+    RATE_LIMIT_TENANT_PER_MIN: int = Field(
+        default=100, ge=1, description="total AI calls per minute per tenant"
+    )
+    RATE_LIMIT_SCAN_PER_HOUR: int = Field(
+        default=1, ge=1, description="background/manual suggestion scans per hour per tenant"
+    )
+    RATE_LIMIT_FAIL_CLOSED: bool = Field(
+        default=False,
+        description=(
+            "when True, Redis unavailability blocks AI requests instead of "
+            "failing open (platform posture is fail-open with a warning)"
+        ),
+    )
+
+    # --- Derived (loaded from files at validation time) ---
+    jwt_public_key: str = ""
+
+    # ------------------------------------------------------------------
+    # Validators — run in definition order (pydantic v2)
+    # ------------------------------------------------------------------
+
+    @model_validator(mode="after")
+    def load_public_key(self) -> Settings:
+        """Load the JWT public key file and fail immediately if missing/unreadable."""
+        path: Path = self.JWT_PUBLIC_KEY_PATH
+        errors: list[str] = []
+
+        if not path.exists():
+            errors.append(f"JWT_PUBLIC_KEY_PATH: file not found at {path}")
+        elif not path.is_file():
+            errors.append(f"JWT_PUBLIC_KEY_PATH: path is not a file ({path})")
+        else:
+            try:
+                content = path.read_text(encoding="utf-8")
+                if "PUBLIC KEY" not in content:
+                    errors.append("JWT_PUBLIC_KEY_PATH: file does not appear to contain a PEM key")
+                else:
+                    self.jwt_public_key = content
+            except OSError as exc:
+                errors.append(f"JWT_PUBLIC_KEY_PATH: cannot read {path}: {exc}")
+
+        if errors:
+            print(
+                f"FATAL: {len(errors)} configuration error(s):\n"
+                + "\n".join(f"  - {e}" for e in errors),
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_provider_pairing(self) -> Settings:
+        """A named provider must always come with a model name."""
+        errors: list[str] = []
+        if self.PROVIDER is not None and not self.MODEL.strip():
+            errors.append("MODEL is required when PROVIDER is set")
+        if self.FALLBACK_PROVIDER is not None and not self.FALLBACK_MODEL.strip():
+            errors.append("FALLBACK_MODEL is required when FALLBACK_PROVIDER is set")
+        if self.PROVIDER is None and self.MODEL.strip():
+            errors.append("PROVIDER is required when MODEL is set")
+        if self.FALLBACK_PROVIDER is None and self.FALLBACK_MODEL.strip():
+            errors.append("FALLBACK_PROVIDER is required when FALLBACK_MODEL is set")
+
+        if errors:
+            raise RuntimeError(
+                "Invalid AI provider configuration:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
+        return self
+
+    @model_validator(mode="after")
+    def production_safety(self) -> Settings:
+        """
+        Fail-fast guards that apply ONLY in staging and production.
+
+        Runs after load_public_key so all fields are populated.
+        Checks:
+          1. The public key must not point at committed test fixtures.
+          2. DEBUG must be False.
+          3. CORS_ORIGINS must not contain wildcard '*'.
+          4. BASE_DOMAIN must be set (tenant subdomain resolution).
+        """
+        if self.ENVIRONMENT not in (Environment.STAGING, Environment.PRODUCTION):
+            return self
+
+        errors: list[str] = []
+
+        if "tests/fixtures" in self.JWT_PUBLIC_KEY_PATH.as_posix():
+            errors.append(
+                "Refusing to start: JWT_PUBLIC_KEY_PATH points at a public test "
+                "fixture. Production and staging must use a secret-manager-"
+                "provisioned key, never the committed dev/test keypair."
+            )
+
+        if self.DEBUG:
+            errors.append(
+                "Refusing to start: DEBUG=true is not allowed in staging/production. "
+                "Set DEBUG=false or omit it entirely."
+            )
+
+        if "*" in self.CORS_ORIGINS:
+            errors.append(
+                "Refusing to start: CORS_ORIGINS contains '*' which is not "
+                "allowed in staging/production. List explicit origins instead."
+            )
+
+        if not self.BASE_DOMAIN.strip():
+            errors.append(
+                "AI_BASE_DOMAIN is required in staging/production so "
+                "tenant subdomains (e.g. acme.skyrict.com) can be resolved "
+                "from the Host header."
+            )
+
+        if errors:
+            raise RuntimeError(
+                "Production safety check failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
+
+        return self
+
+
+settings = Settings()  # type: ignore[call-arg]  # pydantic-settings populates from env

@@ -186,6 +186,18 @@ class CreditLimitExceededError(ValidationError):
     code = "CREDIT_LIMIT_EXCEEDED"
 
 
+class AiServiceUnavailableError(SkyrictError):
+    """The ai-agent microservice is unreachable or timed out (503).
+
+    Raised ONLY for transport failures while proxying /api/v1/ai/* —
+    upstream application errors pass through untouched. The frontend's
+    mock-fallback policy consumes the typed 503.
+    """
+
+    message = "AI service is temporarily unavailable"
+    code = "AI_UNAVAILABLE"
+
+
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
 # Mapping from exception type to HTTP status code and problem type URI.
@@ -214,6 +226,8 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     SelfApprovalForbiddenError: (422, f"{_PROBLEM_BASE}/self-approval-forbidden"),
     # CRM & Sales (docs/modules/sales-crm.md §7 error table).
     CreditLimitExceededError: (422, f"{_PROBLEM_BASE}/credit-limit-exceeded"),
+    # AI proxy transport failures (docs/modules/skyrict-ai/... §6).
+    AiServiceUnavailableError: (503, f"{_PROBLEM_BASE}/ai-unavailable"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

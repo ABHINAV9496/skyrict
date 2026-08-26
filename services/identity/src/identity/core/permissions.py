@@ -63,6 +63,12 @@ ERP_PAYROLL_READ = "erp.payroll.read"
 ERP_PAYROLL_WRITE = "erp.payroll.write"
 ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 
+# AI assistant gate (docs/modules/skyrict-ai/inventory-ai-features.md §6.3).
+# Checked by core BEFORE any /api/v1/ai/* request is forwarded to the
+# ai-agent microservice. Same string as core's catalog so role grants stay
+# portable across the platform.
+ERP_AI_INVOKE = "erp.ai.invoke"
+
 # AI Agents
 AGENTS_READ = "agents:read"
 
@@ -110,6 +116,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
+    ERP_AI_INVOKE,
     AGENTS_READ,
     INTELLIGENCE_READ,
     BILLING_MANAGE,
@@ -141,6 +148,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "ERP Payroll",
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
+    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE,)),
     ("agents", "AI Agents", (AGENTS_READ,)),
     ("intelligence", "Market Intelligence", (INTELLIGENCE_READ,)),
     ("billing", "Billing", (BILLING_MANAGE,)),
@@ -170,6 +178,7 @@ __all__ = [
     "AUDIT_READ",
     "BILLING_MANAGE",
     "CATALOG",
+    "ERP_AI_INVOKE",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_READ",

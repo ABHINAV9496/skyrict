@@ -1,0 +1,139 @@
+name: CI — AI Agent Service
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "services/ai-agent/**"
+      - "libs/skyrict-common/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "services/ai-agent/**"
+      - "libs/skyrict-common/**"
+      - "pyproject.toml"
+      - "uv.lock"
+
+concurrency:
+  group: ci-ai-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Ruff check
+        run: uv run ruff check services/ai-agent/
+
+      - name: Ruff format check
+        run: uv run ruff format --check services/ai-agent/
+
+      - name: Mypy
+        run: uv run mypy services/ai-agent/src/
+
+      - name: Import Linter
+        run: uv run lint-imports --config services/ai-agent/import-linter.toml
+
+      - name: Bandit (security)
+        run: uv run bandit -r services/ai-agent/src -c pyproject.toml
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run unit tests
+        run: uv run pytest services/ai-agent/tests/unit/ -v --tb=short
+
+  test-integration:
+    name: Integration Tests (Postgres + Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: skyrict
+          POSTGRES_PASSWORD: skyrict
+          POSTGRES_DB: skyrict_identity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skyrict -d skyrict_identity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity
+      AI_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run integration tests
+        run: uv run pytest services/ai-agent/tests/integration/ -v --tb=short
+
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and verify
+        run: |
+          uv sync --all-packages
+          uv run python -c "import ai_agent; print(ai_agent.__version__)"

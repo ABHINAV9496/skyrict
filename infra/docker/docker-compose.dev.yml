@@ -98,6 +98,7 @@ services:
       CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
     volumes:
       - ../../services/core/src:/app/services/core/src
+      - ../../services/core/alembic:/app/services/core/alembic
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
       - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).

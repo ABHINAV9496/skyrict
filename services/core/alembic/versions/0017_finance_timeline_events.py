@@ -21,9 +21,7 @@ depends_on = None
 
 def upgrade() -> None:
     for value in ("invoice.issued", "invoice.approved", "payment.applied"):
-        op.execute(
-            f"ALTER TYPE erp_crm_timeline_event_type ADD VALUE IF NOT EXISTS '{value}'"
-        )
+        op.execute(f"ALTER TYPE erp_crm_timeline_event_type ADD VALUE IF NOT EXISTS '{value}'")
 
 
 def downgrade() -> None:

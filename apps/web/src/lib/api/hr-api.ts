@@ -538,6 +538,60 @@ export async function listLeaveMovements(
 }
 
 // ---------------------------------------------------------------------------
+// Leave Policy
+// ---------------------------------------------------------------------------
+
+export interface LeavePolicy {
+  id: string;
+  casualDaysPerYear: number;
+  sickDaysPerYear: number;
+  effectiveFrom: string;
+  lastAccrualYear: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LeavePolicyPayload {
+  id?: unknown;
+  casual_days_per_year?: unknown;
+  sick_days_per_year?: unknown;
+  effective_from?: unknown;
+  last_accrual_year?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
+function mapLeavePolicy(payload: LeavePolicyPayload): LeavePolicy {
+  return {
+    id: String(payload.id ?? ""),
+    casualDaysPerYear: typeof payload.casual_days_per_year === "number" ? payload.casual_days_per_year : 0,
+    sickDaysPerYear: typeof payload.sick_days_per_year === "number" ? payload.sick_days_per_year : 0,
+    effectiveFrom: String(payload.effective_from ?? ""),
+    lastAccrualYear: typeof payload.last_accrual_year === "number" ? payload.last_accrual_year : null,
+    createdAt: String(payload.created_at ?? ""),
+    updatedAt: String(payload.updated_at ?? ""),
+  };
+}
+
+export async function getLeavePolicy(): Promise<LeavePolicy | null> {
+  const raw = await apiFetch<LeavePolicyPayload | null>("/api/v1/hr/leave/policy");
+  return raw ? mapLeavePolicy(raw) : null;
+}
+
+export async function updateLeavePolicy(input: {
+  casualDaysPerYear: number;
+  sickDaysPerYear: number;
+  effectiveFrom: string;
+}): Promise<LeavePolicy> {
+  const raw = await apiPost<LeavePolicyPayload>("/api/v1/hr/leave/policy", {
+    casual_days_per_year: input.casualDaysPerYear,
+    sick_days_per_year: input.sickDaysPerYear,
+    effective_from: input.effectiveFrom,
+  });
+  return mapLeavePolicy(raw ?? {});
+}
+
+// ---------------------------------------------------------------------------
 // Attendance
 // ---------------------------------------------------------------------------
 

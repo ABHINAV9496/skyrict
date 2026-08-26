@@ -45,6 +45,7 @@ from core.features.hr.models.employee import (
 )
 from core.features.hr.models.leave_balance import LeaveBalanceModel
 from core.features.hr.models.leave_movement import LeaveMovementModel
+from core.features.hr.models.leave_policy import LeavePolicyModel
 from core.features.hr.models.leave_request import LeaveRequestModel
 from core.features.hr.models.leave_request import (
     LeaveRequestStatus as LeaveRequestStatusModel,
@@ -55,7 +56,7 @@ from core.features.payroll.models.compensation import CompensationModel
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-_ANNUAL_ACCRUAL = "annual_accrual"
+_ACCRUAL = "accrual"  # ref_type for policy-driven annual accrual movements
 _UNPAID_LEAVE = "unpaid"
 
 
@@ -472,7 +473,7 @@ class HrRepository:
         return [_leave_type_from_orm(model) for model in result.scalars().all()]
 
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
-        """Return leave-type codes with ``is_accrual`` set (annual accrual)."""
+        """Return leave-type codes with ``is_accrual`` set."""
         stmt = (
             select(LeaveTypeModel.code)
             .where(
@@ -482,6 +483,62 @@ class HrRepository:
             .order_by(LeaveTypeModel.code)
         )
         return list((await self.session.execute(stmt)).scalars().all())
+
+    # ------------------------------------------------------------------
+    # Leave policy
+    # ------------------------------------------------------------------
+
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None:
+        stmt = select(LeavePolicyModel).where(LeavePolicyModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        return ent.LeavePolicy(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            casual_days_per_year=model.casual_days_per_year,
+            sick_days_per_year=model.sick_days_per_year,
+            effective_from=model.effective_from,
+            last_accrual_year=model.last_accrual_year,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    async def upsert_leave_policy(self, policy: ent.LeavePolicy) -> ent.LeavePolicy:
+        existing = await self.get_leave_policy(policy.tenant_id)
+        if existing is not None:
+            stmt = (
+                update(LeavePolicyModel)
+                .where(LeavePolicyModel.tenant_id == policy.tenant_id)
+                .values(
+                    casual_days_per_year=policy.casual_days_per_year,
+                    sick_days_per_year=policy.sick_days_per_year,
+                    effective_from=policy.effective_from,
+                )
+            )
+            await self.session.execute(stmt)
+            await self.session.flush()
+            return (await self.get_leave_policy(policy.tenant_id))  # type: ignore[return-value]
+        model = LeavePolicyModel(
+            tenant_id=policy.tenant_id,
+            casual_days_per_year=policy.casual_days_per_year,
+            sick_days_per_year=policy.sick_days_per_year,
+            effective_from=policy.effective_from,
+            id=policy.id or uuid.uuid4(),
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return ent.LeavePolicy(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            casual_days_per_year=model.casual_days_per_year,
+            sick_days_per_year=model.sick_days_per_year,
+            effective_from=model.effective_from,
+            last_accrual_year=model.last_accrual_year,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
 
     # ------------------------------------------------------------------
     # Leave ledger & balances
@@ -521,7 +578,7 @@ class HrRepository:
         existing = await self._find_movement_by_ref(
             movement.employee_id,
             movement.leave_type,
-            _ANNUAL_ACCRUAL,
+            _ACCRUAL,
             movement.ref_id,
             movement.tenant_id,
         )
@@ -537,7 +594,7 @@ class HrRepository:
         existing = await self._find_movement_by_ref(
             movement.employee_id,
             movement.leave_type,
-            _ANNUAL_ACCRUAL,
+            _ACCRUAL,
             movement.ref_id,
             movement.tenant_id,
         )

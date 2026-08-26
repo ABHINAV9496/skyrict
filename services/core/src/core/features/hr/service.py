@@ -264,30 +264,33 @@ class EmployeeService:
     async def _accrue_annual(
         self, employee: ent.Employee, *, year: int, tenant_id: uuid.UUID
     ) -> ent.LeaveMovement | None:
-        leave_type = await self._repo.get_leave_type("annual", tenant_id=tenant_id)
-        if (
-            leave_type is None
-            or not leave_type.is_accrual
-            or leave_type.accrual_days_per_year is None
-        ):
-            return None
-        remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(
-            Decimal(leave_type.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
-        )
-        if qty < 1:
-            return None
-        return await self._repo.accrue_leave_movement(
-            ent.LeaveMovement(
-                tenant_id=tenant_id,
-                employee_id=_require_id(employee, "employee"),
-                leave_type="annual",
-                qty=qty,
-                ref_type="annual_accrual",
-                ref_id=str(year),
-                id=uuid.uuid4(),
+        """Pro-rata accrual for casual+sick on hire, using the tenant's LeavePolicy."""
+        policy = await self._repo.get_leave_policy(tenant_id)
+        if policy is None:
+            return None  # No policy set yet
+        if date.today() < policy.effective_from:
+            return None  # Policy not yet in effect
+        employee_id = _require_id(employee, "employee")
+        last_movement: ent.LeaveMovement | None = None
+        for leave_type, annual_days in [("casual", policy.casual_days_per_year), ("sick", policy.sick_days_per_year)]:
+            remaining = _remaining_days_in_year(employee.hire_date, year)
+            qty = _round_half_up(Decimal(annual_days) * Decimal(remaining) / Decimal(365))
+            if qty < 1:
+                continue
+            movement = await self._repo.accrue_leave_movement(
+                ent.LeaveMovement(
+                    tenant_id=tenant_id,
+                    employee_id=employee_id,
+                    leave_type=leave_type,
+                    qty=qty,
+                    ref_type="accrual",
+                    ref_id=str(year),
+                    id=uuid.uuid4(),
+                )
             )
-        )
+            if movement is not None:
+                last_movement = movement
+        return last_movement
 
     async def get(self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID) -> ent.Employee | None:
         return await self._repo.get_employee(employee_id, tenant_id)
@@ -884,18 +887,34 @@ class LeaveService:
         year: int,
         actor_user_id: uuid.UUID | None = None,
     ) -> ent.LeaveMovement | None:
-        """Rule 4: idempotent annual accrual per (employee, leave_type, leave_year)."""
+        """Idempotent annual accrual per (employee, leave_type, leave_year).
+
+        Reads the allotment from the tenant's LeavePolicy. Gated by
+        effective_from: if today < effective_from, no accrual happens.
+        Pro-rates for new hires (hired this year) based on remaining days.
+        """
         leave_type_row = await self._repo.get_leave_type(leave_type, tenant_id=tenant_id)
         if leave_type_row is None:
             raise ValueError(f"unknown leave type {leave_type!r}")
-        if not leave_type_row.is_accrual or leave_type_row.accrual_days_per_year is None:
+        if not leave_type_row.is_accrual:
             raise ValueError(f"leave type {leave_type!r} does not accrue")
+        policy = await self._repo.get_leave_policy(tenant_id)
+        if policy is None:
+            return None  # No policy set yet
+        if date.today() < policy.effective_from:
+            return None  # Policy not yet in effect
+        if leave_type == "casual":
+            annual_days = policy.casual_days_per_year
+        elif leave_type == "sick":
+            annual_days = policy.sick_days_per_year
+        else:
+            return None  # Not a policy-driven accrual type
         employee = await self._repo.get_employee(employee_id, tenant_id)
         if employee is None:
             raise ValueError(f"employee {employee_id} not found")
         remaining = _remaining_days_in_year(employee.hire_date, year)
         qty = _round_half_up(
-            Decimal(leave_type_row.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
+            Decimal(annual_days) * Decimal(remaining) / Decimal(365)
         )
         if qty < 1:
             return None
@@ -905,7 +924,7 @@ class LeaveService:
                 employee_id=employee_id,
                 leave_type=leave_type,
                 qty=qty,
-                ref_type="annual_accrual",
+                ref_type="accrual",
                 ref_id=str(year),
                 id=uuid.uuid4(),
             )
@@ -960,7 +979,25 @@ class LeaveService:
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> list[ent.LeaveBalance]:
         """All materialized leave balances for one employee, by leave type."""
+        await self._ensure_current_year_accruals(employee_id, tenant_id)
         return list(await self._repo.list_balances(employee_id, tenant_id=tenant_id))
+
+    async def _ensure_current_year_accruals(
+        self, employee_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> None:
+        """Lazy Jan-1 reset: accrue casual+sick for the current year if missing.
+
+        Called on every balance read. Idempotent — if accruals already exist
+        for the current year, the ``accrue()`` call short-circuits immediately.
+        """
+        current_year = date.today().year
+        for leave_type in ("casual", "sick"):
+            await self.accrue(
+                tenant_id=tenant_id,
+                employee_id=employee_id,
+                leave_type=leave_type,
+                year=current_year,
+            )
 
     async def list_movements(
         self,
@@ -988,12 +1025,57 @@ class LeaveService:
         )
 
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
-        """LeaveLedgerPort read: leave types that accrue annually (Rule 4)."""
+        """LeaveLedgerPort read: leave types that accrue annually."""
         return list(await self._repo.list_accrual_leave_types(tenant_id))
 
     async def list_leave_types(self, tenant_id: uuid.UUID) -> list[ent.LeaveType]:
         """Full leave-type catalogue (portal: render every type, accrual or not)."""
         return list(await self._repo.list_leave_types(tenant_id))
+
+    # --- Leave policy ---
+
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None:
+        """Return the tenant's current leave policy, if set."""
+        return await self._repo.get_leave_policy(tenant_id)
+
+    async def update_leave_policy(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        casual_days_per_year: int,
+        sick_days_per_year: int,
+        effective_from: date,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.LeavePolicy:
+        """Create or update the tenant's leave policy.
+
+        Changes take effect at the next Jan-1 reset (lazy accrual gated by
+        idempotency: once a year's accrual exists, it is never re-generated).
+        """
+        if casual_days_per_year < 0:
+            raise ValueError("casual_days_per_year must be non-negative")
+        if sick_days_per_year < 0:
+            raise ValueError("sick_days_per_year must be non-negative")
+        policy = ent.LeavePolicy(
+            tenant_id=tenant_id,
+            casual_days_per_year=casual_days_per_year,
+            sick_days_per_year=sick_days_per_year,
+            effective_from=effective_from,
+            id=uuid.uuid4(),
+        )
+        saved = await self._repo.upsert_leave_policy(policy)
+        await self._audit.log(
+            action=audit_events.HR_LEAVE_POLICY_UPDATED,
+            target=f"tenant:{tenant_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={
+                "casual_days_per_year": casual_days_per_year,
+                "sick_days_per_year": sick_days_per_year,
+                "effective_from": effective_from.isoformat(),
+            },
+        )
+        return saved
 
 
 _PAY_IMPACT_BY_STATUS: dict[AttendanceStatus, PayImpact] = {

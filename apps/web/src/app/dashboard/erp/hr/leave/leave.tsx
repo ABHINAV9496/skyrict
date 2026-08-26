@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, LoaderCircle, X } from "lucide-react";
 
 import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
+import { LeavePolicyCard } from "@/components/dashboard/erp/hr/leave-policy-card";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import {
   Dialog,
   DialogContent,
@@ -29,11 +31,13 @@ import {
   approveLeaveRequest,
   cancelLeaveRequest,
   getLeaveBalances,
+  getLeavePolicy,
   listEmployees,
   listLeaveRequests,
   rejectLeaveRequest,
   type Employee,
   type LeaveBalance,
+  type LeavePolicy,
   type LeaveRequest,
   type LeaveRequestStatus,
 } from "@/lib/api/hr-api";
@@ -84,6 +88,7 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
   const [adjust, setAdjust] = useState({ leaveType: "", qty: "", reason: "" });
   const [accruing, setAccruing] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [policy, setPolicy] = useState<LeavePolicy | null>(null);
 
   const statusOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -125,7 +130,7 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
-      const [requestsResult, employeeList] = await Promise.all([
+      const [requestsResult, employeeList, policyResult] = await Promise.all([
         listLeaveRequests({
           page,
           pageSize: PAGE_SIZE,
@@ -135,8 +140,10 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
           },
         }),
         listEmployees({ pageSize: 100 }),
+        getLeavePolicy(),
       ]);
       setEmployees(employeeList.items);
+      setPolicy(policyResult);
       setStatus({
         state: "ready",
         requests: requestsResult.items,
@@ -265,18 +272,12 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
     {
       key: "reason",
       label: "Reason",
-      className: "relative max-w-[12rem] group/reason",
+      className: "max-w-[12rem]",
       render: (request) => (
-        <>
-          <span className="block truncate text-sm" title={request.reason ?? ""}>
-            {request.reason || "\u2014"}
-          </span>
-          {request.reason ? (
-            <div className="absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-border bg-popover p-3 text-sm shadow-md group-hover/reason:block">
-              {request.reason}
-            </div>
-          ) : null}
-        </>
+        <TruncatedTooltip
+          text={request.reason || "\u2014"}
+          className="text-sm"
+        />
       ),
     },
     ...(canAct
@@ -440,6 +441,14 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
         >
           {notice.text}
         </div>
+      ) : null}
+
+      {canWrite ? (
+        <LeavePolicyCard
+          policy={policy}
+          canEdit={canWrite}
+          onPolicyUpdated={(updated) => setPolicy(updated)}
+        />
       ) : null}
 
       <section className="rounded-xl border border-border bg-card p-5">

@@ -188,8 +188,26 @@ class LeaveRequestRejectBody(BaseModel):
 
 class LeaveAccrueRequest(BaseModel):
     employee_id: uuid.UUID
-    leave_type: str = Field(default="annual", min_length=1, max_length=50)
+    leave_type: str = Field(default="casual", min_length=1, max_length=50)
     leave_year: int | None = None
+
+
+class LeavePolicyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    casual_days_per_year: int
+    sick_days_per_year: int
+    effective_from: date
+    last_accrual_year: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LeavePolicyUpdate(BaseModel):
+    casual_days_per_year: int = Field(..., ge=0)
+    sick_days_per_year: int = Field(..., ge=0)
+    effective_from: date
 
 
 class AttendanceUpsertRequest(BaseModel):
@@ -232,6 +250,8 @@ __all__ = [
     "LeaveBalanceAdjustRequest",
     "LeaveBalanceOut",
     "LeaveMovementOut",
+    "LeavePolicyOut",
+    "LeavePolicyUpdate",
     "LeaveRequestCreate",
     "LeaveRequestOut",
     "LeaveRequestRejectBody",

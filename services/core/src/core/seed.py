@@ -4,8 +4,8 @@ Global reference data (currencies, permissions) is seeded by migration 0001;
 the per-tenant defaults that CANNOT live in a migration (they are tenant-scoped
 decisions) live here and are applied at tenant provisioning time:
 
-  - the leave-type catalogue defaults: annual (accrual, 20 days/yr), sick and
-    unpaid (non-accrual ledger-only types);
+  - the leave-type catalogue defaults: casual (accrual, 12 days/yr), sick
+    (accrual, 8 days/yr), and unpaid (non-accrual ledger-only type);
   - the single ``erp_payroll_settings`` row per tenant (default currency from
     settings, zero PF/tax rates, nearest rounding);
   - the five system roles in ``core_roles`` (ERP grants per the HR & Payroll
@@ -68,10 +68,9 @@ class LeaveTypeDefault:
 
 
 LEAVE_TYPE_DEFAULTS: tuple[LeaveTypeDefault, ...] = (
-    LeaveTypeDefault("annual", "Annual Leave", True, 20),
-    LeaveTypeDefault("sick", "Sick Leave", False, None),
-    LeaveTypeDefault("unpaid", "Unpaid Leave", False, None),
     LeaveTypeDefault("casual", "Casual Leave", True, 12),
+    LeaveTypeDefault("sick", "Sick Leave", True, 8),
+    LeaveTypeDefault("unpaid", "Unpaid Leave", False, None),
 )
 
 

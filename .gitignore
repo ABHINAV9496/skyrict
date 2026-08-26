@@ -75,6 +75,7 @@ tags
 .#*
 *.elc
 .opencode
+opencode.json
 
 # ---------- Environment / Secrets ----------
 .env

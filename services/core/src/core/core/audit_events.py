@@ -28,6 +28,7 @@ HR_LEAVE_REJECTED = "hr.leave.rejected"
 HR_LEAVE_CANCELLED = "hr.leave.cancelled"
 HR_LEAVE_BALANCE_ADJUSTED = "hr.leave.balance.adjusted"
 HR_LEAVE_ACCRUED = "hr.leave.accrued"
+HR_LEAVE_POLICY_UPDATED = "hr.leave.policy.updated"
 HR_ATTENDANCE_RECORDED = "hr.attendance.recorded"
 
 # ---------------------------------------------------------------------------
@@ -70,6 +71,7 @@ CATALOG: tuple[str, ...] = (
     HR_LEAVE_CANCELLED,
     HR_LEAVE_BALANCE_ADJUSTED,
     HR_LEAVE_ACCRUED,
+    HR_LEAVE_POLICY_UPDATED,
     HR_ATTENDANCE_RECORDED,
     PAYROLL_RUN_CREATED,
     PAYROLL_RUN_COMPUTED,
@@ -112,6 +114,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_LEAVE_CANCELLED,
             HR_LEAVE_BALANCE_ADJUSTED,
             HR_LEAVE_ACCRUED,
+            HR_LEAVE_POLICY_UPDATED,
             HR_ATTENDANCE_RECORDED,
         ),
     ),
@@ -189,6 +192,7 @@ __all__ = [
     "HR_LEAVE_APPROVED",
     "HR_LEAVE_BALANCE_ADJUSTED",
     "HR_LEAVE_CANCELLED",
+    "HR_LEAVE_POLICY_UPDATED",
     "HR_LEAVE_REJECTED",
     "HR_LEAVE_REQUESTED",
     "PAYROLL_COMPENSATION_RECORDED",

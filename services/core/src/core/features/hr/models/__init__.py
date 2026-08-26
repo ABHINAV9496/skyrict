@@ -5,6 +5,7 @@ from core.features.hr.models.department import DepartmentModel
 from core.features.hr.models.employee import EmployeeModel, EmploymentStatus
 from core.features.hr.models.leave_balance import LeaveBalanceModel
 from core.features.hr.models.leave_movement import LeaveMovementModel
+from core.features.hr.models.leave_policy import LeavePolicyModel
 from core.features.hr.models.leave_request import LeaveRequestModel, LeaveRequestStatus
 from core.features.hr.models.leave_type import LeaveTypeModel
 
@@ -15,6 +16,7 @@ __all__ = [
     "EmploymentStatus",
     "LeaveBalanceModel",
     "LeaveMovementModel",
+    "LeavePolicyModel",
     "LeaveRequestModel",
     "LeaveRequestStatus",
     "LeaveTypeModel",

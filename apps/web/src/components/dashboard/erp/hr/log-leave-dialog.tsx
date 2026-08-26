@@ -23,7 +23,7 @@ import { byEmployeeName, createLeaveRequest, employeeName, type Employee } from 
 import { ApiError } from "@/lib/api/http";
 
 const LEAVE_TYPES = [
-  { value: "annual", label: "Annual" },
+  { value: "casual", label: "Casual" },
   { value: "sick", label: "Sick" },
   { value: "unpaid", label: "Unpaid" },
 ] as const;
@@ -48,7 +48,7 @@ function typeCallout(leaveType: string): string | null {
   if (leaveType === "unpaid") {
     return "This unpaid leave will reduce the employee\u2019s pay for the affected period.";
   }
-  if (leaveType === "annual" || leaveType === "sick") {
+  if (leaveType === "casual" || leaveType === "sick") {
     return "This leave will be deducted from the employee\u2019s balance upon approval.";
   }
   return null;

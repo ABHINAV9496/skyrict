@@ -40,6 +40,8 @@ from core.api.v1.schemas import (
     LeaveBalanceAdjustRequest,
     LeaveBalanceOut,
     LeaveMovementOut,
+    LeavePolicyOut,
+    LeavePolicyUpdate,
     LeaveRequestCreate,
     LeaveRequestOut,
     LeaveRequestRejectBody,
@@ -485,6 +487,38 @@ async def accrue_leave(
     if movement is None:
         return ResponseEnvelope(data=None, message="Leave already accrued for this period")
     return ResponseEnvelope(data=LeaveMovementOut.model_validate(movement), message="Leave accrued")
+
+
+@router.get("/leave/policy", response_model=ResponseEnvelope[LeavePolicyOut | None])
+async def get_leave_policy(
+    current_user: dict[str, Any] = Depends(_require_hr_read),
+    leave_svc: LeaveService = Depends(get_leave_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[LeavePolicyOut | None]:
+    policy = await leave_svc.get_leave_policy(tenant_id)
+    if policy is None:
+        return ResponseEnvelope(data=None, message="No leave policy set")
+    return ResponseEnvelope(data=LeavePolicyOut.model_validate(policy))
+
+
+@router.put("/leave/policy", response_model=ResponseEnvelope[LeavePolicyOut])
+async def update_leave_policy(
+    body: LeavePolicyUpdate,
+    current_user: dict[str, Any] = Depends(_require_hr_write),
+    leave_svc: LeaveService = Depends(get_leave_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[LeavePolicyOut]:
+    try:
+        policy = await leave_svc.update_leave_policy(
+            tenant_id=tenant_id,
+            casual_days_per_year=body.casual_days_per_year,
+            sick_days_per_year=body.sick_days_per_year,
+            effective_from=body.effective_from,
+            actor_user_id=current_user["user_id"],
+        )
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(data=LeavePolicyOut.model_validate(policy), message="Leave policy updated")
 
 
 @router.get("/leave/movements", response_model=ResponseEnvelope[list[LeaveMovementOut]])

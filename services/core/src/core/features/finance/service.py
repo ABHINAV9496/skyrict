@@ -804,9 +804,9 @@ class FinanceService:
         if not lines:
             return
 
-        total_cogs = sum(
-            (line.quantity * line.unit_cost).quantize(_MONEY_QUANTUM) for line in lines
-        )
+        total_cogs = Decimal("0")
+        for line in lines:
+            total_cogs += (line.quantity * line.unit_cost).quantize(_MONEY_QUANTUM)
         if total_cogs <= 0:
             return
 

@@ -75,7 +75,6 @@ if TYPE_CHECKING:
     from core.features.finance.ports import (
         AuditSink,
         CogsLine,
-        CogsPort,
         CustomerPort,
         FinanceEventSink,
         FinanceRepositoryPort,

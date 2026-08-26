@@ -66,7 +66,7 @@ from skyrict_common.exceptions import NotFoundError, ValidationError
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.ports import CrmTimelinePort
-    from core.features.finance.ports import InvoicePort, CogsPort
+    from core.features.finance.ports import CogsPort, InvoicePort
     from core.features.sales.ports import (
         CustomerPort,
         OrderStockPort,

@@ -257,13 +257,13 @@ def get_finance_service(
     events all commit atomically. The request ID becomes the correlation ID
     stamped on money-moment events.
     """
+    from core.db.sequence_repository import SequenceRepository
     from core.events.producers import get_event_producer
     from core.events.producers.finance_events import FinanceEventPublisher
     from core.features.crm.repository import CrmRepository
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
     from core.features.sales.repository import SalesRepository
-    from core.db.sequence_repository import SequenceRepository
 
     correlation_id = getattr(request.state, "request_id", None)
     crm_repo = CrmRepository(db)

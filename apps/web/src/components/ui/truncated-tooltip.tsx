@@ -9,8 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 interface TruncatedTooltipProps {
   text: string;
   className?: string;
-  asChild?: boolean;
-  children?: React.ReactNode;
 }
 
 function useIsTruncated(ref: React.RefObject<HTMLElement | null>) {
@@ -47,8 +45,6 @@ function useIsTruncated(ref: React.RefObject<HTMLElement | null>) {
 function TruncatedTooltip({
   text,
   className,
-  asChild = false,
-  children,
 }: TruncatedTooltipProps) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const truncated = useIsTruncated(spanRef);

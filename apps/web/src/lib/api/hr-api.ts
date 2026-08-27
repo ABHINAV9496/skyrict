@@ -583,10 +583,13 @@ export async function updateLeavePolicy(input: {
   sickDaysPerYear: number;
   effectiveFrom: string;
 }): Promise<LeavePolicy> {
-  const raw = await apiPost<LeavePolicyPayload>("/api/v1/hr/leave/policy", {
-    casual_days_per_year: input.casualDaysPerYear,
-    sick_days_per_year: input.sickDaysPerYear,
-    effective_from: input.effectiveFrom,
+  const raw = await apiFetch<LeavePolicyPayload>("/api/v1/hr/leave/policy", {
+    method: "PUT",
+    body: JSON.stringify({
+      casual_days_per_year: input.casualDaysPerYear,
+      sick_days_per_year: input.sickDaysPerYear,
+      effective_from: input.effectiveFrom,
+    }),
   });
   return mapLeavePolicy(raw ?? {});
 }

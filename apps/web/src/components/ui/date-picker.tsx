@@ -1,15 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type DateParts = { y: number; m: number; d: number };
@@ -77,9 +70,11 @@ type Cell = { iso: string; label: number; inMonth: boolean };
  * Themed date picker replacing the native browser calendar popup. The month
  * grid renders inline (sibling of the trigger button) so it stays inside the
  * nearest DismissableLayer tree — Radix Dialog sees calendar interactions as
- * "inside" and never dismisses the dialog. `position: fixed` escapes any
- * `overflow: hidden` on ancestors. Inherits the active theme-world tokens
- * (e.g. the ERP green) via CSS custom-property cascade.
+ * "inside" and never dismisses the dialog. Position: absolute inside the
+ * wrapper keeps the calendar anchored to its trigger regardless of whether
+ * the wrapper lives inside a transformed DialogContent or on a scrollable
+ * page. Inherits the active theme-world tokens (e.g. the ERP green) via
+ * CSS custom-property cascade.
  *
  * Value contract: ISO "YYYY-MM-DD" or null; onChange emits the same.
  */
@@ -115,42 +110,41 @@ export function DatePicker({
     return { y: today.y, m: today.m };
   });
   const [highlighted, setHighlighted] = useState<string | null>(null);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [yearOpen, setYearOpen] = useState(false);
 
   const selected = useMemo(() => parseIso(value ?? ""), [value]);
 
-  // Measure trigger and compute dropdown position with viewport collision
-  // detection. Flips above the trigger when insufficient room below, and
-  // clamps horizontally so the calendar never clips at viewport edges.
+  // Measure trigger and compute dropdown position relative to the wrapper.
+  // Container-relative coords work inside both a transformed DialogContent
+  // (where position:fixed degrades to absolute) and on a scrollable page
+  // (where absolute scrolls with the wrapper).
   const CALENDAR_HEIGHT = 320; // px — 5-row month grid + header + footer
-  const VIEWPORT_PADDING = 8; // px — breathing room from viewport edges
+  const CALENDAR_WIDTH = 288; // w-72 = 18rem = 288px
 
   function computePosition() {
     const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const vh = window.innerHeight;
-    const vw = window.innerWidth;
+    const wrapper = wrapperRef.current;
+    if (!el || !wrapper) return;
+    const triggerRect = el.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
 
-    // Vertical: flip above if not enough room below.
-    const spaceBelow = vh - rect.bottom;
+    // Vertical: flip above if not enough room below inside the wrapper.
+    const spaceBelow = triggerRect.bottom - wrapperRect.bottom;
     let top: number;
-    if (spaceBelow < CALENDAR_HEIGHT + VIEWPORT_PADDING) {
-      // Above the trigger — subtract calendar height + gap.
-      top = rect.top + window.scrollY - CALENDAR_HEIGHT - 4;
+    if (spaceBelow < CALENDAR_HEIGHT + 8) {
+      top = triggerRect.top - wrapperRect.top - CALENDAR_HEIGHT - 4;
     } else {
-      // Below the trigger — standard position.
-      top = rect.bottom + window.scrollY + 4;
+      top = triggerRect.bottom - wrapperRect.top + 4;
     }
-    // Clamp to viewport so it never clips at the top either.
-    top = Math.max(window.scrollY + VIEWPORT_PADDING, top);
+    top = Math.max(0, top);
 
-    // Horizontal: align left with trigger, clamp so right edge stays on-screen.
-    const calendarWidth = 288; // w-72 = 18rem = 288px
-    let left = rect.left + window.scrollX;
-    if (left + calendarWidth > vw - VIEWPORT_PADDING) {
-      left = vw - calendarWidth - VIEWPORT_PADDING;
+    // Horizontal: left-align with trigger, clamp so right edge stays inside wrapper.
+    let left = triggerRect.left - wrapperRect.left;
+    if (left + CALENDAR_WIDTH > wrapperRect.width) {
+      left = wrapperRect.width - CALENDAR_WIDTH;
     }
-    left = Math.max(VIEWPORT_PADDING, left);
+    left = Math.max(0, left);
 
     setDropdownPos({ top, left });
   }
@@ -194,18 +188,15 @@ export function DatePicker({
 
   // Click-outside closes the popup. The calendar renders inline inside the
   // DismissableLayer tree, so Radix Dialog won't dismiss on calendar clicks.
-  // Match the calendar's role="dialog", the portaled Select dropdowns, and
-  // their items to keep them interactive.
+  // Match the calendar's role="dialog", its month/year dropdowns, and their
+  // items to keep them interactive.
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as HTMLElement;
       if (target.closest('[role="dialog"][aria-label="Choose date"]')) return;
-      if (target.closest("[data-slot=\"select-content\"]")) return;
-      if (target.closest("[data-slot=\"select-item\"]")) return;
       if (target.closest("[role=\"option\"]")) return;
       if (target.closest("[role=\"listbox\"]")) return;
-      if (target.closest("[data-radix-popper-content-wrapper]")) return;
       const wrapper = wrapperRef.current;
       if (wrapper && wrapper.contains(target)) return;
       setOpen(false);
@@ -281,8 +272,8 @@ export function DatePicker({
   const atEnd = view.y === maxYear && view.m === 12;
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
-    // Let the month/year Selects handle their own keyboard interaction.
-    if ((event.target as HTMLElement).closest('[role="combobox"]')) return;
+    // Let the month/year dropdown buttons handle their own keyboard interaction.
+    if ((event.target as HTMLElement).closest('[role="option"]')) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       if (!open) openPanel();
@@ -314,11 +305,73 @@ export function DatePicker({
     "aria-required": required || undefined,
   };
 
+  /** Custom inline dropdown that renders inside the calendar (no portal needed). */
+  function renderDropdown(opts: {
+    open: boolean;
+    onToggle: () => void;
+    value: string;
+    ariaLabel: string;
+    className?: string;
+    items: { key: string; label: string }[];
+    onSelect: (value: string) => void;
+  }) {
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          aria-label={opts.ariaLabel}
+          aria-expanded={opts.open}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            opts.onToggle();
+          }}
+          className={cn(
+            "flex h-7 items-center justify-between gap-1 rounded-md border border-input bg-transparent px-1.5 text-sm outline-none",
+            opts.className,
+          )}
+        >
+          <span className="truncate">
+            {opts.items.find((i) => i.key === opts.value)?.label ?? opts.value}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </button>
+        {opts.open && (
+          <div
+            role="listbox"
+            aria-label={opts.ariaLabel}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="absolute top-full left-0 z-[10000] mt-0.5 max-h-52 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+          >
+            {opts.items.map((item) => (
+              <div
+                key={item.key}
+                role="option"
+                aria-selected={item.key === opts.value}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  opts.onSelect(item.key);
+                  opts.onToggle();
+                }}
+                className={cn(
+                  "cursor-pointer px-2 py-1 text-sm outline-none hover:bg-accent",
+                  item.key === opts.value && "bg-accent font-medium",
+                )}
+              >
+                {item.label}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const calendarDropdown = open ? (
     <div
       role="dialog"
       aria-label="Choose date"
-      className="fixed z-[9999] w-72 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md outline-none"
+      className="absolute z-[9999] w-72 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md outline-none"
       style={{ top: dropdownPos.top, left: dropdownPos.left }}
     >
       <div className="mb-1 flex items-center gap-1">
@@ -332,49 +385,25 @@ export function DatePicker({
         >
           <ChevronLeft aria-hidden="true" className="size-4" />
         </button>
-        <Select
-          value={String(view.m)}
-          onValueChange={(month) =>
-            setView((current) => ({ ...current, m: Number(month) }))
-          }
-        >
-          <SelectTrigger
-            aria-label="Month"
-            className="h-7 min-w-0 flex-1 text-sm"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_NAMES.map((name, index) => (
-              <SelectItem key={name} value={String(index + 1)}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {renderDropdown({
+          open: monthOpen,
+          onToggle: () => { setMonthOpen((v) => !v); setYearOpen(false); },
+          value: String(view.m),
+          ariaLabel: "Month",
+          className: "min-w-0 flex-1",
+          items: MONTH_NAMES.map((name, index) => ({ key: String(index + 1), label: name })),
+          onSelect: (month) => setView((current) => ({ ...current, m: Number(month) })),
+        })}
         {!lockYear ? (
-          <Select
-            value={String(view.y)}
-            onValueChange={(year) =>
-              setView((current) => ({ ...current, y: Number(year) }))
-            }
-          >
-            <SelectTrigger
-              aria-label="Year"
-              className="h-7 w-[5.75rem] shrink-0 text-sm"
-              onMouseDown={(event) => event.stopPropagation()}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((year) => (
-                <SelectItem key={year} value={String(year)}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          renderDropdown({
+            open: yearOpen,
+            onToggle: () => { setYearOpen((v) => !v); setMonthOpen(false); },
+            value: String(view.y),
+            ariaLabel: "Year",
+            className: "w-[5.75rem] shrink-0",
+            items: yearOptions.map((year) => ({ key: String(year), label: String(year) })),
+            onSelect: (year) => setView((current) => ({ ...current, y: Number(year) })),
+          })
         ) : (
           <span className="h-7 w-[5.75rem] shrink-0 text-sm font-medium text-popover-foreground">
             {view.y}

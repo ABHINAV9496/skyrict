@@ -120,21 +120,55 @@ interface Envelope<T> {
   meta: PaginationMeta | null;
 }
 
+interface ValidationIssue {
+  loc?: unknown[];
+  msg?: string;
+}
+
 async function readPayload<T>(response: Response): Promise<Envelope<T>> {
   const payload = (await response.json().catch(() => ({}))) as {
     data?: T | null;
     meta?: PaginationMeta | null;
-    detail?: { error?: { message?: string }; message?: string } | string;
+    detail?:
+      | { error?: { message?: string }; message?: string }
+      | string
+      | ValidationIssue[];
   };
   if (!response.ok) {
-    const message =
-      (typeof payload.detail === "object" && payload.detail?.error?.message) ||
-      (typeof payload.detail === "object" && payload.detail?.message) ||
-      (typeof payload.detail === "string" ? payload.detail : null) ||
-      "Request failed. Please try again.";
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, extractErrorMessage(payload.detail));
   }
   return { data: payload.data as T, meta: payload.meta ?? null };
+}
+
+/**
+ * Normalize every error shape the backends produce into one human message:
+ * the envelope's `{error: {message}}`, plain strings, and FastAPI's 422
+ * validation array (`[{loc: ["body", "email"], msg: "…"}]`).
+ */
+function extractErrorMessage(
+  detail:
+    | { error?: { message?: string }; message?: string }
+    | string
+    | ValidationIssue[]
+    | undefined,
+): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const issues = detail
+      .map((issue) => {
+        const field = Array.isArray(issue.loc)
+          ? issue.loc.filter((part) => part !== "body").join(".")
+          : "";
+        const text = issue.msg ?? "invalid value";
+        return field ? `${field}: ${text}` : text;
+      })
+      .join("; ");
+    return issues || "Request failed. Please try again.";
+  }
+  if (typeof detail === "object" && detail !== null) {
+    return detail.error?.message ?? detail.message ?? "Request failed. Please try again.";
+  }
+  return "Request failed. Please try again.";
 }
 
 /** Fetch a `/api/v1` endpoint with session hydration/refresh, returning the full envelope. */

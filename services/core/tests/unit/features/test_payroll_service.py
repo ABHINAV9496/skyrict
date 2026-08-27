@@ -148,22 +148,16 @@ class FakePayrollRepository:
     async def get_run(self, run_id: uuid.UUID, tenant_id: uuid.UUID) -> ent.PayrollRun | None:
         return self.runs.get(run_id)
 
-    async def update_run(self, run: ent.PayrollRun) -> ent.PayrollRun:
-        self.runs[run.id] = run
-        return run
-
     async def list_runs(
         self, tenant_id: uuid.UUID, *, status=None, limit: int = 20, offset: int = 0
     ):
         return [r for r in self.runs.values() if status is None or r.status == status]
 
     async def find_overlapping_run(
-        self, tenant_id: uuid.UUID, *, period_start: date, period_end: date, exclude_run_id=None
+        self, tenant_id: uuid.UUID, *, period_start: date, period_end: date
     ) -> ent.PayrollRun | None:
         for run in self.runs.values():
             if run.status == PayrollRunStatus.VOID:
-                continue
-            if run.id == exclude_run_id:
                 continue
             if run.period_start <= period_end and run.period_end >= period_start:
                 return run
@@ -366,8 +360,8 @@ class TestRule8Immutability:
             id=run.id,
         )
         with pytest.raises(PayrollEntryImmutableError):
-            await service.adjust_entry(
-                run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "10"}
+            await service.adjust_entry_by_id(
+                run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"amount": "10"}
             )
 
     async def test_adjust_entry_blocked_on_paid_run(self) -> None:
@@ -394,8 +388,8 @@ class TestRule8Immutability:
             id=run.id,
         )
         with pytest.raises(PayrollEntryImmutableError):
-            await service.adjust_entry(
-                run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "10"}
+            await service.adjust_entry_by_id(
+                run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"amount": "10"}
             )
 
     async def test_adjust_entry_merges_on_draft_run(self) -> None:
@@ -414,8 +408,8 @@ class TestRule8Immutability:
             id=uuid.uuid4(),
         )
         repo.entries[EMPLOYEE] = entry
-        updated = await service.adjust_entry(
-            run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "100"}
+        updated = await service.adjust_entry_by_id(
+            run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"amount": "100"}
         )
         assert updated.adjustments == {"reason": "bonus", "amount": "100"}
 
@@ -677,8 +671,8 @@ class TestComputePreservesAdjustments:
         await _seed_compensation(repo, EMPLOYEE)
         run = await _create_run(service)
         first = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
-        await service.adjust_entry(
-            run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "100"}
+        await service.adjust_entry_by_id(
+            run_id=run.id, entry_id=first.id, tenant_id=TENANT, adjustments={"amount": "100"}
         )
         recomputed = (await service.compute_run(run_id=run.id, tenant_id=TENANT)).entries[0]
         assert recomputed.adjustments == {"amount": "100"}
@@ -737,8 +731,9 @@ class TestAdjustRecompute:
         await _seed_compensation(repo, EMPLOYEE)
         run = await _create_run(service)
         await service.compute_run(run_id=run.id, tenant_id=TENANT)
-        adjusted = await service.adjust_entry(
-            run_id=run.id, employee_id=EMPLOYEE, tenant_id=TENANT, adjustments={"amount": "100"}
+        entry = repo.entries[EMPLOYEE]
+        adjusted = await service.adjust_entry_by_id(
+            run_id=run.id, entry_id=entry.id, tenant_id=TENANT, adjustments={"amount": "100"}
         )
         assert adjusted.gross.amount == Decimal("3000")
         assert adjusted.net.amount == Decimal("2900")

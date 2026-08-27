@@ -57,6 +57,8 @@ async def hire_employee(
     last_name: str = "Lovelace",
     job_title: str = "Engineer",
     hire_date: str = "2026-01-05",
+    email: str | None = None,
+    phone: str | None = None,
     monthly_salary: str | None = "5000.00",
     **overrides: Any,
 ) -> dict[str, Any]:
@@ -64,12 +66,17 @@ async def hire_employee(
 
     ``monthly_salary=None`` omits salary so the employee is created without
     compensation (compensation is then recorded via ``POST /payroll/compensation``).
+    Email/phone default to valid values because ``EmployeeCreate`` requires
+    them; emails are unique per call so parallel hires never collide.
     """
     payload: dict[str, Any] = {
         "first_name": first_name,
         "last_name": last_name,
         "job_title": job_title,
         "hire_date": hire_date,
+        "email": email
+        or f"{first_name.lower()}.{last_name.lower()}.{uuid.uuid4().hex[:8]}@example.com",
+        "phone": phone or "+1 555 010 0000",
     }
     if monthly_salary is not None:
         payload["monthly_salary"] = monthly_salary

@@ -7,11 +7,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+import structlog
+from sqlalchemy import text
+
 from identity.core.audit_events import INVITATION_ACCEPTED, INVITATION_CREATED, INVITATION_EXPIRED
 from identity.core.config import settings
 from identity.core.constants import INVITATION_TOKEN_EXPIRE_DAYS
 from identity.core.email import EmailService
 from identity.core.security import hash_invitation_token, hash_password, validate_password_policy
+from identity.db.session import async_session_factory
 from identity.domain.entities import Invitation, User
 from identity.features.invitations.ports import InvitationRepositoryPort
 from skyrict_common.exceptions import (
@@ -31,6 +35,8 @@ if TYPE_CHECKING:
     from identity.features.organizations.ports import TenantRepositoryPort
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.users.ports import UserRepositoryPort
+
+logger = structlog.get_logger("identity.invitations")
 
 
 class InvitationService:
@@ -65,6 +71,7 @@ class InvitationService:
         inviter_name: str = "",
         organization_name: str = "",
         base_url: str | None = None,
+        expires_in_hours: int | None = None,
     ) -> tuple[Invitation, str]:
 
         role = await self.role_repo.get_by_name(tenant_id, role_name)
@@ -85,7 +92,10 @@ class InvitationService:
         )
 
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(UTC) + timedelta(days=INVITATION_TOKEN_EXPIRE_DAYS)
+        if expires_in_hours is not None:
+            expires_at = datetime.now(UTC) + timedelta(hours=expires_in_hours)
+        else:
+            expires_at = datetime.now(UTC) + timedelta(days=INVITATION_TOKEN_EXPIRE_DAYS)
 
         invitation = await self.invitation_repo.create(
             Invitation(
@@ -225,7 +235,111 @@ class InvitationService:
             tenant_id=str(tenant_id),
         )
 
+        await self._mirror_grant_to_core(
+            tenant_id=uuid.UUID(str(tenant_id)),
+            role=role,
+            user_id=user.id,
+            invitation_email=invitation.email,
+        )
+
         return user
+
+    async def _mirror_grant_to_core(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        role: object,
+        user_id: uuid.UUID,
+        invitation_email: str = "",
+    ) -> None:
+        """ACCEPTED Phase-1 bridge: mirror the grant into core's RBAC tables.
+
+        The Kafka bus does not exist yet (``publish_event`` is a logging stub),
+        so core's ``require_permission`` — which resolves grants from
+        ``core_roles`` / ``core_user_roles`` — would never see invitees. Both
+        services share one database, so this writes the same upserts core's
+        own ``apply_role_grants`` consumer handler performs (same composite-PK
+        shapes, same scope semantics: scope_id = tenant id).
+
+        Additionally binds the invited employee record: when exactly ONE
+        non-terminated ``erp_employees`` row in the tenant carries the
+        invitation email and no ``user_id`` yet, that row is linked to the new
+        user. The self-service portal resolves its caller through this link.
+
+        Failures are logged, never raised: accept must succeed even if the
+        mirror needs a later replay (the future consumer / ``core
+        provision-rbac`` heals it).
+        """
+        role_id = getattr(role, "id", None)
+        role_name = getattr(role, "name", None)
+        permissions = list(getattr(role, "permissions", None) or [])
+        if role_id is None or role_name is None:
+            logger.warning("rbac_mirror.skipped_missing_role", role=role_name)
+            return
+        try:
+            async with async_session_factory() as session:
+                await session.execute(
+                    text(
+                        "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                        "VALUES (:tid, :rid, :rname, :perms, true) "
+                        "ON CONFLICT (tenant_id, name) DO UPDATE SET "
+                        "permissions = (SELECT array_agg(DISTINCT p) FROM unnest("
+                        "core_roles.permissions || EXCLUDED.permissions) AS p), "
+                        "is_system_role = true, updated_at = now()"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "rid": role_id,
+                        "rname": role_name,
+                        "perms": permissions,
+                    },
+                )
+                row = (
+                    await session.execute(
+                        text("SELECT id FROM core_roles WHERE tenant_id = :tid AND name = :rname"),
+                        {"tid": tenant_id, "rname": role_name},
+                    )
+                ).scalar_one()
+                await session.execute(
+                    text(
+                        "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
+                        "VALUES (:tid, gen_random_uuid(), :uid, :crid, :tid) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"tid": tenant_id, "uid": user_id, "crid": row},
+                )
+                if invitation_email:
+                    # Bind the invited employee ONLY when the email match is
+                    # unambiguous (exactly one unlinked candidate); ambiguous
+                    # or missing matches stay unbound — portal access then
+                    # fails closed with a clear error.
+                    await session.execute(
+                        text(
+                            "UPDATE erp_employees e SET user_id = :uid, updated_at = now() "
+                            "WHERE e.tenant_id = :tid AND e.user_id IS NULL "
+                            "AND e.employment_status <> 'terminated' "
+                            "AND lower(e.email) = lower(:email) "
+                            "AND (SELECT count(*) FROM erp_employees c "
+                            "     WHERE c.tenant_id = e.tenant_id AND c.user_id IS NULL "
+                            "     AND c.employment_status <> 'terminated' "
+                            "     AND lower(c.email) = lower(:email)) = 1"
+                        ),
+                        {"tid": tenant_id, "uid": user_id, "email": invitation_email},
+                    )
+                await session.commit()
+            logger.info(
+                "rbac_mirror.granted",
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+                role=role_name,
+            )
+        except Exception:
+            logger.exception(
+                "rbac_mirror.failed",
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+                role=role_name,
+            )
 
     async def expire_invitation(
         self, invitation_id: str | uuid.UUID, tenant_id: str | uuid.UUID

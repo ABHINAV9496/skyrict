@@ -69,6 +69,9 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # portable across the platform.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Employee self-service portal (own leave balances / requests only)
+ERP_LEAVE_SELF = "erp.leave.self"
+
 # AI Agents
 AGENTS_READ = "agents:read"
 
@@ -117,6 +120,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_LEAVE_SELF,
     AGENTS_READ,
     INTELLIGENCE_READ,
     BILLING_MANAGE,
@@ -149,6 +153,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
     ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE,)),
+    ("erp_leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
     ("agents", "AI Agents", (AGENTS_READ,)),
     ("intelligence", "Market Intelligence", (INTELLIGENCE_READ,)),
     ("billing", "Billing", (BILLING_MANAGE,)),
@@ -191,6 +196,7 @@ __all__ = [
     "ERP_INVENTORY_WRITE",
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
+    "ERP_LEAVE_SELF",
     "ERP_PAYROLL_APPROVE",
     "ERP_PAYROLL_READ",
     "ERP_PAYROLL_WRITE",

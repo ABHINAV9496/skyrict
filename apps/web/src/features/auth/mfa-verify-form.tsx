@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, ShieldCheck } from "lucide-react";
 
 import { completeHandoff, verifyMfa } from "@/lib/api/auth-api";
+import { resolveHandoffDestination } from "@/lib/auth/handoff";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 
@@ -35,7 +36,8 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
       setVerifying(false);
       if (result.status === "ok") {
         setHandingOff(true);
-        await completeHandoff("/");
+        const dest = await resolveHandoffDestination();
+        await completeHandoff(dest);
       } else {
         setError(true);
         setCode("");

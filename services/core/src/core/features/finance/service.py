@@ -36,8 +36,11 @@ from typing import TYPE_CHECKING
 from core.core import audit_events
 from core.core.constants import (
     AR_ACCOUNT_CODE,
+    COGS_ACCOUNT_CODE,
+    INVENTORY_ASSET_ACCOUNT_CODE,
     INVOICE_SOURCE_MANUAL,
     INVOICE_SOURCE_SALES_ORDER,
+    JOURNAL_SOURCE_COGS,
     JOURNAL_SOURCE_INVOICE,
     JOURNAL_SOURCE_MANUAL,
     PAYMENT_SOURCE_MANUAL,
@@ -55,7 +58,14 @@ from core.domain.entities import (
     ProfitAndLoss,
     TrialBalance,
 )
-from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
+from core.domain.value_objects import (
+    AccountType,
+    CrmEntityType,
+    CrmTimelineEventType,
+    EntryStatus,
+    InvoiceStatus,
+    PaymentStatus,
+)
 from skyrict_common.exceptions import ConflictError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
@@ -64,8 +74,12 @@ if TYPE_CHECKING:
 
     from core.features.finance.ports import (
         AuditSink,
+        CogsLine,
+        CustomerPort,
         FinanceEventSink,
         FinanceRepositoryPort,
+        FinanceTimelinePort,
+        OrderLookupPort,
         SalesOrderForInvoicing,
     )
 
@@ -102,11 +116,17 @@ class FinanceService:
         events: FinanceEventSink,
         *,
         correlation_id: str | None = None,
+        customers: CustomerPort | None = None,
+        timeline: FinanceTimelinePort | None = None,
+        order_lookup: OrderLookupPort | None = None,
     ) -> None:
         self._repo = repo
         self._audit = audit
         self._events = events
         self._correlation_id = correlation_id or str(uuid.uuid4())
+        self._customers = customers
+        self._timeline = timeline
+        self._order_lookup = order_lookup
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -476,6 +496,16 @@ class FinanceService:
             raise NotFoundError(f"Invoice {invoice_id} not found")
         return invoice
 
+    async def get_invoice_with_customer_name(
+        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> tuple[Invoice, str | None]:
+        """Return invoice + resolved customer name (avoids N+1 at the router)."""
+        invoice = await self.get_invoice(tenant_id, invoice_id)
+        name: str | None = None
+        if self._customers is not None:
+            name = await self._customers.get_customer_name(invoice.customer_id, tenant_id=tenant_id)
+        return invoice, name
+
     async def list_invoices(
         self,
         tenant_id: uuid.UUID,
@@ -485,6 +515,42 @@ class FinanceService:
         limit: int = 50,
     ) -> Sequence[Invoice]:
         return await self._repo.list_invoices(tenant_id, status=status, offset=offset, limit=limit)
+
+    async def list_invoices_with_customer_names(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[Sequence[Invoice], dict[uuid.UUID, str]]:
+        """Return invoices + batch-resolved customer names (avoids N+1)."""
+        invoices = await self.list_invoices(tenant_id, status=status, offset=offset, limit=limit)
+        names: dict[uuid.UUID, str] = {}
+        if self._customers is not None and invoices:
+            ids = list({inv.customer_id for inv in invoices})
+            names = await self._customers.get_customer_names(ids, tenant_id=tenant_id)
+        return invoices, names
+
+    async def resolve_source_order_numbers(
+        self,
+        invoices: Sequence[Invoice],
+        tenant_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Batch-resolve source_ref -> order_number for sales-order invoices."""
+        if self._order_lookup is None:
+            return {}
+        result: dict[str, str] = {}
+        for inv in invoices:
+            if inv.source == INVOICE_SOURCE_SALES_ORDER and inv.source_ref:
+                try:
+                    order_id = uuid.UUID(inv.source_ref)
+                except (ValueError, TypeError):
+                    continue
+                order = await self._order_lookup.get_order(order_id, tenant_id=tenant_id)
+                if order is not None and hasattr(order, "order_number"):
+                    result[inv.source_ref] = order.order_number
+        return result
 
     async def issue_invoice(
         self,
@@ -585,6 +651,19 @@ class FinanceService:
             tenant_id=tenant_id,
             correlation_id=self._correlation_id,
         )
+        if self._timeline is not None:
+            await self._timeline.record_timeline_event(
+                tenant_id=tenant_id,
+                entity_type=CrmEntityType.CUSTOMER,
+                entity_id=invoice.customer_id,
+                event_type=CrmTimelineEventType.INVOICE_APPROVED,
+                title=f"Invoice {approved.invoice_number} approved",
+                payload={
+                    "invoice_id": str(invoice_id),
+                    "invoice_number": approved.invoice_number,
+                    "total": str(invoice.total),
+                },
+            )
         return approved
 
     async def void_invoice(
@@ -680,6 +759,21 @@ class FinanceService:
             tenant_id=tenant_id,
             correlation_id=self._correlation_id,
         )
+        if self._timeline is not None:
+            await self._timeline.record_timeline_event(
+                tenant_id=tenant_id,
+                entity_type=CrmEntityType.CUSTOMER,
+                entity_id=invoice.customer_id,
+                event_type=CrmTimelineEventType.PAYMENT_APPLIED,
+                title=f"Payment {created.payment_number} applied to {invoice.invoice_number}",
+                payload={
+                    "payment_id": str(created.id),
+                    "payment_number": created.payment_number,
+                    "invoice_id": str(invoice_id),
+                    "amount": str(created.amount),
+                    "method": created.method,
+                },
+            )
         return created
 
     async def get_payment(self, tenant_id: uuid.UUID, payment_id: uuid.UUID) -> Payment:
@@ -687,6 +781,76 @@ class FinanceService:
         if payment is None:
             raise NotFoundError(f"Payment {payment_id} not found")
         return payment
+
+    # ------------------------------------------------------------------
+    # COGS (cost-of-goods-sold) posting
+    # ------------------------------------------------------------------
+
+    async def post_cogs_for_order(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        order_id: str,
+        entry_date: date,
+        lines: Sequence[CogsLine],
+    ) -> None:
+        """Post a COGS journal entry after stock consumption (DR COGS / CR Inventory Asset).
+
+        Called by the sales service after ``fulfil_order_lines`` succeeds. The
+        entry is created as POSTED in the same transaction — the unique
+        ``(source, source_ref)`` lock on journal entries prevents double-posting
+        for the same order.
+        """
+        if not lines:
+            return
+
+        total_cogs = Decimal("0")
+        for line in lines:
+            total_cogs += (line.quantity * line.unit_cost).quantize(_MONEY_QUANTUM)
+        if total_cogs <= 0:
+            return
+
+        cogs_account = await self._repo.get_account_by_code(COGS_ACCOUNT_CODE, tenant_id)
+        if cogs_account is None:
+            raise NotFoundError(f"COGS account '{COGS_ACCOUNT_CODE}' not found")
+        assert cogs_account.id is not None
+
+        inv_asset_account = await self._repo.get_account_by_code(
+            INVENTORY_ASSET_ACCOUNT_CODE, tenant_id
+        )
+        if inv_asset_account is None:
+            raise NotFoundError(
+                f"Inventory asset account '{INVENTORY_ASSET_ACCOUNT_CODE}' not found"
+            )
+        assert inv_asset_account.id is not None
+
+        entry = JournalEntry(
+            tenant_id=tenant_id,
+            entry_date=entry_date,
+            memo=f"COGS for sales order {order_id}",
+            status=EntryStatus.POSTED,
+            source=JOURNAL_SOURCE_COGS,
+            source_ref=order_id,
+            lines=(
+                JournalLine(account_id=cogs_account.id, debit=total_cogs),
+                JournalLine(account_id=inv_asset_account.id, credit=total_cogs),
+            ),
+            posted_at=datetime.now(UTC),
+        )
+        created = await self._repo.create_journal_entry(entry)
+        assert created.id is not None
+
+        await self._audit.log(
+            tenant_id=tenant_id,
+            user_id=None,
+            action=audit_events.FINANCE_JOURNAL_ENTRY_POSTED,
+            target=f"journal_entry:{created.id}",
+            details={
+                "source": JOURNAL_SOURCE_COGS,
+                "source_ref": order_id,
+                "total_cogs": str(total_cogs),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Reports (derived from posted lines — never stored)

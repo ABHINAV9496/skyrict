@@ -116,6 +116,8 @@ AR_ACCOUNT_CODE = "1100"
 CASH_ACCOUNT_CODE = "1200"
 AP_ACCOUNT_CODE = "2110"
 REVENUE_ACCOUNT_CODE = "4000"
+COGS_ACCOUNT_CODE = "5000"
+INVENTORY_ASSET_ACCOUNT_CODE = "1300"
 
 # ---------------------------------------------------------------------------
 # Finance — journal entry and invoice provenance (idempotency source keys).
@@ -123,6 +125,7 @@ REVENUE_ACCOUNT_CODE = "4000"
 JOURNAL_SOURCE_MANUAL = "manual"
 JOURNAL_SOURCE_INVOICE = "invoice"
 JOURNAL_SOURCE_PAYMENT = "payment"
+JOURNAL_SOURCE_COGS = "cogs"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

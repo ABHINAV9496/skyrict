@@ -12,7 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from core.api.v1.schemas.payroll import MoneyOut
 
@@ -44,14 +44,25 @@ class EmployeeCreate(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     job_title: str = Field(..., min_length=1, max_length=200)
     hire_date: date
-    email: str | None = Field(default=None, max_length=320)
-    phone: str | None = Field(default=None, max_length=50)
+    email: EmailStr = Field(..., max_length=320)
+    phone: str = Field(..., min_length=1, max_length=50)
     user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     monthly_salary: Decimal | None = Field(
         default=None, gt=0, description="initial gross monthly salary (optional)"
     )
     currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("first_name", "last_name", "email", "phone", mode="before")
+    @classmethod
+    def _strip_reject_blank(cls, value: object) -> object:
+        """Trim surrounding whitespace; whitespace-only values are invalid."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError("must not be blank")
+            return stripped
+        return value
 
 
 class EmployeeUpdate(BaseModel):
@@ -139,6 +150,31 @@ class LeaveMovementOut(BaseModel):
     occurred_at: datetime | None = None
 
 
+class LeaveTypeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    name: str
+    is_accrual: bool
+
+
+class PortalLeaveRequestCreate(BaseModel):
+    """Self-service submit — ``employee_id`` is forced server-side."""
+
+    leave_type: str = Field(..., min_length=1, max_length=50)
+    start_date: date
+    end_date: date
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class PortalMeOut(BaseModel):
+    """Everything the /leave portal needs on load: who I am + my leave state."""
+
+    employee: EmployeeOut
+    leave_types: list[LeaveTypeOut]
+    balances: list[LeaveBalanceOut]
+
+
 class LeaveBalanceAdjustRequest(BaseModel):
     employee_id: uuid.UUID
     leave_type: str = Field(..., min_length=1, max_length=50)
@@ -152,11 +188,57 @@ class LeaveRequestRejectBody(BaseModel):
 
 class LeaveAccrueRequest(BaseModel):
     employee_id: uuid.UUID
-    leave_type: str = Field(default="annual", min_length=1, max_length=50)
+    leave_type: str = Field(default="casual", min_length=1, max_length=50)
     leave_year: int | None = None
 
 
+class LeavePolicyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    casual_days_per_year: int
+    sick_days_per_year: int
+    effective_from: date
+    last_accrual_year: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LeavePolicyUpdate(BaseModel):
+    casual_days_per_year: int = Field(..., ge=0)
+    sick_days_per_year: int = Field(..., ge=0)
+    effective_from: date
+
+
+class AttendanceUpsertRequest(BaseModel):
+    """Log or correct one day's attendance; ``pay_impact`` is derived server-side."""
+
+    employee_id: uuid.UUID
+    work_date: date
+    status: Literal["on_time", "late", "absent"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class AttendanceRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    employee_id: uuid.UUID
+    work_date: date
+    status: str
+    pay_impact: str
+    note: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    # Joined display fields (module-wide list); None on single-employee reads.
+    first_name: str | None = None
+    last_name: str | None = None
+    employee_number: str | None = None
+
+
 __all__ = [
+    "AttendanceRecordOut",
+    "AttendanceUpsertRequest",
     "DepartmentCreate",
     "DepartmentOut",
     "DepartmentUpdate",
@@ -168,8 +250,13 @@ __all__ = [
     "LeaveBalanceAdjustRequest",
     "LeaveBalanceOut",
     "LeaveMovementOut",
+    "LeavePolicyOut",
+    "LeavePolicyUpdate",
     "LeaveRequestCreate",
     "LeaveRequestOut",
     "LeaveRequestRejectBody",
+    "LeaveTypeOut",
+    "PortalLeaveRequestCreate",
+    "PortalMeOut",
     "TerminateRequest",
 ]

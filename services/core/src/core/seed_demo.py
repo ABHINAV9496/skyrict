@@ -1575,9 +1575,11 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
     from core.features.finance.models.journal_entry import ErpJournalEntryModel
     from core.features.finance.models.journal_line import ErpJournalLineModel
     from core.features.finance.models.payment import ErpPaymentModel
+    from core.features.hr.models.attendance_record import AttendanceRecordModel
     from core.features.hr.models.department import DepartmentModel
     from core.features.hr.models.employee import EmployeeModel
     from core.features.hr.models.leave_balance import LeaveBalanceModel
+    from core.features.hr.models.leave_movement import LeaveMovementModel
     from core.features.hr.models.leave_request import LeaveRequestModel
     from core.features.inventory.models.product import ErpProductModel
     from core.features.inventory.models.stock_level import ErpStockLevelModel
@@ -1599,6 +1601,15 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 ),
                 {"tid": tenant_id},
             )
+            # erp_leave_movements carries an append-only guard trigger
+            # (migration 0013); disable it just for this teardown so the
+            # tenant can be wiped. ALTER TABLE is transactional in Postgres,
+            # so a failed teardown rolls the disable back with everything else.
+            await session.execute(
+                text(
+                    "ALTER TABLE erp_leave_movements DISABLE TRIGGER erp_leave_movements_append_only"
+                )
+            )
             for model in (
                 ErpSalesOrderLineModel,
                 ErpSalesOrderModel,
@@ -1616,6 +1627,8 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 ErpJournalEntryModel,
                 ErpFiscalPeriodModel,
                 ErpChartOfAccountModel,
+                AttendanceRecordModel,
+                LeaveMovementModel,
                 LeaveRequestModel,
                 LeaveBalanceModel,
                 EmployeeModel,
@@ -1624,6 +1637,11 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 await session.execute(
                     delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id)  # type: ignore[arg-type]
                 )
+            await session.execute(
+                text(
+                    "ALTER TABLE erp_leave_movements ENABLE TRIGGER erp_leave_movements_append_only"
+                )
+            )
             await session.commit()
             logger.info("seed.demo.cleared", tenant_id=str(tenant_id))
 
@@ -1730,6 +1748,33 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 )
                 session.add(bal)
         counts["leave_balances"] = len(emp_ids) * 2
+
+        # ── ATTENDANCE (last 21 days; deterministic mix of statuses) ─
+        # Cycle per employee/day: mostly on_time, some late, occasional
+        # absent. pay_impact mirrors the service rule (on_time->full,
+        # late->half, absent->none).
+        att_cycle = (
+            ("on_time", "full"),
+            ("on_time", "full"),
+            ("late", "half"),
+            ("on_time", "full"),
+            ("on_time", "full"),
+            ("on_time", "full"),
+            ("absent", "none"),
+        )
+        for emp_idx, emp_id in enumerate(emp_ids):
+            for day_offset in range(21):
+                status, pay_impact = att_cycle[(emp_idx + day_offset) % len(att_cycle)]
+                session.add(
+                    AttendanceRecordModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_id,
+                        work_date=_date_ago(day_offset),
+                        status=status,
+                        pay_impact=pay_impact,
+                    )
+                )
+        counts["attendance_records"] = len(emp_ids) * 21
 
         # ── CHART OF ACCOUNTS ────────────────────────────────────────
         account_ids: list[uuid.UUID] = []

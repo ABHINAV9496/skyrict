@@ -60,7 +60,7 @@ class HrRepositoryPort(Protocol):
         self,
         tenant_id: uuid.UUID,
         *,
-        status: str | None = None,
+        status: str | Sequence[str] | None = None,
         department_id: uuid.UUID | None = None,
         q: str | None = None,
         limit: int = 20,
@@ -69,8 +69,8 @@ class HrRepositoryPort(Protocol):
 
     async def next_employee_number(self, tenant_id: uuid.UUID) -> int: ...
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
+    async def get_employee_by_user_id(
+        self, user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.Employee | None: ...
 
     # --- Leave types ---
@@ -78,9 +78,16 @@ class HrRepositoryPort(Protocol):
         self, leave_type: str, tenant_id: uuid.UUID
     ) -> ent.LeaveType | None: ...
 
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> Sequence[ent.LeaveType]: ...
+
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
         """Return leave-type names that accrue annually (``accrues`` = true)."""
         ...
+
+    # --- Leave policy ---
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None: ...
+
+    async def upsert_leave_policy(self, policy: ent.LeavePolicy) -> ent.LeavePolicy: ...
 
     # --- Leave ledger & balances ---
     async def add_leave_movement(self, movement: ent.LeaveMovement) -> ent.LeaveMovement: ...
@@ -112,10 +119,6 @@ class HrRepositoryPort(Protocol):
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> int: ...
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None: ...
-
     async def approved_unpaid_days(
         self,
         employee_id: uuid.UUID,
@@ -139,8 +142,6 @@ class HrRepositoryPort(Protocol):
     async def get_leave_request(
         self, request_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.LeaveRequest | None: ...
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest: ...
 
     async def transition_leave_status(
         self,
@@ -176,18 +177,26 @@ class HrRepositoryPort(Protocol):
         effective_for: date,
     ) -> ent.Compensation | None: ...
 
+    # --- Attendance (one row per employee per work day) ---
+    async def upsert_attendance_record(
+        self, record: ent.AttendanceRecord
+    ) -> ent.AttendanceRecord: ...
 
-class HrServiceDeps(Protocol):
-    """HrService dependencies — repository, audit, and the identity validator."""
+    async def get_attendance_record(
+        self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
+    ) -> ent.AttendanceRecord | None: ...
 
-    @property
-    def repositories(self) -> HrRepositoryPort: ...
+    async def list_attendance_with_employee(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        employee_id: uuid.UUID | None = None,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[tuple[ent.AttendanceRecord, str, str, str]]: ...
 
-    @property
-    def audit(self) -> object: ...
 
-    @property
-    def identity(self) -> IdentityUserPort: ...
-
-
-__all__ = ["HrRepositoryPort", "HrServiceDeps", "IdentityUserPort"]
+__all__ = ["HrRepositoryPort", "IdentityUserPort"]

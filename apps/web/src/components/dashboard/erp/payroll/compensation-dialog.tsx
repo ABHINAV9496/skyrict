@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,16 +12,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { type Employee } from "@/lib/api/hr-api";import { createCompensationChange } from "@/lib/api/payroll-api";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
+import {
+  byEmployeeName,
+  employeeName,
+  type Employee,
+} from "@/lib/api/hr-api";
+import { createCompensationChange } from "@/lib/api/payroll-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate } from "@/lib/format";
 
@@ -56,10 +59,21 @@ export function CompensationDialog({
     employeeId: "",
     effectiveFrom: "",
     monthlySalary: "",
-    currency: "USD",
+    currency: "INR",
   });
   const [recordError, setRecordError] = useState<string | null>(null);
   const [recordSaving, setRecordSaving] = useState(false);
+  const employeeOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      [...employees]
+        .sort(byEmployeeName)
+        .map((employee) => ({
+          value: employee.id,
+          label: employeeName(employee),
+          keywords: employee.employeeNumber,
+        })),
+    [employees],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -67,7 +81,7 @@ export function CompensationDialog({
       employeeId: defaultEmployeeId ?? "",
       effectiveFrom: "",
       monthlySalary: "",
-      currency: "USD",
+      currency: "INR",
     });
     setRecordError(null);
   }, [open, defaultEmployeeId]);
@@ -126,33 +140,24 @@ export function CompensationDialog({
             {picker ? (
               <div className="space-y-1.5">
                 <Label htmlFor="record-employee">Employee</Label>
-                <Select
-                  value={record.employeeId}
+                <SearchableSelect
+                  id="record-employee"
+                  options={employeeOptions}
+                  value={record.employeeId || null}
                   onValueChange={(value) =>
                     setRecord((current) => ({ ...current, employeeId: value }))
                   }
-                >
-                  <SelectTrigger id="record-employee" className="w-full">
-                    <SelectValue placeholder="Choose an employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.firstName} {employee.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Choose an employee"
+                />
               </div>
             ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="record-effective">Effective date</Label>
-              <Input
+              <DatePicker
                 id="record-effective"
-                type="date"
-                value={record.effectiveFrom}
-                onChange={(event) =>
-                  setRecord((current) => ({ ...current, effectiveFrom: event.target.value }))
+                value={record.effectiveFrom || null}
+                onChange={(iso) =>
+                  setRecord((current) => ({ ...current, effectiveFrom: iso ?? "" }))
                 }
                 required
               />

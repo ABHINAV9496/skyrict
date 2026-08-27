@@ -56,6 +56,7 @@ async def create_invitation(
         role_name=body.role_name,
         created_by_user_id=str(current_user["user_id"]),
         base_url=base_url,
+        expires_in_hours=body.expires_in_hours,
     )
     assert invitation.id is not None
     return ResponseEnvelope(

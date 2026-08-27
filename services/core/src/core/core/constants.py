@@ -51,6 +51,26 @@ class PayrollRounding(enum.StrEnum):
     DOWN = "down"
 
 
+class AttendanceStatus(enum.StrEnum):
+    """Daily attendance outcome — mirrors ``erp_attendance_status``."""
+
+    ON_TIME = "on_time"
+    LATE = "late"
+    ABSENT = "absent"
+
+
+class PayImpact(enum.StrEnum):
+    """Payroll impact derived from attendance status.
+
+    ``on_time`` -> full pay, ``late`` -> half pay, ``absent`` -> no pay for
+    the day. Derived by the service, stored on the row.
+    """
+
+    FULL = "full"
+    HALF = "half"
+    NONE = "none"
+
+
 # ---------------------------------------------------------------------------
 # API constants
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ DB CHECK backstop are integration-only by design.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
@@ -40,20 +40,20 @@ EMPLOYEE_1 = uuid.uuid4()
 EMPLOYEE_2 = uuid.uuid4()
 APPROVER = uuid.uuid4()
 
-ANNUAL = ent.LeaveType(
+CASUAL = ent.LeaveType(
     tenant_id=TENANT,
-    code="annual",
-    name="Annual Leave",
+    code="casual",
+    name="Casual Leave",
     is_accrual=True,
-    accrual_days_per_year=20,
+    accrual_days_per_year=12,
     id=uuid.uuid4(),
 )
 SICK = ent.LeaveType(
     tenant_id=TENANT,
     code="sick",
     name="Sick Leave",
-    is_accrual=False,
-    accrual_days_per_year=None,
+    is_accrual=True,
+    accrual_days_per_year=8,
     id=uuid.uuid4(),
 )
 UNPAID = ent.LeaveType(
@@ -62,6 +62,14 @@ UNPAID = ent.LeaveType(
     name="Unpaid Leave",
     is_accrual=False,
     accrual_days_per_year=None,
+    id=uuid.uuid4(),
+)
+
+DEFAULT_POLICY = ent.LeavePolicy(
+    tenant_id=TENANT,
+    casual_days_per_year=12,
+    sick_days_per_year=8,
+    effective_from=date(2020, 1, 1),
     id=uuid.uuid4(),
 )
 
@@ -106,13 +114,19 @@ class FakeAuditRepository:
 class FakeHrRepository:
     """In-memory ``HrRepositoryPort`` double for leave rule tests."""
 
-    def __init__(self, *, leave_types: Sequence[ent.LeaveType] = (ANNUAL, SICK, UNPAID)) -> None:
+    def __init__(
+        self,
+        *,
+        leave_types: Sequence[ent.LeaveType] = (CASUAL, SICK, UNPAID),
+        policy: ent.LeavePolicy | None = DEFAULT_POLICY,
+    ) -> None:
         self.leave_types = {lt.code: lt for lt in leave_types}
         self.employees: dict[uuid.UUID, ent.Employee] = {}
         self.requests: dict[uuid.UUID, ent.LeaveRequest] = {}
         self.movements: list[ent.LeaveMovement] = []
         self.balances: dict[tuple[uuid.UUID, str], int] = {}
         self.employee_numbers = 0
+        self._policy = policy
 
     async def create_employee(self, employee: ent.Employee) -> ent.Employee:
         self.employees[employee.id] = employee
@@ -134,14 +148,6 @@ class FakeHrRepository:
         self.employee_numbers += 1
         return self.employee_numbers
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
-    ) -> ent.Employee | None:
-        for employee in self.employees.values():
-            if employee.employee_number == employee_number:
-                return employee
-        return None
-
     async def create_department(self, department: ent.Department) -> ent.Department:
         return department
 
@@ -161,6 +167,9 @@ class FakeHrRepository:
 
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
         return [lt.code for lt in self.leave_types.values() if lt.is_accrual]
+
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> list[ent.LeaveType]:
+        return list(self.leave_types.values())
 
     async def approved_unpaid_days(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID, period_start, period_end
@@ -190,7 +199,7 @@ class FakeHrRepository:
             if (
                 existing.employee_id == movement.employee_id
                 and existing.leave_type == movement.leave_type
-                and existing.ref_type == "annual_accrual"
+                and existing.ref_type == "accrual"
                 and existing.ref_id == movement.ref_id
             ):
                 return None  # idempotent
@@ -208,20 +217,6 @@ class FakeHrRepository:
             if m.employee_id == employee_id and m.leave_type == leave_type
         )
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None:
-        balance = self.balances.get((employee_id, leave_type))
-        if balance is None:
-            return None
-        return ent.LeaveBalance(
-            tenant_id=tenant_id,
-            employee_id=employee_id,
-            leave_type=leave_type,
-            balance=balance,
-            id=uuid.uuid4(),
-        )
-
     async def upsert_balance(self, balance: ent.LeaveBalance) -> ent.LeaveBalance:
         self.balances[(balance.employee_id, balance.leave_type)] = balance.balance
         return balance
@@ -234,10 +229,6 @@ class FakeHrRepository:
         self, request_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.LeaveRequest | None:
         return self.requests.get(request_id)
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest:
-        self.requests[request.id] = request
-        return request
 
     async def transition_leave_status(
         self,
@@ -286,6 +277,13 @@ class FakeHrRepository:
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation:
         return compensation
 
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None:
+        return self._policy
+
+    async def upsert_leave_policy(self, policy: ent.LeavePolicy) -> ent.LeavePolicy:
+        self._policy = policy
+        return policy
+
 
 def _service(
     repo: FakeHrRepository | None = None,
@@ -299,18 +297,18 @@ async def _request(
     service: LeaveService,
     repo: FakeHrRepository,
     *,
-    leave_type: str = "annual",
+    leave_type: str = "casual",
     days: int = 2,
     employee_id: uuid.UUID = EMPLOYEE_1,
 ) -> ent.LeaveRequest:
-    start = date(2024, 5, 1)
+    start = date.today() + timedelta(days=1)
     await repo.create_employee(_employee(employee_id=employee_id))
     return await service.request(
         tenant_id=TENANT,
         employee_id=employee_id,
         leave_type=leave_type,
         start_date=start,
-        end_date=date(2024, 5, 1 + days - 1),
+        end_date=start + timedelta(days=days - 1),
     )
 
 
@@ -321,7 +319,7 @@ async def _accrue(
         ent.LeaveMovement(
             tenant_id=TENANT,
             employee_id=EMPLOYEE_1,
-            leave_type="annual",
+            leave_type="casual",
             qty=qty,
             ref_type="adjustment",
             ref_id=None,
@@ -350,7 +348,7 @@ class TestRule1ApproveWritesMovement:
 
         assert request.status == LeaveRequestStatus.APPROVED
         assert balance == 8
-        assert repo.balances[(EMPLOYEE_1, "annual")] == 8
+        assert repo.balances[(EMPLOYEE_1, "casual")] == 8
         approval_movements = [
             m for m in repo.movements if m.ref_type == "approval" and m.ref_id == str(req.id)
         ]
@@ -374,12 +372,12 @@ class TestRule1ApproveWritesMovement:
 
     async def test_non_accrual_type_approval_does_not_seed_balance(self) -> None:
         service, repo, _ = _service()
-        req = await _request(service, repo, leave_type="sick", days=1)
+        req = await _request(service, repo, leave_type="unpaid", days=1)
         request, _ = await service.approve(
             request_id=req.id, tenant_id=TENANT, approved_by=APPROVER
         )
         assert request.status == LeaveRequestStatus.APPROVED
-        assert (EMPLOYEE_1, "sick") not in repo.balances
+        assert (EMPLOYEE_1, "unpaid") not in repo.balances
 
 
 class TestRule2NegativeBalance:
@@ -390,7 +388,7 @@ class TestRule2NegativeBalance:
             await service.approve(request_id=req.id, tenant_id=TENANT, approved_by=APPROVER)
         assert repo.requests[req.id].status == LeaveRequestStatus.PENDING
         assert not repo.movements  # nothing written
-        assert (EMPLOYEE_1, "annual") not in repo.balances
+        assert (EMPLOYEE_1, "casual") not in repo.balances
 
     async def test_approval_at_exact_balance_succeeds(self) -> None:
         service, repo, _ = _service()
@@ -443,51 +441,50 @@ class TestRule4Accrual:
         await repo.create_employee(_employee())
 
         first = await service.accrue(
-            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="casual", year=2024
         )
         second = await service.accrue(
-            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="casual", year=2024
         )
 
         assert first is not None and second is None
-        annual = [
-            m for m in repo.movements if m.ref_type == "annual_accrual" and m.ref_id == "2024"
+        accrual_movements = [
+            m for m in repo.movements if m.ref_type == "accrual" and m.ref_id == "2024"
         ]
-        assert len(annual) == 1
+        assert len(accrual_movements) == 1
         assert audit.added and audit.added[-1].action == HR_LEAVE_ACCRUED
 
     async def test_non_accrual_type_cannot_accrue(self) -> None:
         service, _, _ = _service()
         with pytest.raises(ValueError, match="does not accrue"):
             await service.accrue(
-                tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="sick", year=2024
+                tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="unpaid", year=2024
             )
 
-    async def test_full_year_accrual_uses_leave_type_days(self) -> None:
+    async def test_full_year_accrual_uses_policy_days(self) -> None:
         service, repo, _ = _service()
         employee = _employee(hire_date=date(2024, 1, 1))
         await repo.create_employee(employee)
         movement = await service.accrue(
-            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="casual", year=2024
         )
         assert movement is not None
-        assert movement.qty == 20  # hired Jan 1 → full year
+        assert movement.qty == 12  # hired Jan 1 → full year, 12 casual days
 
     async def test_prorated_accrual_from_hire_date(self) -> None:
         service, repo, _ = _service()
         await repo.create_employee(_employee(hire_date=date(2024, 7, 1)))
         movement = await service.accrue(
-            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="annual", year=2024
+            tenant_id=TENANT, employee_id=EMPLOYEE_1, leave_type="casual", year=2024
         )
         assert movement is not None
         remaining = 365 - (date(2024, 7, 1).timetuple().tm_yday - 1)  # 184 days left
         expected = int(
-            (Decimal("20") * Decimal(remaining) / Decimal(365)).quantize(
+            (Decimal("12") * Decimal(remaining) / Decimal(365)).quantize(
                 Decimal("1"), rounding=ROUND_HALF_UP
             )
         )
         assert movement.qty == expected
-        assert movement.qty == 10  # half-year → 10 days
 
 
 class TestRule3AtomicApproval:
@@ -534,9 +531,9 @@ class TestRequest:
             await service.request(
                 tenant_id=TENANT,
                 employee_id=EMPLOYEE_1,
-                leave_type="annual",
-                start_date=date(2024, 5, 1),
-                end_date=date(2024, 5, 2),
+                leave_type="casual",
+                start_date=date.today() + timedelta(days=1),
+                end_date=date.today() + timedelta(days=2),
             )
         assert not repo.requests
 
@@ -554,7 +551,7 @@ class TestTerminatedEmployeeGuards:
 class TestLeaveLedgerDelegates:
     async def test_list_accrual_leave_types_returns_only_accrual_types(self) -> None:
         service, _, _ = _service()
-        assert await service.list_accrual_leave_types(TENANT) == ["annual"]
+        assert await service.list_accrual_leave_types(TENANT) == ["casual", "sick"]
 
     async def test_approved_unpaid_days_delegates_to_repository(self) -> None:
         service, _, _ = _service()

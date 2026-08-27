@@ -246,11 +246,17 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.payroll.read",
         ),
     ),
+    # Employee self-service: portal access to OWN leave balances/requests only.
+    # Deliberately holds zero dashboard permissions — the login redirect sends
+    # sole holders straight to the /leave portal.
+    ("employee_self_service", ("erp.leave.self",)),
 )
 
 SYSTEM_ROLE_NAMES = frozenset(name for name, _ in SYSTEM_ROLE_DEFINITIONS)
 
 INVITATION_TOKEN_EXPIRE_DAYS = 7
+# Employee-portal invites are shorter-lived (spec: single-use, 72h).
+EMPLOYEE_INVITE_TOKEN_EXPIRE_HOURS = 72
 DEFAULT_INVITE_ROLE = "standard_user"
 
 PROBLEM_INVITATION_NOT_FOUND = f"{PROBLEM_BASE_URL}/invitation-not-found"

@@ -10,12 +10,9 @@ import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
 import { useModuleAccess } from "@/lib/access/modules";
 import { listEmployees, type Employee } from "@/lib/api/hr-api";
 import {
@@ -70,6 +67,16 @@ export function CompensationClient() {
   const selectedEmployee = useMemo(
     () => employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
+  );
+
+  const employeeOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.firstName} ${employee.lastName}`,
+        keywords: employee.employeeNumber,
+      })),
+    [employees],
   );
 
   const loadHistory = useCallback(
@@ -208,21 +215,13 @@ export function CompensationClient() {
                   />
                 </div>
               ) : (
-                <Select
-                  value={selectedEmployeeId}
+                <SearchableSelect
+                  className="max-w-sm"
+                  options={employeeOptions}
+                  value={selectedEmployeeId || null}
                   onValueChange={setSelectedEmployeeId}
-                >
-                  <SelectTrigger className="w-full max-w-sm" aria-label="Select employee">
-                    <SelectValue placeholder="Choose an employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.firstName} {employee.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Choose an employee"
+                />
               )}
               {selectedEmployee ? (
                 <p className="mt-3 text-sm text-muted-foreground">

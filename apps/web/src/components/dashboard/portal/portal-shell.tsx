@@ -16,7 +16,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useSession();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-muted/30">
+    <div className="flex min-h-dvh flex-col bg-muted/30" data-theme-scope>
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4">
           <Logo tone="sky" />

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { LoaderCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getLeavePolicy, updateLeavePolicy, type LeavePolicy } from "@/lib/api/hr-api";
+import { updateLeavePolicy, type LeavePolicy } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate } from "@/lib/format";
 
@@ -29,12 +30,16 @@ export function LeavePolicyCard({ policy, canEdit, onPolicyUpdated }: LeavePolic
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    casualDaysPerYear: policy?.casualDaysPerYear ?? 12,
-    sickDaysPerYear: policy?.sickDaysPerYear ?? 8,
+    casualDaysPerYear: policy?.casualDaysPerYear,
+    sickDaysPerYear: policy?.sickDaysPerYear,
     effectiveFrom: policy?.effectiveFrom ?? new Date().toISOString().slice(0, 10),
   });
 
   const handleSave = useCallback(async () => {
+    if (form.casualDaysPerYear === undefined || form.sickDaysPerYear === undefined) {
+      setError("Please enter both casual and sick leave days.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -120,10 +125,12 @@ export function LeavePolicyCard({ policy, canEdit, onPolicyUpdated }: LeavePolic
                 id="casual-days"
                 type="number"
                 min={0}
-                value={form.casualDaysPerYear}
+                value={form.casualDaysPerYear ?? ""}
+                placeholder="e.g. 12"
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, casualDaysPerYear: Number(e.target.value) }))
+                  setForm((f) => ({ ...f, casualDaysPerYear: e.target.value ? Number(e.target.value) : undefined }))
                 }
+                className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 required
               />
             </div>
@@ -133,22 +140,24 @@ export function LeavePolicyCard({ policy, canEdit, onPolicyUpdated }: LeavePolic
                 id="sick-days"
                 type="number"
                 min={0}
-                value={form.sickDaysPerYear}
+                value={form.sickDaysPerYear ?? ""}
+                placeholder="e.g. 8"
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, sickDaysPerYear: Number(e.target.value) }))
+                  setForm((f) => ({ ...f, sickDaysPerYear: e.target.value ? Number(e.target.value) : undefined }))
                 }
+                className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 required
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="effective-from">Effective From</Label>
-              <Input
+              <DatePicker
                 id="effective-from"
-                type="date"
                 value={form.effectiveFrom}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, effectiveFrom: e.target.value }))
-                }
+                onChange={(iso) => {
+                  if (iso) setForm((f) => ({ ...f, effectiveFrom: iso }));
+                }}
+                min={new Date().toISOString().slice(0, 10)}
                 required
               />
             </div>

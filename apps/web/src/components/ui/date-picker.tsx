@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
 import {
@@ -75,11 +75,11 @@ type Cell = { iso: string; label: number; inMonth: boolean };
 
 /**
  * Themed date picker replacing the native browser calendar popup. The month
- * grid renders inline (absolutely positioned under the trigger) rather than
- * through a portal, so it stays inside the DialogContent subtree: Radix's
- * scroll-lock never swallows its wheel events, outside-click dismissal never
- * sees it, and it inherits the active theme-world tokens (e.g. the ERP
- * green) without any container lookup.
+ * grid renders inline (sibling of the trigger button) so it stays inside the
+ * nearest DismissableLayer tree — Radix Dialog sees calendar interactions as
+ * "inside" and never dismisses the dialog. `position: fixed` escapes any
+ * `overflow: hidden` on ancestors. Inherits the active theme-world tokens
+ * (e.g. the ERP green) via CSS custom-property cascade.
  *
  * Value contract: ISO "YYYY-MM-DD" or null; onChange emits the same.
  */
@@ -107,7 +107,9 @@ export function DatePicker({
   lockYear?: boolean;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [view, setView] = useState<ViewMonth>(() => {
     const today = todayParts();
     return { y: today.y, m: today.m };
@@ -116,10 +118,59 @@ export function DatePicker({
 
   const selected = useMemo(() => parseIso(value ?? ""), [value]);
 
+  // Measure trigger and compute dropdown position with viewport collision
+  // detection. Flips above the trigger when insufficient room below, and
+  // clamps horizontally so the calendar never clips at viewport edges.
+  const CALENDAR_HEIGHT = 320; // px — 5-row month grid + header + footer
+  const VIEWPORT_PADDING = 8; // px — breathing room from viewport edges
+
+  function computePosition() {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+
+    // Vertical: flip above if not enough room below.
+    const spaceBelow = vh - rect.bottom;
+    let top: number;
+    if (spaceBelow < CALENDAR_HEIGHT + VIEWPORT_PADDING) {
+      // Above the trigger — subtract calendar height + gap.
+      top = rect.top + window.scrollY - CALENDAR_HEIGHT - 4;
+    } else {
+      // Below the trigger — standard position.
+      top = rect.bottom + window.scrollY + 4;
+    }
+    // Clamp to viewport so it never clips at the top either.
+    top = Math.max(window.scrollY + VIEWPORT_PADDING, top);
+
+    // Horizontal: align left with trigger, clamp so right edge stays on-screen.
+    const calendarWidth = 288; // w-72 = 18rem = 288px
+    let left = rect.left + window.scrollX;
+    if (left + calendarWidth > vw - VIEWPORT_PADDING) {
+      left = vw - calendarWidth - VIEWPORT_PADDING;
+    }
+    left = Math.max(VIEWPORT_PADDING, left);
+
+    setDropdownPos({ top, left });
+  }
+
+  // Measure on open and re-measure on scroll/resize while open.
+  useLayoutEffect(() => {
+    if (!open) return;
+    computePosition();
+    const onReposition = () => computePosition();
+    window.addEventListener("scroll", onReposition, true);
+    window.addEventListener("resize", onReposition);
+    return () => {
+      window.removeEventListener("scroll", onReposition, true);
+      window.removeEventListener("resize", onReposition);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function openPanel() {
     const base = selected ?? todayParts();
-    // A pre-existing selection outside the window (e.g. an old hire date)
-    // still highlights, but the visible month stays inside the window.
     setView(clampView({ y: base.y, m: base.m }, lockYear));
     setHighlighted(toIso(base));
     setOpen(true);
@@ -141,19 +192,23 @@ export function DatePicker({
     return () => document.removeEventListener("keydown", handleCapture, true);
   }, []);
 
-  // Click-outside closes the popup. Clicks inside a portaled Select dropdown
-  // (month/year choosers) count as inside — they land on document.body. This
-  // Radix version renders no [data-radix-popper-content-wrapper], so match
-  // the listbox role instead.
+  // Click-outside closes the popup. The calendar renders inline inside the
+  // DismissableLayer tree, so Radix Dialog won't dismiss on calendar clicks.
+  // Match the calendar's role="dialog", the portaled Select dropdowns, and
+  // their items to keep them interactive.
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
-      const wrapper = wrapperRef.current;
-      if (!wrapper || !event.target) return;
       const target = event.target as HTMLElement;
-      if (target.closest('[role="listbox"]')) return;
+      if (target.closest('[role="dialog"][aria-label="Choose date"]')) return;
+      if (target.closest("[data-slot=\"select-content\"]")) return;
+      if (target.closest("[data-slot=\"select-item\"]")) return;
+      if (target.closest("[role=\"option\"]")) return;
+      if (target.closest("[role=\"listbox\"]")) return;
       if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      if (!wrapper.contains(target)) setOpen(false);
+      const wrapper = wrapperRef.current;
+      if (wrapper && wrapper.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () => document.removeEventListener("pointerdown", handlePointerDown, true);
@@ -259,10 +314,150 @@ export function DatePicker({
     "aria-required": required || undefined,
   };
 
+  const calendarDropdown = open ? (
+    <div
+      role="dialog"
+      aria-label="Choose date"
+      className="fixed z-[9999] w-72 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md outline-none"
+      style={{ top: dropdownPos.top, left: dropdownPos.left }}
+    >
+      <div className="mb-1 flex items-center gap-1">
+        <button
+          type="button"
+          aria-label="Previous month"
+          disabled={atStart}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => shiftView(-1)}
+          className="rounded-md p-1 text-popover-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+        >
+          <ChevronLeft aria-hidden="true" className="size-4" />
+        </button>
+        <Select
+          value={String(view.m)}
+          onValueChange={(month) =>
+            setView((current) => ({ ...current, m: Number(month) }))
+          }
+        >
+          <SelectTrigger
+            aria-label="Month"
+            className="h-7 min-w-0 flex-1 text-sm"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTH_NAMES.map((name, index) => (
+              <SelectItem key={name} value={String(index + 1)}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!lockYear ? (
+          <Select
+            value={String(view.y)}
+            onValueChange={(year) =>
+              setView((current) => ({ ...current, y: Number(year) }))
+            }
+          >
+            <SelectTrigger
+              aria-label="Year"
+              className="h-7 w-[5.75rem] shrink-0 text-sm"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="h-7 w-[5.75rem] shrink-0 text-sm font-medium text-popover-foreground">
+            {view.y}
+          </span>
+        )}
+        <button
+          type="button"
+          aria-label="Next month"
+          disabled={atEnd}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => shiftView(1)}
+          className="rounded-md p-1 text-popover-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+        >
+          <ChevronRight aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5" role="grid">
+        {WEEKDAYS.map((weekday) => (
+          <span
+            key={weekday}
+            aria-hidden="true"
+            className="flex size-8 items-center justify-center text-xs font-medium text-muted-foreground"
+          >
+            {weekday}
+          </span>
+        ))}
+        {cells.map((cell) => {
+          const isSelected = cell.iso === value;
+          const isHighlighted = cell.iso === highlighted;
+          const isToday = cell.iso === toIso(todayParts());
+          const isPast = Boolean(min && cell.iso < min);
+          return (
+            <button
+              key={cell.iso}
+              type="button"
+              role="gridcell"
+              disabled={isPast || undefined}
+              aria-disabled={isPast || undefined}
+              aria-selected={isSelected || undefined}
+              aria-label={cell.iso}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { if (!isPast) commit(cell.iso); }}
+              className={cn(
+                "flex size-8 items-center justify-center rounded-md text-sm transition-colors",
+                cell.inMonth ? "text-popover-foreground" : "text-muted-foreground/50",
+                isPast && "cursor-not-allowed text-muted-foreground/30",
+                isHighlighted && !isSelected && !isPast && "bg-accent",
+                !isHighlighted && !isSelected && !isPast && "hover:bg-accent",
+                isSelected && "bg-primary font-medium text-primary-foreground",
+                isToday && !isSelected && "font-semibold text-primary ring-1 ring-inset ring-primary/40",
+              )}
+            >
+              {cell.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => commit(toIso(todayParts()))}
+          className="rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-accent"
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => commit(null)}
+          className="rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-accent"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div ref={wrapperRef} className={cn("relative", className)}>
       <button
         type="button"
+        ref={triggerRef}
         id={id}
         disabled={disabled}
         aria-haspopup="dialog"
@@ -282,143 +477,7 @@ export function DatePicker({
         </span>
         <Calendar aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
       </button>
-      {open ? (
-        <div
-          role="dialog"
-          aria-label="Choose date"
-          className="absolute top-full left-0 z-50 mt-1 w-72 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md outline-none"
-        >
-          <div className="mb-1 flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous month"
-              disabled={atStart}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => shiftView(-1)}
-              className="rounded-md p-1 text-popover-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-            >
-              <ChevronLeft aria-hidden="true" className="size-4" />
-            </button>
-            <Select
-              value={String(view.m)}
-              onValueChange={(month) =>
-                setView((current) => ({ ...current, m: Number(month) }))
-              }
-            >
-              <SelectTrigger
-                aria-label="Month"
-                className="h-7 min-w-0 flex-1 text-sm"
-                onMouseDown={(event) => event.stopPropagation()}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_NAMES.map((name, index) => (
-                  <SelectItem key={name} value={String(index + 1)}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!lockYear ? (
-              <Select
-                value={String(view.y)}
-                onValueChange={(year) =>
-                  setView((current) => ({ ...current, y: Number(year) }))
-                }
-              >
-                <SelectTrigger
-                  aria-label="Year"
-                  className="h-7 w-[5.75rem] shrink-0 text-sm"
-                  onMouseDown={(event) => event.stopPropagation()}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {yearOptions.map((year) => (
-                    <SelectItem key={year} value={String(year)}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <span className="h-7 w-[5.75rem] shrink-0 text-sm font-medium text-popover-foreground">
-                {view.y}
-              </span>
-            )}
-            <button
-              type="button"
-              aria-label="Next month"
-              disabled={atEnd}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => shiftView(1)}
-              className="rounded-md p-1 text-popover-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-            >
-              <ChevronRight aria-hidden="true" className="size-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-0.5" role="grid">
-            {WEEKDAYS.map((weekday) => (
-              <span
-                key={weekday}
-                aria-hidden="true"
-                className="flex size-8 items-center justify-center text-xs font-medium text-muted-foreground"
-              >
-                {weekday}
-              </span>
-            ))}
-            {cells.map((cell) => {
-              const isSelected = cell.iso === value;
-              const isHighlighted = cell.iso === highlighted;
-              const isToday = cell.iso === toIso(todayParts());
-              const isPast = Boolean(min && cell.iso < min);
-              return (
-                <button
-                  key={cell.iso}
-                  type="button"
-                  role="gridcell"
-                  disabled={isPast || undefined}
-                  aria-disabled={isPast || undefined}
-                  aria-selected={isSelected || undefined}
-                  aria-label={cell.iso}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => { if (!isPast) commit(cell.iso); }}
-                  className={cn(
-                    "flex size-8 items-center justify-center rounded-md text-sm transition-colors",
-                    cell.inMonth ? "text-popover-foreground" : "text-muted-foreground/50",
-                    isPast && "cursor-not-allowed text-muted-foreground/30",
-                    isHighlighted && !isSelected && !isPast && "bg-accent",
-                    !isHighlighted && !isSelected && !isPast && "hover:bg-accent",
-                    isSelected && "bg-primary font-medium text-primary-foreground",
-                    isToday && !isSelected && "font-semibold text-primary ring-1 ring-inset ring-primary/40",
-                  )}
-                >
-                  {cell.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => commit(toIso(todayParts()))}
-              className="rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-accent"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => commit(null)}
-              className="rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-accent"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {calendarDropdown}
     </div>
   );
 }

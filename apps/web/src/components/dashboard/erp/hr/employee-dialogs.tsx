@@ -329,6 +329,7 @@ export function EmployeeFormDialog({
                 onChange={(iso) =>
                   setForm((current) => ({ ...current, hireDate: iso ?? "" }))
                 }
+                min={new Date().toISOString().slice(0, 10)}
                 required
               />
             </div>

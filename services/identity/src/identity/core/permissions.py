@@ -69,6 +69,10 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # portable across the platform.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Cross-module intelligence narrator (SKY-63): force-refresh gate on the
+# /api/v1/ai/narrator/digest/refresh proxy. Same string as core's catalog.
+ERP_AI_NARRATOR_REFRESH = "erp.ai.narrator.refresh"
+
 # Employee self-service portal (own leave balances / requests only)
 ERP_LEAVE_SELF = "erp.leave.self"
 
@@ -120,6 +124,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
     ERP_LEAVE_SELF,
     AGENTS_READ,
     INTELLIGENCE_READ,
@@ -152,7 +157,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "ERP Payroll",
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
-    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE,)),
+    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     ("erp_leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
     ("agents", "AI Agents", (AGENTS_READ,)),
     ("intelligence", "Market Intelligence", (INTELLIGENCE_READ,)),
@@ -184,6 +189,7 @@ __all__ = [
     "BILLING_MANAGE",
     "CATALOG",
     "ERP_AI_INVOKE",
+    "ERP_AI_NARRATOR_REFRESH",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_READ",

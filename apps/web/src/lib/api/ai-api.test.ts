@@ -13,7 +13,7 @@ type Envelope = { data?: unknown; meta?: unknown };
  * lib/api/http.ts.
  */
 vi.mock("@/lib/api/http", () => ({
-  apiFetch: async (_path: string, _options?: RequestInit) => {
+  apiFetch: async (_path: string, _options: RequestInit = {}) => {
     const result = await httpMock(_path, _options);
     return (result as Envelope).data;
   },

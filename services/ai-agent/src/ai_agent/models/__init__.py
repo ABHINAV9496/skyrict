@@ -13,6 +13,7 @@ Alembic's ``target_metadata`` reflects the full schema.
 from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -22,6 +23,7 @@ __all__ = [
     "AgentRegistryModel",
     "AiAnomalyModel",
     "AiAuditLogModel",
+    "AiDigestModel",
     "AiQueryLogModel",
     "AiSuggestionModel",
     "Base",

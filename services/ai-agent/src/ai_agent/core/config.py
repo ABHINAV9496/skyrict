@@ -183,6 +183,26 @@ class Settings(BaseSettings):
         description="days before an open anomaly auto-closes (spec §4.4)",
     )
 
+    # --- Cross-module narrator (SKY-63) ---
+    NARRATOR_SCHEDULER_ENABLED: bool = Field(
+        default=False,
+        description="start the daily narrator cron at boot (SKY-63)",
+    )
+    NARRATOR_SCHEDULER_TIMEZONE: str = Field(
+        default="UTC",
+        description="timezone for the daily narrator cron (tenant time)",
+    )
+    NARRATOR_ALLOW_LLM: bool = Field(
+        default=True,
+        description="whether the narrator may call the LLM (False forces abstentions)",
+    )
+    NARRATOR_DAILY_HOUR: int = Field(
+        default=8, ge=0, le=23, description="hour of day for the daily narrator digest"
+    )
+    NARRATOR_DAILY_MINUTE: int = Field(
+        default=0, ge=0, le=59, description="minute of hour for the daily narrator digest"
+    )
+
     # --- Rate limits (spec §5.4) ---
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
         default=30, ge=1, description="NL queries per minute per user"

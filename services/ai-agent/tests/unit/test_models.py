@@ -11,6 +11,7 @@ import ai_agent.models  # noqa: F401  # registers every model on Base.metadata
 from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base
@@ -26,12 +27,19 @@ class TestRegistry:
             "ai_suggestions",
             "ai_anomalies",
             "ai_audit_log",
+            "ai_digest_snapshots",
             "agent_registry",
         }
         assert expected == set(Base.metadata.tables.keys())
 
     def test_tenant_tables_use_composite_pk(self) -> None:
-        for table in ("ai_query_log", "ai_suggestions", "ai_anomalies", "ai_audit_log"):
+        for table in (
+            "ai_query_log",
+            "ai_suggestions",
+            "ai_anomalies",
+            "ai_audit_log",
+            "ai_digest_snapshots",
+        ):
             pk = list(Base.metadata.tables[table].primary_key.columns.keys())
             assert pk == ["tenant_id", "id"], table
 
@@ -114,6 +122,26 @@ class TestAiAuditLog:
     def test_input_output_are_jsonb(self) -> None:
         assert type(AiAuditLogModel.__table__.c.input.type).__name__ == "JSONB"
         assert type(AiAuditLogModel.__table__.c.output.type).__name__ == "JSONB"
+
+
+class TestAiDigest:
+    def test_insert_only_table_has_no_updated_at(self) -> None:
+        assert "updated_at" not in AiDigestModel.__table__.columns
+
+    def test_points_and_signals_are_jsonb(self) -> None:
+        assert type(AiDigestModel.__table__.c.points.type).__name__ == "JSONB"
+        assert type(AiDigestModel.__table__.c.signals.type).__name__ == "JSONB"
+
+    def test_as_of_index_applies_desc_order(self) -> None:
+        index = next(
+            index
+            for index in AiDigestModel.__table__.indexes
+            if index.name == "idx_ai_digest_snapshots_tenant_as_of"
+        )
+        cols = [column.name for column in index.columns]
+        assert cols == ["tenant_id", "as_of"]
+        desc = str(index.expressions[-1].compile()).lower()
+        assert "generated_at desc" in desc
 
 
 class TestAgentRegistry:

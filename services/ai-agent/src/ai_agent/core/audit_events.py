@@ -38,6 +38,12 @@ escalation but the appendix omits its event. Added here so escalations
 are never mis-audited as dismissals; flagged for the next ADR pass.
 """
 
+AI_NARRATOR_GENERATED = "ai.narrator.generated"
+"""The daily (or on-demand) cross-module digest was produced (SKY-63)."""
+
+AI_NARRATOR_REFRESHED = "ai.narrator.refreshed"
+"""A human force-refreshed the cross-module digest (SKY-63)."""
+
 ALL_AI_AUDIT_EVENTS = frozenset(
     {
         AI_QUERY_EXECUTED,
@@ -48,6 +54,8 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_ANOMALY_RESOLVED,
         AI_ANOMALY_DISMISSED,
         AI_ANOMALY_ESCALATED,
+        AI_NARRATOR_GENERATED,
+        AI_NARRATOR_REFRESHED,
     }
 )
 """The complete, closed vocabulary accepted by the AuditService."""

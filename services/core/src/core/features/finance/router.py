@@ -19,6 +19,7 @@ from core.api.deps import get_finance_service, require_permission
 from core.features.finance.schemas import (
     AccountCreateRequest,
     AccountResponse,
+    ArAgingResponse,
     BalanceSheetResponse,
     FiscalPeriodCreateRequest,
     FiscalPeriodResponse,
@@ -421,6 +422,16 @@ async def get_balance_sheet(
 ) -> ResponseEnvelope[BalanceSheetResponse]:
     report = await svc.balance_sheet(_tenant_id(current_user), as_of)
     return ResponseEnvelope(data=BalanceSheetResponse.model_validate(report))
+
+
+@router.get("/reports/ar-aging", response_model=ResponseEnvelope[ArAgingResponse])
+async def get_ar_aging(
+    as_of: date,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceService = Depends(get_finance_service),
+) -> ResponseEnvelope[ArAgingResponse]:
+    report = await svc.ar_aging(_tenant_id(current_user), as_of)
+    return ResponseEnvelope(data=ArAgingResponse.model_validate(report))
 
 
 # ---------------------------------------------------------------------------

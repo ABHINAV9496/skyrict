@@ -5,7 +5,8 @@ other shape with 422 and the upstream request target only ever embeds the
 canonical hyphenated form — no traversal or metacharacters can reach
 ai-agent (taint cut for the CodeQL SSRF finding). Permission dependencies
 and the pooled client are overridden; transport behaviour lives in
-test_ai_proxy.py.
+test_ai_proxy.py. The narrator (SKY-63) routes also exercise their strict
+AND-permission gate against a stubbed RBAC resolver.
 """
 
 from __future__ import annotations
@@ -17,6 +18,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.api.deps import get_current_user, get_db
+from core.core.exceptions import SkyrictError, skyrict_error_handler
+from core.core.permissions import (
+    ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
+    ERP_CRM_READ,
+    ERP_FINANCE_READ,
+    ERP_INVENTORY_READ,
+    ERP_SALES_READ,
+)
 from core.features.ai import router as ai_router
 
 
@@ -32,6 +43,8 @@ def _app_with_recorder(seen: list[httpx.Request]) -> TestClient:
     app.dependency_overrides[ai_router._require_ai_invoke] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_inventory_read] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_inventory_write] = lambda: {"sub": "u1"}
+    app.dependency_overrides[ai_router._require_narrator_reads] = lambda: {"sub": "u1"}
+    app.dependency_overrides[ai_router._require_narrator_refresh] = lambda: {"sub": "u1"}
     client_factory = lambda: httpx.AsyncClient(  # noqa: E731
         transport=httpx.MockTransport(handler), base_url="http://ai.test"
     )
@@ -102,3 +115,120 @@ class TestProxyPathIdsAreUuids:
 
         assert response.status_code in (404, 422)
         assert seen == []
+
+
+class TestNarratorForwarding:
+    def test_digest_get_forwards(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+
+        response = client.get(
+            "/api/v1/ai/narrator/digest?as_of=2026-08-27",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == "/ai/narrator/digest"
+        assert seen[0].url.query == b"as_of=2026-08-27"
+
+    def test_refresh_post_forwards(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+
+        response = client.post(
+            "/api/v1/ai/narrator/digest/refresh",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == "/ai/narrator/digest/refresh"
+
+
+class TestNarratorPermissionGate:
+    """The narrator is AND-gated: invoke + every module read (refresh adds the
+    dedicated key). Each authorisation is exercised with a stubbed RBAC."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rbac(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        grants: list[str] = []
+        self._grants_box = grants
+
+        class _FakeRbac:
+            def __init__(self, session: object) -> None:
+                self.session = session
+
+            async def resolve_user_permissions(
+                self, *, user_id: object, tenant_id: object
+            ) -> list[str]:
+                return grants
+
+        monkeypatch.setattr(ai_router, "RbacRepository", _FakeRbac)
+
+    def _app(self) -> TestClient:
+        app = FastAPI()
+        app.add_exception_handler(SkyrictError, skyrict_error_handler)
+        app.include_router(ai_router.router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: {
+            "user_id": uuid.uuid4(),
+            "tenant_id": uuid.uuid4(),
+        }
+        app.dependency_overrides[get_db] = lambda: object()
+        app.dependency_overrides[ai_router.get_ai_client] = lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})),
+            base_url="http://ai.test",
+        )
+        return TestClient(app)
+
+    def _grant(self, *keys: str) -> None:
+        self._grants_box[:] = list(keys)
+
+    def test_full_matrix_reads_digest(self) -> None:
+        self._grant(
+            ERP_AI_INVOKE,
+            ERP_FINANCE_READ,
+            ERP_SALES_READ,
+            ERP_INVENTORY_READ,
+            ERP_CRM_READ,
+        )
+        assert self._app().get("/api/v1/ai/narrator/digest").status_code == 200
+
+    def test_missing_any_module_read_denied(self) -> None:
+        # CRM read missing -> 403 even though invoke + other reads are held.
+        self._grant(
+            ERP_AI_INVOKE,
+            ERP_FINANCE_READ,
+            ERP_SALES_READ,
+            ERP_INVENTORY_READ,
+        )
+        assert self._app().get("/api/v1/ai/narrator/digest").status_code == 403
+
+    def test_missing_invoke_denied(self) -> None:
+        self._grant(
+            ERP_FINANCE_READ,
+            ERP_SALES_READ,
+            ERP_INVENTORY_READ,
+            ERP_CRM_READ,
+        )
+        assert self._app().get("/api/v1/ai/narrator/digest").status_code == 403
+
+    def test_refresh_needs_dedicated_key(self) -> None:
+        # Full matrix but no erp.ai.narrator.refresh -> refresh denied.
+        self._grant(
+            ERP_AI_INVOKE,
+            ERP_FINANCE_READ,
+            ERP_SALES_READ,
+            ERP_INVENTORY_READ,
+            ERP_CRM_READ,
+        )
+        assert self._app().post("/api/v1/ai/narrator/digest/refresh").status_code == 403
+
+    def test_refresh_granted_with_dedicated_key(self) -> None:
+        self._grant(
+            ERP_AI_INVOKE,
+            ERP_FINANCE_READ,
+            ERP_SALES_READ,
+            ERP_INVENTORY_READ,
+            ERP_CRM_READ,
+            ERP_AI_NARRATOR_REFRESH,
+        )
+        assert self._app().post("/api/v1/ai/narrator/digest/refresh").status_code == 200

@@ -65,6 +65,11 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # ai-agent microservice - permissionless calls never reach the AI service.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Cross-module intelligence narrator (SKY-63): force-refresh gate on the
+# /api/v1/ai/narrator/digest/refresh proxy. Only lets an operator recompute
+# the daily digest out of turn; plain reads need the strict narrator matrix.
+ERP_AI_NARRATOR_REFRESH = "erp.ai.narrator.refresh"
+
 # Employee self-service portal (own leave balances/requests only; mirrors
 # identity's catalog so the invite flow can grant it portably)
 ERP_LEAVE_SELF = "erp.leave.self"
@@ -96,9 +101,9 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
     ERP_LEAVE_SELF,
 )
-
 # Permission module groupings.
 # Each entry: (module_key, module_label, (permission_keys, ...))
 PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -119,7 +124,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
-    ("ai", "AI assistant", (ERP_AI_INVOKE,)),
+    ("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     ("leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
 )
 
@@ -144,6 +149,7 @@ _assert_catalog_union()
 __all__ = [
     "CATALOG",
     "ERP_AI_INVOKE",
+    "ERP_AI_NARRATOR_REFRESH",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_APPROVE",

@@ -4,8 +4,8 @@ Add three new values to the ``erp_crm_timeline_event_type`` PostgreSQL enum
 so the finance service can write curated timeline events anchored to the
 customer entity: ``invoice.issued``, ``invoice.approved``, ``payment.applied``.
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-08-21
 """
 
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0017"
-down_revision = "0016"
+revision = "0020"
+down_revision = "0019"
 branch_labels = None
 depends_on = None
 

@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { createPayrollRun, type PayrollRun } from "@/lib/api/payroll-api";
 import { ApiError } from "@/lib/api/http";
@@ -87,24 +87,22 @@ export function NewRunDialog({
           <div className="grid gap-4 py-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="period-start">Period start</Label>
-              <Input
+              <DatePicker
                 id="period-start"
-                type="date"
-                value={form.periodStart}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, periodStart: event.target.value }))
+                value={form.periodStart || null}
+                onChange={(iso) =>
+                  setForm((current) => ({ ...current, periodStart: iso ?? "" }))
                 }
                 required
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="period-end">Period end</Label>
-              <Input
+              <DatePicker
                 id="period-end"
-                type="date"
-                value={form.periodEnd}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, periodEnd: event.target.value }))
+                value={form.periodEnd || null}
+                onChange={(iso) =>
+                  setForm((current) => ({ ...current, periodEnd: iso ?? "" }))
                 }
                 required
               />

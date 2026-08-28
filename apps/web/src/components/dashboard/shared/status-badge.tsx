@@ -20,6 +20,14 @@ const STATUS_CLASSES: Record<string, string> = {
   computed: "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-400",
   paid: "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-400",
   void: "bg-red-500/15 text-red-700 ring-1 ring-red-500/30 dark:text-red-400",
+  // Attendance statuses
+  on_time: "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-400",
+  late: "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400",
+  absent: "bg-red-500/15 text-red-700 ring-1 ring-red-500/30 dark:text-red-400",
+  // Attendance pay impact
+  full: "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-400",
+  half: "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400",
+  none: "bg-muted text-muted-foreground ring-1 ring-border",
 };
 
 const DEFAULT_CLASS = "bg-muted text-muted-foreground ring-1 ring-border";

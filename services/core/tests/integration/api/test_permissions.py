@@ -216,6 +216,8 @@ class TestScopeMatrix:
                     "last_name": "Test",
                     "job_title": "Engineer",
                     "hire_date": "2026-01-05",
+                    "email": "scope.test@example.com",
+                    "phone": "+1 555 010 0500",
                     "monthly_salary": "5000.00",
                 },
                 hr_write,

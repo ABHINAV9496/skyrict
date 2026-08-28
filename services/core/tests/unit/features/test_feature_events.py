@@ -10,7 +10,7 @@ integration layer, so the buffer mechanics are tested here in isolation.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -256,8 +256,8 @@ class TestLeaveCancelledEventPending:
             tenant_id=TENANT,
             employee_id=employee_id,
             leave_type="annual",
-            start_date=date(2024, 5, 1),
-            end_date=date(2024, 5, 2),
+            start_date=date.today() + timedelta(days=1),
+            end_date=date.today() + timedelta(days=2),
         )
         await service.cancel(request_id=request.id, tenant_id=TENANT)
 

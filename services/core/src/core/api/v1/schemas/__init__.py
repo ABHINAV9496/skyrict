@@ -1,6 +1,8 @@
 """API v1 request/response schemas — HR & payroll (HR-BE-002)."""
 
 from core.api.v1.schemas.hr import (
+    AttendanceRecordOut,
+    AttendanceUpsertRequest,
     DepartmentCreate,
     DepartmentOut,
     DepartmentUpdate,
@@ -12,6 +14,8 @@ from core.api.v1.schemas.hr import (
     LeaveBalanceAdjustRequest,
     LeaveBalanceOut,
     LeaveMovementOut,
+    LeavePolicyOut,
+    LeavePolicyUpdate,
     LeaveRequestCreate,
     LeaveRequestOut,
     LeaveRequestRejectBody,
@@ -32,6 +36,8 @@ from core.api.v1.schemas.payroll import (
 )
 
 __all__ = [
+    "AttendanceRecordOut",
+    "AttendanceUpsertRequest",
     "CompensationCreate",
     "CompensationOut",
     "DepartmentCreate",
@@ -46,6 +52,8 @@ __all__ = [
     "LeaveBalanceAdjustRequest",
     "LeaveBalanceOut",
     "LeaveMovementOut",
+    "LeavePolicyOut",
+    "LeavePolicyUpdate",
     "LeaveRequestCreate",
     "LeaveRequestOut",
     "LeaveRequestRejectBody",

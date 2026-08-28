@@ -198,6 +198,9 @@ class CrmTimelineEventType(StrEnum):
     ORDER_CREATED = "order.created"
     CONTACT_CREATED = "contact.created"
     CONTACT_DEACTIVATED = "contact.deactivated"
+    INVOICE_ISSUED = "invoice.issued"
+    INVOICE_APPROVED = "invoice.approved"
+    PAYMENT_APPLIED = "payment.applied"
 
 
 class OrderStatus(StrEnum):

@@ -273,14 +273,22 @@ async def list_invoices(
     current_user: dict[str, Any] = Depends(require_finance_read),
     svc: FinanceService = Depends(get_finance_service),
 ) -> ListResponse[InvoiceResponse]:
-    invoices = await svc.list_invoices(
-        _tenant_id(current_user),
+    tenant_id = _tenant_id(current_user)
+    invoices, customer_names = await svc.list_invoices_with_customer_names(
+        tenant_id,
         status=_parse_invoice_status(status),
         offset=offset,
         limit=limit,
     )
+    order_numbers = await svc.resolve_source_order_numbers(invoices, tenant_id)
+    data = []
+    for inv in invoices:
+        resp = InvoiceResponse.model_validate(inv)
+        resp.customer_name = customer_names.get(inv.customer_id)
+        resp.source_order_number = order_numbers.get(inv.source_ref) if inv.source_ref else None
+        data.append(resp)
     return ListResponse(
-        data=[InvoiceResponse.model_validate(i) for i in invoices],
+        data=data,
         meta=PaginationMeta.create(
             total=len(invoices), page=(offset // limit) + 1 if limit else 1, page_size=limit
         ),
@@ -293,8 +301,13 @@ async def get_invoice(
     current_user: dict[str, Any] = Depends(require_finance_read),
     svc: FinanceService = Depends(get_finance_service),
 ) -> ResponseEnvelope[InvoiceResponse]:
-    invoice = await svc.get_invoice(_tenant_id(current_user), invoice_id)
-    return ResponseEnvelope(data=InvoiceResponse.model_validate(invoice))
+    tenant_id = _tenant_id(current_user)
+    invoice, customer_name = await svc.get_invoice_with_customer_name(tenant_id, invoice_id)
+    resp = InvoiceResponse.model_validate(invoice)
+    resp.customer_name = customer_name
+    order_numbers = await svc.resolve_source_order_numbers([invoice], tenant_id)
+    resp.source_order_number = order_numbers.get(invoice.source_ref) if invoice.source_ref else None
+    return ResponseEnvelope(data=resp)
 
 
 @router.post("/invoices/{invoice_id}/issue", response_model=ResponseEnvelope[InvoiceResponse])

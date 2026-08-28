@@ -201,6 +201,8 @@ async def _hire(
         "last_name": "Test",
         "job_title": "Engineer",
         "hire_date": hire_date,
+        "email": f"race.test.{uuid.uuid4().hex[:8]}@example.com",
+        "phone": "+1 555 010 0000",
     }
     if overrides.pop("no_salary", False) is False:
         payload["monthly_salary"] = "5000.00"
@@ -213,15 +215,17 @@ async def _hire(
 async def _create_leave_request(
     client: AsyncClient, headers: dict[str, str], employee_id: str, days: int
 ) -> str:
-    start = f"2026-02-{1:02d}"
-    end = f"2026-03-{days:02d}" if days > 28 else f"2026-02-{days:02d}"
+    from datetime import date, timedelta
+
+    start_date = date.today() + timedelta(days=1)
+    end_date = start_date + timedelta(days=days - 1)
     response = await client.post(
         "/api/v1/hr/leave/requests",
         json={
             "employee_id": employee_id,
             "leave_type": "annual",
-            "start_date": start,
-            "end_date": end,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         },
         headers=headers,
     )
@@ -622,6 +626,8 @@ class TestNoEventOnFailedTransaction:
                 "last_name": "Row",
                 "job_title": "Engineer",
                 "hire_date": "2026-01-05",
+                "email": "ghost.row@example.com",
+                "phone": "+1 555 010 0400",
                 "monthly_salary": "5000.00",
                 "department_id": foreign_department_id,
             },

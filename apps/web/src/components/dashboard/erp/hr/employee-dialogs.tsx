@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Leaf, LoaderCircle, Trash2, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -15,12 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
 import {
   changeEmployeeStatus,
   createEmployee,
@@ -30,6 +28,8 @@ import {
   type Employee,
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
+import { CountryCombobox } from "@/components/dashboard/erp/hr/country-combobox";
+import { getCountryByCode, splitDialCode } from "@/lib/hr/countries";
 
 interface EmployeeFormState {
   firstName: string;
@@ -52,8 +52,21 @@ const EMPTY_FORM: EmployeeFormState = {
   phone: "",
   departmentId: "",
   monthlySalary: "",
-  currency: "USD",
+  currency: "INR",
 };
+
+/**
+ * Seed values for the hire dialog: always India (+91 IN / INR), regardless
+ * of the browser locale — the tenant's workforce is India-based, so the
+ * defaults must not drift with whatever region the browser reports. The two
+ * fields stay fully independent after seeding.
+ */
+function defaultCountrySeed(): { country: string | null; currency: string } {
+  const india = getCountryByCode("IN");
+  return india?.dialCode
+    ? { country: india.code, currency: india.currency ?? "INR" }
+    : { country: null, currency: "INR" };
+}
 
 export function EmployeeFormDialog({
   open,
@@ -70,7 +83,24 @@ export function EmployeeFormDialog({
 }) {
   const [form, setForm] = useState<EmployeeFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"email" | "phone", string>>>({});
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** True once the user manually picks a currency; stops phone→currency suggestions. */
+  const currencyTouchedRef = useRef(false);
+
+  const selectedCountry = selectedCountryCode
+    ? getCountryByCode(selectedCountryCode) ?? null
+    : null;
+
+  const departmentOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      departments.map((department) => ({
+        value: department.id,
+        label: department.name,
+      })),
+    [departments],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -85,12 +115,91 @@ export function EmployeeFormDialog({
             phone: employee.phone ?? "",
             departmentId: employee.departmentId ?? "",
             monthlySalary: "",
-            currency: "USD",
+            currency: "INR",
           }
         : EMPTY_FORM,
     );
     setFormError(null);
+    setFieldErrors({});
+    setSelectedCountryCode(null);
+    currencyTouchedRef.current = false;
+    if (employee) {
+      // Move a leading dial code out of the number and into the picker, so
+      // the code shows once (like hire mode) instead of inside the field.
+      const parsed = employee.phone ? splitDialCode(employee.phone) : null;
+      if (parsed) {
+        setSelectedCountryCode(parsed.country.code);
+        setForm((current) => ({ ...current, phone: parsed.rest }));
+      }
+    } else {
+      const defaults = defaultCountrySeed();
+      setSelectedCountryCode(defaults.country);
+      setForm((current) => ({ ...current, currency: defaults.currency }));
+    }
   }, [open, employee]);
+
+  /**
+   * Phone-side selection. Suggests the matching currency, but only while the
+   * user hasn't manually chosen one; after an explicit currency pick the two
+   * fields stay fully independent for the rest of the dialog session.
+   */
+  function handlePhoneCountryChange(code: string) {
+    setSelectedCountryCode(code);
+    if (!currencyTouchedRef.current) {
+      const country = getCountryByCode(code);
+      if (country?.currency) {
+        setForm((current) => ({ ...current, currency: country.currency as string }));
+      }
+    }
+    setFieldErrors((current) => ({ ...current, phone: undefined }));
+  }
+
+  /** Currency-side selection: claims the field; never touches the phone country. */
+  function handleCurrencyChange(code: string) {
+    currencyTouchedRef.current = true;
+    setForm((current) => ({ ...current, currency: code }));
+  }
+
+  function validateHireFields(): boolean {
+    const errors: Partial<Record<"email" | "phone", string>> = {};
+    const email = form.email.trim();
+    if (!email) {
+      errors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (!form.phone.trim()) {
+      errors.phone = "Phone number is required.";
+    } else if (!selectedCountryCode) {
+      errors.phone = "Select a country for the phone number.";
+    } else if (
+      selectedCountry?.phoneMin != null &&
+      selectedCountry.phoneMax != null
+    ) {
+      const digits = form.phone.replace(/\D/g, "");
+      if (
+        digits &&
+        (digits.length < selectedCountry.phoneMin ||
+          digits.length > selectedCountry.phoneMax)
+      ) {
+        errors.phone = `${selectedCountry.name} phone numbers use ${selectedCountry.phoneMin}\u2013${selectedCountry.phoneMax} digits.`;
+      }
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  /**
+   * Full number sent to the API: the picker owns the dial code, so it is
+   * re-attached here (unless the user typed their own "+…" prefix). Values
+   * without a recognizable code round-trip unchanged.
+   */
+  function buildPhone(): string {
+    const raw = form.phone.trim();
+    if (!raw || raw.startsWith("+")) return raw;
+    const dial = selectedCountry?.dialCode;
+    return dial ? `+${dial}${raw}` : raw;
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,6 +210,10 @@ export function EmployeeFormDialog({
     }
     if (!form.hireDate) {
       setFormError("A hire date is required.");
+      return;
+    }
+    if (!employee && !validateHireFields()) {
+      setFormError("Please fix the highlighted fields.");
       return;
     }
 
@@ -114,7 +227,7 @@ export function EmployeeFormDialog({
           jobTitle: form.jobTitle.trim(),
           hireDate: form.hireDate,
           email: form.email.trim() || undefined,
-          phone: form.phone.trim() || undefined,
+          phone: buildPhone() || undefined,
           departmentId: form.departmentId || undefined,
         });
         onOpenChange(false);
@@ -125,8 +238,8 @@ export function EmployeeFormDialog({
           lastName: form.lastName.trim(),
           jobTitle: form.jobTitle.trim(),
           hireDate: form.hireDate,
-          email: form.email.trim() || undefined,
-          phone: form.phone.trim() || undefined,
+          email: form.email.trim(),
+          phone: buildPhone(),
           departmentId: form.departmentId || undefined,
           monthlySalary: form.monthlySalary.trim() || undefined,
           currency: form.currency.trim() || undefined,
@@ -144,9 +257,22 @@ export function EmployeeFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !saving && onOpenChange(next)}
+    >
       <DialogContent className="sm:max-w-lg">
-        <form onSubmit={(event) => void onSubmit(event)}>
+        <form
+          onSubmit={(event) => void onSubmit(event)}
+          onKeyDown={(event) => {
+            // Enter must not implicitly submit the form from a mid-form input
+            // (it fires createEmployee and slams the dialog shut); only the
+            // footer buttons keep their Enter activation.
+            if (event.key === "Enter" && (event.target as HTMLElement).tagName !== "BUTTON") {
+              event.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {employee ? "Edit employee" : "Hire a new employee"}
@@ -159,7 +285,9 @@ export function EmployeeFormDialog({
           </DialogHeader>
           <div className="grid gap-4 py-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="first-name">First name</Label>
+              <Label htmlFor="first-name">
+                First name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="first-name"
                 value={form.firstName}
@@ -170,7 +298,9 @@ export function EmployeeFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="last-name">Last name</Label>
+              <Label htmlFor="last-name">
+                Last name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="last-name"
                 value={form.lastName}
@@ -193,59 +323,88 @@ export function EmployeeFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="hire-date">Hire date</Label>
-              <Input
+              <DatePicker
                 id="hire-date"
-                type="date"
-                value={form.hireDate}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, hireDate: event.target.value }))
+                value={form.hireDate || null}
+                onChange={(iso) =>
+                  setForm((current) => ({ ...current, hireDate: iso ?? "" }))
                 }
+                min={new Date().toISOString().slice(0, 10)}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">
+                Email <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="email"
                 type="email"
                 value={form.email}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, email: event.target.value }))
-                }
+                aria-invalid={fieldErrors.email ? true : undefined}
+                onChange={(event) => {
+                  setForm((current) => ({ ...current, email: event.target.value }));
+                  if (fieldErrors.email) {
+                    setFieldErrors((current) => ({ ...current, email: undefined }));
+                  }
+                }}
               />
+              {fieldErrors.email ? (
+                <p className="text-xs font-medium text-destructive">{fieldErrors.email}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                value={form.phone}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, phone: event.target.value }))
-                }
-              />
+              <Label htmlFor="phone">
+                Phone <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex gap-2">
+                <CountryCombobox
+                  kind="country"
+                  id="phone-country"
+                  className="w-32 shrink-0"
+                  value={selectedCountryCode}
+                  onChange={handlePhoneCountryChange}
+                  placeholder="Country"
+                  invalid={Boolean(fieldErrors.phone)}
+                />
+                <Input
+                  id="phone"
+                  className="flex-1"
+                  inputMode="tel"
+                  value={form.phone}
+                  aria-invalid={fieldErrors.phone ? true : undefined}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, phone: event.target.value }));
+                    if (fieldErrors.phone) {
+                      setFieldErrors((current) => ({ ...current, phone: undefined }));
+                    }
+                  }}
+                />
+              </div>
+              {fieldErrors.phone ? (
+                <p className="text-xs font-medium text-destructive">{fieldErrors.phone}</p>
+              ) : selectedCountry?.phoneMin != null && selectedCountry.phoneMax != null ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedCountry.name}: {selectedCountry.phoneMin}
+                  &ndash;
+                  {selectedCountry.phoneMax} digits
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="department">Department</Label>
-              <Select
-                value={form.departmentId}
+              <SearchableSelect
+                id="department"
+                options={departmentOptions}
+                value={form.departmentId || null}
                 onValueChange={(value) =>
                   setForm((current) => ({ ...current, departmentId: value }))
                 }
-              >
-                <SelectTrigger id="department" className="w-full">
-                  <SelectValue placeholder="No department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((department) => (
-                    <SelectItem key={department.id} value={department.id}>
-                      {department.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="No department"
+              />
             </div>
             {!employee ? (
-              <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[1fr_6rem]">
+              <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[1fr_12rem]">
                 <div className="space-y-1.5">
                   <Label htmlFor="monthly-salary">Monthly salary (optional)</Label>
                   <Input
@@ -263,17 +422,11 @@ export function EmployeeFormDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="currency">Currency</Label>
-                  <Input
+                  <CountryCombobox
+                    kind="currency"
                     id="currency"
-                    maxLength={3}
-                    className="uppercase"
                     value={form.currency}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        currency: event.target.value.toUpperCase(),
-                      }))
-                    }
+                    onChange={handleCurrencyChange}
                   />
                 </div>
               </div>
@@ -459,11 +612,10 @@ export function TerminateEmployeeDialog({
           <div className="grid gap-4 py-4">
             <div className="space-y-1.5">
               <Label htmlFor="termination-date">Termination date (optional)</Label>
-              <Input
+              <DatePicker
                 id="termination-date"
-                type="date"
-                value={terminationDate}
-                onChange={(event) => setTerminationDate(event.target.value)}
+                value={terminationDate || null}
+                onChange={(iso) => setTerminationDate(iso ?? "")}
               />
             </div>
             <div className="space-y-1.5">

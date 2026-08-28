@@ -171,6 +171,7 @@ allow_indirect_imports = true
 ignore_imports = [
     "identity.features.**.repository -> identity.models.**",
     "identity.features.**.repository -> identity.db.**",
+    "identity.features.invitations.service -> identity.db.session",
 ]
 
 [[tool.importlinter.contracts]]

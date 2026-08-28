@@ -66,6 +66,10 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # ai-agent microservice - permissionless calls never reach the AI service.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Employee self-service portal (own leave balances/requests only; mirrors
+# identity's catalog so the invite flow can grant it portably)
+ERP_LEAVE_SELF = "erp.leave.self"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -94,6 +98,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_LEAVE_SELF,
 )
 
 # Permission module groupings.
@@ -118,6 +123,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
     ("ai", "AI assistant", (ERP_AI_INVOKE,)),
+    ("leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
 )
 
 
@@ -157,6 +163,7 @@ __all__ = [
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
     "ERP_INVOICE_WRITE",
+    "ERP_LEAVE_SELF",
     "ERP_PAYROLL_APPROVE",
     "ERP_PAYROLL_READ",
     "ERP_PAYROLL_WRITE",

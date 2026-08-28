@@ -78,8 +78,6 @@ class PayrollRepositoryPort(Protocol):
 
     async def get_run(self, run_id: uuid.UUID, tenant_id: uuid.UUID) -> ent.PayrollRun | None: ...
 
-    async def update_run(self, run: ent.PayrollRun) -> ent.PayrollRun: ...
-
     async def list_runs(
         self,
         tenant_id: uuid.UUID,
@@ -95,7 +93,6 @@ class PayrollRepositoryPort(Protocol):
         *,
         period_start: date,
         period_end: date,
-        exclude_run_id: uuid.UUID | None = None,
     ) -> ent.PayrollRun | None: ...
 
     async def transition_run_status(

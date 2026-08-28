@@ -69,7 +69,7 @@ def main() -> int:
                     tmp.write(chunk)
         except urllib.error.HTTPError as exc:
             if exc.code in (401, 403):
-                print("MaxMind rejected the license key (HTTP %d)." % exc.code, file=sys.stderr)
+                print(f"MaxMind rejected the license key (HTTP {exc.code}).", file=sys.stderr)
             else:
                 print(f"Download failed: {exc}", file=sys.stderr)
             os.unlink(tmp_name)
@@ -87,7 +87,7 @@ def main() -> int:
                 raise RuntimeError(f"{EDITION}.mmdb missing from archive")
             with open(output, "wb") as dest:
                 dest.write(src.read())
-    except Exception as exc:  # noqa: BLE001  # surface any archive error to the user
+    except Exception as exc:  # surface any archive error to the user
         print(f"Extraction failed: {exc}", file=sys.stderr)
         os.unlink(tmp_name)
         return 1

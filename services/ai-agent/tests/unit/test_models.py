@@ -21,17 +21,32 @@ class TestRegistry:
         expected = {
             # read-only projection of identity's shared table
             "tenants",
-            # AI-owned tables (this commit)
+            # AI-owned tables (SKY-57)
             "ai_query_log",
             "ai_suggestions",
             "ai_anomalies",
             "ai_audit_log",
             "agent_registry",
+            # RAG tables (SKY-58)
+            "ai_rag_parents",
+            "ai_rag_chunks",
+            "ai_episodic_memory",
+            "ai_query_cache",
+            "ai_eval_runs",
         }
         assert expected == set(Base.metadata.tables.keys())
 
     def test_tenant_tables_use_composite_pk(self) -> None:
-        for table in ("ai_query_log", "ai_suggestions", "ai_anomalies", "ai_audit_log"):
+        for table in (
+            "ai_query_log",
+            "ai_suggestions",
+            "ai_anomalies",
+            "ai_audit_log",
+            "ai_rag_parents",
+            "ai_rag_chunks",
+            "ai_episodic_memory",
+            "ai_query_cache",
+        ):
             pk = list(Base.metadata.tables[table].primary_key.columns.keys())
             assert pk == ["tenant_id", "id"], table
 

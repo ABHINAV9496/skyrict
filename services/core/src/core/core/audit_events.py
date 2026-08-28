@@ -30,6 +30,7 @@ HR_LEAVE_BALANCE_ADJUSTED = "hr.leave.balance.adjusted"
 HR_LEAVE_ACCRUED = "hr.leave.accrued"
 HR_LEAVE_POLICY_UPDATED = "hr.leave.policy.updated"
 HR_ATTENDANCE_RECORDED = "hr.attendance.recorded"
+HR_AI_RISK_ACKNOWLEDGED = "hr.ai.risk.acknowledged"
 
 # ---------------------------------------------------------------------------
 # Payroll
@@ -73,6 +74,7 @@ CATALOG: tuple[str, ...] = (
     HR_LEAVE_ACCRUED,
     HR_LEAVE_POLICY_UPDATED,
     HR_ATTENDANCE_RECORDED,
+    HR_AI_RISK_ACKNOWLEDGED,
     PAYROLL_RUN_CREATED,
     PAYROLL_RUN_COMPUTED,
     PAYROLL_RUN_APPROVED,
@@ -116,6 +118,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_LEAVE_ACCRUED,
             HR_LEAVE_POLICY_UPDATED,
             HR_ATTENDANCE_RECORDED,
+            HR_AI_RISK_ACKNOWLEDGED,
         ),
     ),
     (
@@ -183,6 +186,7 @@ __all__ = [
     "FINANCE_JOURNAL_ENTRY_POSTED",
     "FINANCE_JOURNAL_ENTRY_VOIDED",
     "FINANCE_PAYMENT_APPLIED",
+    "HR_AI_RISK_ACKNOWLEDGED",
     "HR_DEPARTMENT_CREATED",
     "HR_DEPARTMENT_UPDATED",
     "HR_EMPLOYEE_CREATED",

@@ -1,0 +1,29 @@
+{
+  "name": "hr_attrition_risk_v1",
+  "version": "v1-gbc-2026-08",
+  "model_type": "sklearn.ensemble.GradientBoostingClassifier",
+  "explainer": "shap.TreeExplainer",
+  "features": [
+    "tenure_years",
+    "compa_ratio",
+    "promotion_gap_months",
+    "activity_count"
+  ],
+  "risk_band_thresholds": {
+    "low_to_medium": 0.45,
+    "medium_to_high": 0.70
+  },
+  "abstention_rule": {
+    "description": "confidence < 0.75 -> no score returned or stored (business-wide)",
+    "threshold": 0.75
+  },
+  "training_cadence": "manual / explicit via `uv run --directory services/ai-agent ai-agent attrition-train`; the platform has NO scheduler (matches the leave-accrual lazy precedent)",
+  "refresh": "lazy-on-read TTL in core: scores regenerated when the attrition endpoint is read and the latest generated_at is older than AI_HR_REFRESH_INTERVAL_DAYS (default 7); idempotent per (employee_id, model_version)",
+  "known_limitations": [
+    "default model is fit on a small bundled reference dataset for reproducible out-of-the-box scoring; it is a placeholder until a validated model is trained via the CLI",
+    "confidence is a v1 heuristic (magnitude from the abstention edge + activity/compa data presence), not a calibrated probability",
+    "feature data quality depends on core exposing compa-ratio baseline and activity counts; sparse data lowers confidence and may abstain",
+    "no scheduler: model version only advances when a human retrains and exports via the CLI"
+  ],
+  "staleness_window_days": 7
+}

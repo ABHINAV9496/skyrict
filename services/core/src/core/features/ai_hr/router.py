@@ -1,0 +1,198 @@
+"""``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
+
+L1 aggregates (``/overview``, ``/tenure``) are computed in-core and never
+proxied — no employee row leaves the service. The attrition endpoints
+(``/attrition``, ``/attrition/{id}/acknowledge``) are the L1-L2 slice:
+
+- ``GET /attrition`` requires ``erp.ai.invoke`` + ``erp.hr.ai.read``. Callers
+  holding ``erp.hr.ai.individual`` (owner + exec only) get the full per-employee
+  L2 body; everyone else gets a **403 with an aggregates-only (L1) body** per
+  the Gherkin — never an empty failure. The lazy-on-read TTL re-score proxies
+  anonymous feature vectors to ai-agent (Commit 3).
+- ``POST /attrition/{id}/acknowledge`` requires ``erp.hr.ai.acknowledge`` and
+  appends an audited ``hr.ai.risk.acknowledged`` event.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Sequence
+from typing import Annotated, Any
+
+import httpx
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse, Response
+
+from core.api.deps import (
+    get_ai_hr_service,
+    get_current_user,
+    get_hr_ai_individual,
+    require_permission,
+)
+from core.core.permissions import (
+    ERP_AI_INVOKE,
+    ERP_HR_AI_ACKNOWLEDGE,
+    ERP_HR_AI_COPILOT,
+    ERP_HR_AI_READ,
+)
+from core.core.tenant_resolver import derive_tenant_slug
+from core.features.ai.proxy import forward_to_ai_agent, relay_response
+from core.features.ai.router import get_ai_client
+from core.features.ai_hr.attrition_client import score_features
+from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
+from core.features.ai_hr.schemas import (
+    AttritionDetailOut,
+    AttritionSummaryOut,
+    OverviewOut,
+    TenureSummaryOut,
+    attrition_l1_to_out,
+    attrition_l2_to_out,
+    overview_to_out,
+    tenure_to_out,
+)
+from core.features.ai_hr.service import AiHrService
+from skyrict_common.schemas import ResponseEnvelope
+
+router = APIRouter(prefix="/ai/hr", tags=["ai-hr"])
+
+_require_ai_invoke = require_permission(ERP_AI_INVOKE)
+_require_hr_ai_read = require_permission(ERP_HR_AI_READ)
+_require_hr_ai_acknowledge = require_permission(ERP_HR_AI_ACKNOWLEDGE)
+_require_hr_ai_copilot = require_permission(ERP_HR_AI_COPILOT)
+
+_AiInvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
+_HrAiReadDep = Annotated[dict[str, Any], Depends(_require_hr_ai_read)]
+_HrAiAckDep = Annotated[dict[str, Any], Depends(_require_hr_ai_acknowledge)]
+_HrAiCopilotDep = Annotated[dict[str, Any], Depends(_require_hr_ai_copilot)]
+_CurrentUserDep = Annotated[dict[str, Any], Depends(get_current_user)]
+_ServiceDep = Annotated[AiHrService, Depends(get_ai_hr_service)]
+_ClientDep = Annotated[httpx.AsyncClient, Depends(get_ai_client)]
+_IndividualDep = Annotated[bool, Depends(get_hr_ai_individual)]
+
+
+def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
+    val = current_user["tenant_id"]
+    return val if isinstance(val, uuid.UUID) else uuid.UUID(val)
+
+
+class _HttpxScorer:
+    """Binds the request's auth + tenant slug to the outbound ai-agent call."""
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        authorization: str | None,
+        tenant_slug: str | None,
+    ) -> None:
+        self._client = client
+        self._authorization = authorization
+        self._tenant_slug = tenant_slug
+
+    async def score(
+        self,
+        tenant_id: uuid.UUID,
+        features: Sequence[FeatureVector],
+    ) -> list[ScoredRisk]:
+        del tenant_id  # the tenant travels via X-Tenant-Slug / JWT
+        return await score_features(
+            self._client,
+            authorization=self._authorization,
+            tenant_slug=self._tenant_slug,
+            features=features,
+        )
+
+
+@router.get("/overview", response_model=ResponseEnvelope[OverviewOut])
+async def overview(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    service: _ServiceDep,
+) -> ResponseEnvelope[OverviewOut]:
+    """L1 headcount/tenure overview with a deterministic narrative."""
+    result = await service.overview(_tenant_id(current_user))
+    return ResponseEnvelope(data=overview_to_out(result), message="HR AI overview retrieved")
+
+
+@router.get("/tenure", response_model=ResponseEnvelope[TenureSummaryOut])
+async def tenure(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    service: _ServiceDep,
+) -> ResponseEnvelope[TenureSummaryOut]:
+    """L1 tenure-band summary with a deterministic narrative."""
+    result = await service.tenure(_tenant_id(current_user))
+    return ResponseEnvelope(data=tenure_to_out(result), message="HR AI tenure summary retrieved")
+
+
+@router.get("/attrition", response_model=ResponseEnvelope[AttritionDetailOut])
+async def attrition(
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    client: _ClientDep,
+    service: _ServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[AttritionDetailOut] | JSONResponse:
+    """L2 per-employee risk for ``individual`` callers; L1 aggregates otherwise."""
+    tenant_id = _tenant_id(current_user)
+    scorer = _HttpxScorer(client, request.headers.get("authorization"), derive_tenant_slug(request))
+    scored = await service.attrition(tenant_id, scorer=scorer)
+    if not show_individual:
+        summary = attrition_l1_to_out(scored)
+        limited: ResponseEnvelope[AttritionSummaryOut] = ResponseEnvelope(
+            data=summary,
+            message="erp.hr.ai.individual required; aggregates returned",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    return ResponseEnvelope(
+        data=attrition_l2_to_out(scored),
+        message="HR AI attrition detail retrieved",
+    )
+
+
+@router.post(
+    "/attrition/{employee_id}/acknowledge", response_model=ResponseEnvelope[dict[str, str]]
+)
+async def acknowledge(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiAckDep,
+    service: _ServiceDep,
+) -> ResponseEnvelope[dict[str, str]]:
+    """Audit a manager's acknowledgement of one employee's attrition risk."""
+    await service.acknowledge(
+        _tenant_id(current_user),
+        employee_id,
+        actor_user_id=current_user["user_id"],
+    )
+    return ResponseEnvelope(
+        data={"status": "acknowledged"},
+        message="Attrition risk acknowledged",
+    )
+
+
+@router.post("/copilot/chat")
+async def copilot_chat(
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiCopilotDep,
+    client: _ClientDep,
+) -> Response:
+    """Forward one HR Copilot message to ai-agent (spec §9 feature 5).
+
+    Gated by ``erp.ai.invoke`` + ``erp.hr.ai.copilot``. The caller's JWT and
+    tenant slug are relayed so ai-agent makes its aggregate reads (and any PII
+    redaction) under exactly that identity. The upstream RFC 7807 response
+    passes through untouched.
+    """
+    del current_user
+    body = await request.body()
+    upstream = await forward_to_ai_agent(
+        client,
+        method=request.method,
+        upstream_path="/ai/hr/copilot/chat",
+        authorization=request.headers.get("authorization"),
+        tenant_slug=derive_tenant_slug(request),
+        body=body,
+    )
+    return relay_response(upstream)

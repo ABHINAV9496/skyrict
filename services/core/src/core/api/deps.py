@@ -29,6 +29,7 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
+    from core.features.ai_hr.service import AiHrService
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
@@ -289,6 +290,47 @@ def get_payroll_service(
         ),
         audit=audit,
     )
+
+
+def get_ai_hr_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> AiHrService:
+    """Composition root for the HR/Payroll AI features (L1 + attrition).
+
+    Shares ONE request-scoped session across the aggregate and attrition
+    repositories so a lazy re-score upserts in the same transaction it reads.
+    """
+    from core.core.config import settings
+    from core.features.ai_hr.attrition_repository import AiHrAttritionRepository
+    from core.features.ai_hr.repository import AiHrRepository
+    from core.features.ai_hr.service import AiHrService
+
+    return AiHrService(
+        repository=AiHrRepository(db),
+        attrition_repository=AiHrAttritionRepository(db),
+        audit=audit,
+        attrition_refresh_days=settings.AI_HR_REFRESH_INTERVAL_DAYS,
+    )
+
+
+async def get_hr_ai_individual(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """True when the caller may view individual (L2) attrition scores.
+
+    ``erp.hr.ai.individual`` is granted only to the owner and a dedicated exec
+    role (spec §3) — NOT org_admin/dept_manager. The attrition endpoint uses
+    this to downgrade to an aggregates-only (L1) 403 body when absent.
+    """
+    from core.core.permissions import ERP_HR_AI_INDIVIDUAL
+
+    granted = await RbacRepository(db).resolve_user_permissions(
+        user_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
+    return grants_permission(granted, ERP_HR_AI_INDIVIDUAL)
 
 
 def get_finance_service(

@@ -42,6 +42,34 @@ class _FakeSession:
         self.flushed = True
 
 
+class _Cursor:
+    """Minimal result cursor for the retrieval-path queries."""
+
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[object]:
+        return self._rows
+
+    def scalars(self) -> _Cursor:
+        return self
+
+    def __iter__(self):  # pragma: no cover - iter(scalars())
+        return iter(self._rows)
+
+
+class _RetrievalFakeSession:
+    """Session that returns queued cursors from ``execute``."""
+
+    def __init__(self, cursors: list[_Cursor]) -> None:
+        self._cursors = list(cursors)
+        self.executed: list[object] = []
+
+    async def execute(self, statement: object) -> _Cursor:
+        self.executed.append(statement)
+        return self._cursors.pop(0) if self._cursors else _Cursor([])
+
+
 def _parents_and_vectors() -> list[tuple[ParentChunk, list[list[float]]]]:
     child = ChildChunk(index=0, text="Laptop Charger 65W", token_count=8)
     parent = ParentChunk(index=0, text="Laptop Charger 65W", token_count=8, children=(child,))
@@ -157,3 +185,114 @@ class TestReplaceDocument:
                 embedding_model="m",
                 dims=4,
             )
+
+
+def _chunk_model(
+    *,
+    parent_id: uuid.UUID,
+    chunk_index: int = 0,
+    text: str = "Laptop Charger 65W",
+) -> AiRagChunkModel:
+    return AiRagChunkModel(
+        tenant_id=TENANT_ID,
+        id=uuid.uuid4(),
+        parent_id=parent_id,
+        source_ref=SOURCE_REF,
+        chunk_text=text,
+        module=MODULE,
+        chunk_index=chunk_index,
+        metadata_={},
+    )
+
+
+class TestSemanticSearch:
+    async def test_filters_tenant_and_orders_by_cosine_distance_with_limit(self) -> None:
+        parent_id = uuid.uuid4()
+        chunk = _chunk_model(parent_id=parent_id)
+        session = _RetrievalFakeSession([_Cursor([(chunk, 0.15)])])
+        repo = RagRepository(session)  # type: ignore[arg-type]
+
+        hits = await repo.semantic_search(
+            tenant_id=TENANT_ID, query_vector=[0.1, 0.2, 0.3, 0.4], top_k=20
+        )
+
+        assert len(hits) == 1
+        assert hits[0].parent_id == parent_id
+        assert hits[0].chunk_text == "Laptop Charger 65W"
+        assert hits[0].cosine_distance == pytest.approx(0.15)
+        compiled = str(
+            session.executed[0].compile(dialect=sqlalchemy.dialects.postgresql.dialect())
+        )
+        assert "ai_rag_chunks.tenant_id" in compiled
+        assert "ai_rag_chunks.embedding <=>" in compiled
+        assert "LIMIT" in compiled
+
+    async def test_module_filter_added_when_provided(self) -> None:
+        chunk = _chunk_model(parent_id=uuid.uuid4())
+        session = _RetrievalFakeSession([_Cursor([(chunk, 0.3)])])
+        repo = RagRepository(session)  # type: ignore[arg-type]
+
+        await repo.semantic_search(
+            tenant_id=TENANT_ID,
+            query_vector=[0.1, 0.2, 0.3, 0.4],
+            top_k=5,
+            module="manuals",
+        )
+
+        compiled = str(
+            session.executed[0].compile(dialect=sqlalchemy.dialects.postgresql.dialect())
+        )
+        assert (
+            "ai_rag_chunks.module = 'manuals'" in compiled or "ai_rag_chunks.module =" in compiled
+        )
+
+
+class TestFetchParents:
+    async def test_orders_results_like_the_input_ids(self) -> None:
+        first_id, second_id = uuid.uuid4(), uuid.uuid4()
+        first_parent = AiRagParentModel(
+            tenant_id=TENANT_ID,
+            id=first_id,
+            source_ref=SOURCE_REF,
+            chunk_text="First parent text",
+            module=MODULE,
+            metadata_={},
+        )
+        second_parent = AiRagParentModel(
+            tenant_id=TENANT_ID,
+            id=second_id,
+            source_ref=SOURCE_REF,
+            chunk_text="Second parent text",
+            module=MODULE,
+            metadata_={},
+        )
+        session = _RetrievalFakeSession([_Cursor([first_parent, second_parent])])
+        repo = RagRepository(session)  # type: ignore[arg-type]
+
+        records = await repo.fetch_parents(tenant_id=TENANT_ID, parent_ids=[second_id, first_id])
+
+        assert [r.parent_id for r in records] == [second_id, first_id]
+        assert records[0].chunk_text == "Second parent text"
+
+    async def test_empty_input_returns_without_query(self) -> None:
+        session = _RetrievalFakeSession([])
+        repo = RagRepository(session)  # type: ignore[arg-type]
+        assert await repo.fetch_parents(tenant_id=TENANT_ID, parent_ids=[]) == []
+        assert session.executed == []
+
+
+class TestStatusForTenant:
+    async def test_merges_parent_and_chunk_stats_per_module(self) -> None:
+        parent_rows = [("products", 12, 3, None), ("manuals", 4, 2, None)]
+        child_rows = [("products", 45), ("manuals", 9)]
+        session = _RetrievalFakeSession([_Cursor(parent_rows), _Cursor(child_rows)])
+        repo = RagRepository(session)  # type: ignore[arg-type]
+
+        modules = await repo.status_for_tenant(tenant_id=TENANT_ID)
+
+        by_module = {row["module"]: row for row in modules}
+        assert by_module["products"]["parents"] == 12
+        assert by_module["products"]["documents"] == 3
+        assert by_module["products"]["children"] == 45
+        assert by_module["manuals"]["children"] == 9
+        assert len(session.executed) == 2

@@ -273,6 +273,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
         default=30, ge=1, description="NL queries per minute per user"
     )
+    RATE_LIMIT_RAG_SEARCH_PER_MIN: int = Field(
+        default=30, ge=1, description="RAG semantic searches per minute per user"
+    )
     RATE_LIMIT_APPROVAL_PER_MIN: int = Field(
         default=10, ge=1, description="suggestion approvals/rejections per minute per user"
     )

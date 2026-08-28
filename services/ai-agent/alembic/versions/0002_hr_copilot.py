@@ -34,6 +34,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        f"DELETE FROM agent_registry WHERE name = '{_AGENT_NAME}'"
-    )
+    op.execute(f"DELETE FROM agent_registry WHERE name = '{_AGENT_NAME}'")

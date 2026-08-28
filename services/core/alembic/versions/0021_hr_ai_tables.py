@@ -16,8 +16,8 @@ All AI tables use the ``ai_`` prefix, are tenant-scoped with RLS enabled, and
 use composite ``(tenant_id, id)`` primary keys with composite FKs to
 ``erp_employees`` / ``erp_payroll_runs``.
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-08-28
 """
 
@@ -27,8 +27,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0020"
-down_revision = "0019"
+revision = "0021"
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 
@@ -129,7 +129,9 @@ def upgrade() -> None:
         sa.Column("score", sa.Numeric(5, 4), nullable=False),
         sa.Column("risk_band", sa.String(8), nullable=False),
         sa.Column("confidence", sa.Numeric(3, 2), nullable=False),
-        sa.Column("factors", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column(
+            "factors", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")
+        ),
         sa.Column("model_version", sa.String(64), nullable=False),
         sa.Column(
             "generated_at",
@@ -208,7 +210,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("severity", sa.String(10), nullable=False),
-        sa.Column("evidence", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "evidence", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")
+        ),
         sa.Column("status", sa.String(14), nullable=False, server_default="open"),
         sa.Column("acknowledged_by", sa.Uuid(), nullable=True),
         sa.Column("acknowledged_at", sa.DateTime(timezone=True), nullable=True),
@@ -264,7 +268,9 @@ def upgrade() -> None:
         sa.Column("owner_rule", sa.String(64), nullable=False),
         sa.Column("owner_user_id", sa.Uuid(), nullable=True),
         sa.Column("status", sa.String(14), nullable=False, server_default="open"),
-        sa.Column("evidence", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "evidence", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

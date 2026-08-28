@@ -117,6 +117,15 @@ class Settings(BaseSettings):
         gt=0,
         description="per-request timeout for proxied AI calls (LLMs are slow)",
     )
+    AI_HR_REFRESH_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL: when the HR attrition endpoint is read and the "
+            "latest stored score's generated_at is older than this many days, the "
+            "core re-scores by proxying anonymous feature vectors to ai-agent."
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""

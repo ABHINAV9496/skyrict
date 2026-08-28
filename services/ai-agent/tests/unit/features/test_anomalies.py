@@ -32,14 +32,18 @@ def _movement(
     product_id: uuid.UUID | None = None,
     warehouse_id: uuid.UUID | None = None,
     ref_id: str | None = None,
+    hour: int | None = None,
 ) -> MovementRow:
+    created = datetime.now(tz=UTC) - timedelta(hours=hours_ago)
+    if hour is not None:
+        created = created.replace(hour=hour, minute=0, second=0, microsecond=0)
     return MovementRow(
         id=uuid.uuid4(),
         product_id=product_id or PRODUCT_ID,
         warehouse_id=warehouse_id or WAREHOUSE_ID,
         movement_type=movement_type,
         qty=qty,
-        created_at=datetime.now(tz=UTC) - timedelta(hours=hours_ago),
+        created_at=created,
         ref_id=ref_id,
     )
 
@@ -157,17 +161,27 @@ class FakeGateway:
     def __init__(self, movements: list[MovementRow]) -> None:
         self.movements = movements
 
-    async def list_movements(self) -> list[MovementRow]:
+    async def list_movements(self, *, product_id=None, warehouse_id=None, movement_type=None) -> list[MovementRow]:
         return self.movements
+
+    async def get_stock_levels(self, *, product_id=None, warehouse_id=None):
+        return []
 
 
 class FakeAnomalies:
     def __init__(self) -> None:
         self.created: list[dict[str, object]] = []
-        self.open_types: set[str] = set()
+        self.open_scopes: set[tuple[str, uuid.UUID | None, uuid.UUID | None]] = set()
 
-    async def has_open(self, *, tenant_id: uuid.UUID, anomaly_type: str) -> bool:
-        return anomaly_type in self.open_types
+    async def has_open(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        anomaly_type: str,
+        product_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+    ) -> bool:
+        return (anomaly_type, product_id, warehouse_id) in self.open_scopes
 
     async def create(self, **kwargs):
         row = SimpleNamespace(**kwargs, id=uuid.uuid4())
@@ -195,8 +209,8 @@ def _make_service(movements):
 class TestScan:
     async def test_creates_rows_and_audit_events(self) -> None:
         movements = [
-            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20),
-            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4),
+            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20, hour=14),
+            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4, hour=14),
         ]
         service, repo, audit = _make_service(movements)
 
@@ -208,11 +222,13 @@ class TestScan:
 
     async def test_open_anomaly_of_same_type_is_skipped(self) -> None:
         movements = [
-            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20),
-            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4),
+            _movement(movement_type="receipt", qty=Decimal(100), hours_ago=20, hour=14),
+            _movement(movement_type="issue", qty=Decimal(-80), hours_ago=4, hour=14),
         ]
         service, repo, _audit = _make_service(movements)
-        repo.open_types.add("sudden_stock_drop")
+        repo.open_scopes.add(
+            ("sudden_stock_drop", movements[1].product_id, movements[1].warehouse_id)
+        )
 
         report = await service.run_scan(tenant_id=TENANT_ID)
 

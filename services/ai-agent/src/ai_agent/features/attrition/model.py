@@ -86,7 +86,9 @@ def load_model(path: str | None = None) -> LoadedModel:
     target = path or _DEFAULT_MODEL_PATH
     if target and os.path.isfile(target):
         with open(target, "rb") as fh:
-            payload = pickle.load(fh)
+            # Trusted local artifact: written by this package's own export_model
+            # CLI / bundled build, never deserialized from user or network input.
+            payload = pickle.load(fh)  # nosec B301
         if isinstance(payload, dict) and "model" in payload and "version" in payload:
             return LoadedModel(
                 model=payload["model"],

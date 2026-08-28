@@ -33,20 +33,38 @@ from ai_agent.core.exceptions import (
     AiInvalidResponseError,
     AiUnavailableError,
 )
+from ai_agent.core.providers.base import LlmRequest
+from ai_agent.redaction import Redactor
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from ai_agent.core.providers.base import LlmCompletion, LlmProvider, LlmRequest
+    from ai_agent.core.providers.base import LlmCompletion, LlmProvider
 
 logger = structlog.get_logger("ai_agent.llm_router")
 
 
 class LlmRouter:
-    """Ordered failover across zero or more providers."""
+    """Ordered failover across zero or more providers.
 
-    def __init__(self, providers: Sequence[LlmProvider]) -> None:
+    The router is the single choke-point through which every LLM request
+    passes. As such it also enforces the PII redaction gate (HR-AI-001): every
+    ``LlmRequest`` is passed through ``self._redactor`` BEFORE it reaches any
+    provider adapter, so no raw sensitive value can ever be serialized into an
+    outbound provider payload. The gate fails closed — anything that matches a
+    sensitive pattern is masked.
+    """
+
+    def __init__(
+        self,
+        providers: Sequence[LlmProvider],
+        *,
+        redactor: Redactor | None = None,
+    ) -> None:
         self._providers: list[LlmProvider] = list(providers)
+        # Default to the real redactor; tests may inject a fake. A redactor is
+        # always present so the gate is never silently disabled by omission.
+        self._redactor: Redactor = redactor if redactor is not None else Redactor()
 
     @property
     def has_providers(self) -> bool:
@@ -85,6 +103,22 @@ class LlmRouter:
         )
         if not eligible:
             raise AiUnavailableError("No AI provider is configured")
+
+        # REDACTION GATE (HR-AI-001): mask PII from both prompt parts BEFORE any
+        # provider serializes the payload. This is the single enforcement point
+        # for every outbound provider call in ai-agent.
+        redacted = self._redactor.redact(request.user_prompt)
+        if redacted.text != request.user_prompt:
+            logger.info(
+                "llm_router.redacted",
+                mask_counts=redacted.mask_counts,
+            )
+            request = LlmRequest(
+                system_prompt=request.system_prompt,
+                user_prompt=redacted.text,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            )
 
         saw_unavailable = False
         for provider in eligible:

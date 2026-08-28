@@ -45,5 +45,31 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
     )
 
 
+@app.command()
+def ingest(
+    source: str = typer.Option(
+        "docs", help="source: 'docs' (markdown dir) or 'module' (core data)"
+    ),
+    module: str = typer.Option("docs", help="module name ('docs' or e.g. 'products')"),
+    tenant: str = typer.Option(..., help="tenant slug (required)"),
+    path: Path | None = None,
+    mode: str = typer.Option(
+        "incremental", help="'incremental' or 'full' (both replace idempotently)"
+    ),
+) -> None:
+    """Ingest documents into the RAG vector store (SKY-58).
+
+    --path: markdown directory root when --source=docs. Re-running a document
+    is always safe (both modes replace idempotently).
+
+    Requires an embedding provider: AI_EMBEDDING_PROVIDER + AI_EMBEDDING_API_KEY.
+    """
+    import asyncio
+
+    from ai_agent.ingest import run_ingest
+
+    asyncio.run(run_ingest(source=source, module=module, tenant=tenant, path=path, mode=mode))
+
+
 if __name__ == "__main__":
     app()

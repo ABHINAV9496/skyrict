@@ -203,6 +203,13 @@ class Settings(BaseSettings):
         gt=0,
         description="timeout for embedding API calls",
     )
+    INGEST_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token used by the RAG ingestion CLI when pulling module "
+            "data from the core service — never logged"
+        ),
+    )
 
     # --- RAG configuration (SKY-58) ---
     RAG_CHUNK_CHILD_TOKENS: int = Field(

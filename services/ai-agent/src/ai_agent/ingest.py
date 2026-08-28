@@ -13,13 +13,11 @@ therefore pins the resolved tenant id BEFORE any statement runs.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 import structlog
 import typer
-from sqlalchemy import select
 
 from ai_agent.core.config import settings
 from ai_agent.core.embedding import build_embedding_provider
@@ -28,18 +26,16 @@ from ai_agent.core.tenant_context import TenantContext
 from ai_agent.core.token_counter import TokenCounter
 from ai_agent.db.rag_repository import RagRepository
 from ai_agent.db.session import async_session_factory
+from ai_agent.db.tenant_resolver import resolve_tenant_id
 from ai_agent.features.rag.ingest.loader import (
     MODULE_ENDPOINTS,
     DocsLoader,
     ModuleLoader,
 )
 from ai_agent.features.rag.ingest.service import RagIngestService
-from ai_agent.models.tenant import TenantModel
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
     from ai_agent.features.rag.ingest.loader import SourceDocument
 
@@ -79,7 +75,7 @@ async def run_ingest(
             )
 
     async with async_session_factory() as session:
-        tenant_id = await _resolve_tenant(session, tenant)
+        tenant_id = await resolve_tenant_id(session, tenant)
         # Pin the security context BEFORE the first statement so the session's
         # RLS hook constrains every delete/insert to this tenant.
         TenantContext.set(str(tenant_id))
@@ -117,19 +113,6 @@ async def run_ingest(
         mode=mode,
         **asdict(report),
     )
-
-
-async def _resolve_tenant(session: AsyncSession, tenant: str) -> uuid.UUID:
-    """Accept a tenant UUID directly, or resolve a slug from the tenants row."""
-    try:
-        return uuid.UUID(tenant)
-    except ValueError:
-        pass
-    result = await session.execute(select(TenantModel).where(TenantModel.slug == tenant))
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise StartupError(f"tenant not found: {tenant}")
-    return row.id
 
 
 async def _load_documents(

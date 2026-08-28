@@ -8,10 +8,10 @@ second identical query from the SAME tenant increments ``hit_count`` instead
 of inserting a duplicate row (migration 0003 fixed 0002's global-unique bug
 so this conflict target exists).
 
-Expired rows are left in place for the hourly cleanup sweep (deferred to the
-RAGAS/nightly commit, same pattern as ai_episodic_memory). Reads are not
-serve-from-DB: a Redis miss falls through to a fresh retrieval, then writes
-through BOTH layers.
+Expired rows are purged by ``delete_expired`` (``ai-agent sweep-caches`` in
+the nightly workflow) — the same TTL-sweep pattern as ai_episodic_memory.
+Reads never serve from the DB: a Redis miss falls through to a fresh
+retrieval, then writes through BOTH layers.
 """
 
 from __future__ import annotations
@@ -20,8 +20,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import CursorResult
 
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 
@@ -77,3 +78,18 @@ class QueryCacheRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def delete_expired(self) -> int:
+        """Purge expired rows; returns the number of rows deleted.
+
+        The nightly ``ai-agent sweep-caches`` gate calls this. The ``expires_at``
+        index (idx_query_cache_expires) keeps this a narrow index scan.
+        """
+        result = await self.session.execute(
+            delete(AiQueryCacheModel).where(AiQueryCacheModel.expires_at <= func.now())
+        )
+        # rowcount only exists on CursorResult (DML executions), not the base
+        # Result type — narrow instead of suppressing the type check.
+        if isinstance(result, CursorResult):
+            return result.rowcount or 0
+        return 0

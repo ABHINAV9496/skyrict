@@ -18,6 +18,8 @@ TENANT_ID = uuid.uuid4()
 
 
 class _Result:
+    rowcount: int = 0
+
     def scalar_one(self) -> object:
         return object()
 
@@ -106,3 +108,19 @@ class TestGet:
         sql = _compile(session.executed[0])
         assert "SELECT ai_query_cache" in sql
         assert "expires_at >" in sql
+
+
+class TestDeleteExpired:
+    async def test_sweep_deletes_only_expired_rows(self) -> None:
+        session = _FakeSession()
+        repo = QueryCacheRepository(session)  # type: ignore[arg-type]
+        deleted = await repo.delete_expired()
+
+        assert deleted == 0
+        assert len(session.executed) == 1
+        sql = _compile(session.executed[0])
+        assert "DELETE FROM ai_query_cache" in sql
+        # Narrow index scan: expires_at is indexed, and the predicate is the
+        # same boundary reads use (<= now() rather than a timestamp binding).
+        assert "expires_at <=" in sql
+        assert "now" in sql

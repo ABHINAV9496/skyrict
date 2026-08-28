@@ -235,6 +235,107 @@ class InvoicePort(Protocol):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Cross-module customer port (seam for CRM)
+# ---------------------------------------------------------------------------
+
+
+class CustomerPort(Protocol):
+    """Customer name resolution port — finance reads customer names, never CRM tables.
+
+    Implemented by ``CrmRepository`` (via ``get_customer``). The service calls
+    ``get_customer_name`` to resolve a single customer, or the batch variant
+    ``get_customer_names`` for list endpoints to avoid N+1 queries.
+    """
+
+    async def get_customer_name(
+        self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> str | None: ...
+
+    async def get_customer_names(
+        self, customer_ids: Sequence[uuid.UUID], *, tenant_id: uuid.UUID
+    ) -> dict[uuid.UUID, str]: ...
+
+
+# ---------------------------------------------------------------------------
+# Cross-module COGS port (seam for sales/inventory)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CogsLine:
+    """One consumed product line for COGS posting.
+
+    ``unit_cost`` is the product's cost price at fulfilment time.
+    """
+
+    product_id: uuid.UUID
+    quantity: Decimal
+    unit_cost: Decimal
+
+
+class CogsPort(Protocol):
+    """Cost-of-goods-sold posting seam the sales service calls after stock consumption.
+
+    Implemented by the finance service (via ``FinanceService.post_cogs_for_order``).
+    """
+
+    async def post_cogs_for_order(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        order_id: str,
+        entry_date: date,
+        lines: Sequence[CogsLine],
+    ) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# Cross-module CRM timeline port (seam for writing finance events to CRM)
+# ---------------------------------------------------------------------------
+
+
+class FinanceTimelinePort(Protocol):
+    """Write curated finance events to the customer-facing CRM timeline.
+
+    Implemented structurally by ``CrmRepository.record_timeline_event`` —
+    the finance service never imports CRM modules. Events are anchored to
+    the customer entity (``entity_type='customer'``).
+    """
+
+    async def record_timeline_event(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: Any,
+        entity_id: uuid.UUID,
+        event_type: Any,
+        title: str,
+        actor_id: uuid.UUID | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
+# Cross-module order lookup port (seam for resolving source sales order)
+# ---------------------------------------------------------------------------
+
+
+class OrderLookupPort(Protocol):
+    """Resolve a sales order number from its UUID for display on invoice detail.
+
+    Implemented structurally by ``SalesRepository.get_order`` — finance never
+    imports the sales feature.
+    """
+
+    async def get_order(self, order_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
+# Audit sink (implemented structurally by core.features.audit.repository)
+# ---------------------------------------------------------------------------
+
+
 class AuditSink(Protocol):
     """Append-only audit trail for finance state changes.
 

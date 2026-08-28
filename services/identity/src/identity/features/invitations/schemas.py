@@ -16,6 +16,15 @@ class InvitationCreateRequest(BaseModel):
         default=DEFAULT_INVITE_ROLE,
         description="Role to assign on accept — must exist in the organization",
     )
+    expires_in_hours: int | None = Field(
+        default=None,
+        ge=1,
+        le=336,
+        description=(
+            "Token lifetime override in hours (default: INVITATION_TOKEN_EXPIRE_DAYS); "
+            "employee portal invites pass 72"
+        ),
+    )
 
 
 class InvitationVerifyResponse(BaseModel):

@@ -17,6 +17,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -171,4 +172,4 @@ class OrderStockPort(Protocol):
         order_id: uuid.UUID,
         lines: Sequence[SalesOrderLine],
         ref_type: str = "sale_order",
-    ) -> None: ...
+    ) -> list[tuple[uuid.UUID, Decimal, Decimal]]: ...

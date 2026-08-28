@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, LoaderCircle, X } from "lucide-react";
 
 import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
+import { LeavePolicyCard } from "@/components/dashboard/erp/hr/leave-policy-card";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
 import { Button } from "@/components/ui/button";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import {
   Dialog,
   DialogContent,
@@ -19,12 +21,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
 import { useModuleAccess } from "@/lib/access/modules";
 import {
   accrueLeave,
@@ -32,11 +31,13 @@ import {
   approveLeaveRequest,
   cancelLeaveRequest,
   getLeaveBalances,
+  getLeavePolicy,
   listEmployees,
   listLeaveRequests,
   rejectLeaveRequest,
   type Employee,
   type LeaveBalance,
+  type LeavePolicy,
   type LeaveRequest,
   type LeaveRequestStatus,
 } from "@/lib/api/hr-api";
@@ -87,11 +88,49 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
   const [adjust, setAdjust] = useState({ leaveType: "", qty: "", reason: "" });
   const [accruing, setAccruing] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [policy, setPolicy] = useState<LeavePolicy | null>(null);
+
+  const statusOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      STATUS_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    [],
+  );
+  const employeeFilterOptions = useMemo<SearchableSelectOption[]>(
+    () => [
+      { value: "all", label: "All employees" },
+      ...employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.firstName} ${employee.lastName}`,
+        keywords: employee.employeeNumber,
+      })),
+    ],
+    [employees],
+  );
+  const balanceEmployeeOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.firstName} ${employee.lastName}`,
+        keywords: employee.employeeNumber,
+      })),
+    [employees],
+  );
+  const adjustTypeOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      balances.map((balance) => ({
+        value: balance.leaveType,
+        label: balance.leaveType,
+      })),
+    [balances],
+  );
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
-      const [requestsResult, employeeList] = await Promise.all([
+      const [requestsResult, employeeList, policyResult] = await Promise.all([
         listLeaveRequests({
           page,
           pageSize: PAGE_SIZE,
@@ -101,8 +140,10 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
           },
         }),
         listEmployees({ pageSize: 100 }),
+        getLeavePolicy(),
       ]);
       setEmployees(employeeList.items);
+      setPolicy(policyResult);
       setStatus({
         state: "ready",
         requests: requestsResult.items,
@@ -226,6 +267,17 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
       label: "Requested",
       render: (request) => (
         <span className="text-muted-foreground">{formatDate(request.createdAt)}</span>
+      ),
+    },
+    {
+      key: "reason",
+      label: "Reason",
+      className: "max-w-[12rem]",
+      render: (request) => (
+        <TruncatedTooltip
+          text={request.reason || "\u2014"}
+          className="text-sm"
+        />
       ),
     },
     ...(canAct
@@ -391,49 +443,40 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
         </div>
       ) : null}
 
+      {canWrite ? (
+        <LeavePolicyCard
+          policy={policy}
+          canEdit={canWrite}
+          onPolicyUpdated={(updated) => setPolicy(updated)}
+        />
+      ) : null}
+
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-sm font-semibold tracking-tight text-foreground">
             Requests
           </h2>
           <div className="flex flex-wrap items-center gap-3">
-            <Select
+            <SearchableSelect
+              className="w-40"
+              options={statusOptions}
               value={statusFilter}
               onValueChange={(value) => {
                 setStatusFilter(value as "all" | LeaveRequestStatus);
                 setPage(1);
               }}
-            >
-              <SelectTrigger className="w-40" aria-label="Filter by status">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
+              placeholder="Status"
+            />
+            <SearchableSelect
+              className="w-48"
+              options={employeeFilterOptions}
               value={employeeFilter}
               onValueChange={(value) => {
                 setEmployeeFilter(value);
                 setPage(1);
               }}
-            >
-              <SelectTrigger className="w-48" aria-label="Filter by employee">
-                <SelectValue placeholder="Employee" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All employees</SelectItem>
-                {employees.map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Employee"
+            />
           </div>
         </div>
 
@@ -475,21 +518,13 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
             Balances
           </h2>
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={selectedEmployeeId ?? ""}
+            <SearchableSelect
+              className="w-56"
+              options={balanceEmployeeOptions}
+              value={selectedEmployeeId}
               onValueChange={(value) => setSelectedEmployeeId(value || null)}
-            >
-              <SelectTrigger className="w-56" aria-label="Select employee">
-                <SelectValue placeholder="Choose an employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Choose an employee"
+            />
             {canWrite ? (
               <>
                 <Button
@@ -566,23 +601,15 @@ export function LeaveClient({ initialStatus }: { initialStatus?: LeaveRequestSta
             <div className="grid gap-4 py-4">
               <div className="space-y-1.5">
                 <Label htmlFor="adjust-type">Leave type</Label>
-                <Select
-                  value={adjust.leaveType}
+                <SearchableSelect
+                  id="adjust-type"
+                  options={adjustTypeOptions}
+                  value={adjust.leaveType || null}
                   onValueChange={(value) =>
                     setAdjust((current) => ({ ...current, leaveType: value }))
                   }
-                >
-                  <SelectTrigger id="adjust-type" className="w-full">
-                    <SelectValue placeholder="Leave type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {balances.map((balance) => (
-                      <SelectItem key={balance.leaveType} value={balance.leaveType}>
-                        {balance.leaveType}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Leave type"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="adjust-qty">Days</Label>

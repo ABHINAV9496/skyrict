@@ -226,6 +226,8 @@ class TestCrmWorkspaceEnums:
                 "contact.created",
                 "contact.deactivated",
                 "customer.created",
+                "invoice.approved",
+                "invoice.issued",
                 "lead.created",
                 "lead.disqualified",
                 "lead.qualified",
@@ -234,6 +236,7 @@ class TestCrmWorkspaceEnums:
                 "opportunity.stage_changed",
                 "opportunity.won",
                 "order.created",
+                "payment.applied",
             ]
 
         await engine.dispose()

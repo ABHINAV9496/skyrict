@@ -35,7 +35,12 @@ if TYPE_CHECKING:
     from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
-    from core.features.hr.service import DepartmentService, EmployeeService, LeaveService
+    from core.features.hr.service import (
+        AttendanceService,
+        DepartmentService,
+        EmployeeService,
+        LeaveService,
+    )
     from core.features.inventory.service import InventoryService
     from core.features.payroll.service import PayrollService
     from core.features.sales.service import SalesService
@@ -217,6 +222,47 @@ def get_leave_service(
     return LeaveService(repository=repo, audit=audit)
 
 
+async def require_employee_self_service(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    repo: HrRepository = Depends(get_hr_repo),
+) -> dict[str, Any]:
+    """Portal gate — permission check + employee binding in one dependency.
+
+    The caller must hold ``erp.leave.self`` (the ``employee_self_service`` role
+    grants exactly that key; the owner wildcard also passes). The linked
+    ``erp_employees`` row is resolved via ``user_id`` — bound on the identity
+    side at invite-accept (shared-DB mirror). Fails closed when the permission
+    is missing or no employee record is (yet) linked to the account.
+    """
+    from core.core.permissions import ERP_LEAVE_SELF
+
+    user_id = current_user["user_id"]
+    tenant_id = current_user["tenant_id"]
+    granted = await RbacRepository(db).resolve_user_permissions(
+        user_id=user_id,
+        tenant_id=tenant_id,
+    )
+    if not grants_permission(granted, ERP_LEAVE_SELF):
+        raise PermissionDeniedError(f"Missing required permission: {ERP_LEAVE_SELF}")
+    employee = await repo.get_employee_by_user_id(user_id, tenant_id)
+    if employee is None:
+        raise PermissionDeniedError(
+            "Your account is not linked to an employee record. Ask HR to check "
+            "that your work email matches your employee profile."
+        )
+    return {**current_user, "employee": employee}
+
+
+def get_attendance_service(
+    repo: HrRepository = Depends(get_hr_repo),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> AttendanceService:
+    from core.features.hr.service import AttendanceService
+
+    return AttendanceService(repository=repo, audit=audit)
+
+
 def get_payroll_service(
     db: AsyncSession = Depends(get_db),
     audit: CoreAuditService = Depends(get_core_audit_service),
@@ -251,22 +297,31 @@ def get_finance_service(
 ) -> FinanceService:
     """Composition root for the finance feature.
 
-    Wires the concrete repository, the shared audit sink, and the after-commit
-    event publisher onto ONE request-scoped session — so audit rows, the
-    business mutation, and (later) published events all commit atomically. The
-    request ID becomes the correlation ID stamped on money-moment events.
+    Wires the concrete repository, the shared audit sink, the after-commit
+    event publisher, and the CRM customer port onto ONE request-scoped
+    session — so audit rows, the business mutation, and (later) published
+    events all commit atomically. The request ID becomes the correlation ID
+    stamped on money-moment events.
     """
+    from core.db.sequence_repository import SequenceRepository
     from core.events.producers import get_event_producer
     from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
+    from core.features.sales.repository import SalesRepository
 
     correlation_id = getattr(request.state, "request_id", None)
+    crm_repo = CrmRepository(db)
+    sales_repo = SalesRepository(db, next_sequence=SequenceRepository(db).next_value)
     return FinanceService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
         correlation_id=correlation_id,
+        customers=crm_repo,
+        timeline=crm_repo,
+        order_lookup=sales_repo,
     )
 
 
@@ -405,4 +460,5 @@ def get_sales_service(
         invoice=finance,
         audit=audit_service,
         timeline=crm_repo,
+        cogs=finance,
     )

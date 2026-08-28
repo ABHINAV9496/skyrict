@@ -5,8 +5,8 @@ suggestions require a dedicated permission separate from erp.inventory.write.
 The core AI proxy router uses this key to gate /ai/suggestions/scan,
 /ai/suggestions/{id}/approve, and /ai/suggestions/{id}/reject.
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-08-27
 """
 
@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0017"
-down_revision = "0016"
+revision = "0021"
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 

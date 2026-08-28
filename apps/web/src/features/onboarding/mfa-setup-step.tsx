@@ -21,6 +21,7 @@ import {
   setupMfa,
   type MfaSetup,
 } from "@/lib/api/auth-api";
+import { resolveHandoffDestination } from "@/lib/auth/handoff";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
 import { cn } from "@/lib/utils";
@@ -148,14 +149,17 @@ function MfaSetupStep() {
     }
   }
 
-  function finish() {
+  async function finish() {
     setHandingOff(true);
-    void completeHandoff("/").catch((err: unknown) => {
+    try {
+      const dest = await resolveHandoffDestination();
+      await completeHandoff(dest);
+    } catch (err: unknown) {
       setHandingOff(false);
       setError(
         err instanceof Error ? err.message : "Could not open your workspace.",
       );
-    });
+    }
   }
 
   if (!setup) {

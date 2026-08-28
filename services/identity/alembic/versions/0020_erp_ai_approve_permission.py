@@ -4,8 +4,8 @@ Ticket SKY-68 (inventory AI advisor suite): approve/reject AI restock
 suggestions and trigger scans require a dedicated permission separate from
 erp.inventory.write. Granted to organization_admin and department_manager.
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-08-27
 """
 
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0019"
-down_revision = "0018"
+revision = "0020"
+down_revision = "0019"
 branch_labels = None
 depends_on = None
 

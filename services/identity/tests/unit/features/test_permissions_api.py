@@ -221,7 +221,7 @@ class TestPermissionsCatalog:
         assert "modules" in data
 
         modules = data["modules"]
-        assert len(modules) == 19
+        assert len(modules) == 20
 
         # Collect all keys from modules
         all_keys = []
@@ -236,10 +236,10 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-        # 39 unique keys (includes erp.ai.invoke since SKY-57 and
-        # erp.inventory.ai.approve since SKY-68)
-        assert len(all_keys) == 39
-        assert len(module_keys_set) == 39
+# 40 unique keys (erp.ai.invoke since SKY-57, erp.leave.self since
+        # SKY-57 HR, and erp.inventory.ai.approve since SKY-68)
+        assert len(all_keys) == 40
+        assert len(module_keys_set) == 40
 
         # Union equals CATALOG
         catalog_set = set(CATALOG)
@@ -262,6 +262,7 @@ class TestPermissionsCatalog:
             "erp_hr",
             "erp_payroll",
             "erp_ai",
+            "erp_leave_self",
             "agents",
             "intelligence",
             "billing",

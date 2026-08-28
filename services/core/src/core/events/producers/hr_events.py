@@ -264,3 +264,25 @@ async def emit_leave_accrued(
         },
     )
     await apublish("hr.leave.accrued", event, key=str(tenant_id))
+
+
+async def emit_attendance_recorded(
+    *,
+    employee_id: uuid.UUID,
+    work_date: str,
+    status: str,
+    pay_impact: str,
+    tenant_id: uuid.UUID,
+) -> None:
+    """Emit ``hr.attendance.recorded`` (day logged or corrected)."""
+    event = BaseEvent(
+        event_type="hr.attendance.recorded",
+        tenant_id=str(tenant_id),
+        metadata={
+            "employee_id": str(employee_id),
+            "work_date": work_date,
+            "status": status,
+            "pay_impact": pay_impact,
+        },
+    )
+    await apublish("hr.attendance.recorded", event, key=str(tenant_id))

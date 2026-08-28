@@ -246,6 +246,22 @@ def _request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce pydantic error payloads into JSON-serializable values.
+
+    Validator-raised errors carry live exception objects in ``ctx`` (e.g.
+    ``{"error": ValueError(...)}``) which ``json.dumps`` cannot serialize;
+    those are stringified in place.
+    """
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
 async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResponse:
     """Map SkyrictError to an RFC 7807 problem+json response."""
     status_code, problem_type = _status_and_type(exc)
@@ -265,7 +281,7 @@ async def request_validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Return FastAPI body-validation failures as RFC 7807 (422)."""
-    errors = exc.errors()
+    errors = [_json_safe(error) for error in exc.errors()]
     messages = [
         f"{'.'.join(str(loc) for loc in error.get('loc', ()))}: {error.get('msg', '')}"
         for error in errors

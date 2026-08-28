@@ -575,44 +575,6 @@ class PayrollService:
     # ------------------------------------------------------------------
     # Entries (Rule 8: immutable after approved/paid)
     # ------------------------------------------------------------------
-    async def adjust_entry(
-        self,
-        *,
-        run_id: uuid.UUID,
-        employee_id: uuid.UUID,
-        tenant_id: uuid.UUID,
-        adjustments: dict[str, object],
-        actor_user_id: uuid.UUID | None = None,
-    ) -> ent.PayrollEntry:
-        """Apply a flat adjustment to a draft/computed entry."""
-        run = await self._repo.get_run(run_id, tenant_id)
-        if run is None:
-            raise ValueError(f"payroll run {run_id} not found")
-        if run.status in (PayrollRunStatus.APPROVED, PayrollRunStatus.PAID):
-            raise PayrollEntryImmutableError("entries are immutable once a run is approved")
-        entry = await self._repo.get_entry(run_id, employee_id, tenant_id=tenant_id)
-        if entry is None:
-            raise ValueError(f"no entry for employee {employee_id} in run {run_id}")
-        merged = {**(entry.adjustments or {}), **adjustments}
-        updated = dataclasses.replace(entry, adjustments=merged)
-        updated = await self._recompute_entry(updated, run=run, tenant_id=tenant_id)
-        updated = await self._repo.update_entry(updated)
-        await self._audit.log(
-            action=audit_events.PAYROLL_ENTRY_ADJUSTED,
-            target=f"payroll_entry:{updated.id}",
-            tenant_id=tenant_id,
-            user_id=actor_user_id,
-            details={"adjustments": adjustments},
-        )
-        if updated.id is not None:
-            await emit_entry_adjusted(
-                run_id=run_id,
-                employee_id=employee_id,
-                adjustments=adjustments,
-                tenant_id=tenant_id,
-            )
-        return updated
-
     async def adjust_entry_by_id(
         self,
         *,

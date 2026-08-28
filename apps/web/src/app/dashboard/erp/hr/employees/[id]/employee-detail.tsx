@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   BadgeDollarSign,
   Building2,
+  CalendarClock,
   CalendarDays,
   Leaf,
   Mail,
@@ -21,6 +22,7 @@ import {
   EmployeeFormDialog,
   TerminateEmployeeDialog,
 } from "@/components/dashboard/erp/hr/employee-dialogs";
+import { LogAttendanceDialog } from "@/components/dashboard/erp/hr/log-attendance-dialog";
 import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
@@ -29,9 +31,11 @@ import { useModuleAccess } from "@/lib/access/modules";
 import {
   getEmployee,
   getLeaveBalances,
+  listAttendance,
   listDepartments,
   listEmployees,
   listLeaveMovements,
+  type AttendanceRecord,
   type Department,
   type Employee,
   type LeaveBalance,
@@ -95,12 +99,14 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [movements, setMovements] = useState<LeaveMovement[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [compensation, setCompensation] = useState<Compensation[] | null>(null);
   const [compensationError, setCompensationError] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [attendanceLogOpen, setAttendanceLogOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [terminating, setTerminating] = useState(false);
   const [statusTarget, setStatusTarget] = useState<"active" | "on_leave" | null>(null);
@@ -113,11 +119,13 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         listDepartments(),
         getLeaveBalances(employeeId),
         listLeaveMovements(employeeId),
+        listAttendance({ pageSize: 10, filters: { employeeId } }),
       ]);
       setEmployee(results[0]);
       setDepartments(results[1]);
       setBalances(results[2]);
       setMovements(results[3]);
+      setAttendance(results[4].items);
       setStatus({ state: "ready" });
     } catch (error) {
       const message =
@@ -177,6 +185,18 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
     setLogOpen(true);
   }
 
+  async function openLogAttendance() {
+    if (allEmployees.length === 0) {
+      try {
+        const result = await listEmployees({ pageSize: 100 });
+        setAllEmployees(result.items);
+      } catch {
+        setAllEmployees([]);
+      }
+    }
+    setAttendanceLogOpen(true);
+  }
+
   if (status.state === "loading") {
     return <ErpDataTableSkeleton columns={4} />;
   }
@@ -231,6 +251,41 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         <span className="text-muted-foreground">
           {movement.occurredAt ? formatDateTime(movement.occurredAt) : "—"}
         </span>
+      ),
+    },
+  ];
+
+  const attendanceColumns: ErpColumn<AttendanceRecord>[] = [
+    {
+      key: "workDate",
+      label: "Date",
+      render: (record) => (
+        <span className="font-medium text-foreground">{formatDate(record.workDate)}</span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (record) => <StatusBadge status={record.status} />,
+    },
+    {
+      key: "payImpact",
+      label: "Pay impact",
+      render: (record) => (
+        <span className="text-muted-foreground">
+          {record.payImpact === "full"
+            ? "Full day"
+            : record.payImpact === "half"
+              ? "Half day"
+              : "No pay"}
+        </span>
+      ),
+    },
+    {
+      key: "note",
+      label: "Note",
+      render: (record) => (
+        <span className="text-muted-foreground">{record.note ?? "—"}</span>
       ),
     },
   ];
@@ -463,6 +518,48 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         )}
       </Card>
 
+      <Card
+        title="Attendance"
+        icon={CalendarClock}
+        actions={
+          canWrite ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void openLogAttendance()}
+            >
+              Log attendance
+            </Button>
+          ) : undefined
+        }
+      >
+        {attendance.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No attendance records yet.</p>
+        ) : (
+          <>
+            <ErpDataTable
+              columns={attendanceColumns}
+              rows={attendance}
+              meta={{
+                total: attendance.length,
+                page: 1,
+                page_size: attendance.length,
+                total_pages: 1,
+              }}
+            />
+            <div className="mt-3">
+              <Link
+                href={`/dashboard/erp/hr/attendance?employee=${employeeId}`}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                View all attendance →
+              </Link>
+            </div>
+          </>
+        )}
+      </Card>
+
       <EmployeeFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
@@ -490,6 +587,14 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         employees={allEmployees}
         prefillEmployeeId={employeeId}
         onCreated={() => void load()}
+      />
+
+      <LogAttendanceDialog
+        open={attendanceLogOpen}
+        onOpenChange={setAttendanceLogOpen}
+        employees={allEmployees}
+        prefillEmployeeId={employeeId}
+        onSaved={() => void load()}
       />
     </div>
   );

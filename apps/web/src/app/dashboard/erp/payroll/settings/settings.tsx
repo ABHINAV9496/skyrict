@@ -1,19 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoaderCircle, SlidersHorizontal } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useModuleAccess } from "@/lib/access/modules";
 import {
   getPayrollSettings,
@@ -48,6 +45,15 @@ export function PayrollSettingsClient() {
   const [rounding, setRounding] = useState<PayrollRounding>("nearest");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const roundingOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      ROUNDING_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    [],
+  );
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -196,18 +202,13 @@ export function PayrollSettingsClient() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="rounding">Net pay rounding</Label>
-            <Select value={rounding} onValueChange={(value) => setRounding(value as PayrollRounding)}>
-              <SelectTrigger id="rounding" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROUNDING_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              id="rounding"
+              options={roundingOptions}
+              value={rounding}
+              onValueChange={(value) => setRounding(value as PayrollRounding)}
+              placeholder="Rounding"
+            />
             <p className="text-xs text-muted-foreground">
               How computed net pay is rounded before it&apos;s recorded.
             </p>

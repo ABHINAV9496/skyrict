@@ -75,6 +75,7 @@ tags
 .#*
 *.elc
 .opencode
+opencode.json
 
 # ---------- Environment / Secrets ----------
 .env
@@ -213,3 +214,12 @@ HR-Payroll-Manual-Test-Guide.md
 HR-Payroll-Manual-Tests.postman_collection.json
 HR-Payroll-Manual-Tests.postman_environment.json
 scripts/mint_core_token.py
+
+# ---------- Essentials gap-fill ----------
+.eslintcache
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.vercel/
+.import_linter_cache/

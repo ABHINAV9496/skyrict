@@ -66,7 +66,7 @@ from skyrict_common.exceptions import NotFoundError, ValidationError
 if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.ports import CrmTimelinePort
-    from core.features.finance.ports import InvoicePort
+    from core.features.finance.ports import CogsPort, InvoicePort
     from core.features.sales.ports import (
         CustomerPort,
         OrderStockPort,
@@ -112,6 +112,7 @@ class SalesService:
         invoice: InvoicePort,
         audit: AuditService,
         timeline: CrmTimelinePort,
+        cogs: CogsPort | None = None,
     ) -> None:
         self._repo = repository
         self._customers = customers
@@ -121,6 +122,7 @@ class SalesService:
         self._invoice = invoice
         self._audit_service = audit
         self._timeline = timeline
+        self._cogs = cogs
 
     # ------------------------------------------------------------------
     # Draft lifecycle
@@ -418,12 +420,25 @@ class SalesService:
             tenant_id=tenant_id,
             invoice_id=invoice.id,
         )
-        await self._stock.fulfil_order_lines(
+        cost_data = await self._stock.fulfil_order_lines(
             tenant_id=tenant_id,
             warehouse_id=warehouse,
             order_id=order_id,
             lines=lines,
         )
+        if self._cogs is not None and cost_data:
+            from core.features.finance.ports import CogsLine
+
+            cogs_lines = [
+                CogsLine(product_id=pid, quantity=qty, unit_cost=cost)
+                for pid, qty, cost in cost_data
+            ]
+            await self._cogs.post_cogs_for_order(
+                tenant_id=tenant_id,
+                order_id=str(order_id),
+                entry_date=datetime.now(UTC).date(),
+                lines=cogs_lines,
+            )
         return fulfilled
 
     async def cancel_order(self, order_id: uuid.UUID, *, tenant_id: uuid.UUID) -> SalesOrder:

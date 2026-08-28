@@ -29,12 +29,13 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.constants import EmploymentStatus, LeaveRequestStatus
 from core.domain import entities as ent
 from core.domain.value_objects import Money
+from core.features.hr.models.attendance_record import AttendanceRecordModel
 from core.features.hr.models.department import DepartmentModel
 from core.features.hr.models.employee import (
     EmployeeModel,
@@ -44,6 +45,7 @@ from core.features.hr.models.employee import (
 )
 from core.features.hr.models.leave_balance import LeaveBalanceModel
 from core.features.hr.models.leave_movement import LeaveMovementModel
+from core.features.hr.models.leave_policy import LeavePolicyModel
 from core.features.hr.models.leave_request import LeaveRequestModel
 from core.features.hr.models.leave_request import (
     LeaveRequestStatus as LeaveRequestStatusModel,
@@ -54,7 +56,7 @@ from core.features.payroll.models.compensation import CompensationModel
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-_ANNUAL_ACCRUAL = "annual_accrual"
+_ACCRUAL = "accrual"  # ref_type for policy-driven annual accrual movements
 _UNPAID_LEAVE = "unpaid"
 
 
@@ -239,6 +241,20 @@ def _compensation_from_orm(model: CompensationModel) -> ent.Compensation:
     )
 
 
+def _attendance_from_orm(model: AttendanceRecordModel) -> ent.AttendanceRecord:
+    return ent.AttendanceRecord(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        work_date=model.work_date,
+        status=model.status,
+        pay_impact=model.pay_impact,
+        note=model.note,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
 class HrRepository:
     """Concrete SQLAlchemy implementation of :class:`HrRepositoryPort`.
 
@@ -363,15 +379,20 @@ class HrRepository:
         self,
         tenant_id: uuid.UUID,
         *,
-        status: str | None = None,
+        status: str | Sequence[str] | None = None,
         department_id: uuid.UUID | None = None,
         q: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> Sequence[ent.Employee]:
         stmt = select(EmployeeModel).where(EmployeeModel.tenant_id == tenant_id)
+        statuses: list[str] | None = None
         if status is not None:
-            stmt = stmt.where(EmployeeModel.employment_status == status)
+            statuses = [str(s) for s in ([status] if isinstance(status, str) else status)]
+            if len(statuses) == 1:
+                stmt = stmt.where(EmployeeModel.employment_status == statuses[0])
+            elif statuses:
+                stmt = stmt.where(EmployeeModel.employment_status.in_(statuses))
         if department_id is not None:
             stmt = stmt.where(EmployeeModel.department_id == department_id)
         if q:
@@ -383,19 +404,38 @@ class HrRepository:
                     EmployeeModel.employee_number.ilike(pattern),
                 )
             )
-        stmt = stmt.order_by(EmployeeModel.employee_number).offset(offset).limit(limit)
+        # Newest first everywhere; a terminated-only listing reads naturally by
+        # most recent termination instead of hire date. Employee number breaks
+        # ties (higher number = hired later) so pagination stays deterministic.
+        if statuses == ["terminated"]:
+            stmt = stmt.order_by(
+                EmployeeModel.termination_date.desc(),
+                EmployeeModel.employee_number.desc(),
+            )
+        else:
+            stmt = stmt.order_by(
+                EmployeeModel.hire_date.desc(),
+                EmployeeModel.employee_number.desc(),
+            )
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.session.execute(stmt)
         return [_employee_from_orm(model) for model in result.scalars().all()]
 
     async def next_employee_number(self, tenant_id: uuid.UUID) -> int:
         return await self._next_sequence(tenant_id, "employee")
 
-    async def get_employee_by_number(
-        self, employee_number: str, tenant_id: uuid.UUID
+    async def get_employee_by_user_id(
+        self, user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> ent.Employee | None:
+        """Portal resolution: the employee linked to an identity user, if any.
+
+        Binding happens on the identity side at invite-accept (shared-DB mirror
+        sets ``erp_employees.user_id`` by invitation email), so lookup here is
+        strictly by ``user_id``.
+        """
         stmt = select(EmployeeModel).where(
             EmployeeModel.tenant_id == tenant_id,
-            EmployeeModel.employee_number == employee_number,
+            EmployeeModel.user_id == user_id,
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _employee_from_orm(model) if model is not None else None
@@ -412,8 +452,18 @@ class HrRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _leave_type_from_orm(model) if model is not None else None
 
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> Sequence[ent.LeaveType]:
+        """Full leave-type catalogue for the tenant, ordered by code."""
+        stmt = (
+            select(LeaveTypeModel)
+            .where(LeaveTypeModel.tenant_id == tenant_id)
+            .order_by(LeaveTypeModel.code)
+        )
+        result = await self.session.execute(stmt)
+        return [_leave_type_from_orm(model) for model in result.scalars().all()]
+
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> Sequence[str]:
-        """Return leave-type codes with ``is_accrual`` set (annual accrual)."""
+        """Return leave-type codes with ``is_accrual`` set."""
         stmt = (
             select(LeaveTypeModel.code)
             .where(
@@ -423,6 +473,62 @@ class HrRepository:
             .order_by(LeaveTypeModel.code)
         )
         return list((await self.session.execute(stmt)).scalars().all())
+
+    # ------------------------------------------------------------------
+    # Leave policy
+    # ------------------------------------------------------------------
+
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None:
+        stmt = select(LeavePolicyModel).where(LeavePolicyModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        return ent.LeavePolicy(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            casual_days_per_year=model.casual_days_per_year,
+            sick_days_per_year=model.sick_days_per_year,
+            effective_from=model.effective_from,
+            last_accrual_year=model.last_accrual_year,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    async def upsert_leave_policy(self, policy: ent.LeavePolicy) -> ent.LeavePolicy:
+        existing = await self.get_leave_policy(policy.tenant_id)
+        if existing is not None:
+            stmt = (
+                update(LeavePolicyModel)
+                .where(LeavePolicyModel.tenant_id == policy.tenant_id)
+                .values(
+                    casual_days_per_year=policy.casual_days_per_year,
+                    sick_days_per_year=policy.sick_days_per_year,
+                    effective_from=policy.effective_from,
+                )
+            )
+            await self.session.execute(stmt)
+            await self.session.flush()
+            return await self.get_leave_policy(policy.tenant_id)  # type: ignore[return-value]
+        model = LeavePolicyModel(
+            tenant_id=policy.tenant_id,
+            casual_days_per_year=policy.casual_days_per_year,
+            sick_days_per_year=policy.sick_days_per_year,
+            effective_from=policy.effective_from,
+            id=policy.id or uuid.uuid4(),
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return ent.LeavePolicy(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            casual_days_per_year=model.casual_days_per_year,
+            sick_days_per_year=model.sick_days_per_year,
+            effective_from=model.effective_from,
+            last_accrual_year=model.last_accrual_year,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
 
     # ------------------------------------------------------------------
     # Leave ledger & balances
@@ -462,7 +568,7 @@ class HrRepository:
         existing = await self._find_movement_by_ref(
             movement.employee_id,
             movement.leave_type,
-            _ANNUAL_ACCRUAL,
+            _ACCRUAL,
             movement.ref_id,
             movement.tenant_id,
         )
@@ -478,7 +584,7 @@ class HrRepository:
         existing = await self._find_movement_by_ref(
             movement.employee_id,
             movement.leave_type,
-            _ANNUAL_ACCRUAL,
+            _ACCRUAL,
             movement.ref_id,
             movement.tenant_id,
         )
@@ -560,17 +666,6 @@ class HrRepository:
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
-    async def get_balance(
-        self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
-    ) -> ent.LeaveBalance | None:
-        stmt = select(LeaveBalanceModel).where(
-            LeaveBalanceModel.tenant_id == tenant_id,
-            LeaveBalanceModel.employee_id == employee_id,
-            LeaveBalanceModel.leave_type == leave_type,
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        return _leave_balance_from_orm(model) if model is not None else None
-
     async def list_balances(
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Sequence[ent.LeaveBalance]:
@@ -632,34 +727,6 @@ class HrRepository:
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _leave_request_from_orm(model) if model is not None else None
-
-    async def update_leave_request(self, request: ent.LeaveRequest) -> ent.LeaveRequest:
-        if request.id is None:
-            raise ValueError("leave request is missing an id")
-        stmt = (
-            update(LeaveRequestModel)
-            .where(
-                LeaveRequestModel.tenant_id == request.tenant_id,
-                LeaveRequestModel.id == request.id,
-            )
-            .values(
-                employee_id=request.employee_id,
-                leave_type=request.leave_type,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                days=request.days,
-                status=LeaveRequestStatusModel(request.status.value),
-                reason=request.reason,
-                approved_by=request.approved_by,
-                approved_at=request.approved_at,
-                updated_at=func.now(),
-            )
-            .returning(LeaveRequestModel)
-        )
-        model = (await self.session.execute(stmt)).scalar_one_or_none()
-        if model is None:
-            raise ValueError(f"leave request {request.id} not found")
-        return _leave_request_from_orm(model)
 
     async def transition_leave_status(
         self,
@@ -758,6 +825,106 @@ class HrRepository:
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _compensation_from_orm(model) if model is not None else None
+
+    # ------------------------------------------------------------------
+    # Attendance (one row per employee per work day; upserted in place)
+    # ------------------------------------------------------------------
+
+    async def upsert_attendance_record(self, record: ent.AttendanceRecord) -> ent.AttendanceRecord:
+        """Insert or correct one day's attendance (unique per employee/day)."""
+        stmt = (
+            pg_insert(AttendanceRecordModel)
+            .values(
+                tenant_id=record.tenant_id,
+                employee_id=record.employee_id,
+                work_date=record.work_date,
+                status=record.status,
+                pay_impact=record.pay_impact,
+                note=record.note,
+                id=record.id if record.id is not None else uuid.uuid4(),
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    AttendanceRecordModel.tenant_id,
+                    AttendanceRecordModel.employee_id,
+                    AttendanceRecordModel.work_date,
+                ],
+                set_={
+                    "status": record.status,
+                    "pay_impact": record.pay_impact,
+                    "note": record.note,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(AttendanceRecordModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one()
+        return _attendance_from_orm(model)
+
+    async def get_attendance_record(
+        self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
+    ) -> ent.AttendanceRecord | None:
+        stmt = select(AttendanceRecordModel).where(
+            AttendanceRecordModel.tenant_id == tenant_id,
+            AttendanceRecordModel.employee_id == employee_id,
+            AttendanceRecordModel.work_date == work_date,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _attendance_from_orm(model) if model is not None else None
+
+    async def list_attendance_with_employee(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        employee_id: uuid.UUID | None = None,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[tuple[ent.AttendanceRecord, str, str, str]]:
+        """Attendance rows joined with the employee display tuple.
+
+        Returns ``(record, first_name, last_name, employee_number)`` so the
+        module-wide list can show who each row belongs to without N+1 reads.
+        """
+        stmt = (
+            select(
+                AttendanceRecordModel,
+                EmployeeModel.first_name,
+                EmployeeModel.last_name,
+                EmployeeModel.employee_number,
+            )
+            .join(
+                EmployeeModel,
+                and_(
+                    EmployeeModel.tenant_id == AttendanceRecordModel.tenant_id,
+                    EmployeeModel.id == AttendanceRecordModel.employee_id,
+                ),
+            )
+            .where(AttendanceRecordModel.tenant_id == tenant_id)
+        )
+        if employee_id is not None:
+            stmt = stmt.where(AttendanceRecordModel.employee_id == employee_id)
+        if status:
+            stmt = stmt.where(AttendanceRecordModel.status == status)
+        if date_from is not None:
+            stmt = stmt.where(AttendanceRecordModel.work_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(AttendanceRecordModel.work_date <= date_to)
+        stmt = (
+            stmt.order_by(
+                AttendanceRecordModel.work_date.desc(),
+                AttendanceRecordModel.created_at.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return [
+            (_attendance_from_orm(model), first_name, last_name, employee_number)
+            for model, first_name, last_name, employee_number in result.all()
+        ]
 
     # ------------------------------------------------------------------
     # LeaveLedgerPort (implemented for payroll — one sanctioned cross-feature read)

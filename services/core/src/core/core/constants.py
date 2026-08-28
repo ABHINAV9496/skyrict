@@ -51,6 +51,26 @@ class PayrollRounding(enum.StrEnum):
     DOWN = "down"
 
 
+class AttendanceStatus(enum.StrEnum):
+    """Daily attendance outcome — mirrors ``erp_attendance_status``."""
+
+    ON_TIME = "on_time"
+    LATE = "late"
+    ABSENT = "absent"
+
+
+class PayImpact(enum.StrEnum):
+    """Payroll impact derived from attendance status.
+
+    ``on_time`` -> full pay, ``late`` -> half pay, ``absent`` -> no pay for
+    the day. Derived by the service, stored on the row.
+    """
+
+    FULL = "full"
+    HALF = "half"
+    NONE = "none"
+
+
 # ---------------------------------------------------------------------------
 # API constants
 # ---------------------------------------------------------------------------
@@ -96,6 +116,8 @@ AR_ACCOUNT_CODE = "1100"
 CASH_ACCOUNT_CODE = "1200"
 AP_ACCOUNT_CODE = "2110"
 REVENUE_ACCOUNT_CODE = "4000"
+COGS_ACCOUNT_CODE = "5000"
+INVENTORY_ASSET_ACCOUNT_CODE = "1300"
 
 # ---------------------------------------------------------------------------
 # Finance — journal entry and invoice provenance (idempotency source keys).
@@ -103,6 +125,7 @@ REVENUE_ACCOUNT_CODE = "4000"
 JOURNAL_SOURCE_MANUAL = "manual"
 JOURNAL_SOURCE_INVOICE = "invoice"
 JOURNAL_SOURCE_PAYMENT = "payment"
+JOURNAL_SOURCE_COGS = "cogs"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

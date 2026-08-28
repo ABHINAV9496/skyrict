@@ -16,7 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from core.core import audit_events
 from core.core.audit_service import AuditService
-from core.core.constants import EmploymentStatus, LeaveRequestStatus
+from core.core.constants import AttendanceStatus, EmploymentStatus, LeaveRequestStatus, PayImpact
 from core.core.exceptions import (
     DuplicateRecordError,
     EmployeeTerminatedError,
@@ -28,6 +28,7 @@ from core.core.state_machine import InvalidTransitionError, StateMachine
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 from core.events.producers.hr_events import (
+    emit_attendance_recorded,
     emit_department_created,
     emit_department_updated,
     emit_employee_created,
@@ -263,30 +264,36 @@ class EmployeeService:
     async def _accrue_annual(
         self, employee: ent.Employee, *, year: int, tenant_id: uuid.UUID
     ) -> ent.LeaveMovement | None:
-        leave_type = await self._repo.get_leave_type("annual", tenant_id=tenant_id)
-        if (
-            leave_type is None
-            or not leave_type.is_accrual
-            or leave_type.accrual_days_per_year is None
-        ):
-            return None
-        remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(
-            Decimal(leave_type.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
-        )
-        if qty < 1:
-            return None
-        return await self._repo.accrue_leave_movement(
-            ent.LeaveMovement(
-                tenant_id=tenant_id,
-                employee_id=_require_id(employee, "employee"),
-                leave_type="annual",
-                qty=qty,
-                ref_type="annual_accrual",
-                ref_id=str(year),
-                id=uuid.uuid4(),
+        """Pro-rata accrual for casual+sick on hire, using the tenant's LeavePolicy."""
+        policy = await self._repo.get_leave_policy(tenant_id)
+        if policy is None:
+            return None  # No policy set yet
+        if date.today() < policy.effective_from:
+            return None  # Policy not yet in effect
+        employee_id = _require_id(employee, "employee")
+        last_movement: ent.LeaveMovement | None = None
+        for leave_type, annual_days in [
+            ("casual", policy.casual_days_per_year),
+            ("sick", policy.sick_days_per_year),
+        ]:
+            remaining = _remaining_days_in_year(employee.hire_date, year)
+            qty = _round_half_up(Decimal(annual_days) * Decimal(remaining) / Decimal(365))
+            if qty < 1:
+                continue
+            movement = await self._repo.accrue_leave_movement(
+                ent.LeaveMovement(
+                    tenant_id=tenant_id,
+                    employee_id=employee_id,
+                    leave_type=leave_type,
+                    qty=qty,
+                    ref_type="accrual",
+                    ref_id=str(year),
+                    id=uuid.uuid4(),
+                )
             )
-        )
+            if movement is not None:
+                last_movement = movement
+        return last_movement
 
     async def get(self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID) -> ent.Employee | None:
         return await self._repo.get_employee(employee_id, tenant_id)
@@ -414,10 +421,19 @@ class EmployeeService:
         limit: int = 20,
         offset: int = 0,
     ) -> list[ent.Employee]:
+        """List employees; ``status`` accepts one value or a comma-separated
+        set (e.g. ``active,on_leave``) so callers can express exclusions."""
+        statuses: list[str] | None = None
+        if status is not None:
+            tokens = [token.strip() for token in status.split(",") if token.strip()]
+            try:
+                statuses = [EmploymentStatus(token).value for token in tokens]
+            except ValueError as exc:
+                raise ValueError(f"unknown employment status in {status!r}") from exc
         return list(
             await self._repo.list_employees(
                 tenant_id,
-                status=status,
+                status=statuses,
                 department_id=department_id,
                 q=q,
                 limit=limit,
@@ -449,6 +465,8 @@ class LeaveService:
         actor_user_id: uuid.UUID | None = None,
     ) -> ent.LeaveRequest:
         """Create a pending request; days computed server-side."""
+        if start_date < date.today():
+            raise ValueError("leave start_date cannot be in the past")
         if end_date < start_date:
             raise ValueError("end_date cannot precede start_date")
         days = (end_date - start_date).days + 1
@@ -872,19 +890,33 @@ class LeaveService:
         year: int,
         actor_user_id: uuid.UUID | None = None,
     ) -> ent.LeaveMovement | None:
-        """Rule 4: idempotent annual accrual per (employee, leave_type, leave_year)."""
+        """Idempotent annual accrual per (employee, leave_type, leave_year).
+
+        Reads the allotment from the tenant's LeavePolicy. Gated by
+        effective_from: if today < effective_from, no accrual happens.
+        Pro-rates for new hires (hired this year) based on remaining days.
+        """
         leave_type_row = await self._repo.get_leave_type(leave_type, tenant_id=tenant_id)
         if leave_type_row is None:
             raise ValueError(f"unknown leave type {leave_type!r}")
-        if not leave_type_row.is_accrual or leave_type_row.accrual_days_per_year is None:
+        if not leave_type_row.is_accrual:
             raise ValueError(f"leave type {leave_type!r} does not accrue")
+        policy = await self._repo.get_leave_policy(tenant_id)
+        if policy is None:
+            return None  # No policy set yet
+        if date.today() < policy.effective_from:
+            return None  # Policy not yet in effect
+        if leave_type == "casual":
+            annual_days = policy.casual_days_per_year
+        elif leave_type == "sick":
+            annual_days = policy.sick_days_per_year
+        else:
+            return None  # Not a policy-driven accrual type
         employee = await self._repo.get_employee(employee_id, tenant_id)
         if employee is None:
             raise ValueError(f"employee {employee_id} not found")
         remaining = _remaining_days_in_year(employee.hire_date, year)
-        qty = _round_half_up(
-            Decimal(leave_type_row.accrual_days_per_year) * Decimal(remaining) / Decimal(365)
-        )
+        qty = _round_half_up(Decimal(annual_days) * Decimal(remaining) / Decimal(365))
         if qty < 1:
             return None
         movement = await self._repo.accrue_leave_movement(
@@ -893,7 +925,7 @@ class LeaveService:
                 employee_id=employee_id,
                 leave_type=leave_type,
                 qty=qty,
-                ref_type="annual_accrual",
+                ref_type="accrual",
                 ref_id=str(year),
                 id=uuid.uuid4(),
             )
@@ -948,7 +980,25 @@ class LeaveService:
         self, employee_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> list[ent.LeaveBalance]:
         """All materialized leave balances for one employee, by leave type."""
+        await self._ensure_current_year_accruals(employee_id, tenant_id)
         return list(await self._repo.list_balances(employee_id, tenant_id=tenant_id))
+
+    async def _ensure_current_year_accruals(
+        self, employee_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> None:
+        """Lazy Jan-1 reset: accrue casual+sick for the current year if missing.
+
+        Called on every balance read. Idempotent — if accruals already exist
+        for the current year, the ``accrue()`` call short-circuits immediately.
+        """
+        current_year = date.today().year
+        for leave_type in ("casual", "sick"):
+            await self.accrue(
+                tenant_id=tenant_id,
+                employee_id=employee_id,
+                leave_type=leave_type,
+                year=current_year,
+            )
 
     async def list_movements(
         self,
@@ -976,8 +1026,155 @@ class LeaveService:
         )
 
     async def list_accrual_leave_types(self, tenant_id: uuid.UUID) -> list[str]:
-        """LeaveLedgerPort read: leave types that accrue annually (Rule 4)."""
+        """LeaveLedgerPort read: leave types that accrue annually."""
         return list(await self._repo.list_accrual_leave_types(tenant_id))
+
+    async def list_leave_types(self, tenant_id: uuid.UUID) -> list[ent.LeaveType]:
+        """Full leave-type catalogue (portal: render every type, accrual or not)."""
+        return list(await self._repo.list_leave_types(tenant_id))
+
+    # --- Leave policy ---
+
+    async def get_leave_policy(self, tenant_id: uuid.UUID) -> ent.LeavePolicy | None:
+        """Return the tenant's current leave policy, if set."""
+        return await self._repo.get_leave_policy(tenant_id)
+
+    async def update_leave_policy(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        casual_days_per_year: int,
+        sick_days_per_year: int,
+        effective_from: date,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.LeavePolicy:
+        """Create or update the tenant's leave policy.
+
+        Changes take effect at the next Jan-1 reset (lazy accrual gated by
+        idempotency: once a year's accrual exists, it is never re-generated).
+        """
+        if casual_days_per_year < 0:
+            raise ValueError("casual_days_per_year must be non-negative")
+        if sick_days_per_year < 0:
+            raise ValueError("sick_days_per_year must be non-negative")
+        policy = ent.LeavePolicy(
+            tenant_id=tenant_id,
+            casual_days_per_year=casual_days_per_year,
+            sick_days_per_year=sick_days_per_year,
+            effective_from=effective_from,
+            id=uuid.uuid4(),
+        )
+        saved = await self._repo.upsert_leave_policy(policy)
+        await self._audit.log(
+            action=audit_events.HR_LEAVE_POLICY_UPDATED,
+            target=f"tenant:{tenant_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={
+                "casual_days_per_year": casual_days_per_year,
+                "sick_days_per_year": sick_days_per_year,
+                "effective_from": effective_from.isoformat(),
+            },
+        )
+        return saved
+
+
+_PAY_IMPACT_BY_STATUS: dict[AttendanceStatus, PayImpact] = {
+    AttendanceStatus.ON_TIME: PayImpact.FULL,
+    AttendanceStatus.LATE: PayImpact.HALF,
+    AttendanceStatus.ABSENT: PayImpact.NONE,
+}
+
+
+class AttendanceService:
+    """Daily attendance logging/correction (feeds payroll pay-impact rules).
+
+    One record per employee per work day — corrections upsert the same day.
+    ``pay_impact`` is derived here from the status (on_time -> full, late ->
+    half, absent -> none) and never trusted from clients.
+    """
+
+    def __init__(self, repository: HrRepositoryPort, audit: AuditService) -> None:
+        self._repo = repository
+        self._audit = audit
+
+    async def record(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        work_date: date,
+        status: AttendanceStatus,
+        note: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.AttendanceRecord:
+        """Log or correct one day's attendance for an employee."""
+        employee = await self._repo.get_employee(employee_id, tenant_id)
+        if employee is None:
+            raise ValueError(f"employee {employee_id} not found")
+        record = ent.AttendanceRecord(
+            tenant_id=tenant_id,
+            employee_id=employee_id,
+            work_date=work_date,
+            status=status,
+            pay_impact=_PAY_IMPACT_BY_STATUS[status],
+            note=note,
+            id=uuid.uuid4(),
+        )
+        saved = await self._repo.upsert_attendance_record(record)
+        # Derive from the in-memory impact (the ORM returns pay_impact as a
+        # plain string — its column is VARCHAR with a CHECK, not a pg enum).
+        impact = record.pay_impact.value
+        await self._audit.log(
+            action=audit_events.HR_ATTENDANCE_RECORDED,
+            target=f"attendance:{saved.id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={
+                "employee_id": str(employee_id),
+                "work_date": work_date.isoformat(),
+                "status": status.value,
+                "pay_impact": impact,
+            },
+        )
+        await emit_attendance_recorded(
+            employee_id=employee_id,
+            work_date=work_date.isoformat(),
+            status=status.value,
+            pay_impact=impact,
+            tenant_id=tenant_id,
+        )
+        return saved
+
+    async def get(
+        self, employee_id: uuid.UUID, work_date: date, *, tenant_id: uuid.UUID
+    ) -> ent.AttendanceRecord | None:
+        """Fetch one employee's attendance for a specific day."""
+        return await self._repo.get_attendance_record(employee_id, work_date, tenant_id=tenant_id)
+
+    async def list_with_employee(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        employee_id: uuid.UUID | None = None,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[tuple[ent.AttendanceRecord, str, str, str]]:
+        """Attendance rows joined with ``(first_name, last_name, number)``."""
+        return list(
+            await self._repo.list_attendance_with_employee(
+                tenant_id,
+                employee_id=employee_id,
+                status=status,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+                offset=offset,
+            )
+        )
 
 
 def _round_half_up(value: Decimal) -> int:
@@ -1006,4 +1203,4 @@ def _is_unique_violation(exc: Exception) -> bool:
     return "23505" in str(orig)
 
 
-__all__ = ["DepartmentService", "EmployeeService", "LeaveService"]
+__all__ = ["AttendanceService", "DepartmentService", "EmployeeService", "LeaveService"]

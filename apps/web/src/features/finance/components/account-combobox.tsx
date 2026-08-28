@@ -6,6 +6,7 @@ import { Check, ChevronsUpDown } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import type { Account } from "@/lib/api/finance-api";
+import { getThemeContainer } from "@/lib/theme-world";
 import { cn } from "@/lib/utils";
 
 interface AccountComboboxProps {
@@ -253,7 +254,7 @@ function AccountCombobox({
                 ))
               )}
             </div>,
-            document.body,
+            getThemeContainer() ?? document.body,
           )
         : null}
     </>

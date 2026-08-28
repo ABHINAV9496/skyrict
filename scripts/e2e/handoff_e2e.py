@@ -31,15 +31,15 @@ os.environ["IDENTITY_DATABASE_URL"] = (
     "postgresql+asyncpg://skyrict:skyrict@127.0.0.1:5433/skyrict_identity"
 )
 
-import httpx  # noqa: E402
-import pyotp  # noqa: E402
+import httpx
+import pyotp
 
-from identity.core.constants import SYSTEM_ROLE_DEFINITIONS  # noqa: E402
-from identity.core.security import hash_password  # noqa: E402
-from identity.db.session import async_session_factory  # noqa: E402
-from identity.models.role import RoleModel  # noqa: E402
-from identity.models.tenant import TenantModel  # noqa: E402
-from identity.models.user import UserModel  # noqa: E402
+from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
+from identity.core.security import hash_password
+from identity.db.session import async_session_factory
+from identity.models.role import RoleModel
+from identity.models.tenant import TenantModel
+from identity.models.user import UserModel
 
 PORT = 3000
 PASSWORD = "E2EPass123!"

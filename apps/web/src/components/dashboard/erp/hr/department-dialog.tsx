@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,14 +15,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/dashboard/shared/searchable-select";
 import {
+  byEmployeeName,
   createDepartment,
+  employeeName,
   updateDepartment,
   type Department,
   type Employee,
@@ -53,6 +52,19 @@ export function DepartmentDialog({
   const [form, setForm] = useState<DepartmentFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const managerOptions = useMemo<SearchableSelectOption[]>(
+    () => [
+      { value: "", label: "No manager" },
+      ...[...employees]
+        .sort(byEmployeeName)
+        .map((employee) => ({
+          value: employee.id,
+          label: employeeName(employee),
+          keywords: employee.employeeNumber,
+        })),
+    ],
+    [employees],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -130,27 +142,18 @@ export function DepartmentDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="department-manager">Manager (optional)</Label>
-              <Select
-                value={form.managerEmployeeId}
+              <SearchableSelect
+                id="department-manager"
+                options={managerOptions}
+                value={form.managerEmployeeId || null}
                 onValueChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    managerEmployeeId: value === "none" ? "" : value,
+                    managerEmployeeId: value,
                   }))
                 }
-              >
-                <SelectTrigger id="department-manager" className="w-full">
-                  <SelectValue placeholder="No manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No manager</SelectItem>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="No manager"
+              />
             </div>
           </div>
           {formError ? (

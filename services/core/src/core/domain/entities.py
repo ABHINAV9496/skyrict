@@ -12,8 +12,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from core.core.constants import (
+    AttendanceStatus,
     EmploymentStatus,
     LeaveRequestStatus,
+    PayImpact,
     PayrollRounding,
     PayrollRunStatus,
 )
@@ -307,6 +309,46 @@ class LeaveBalance:
     employee_id: uuid.UUID
     leave_type: str
     balance: int = 0
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class LeavePolicy:
+    """Tenant-scoped leave policy — replaces per-type accrual config.
+
+    Defines annual allotments for casual and sick leave. Effective from a
+    chosen date; policy changes apply at the next Jan-1 reset (lazy accrual
+    gated by idempotency: once a year's accrual exists, it is never
+    re-generated).
+    """
+
+    tenant_id: uuid.UUID
+    casual_days_per_year: int
+    sick_days_per_year: int
+    effective_from: date
+    last_accrual_year: int | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AttendanceRecord:
+    """One work day's attendance for an employee.
+
+    ``pay_impact`` is derived from ``status`` by the service (on_time -> full,
+    late -> half, absent -> none) — never trusted from clients. One record per
+    (employee, work_date); corrections upsert the existing day.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    work_date: date
+    status: AttendanceStatus
+    pay_impact: PayImpact
+    note: str | None = None
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

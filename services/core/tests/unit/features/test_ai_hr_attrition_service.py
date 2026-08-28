@@ -162,7 +162,8 @@ async def test_attrition_refreshes_when_no_scores_stored() -> None:
 
 
 async def test_attrition_serves_fresh_scores_without_rescoring() -> None:
-    repo = _FakeAttritionRepo(latest=datetime.now(UTC) - timedelta(days=1), stored=[_risk()])
+    risk = _risk()
+    repo = _FakeAttritionRepo(latest=datetime.now(UTC) - timedelta(days=1), stored=[risk])
     audit = _FakeAudit()
     scorer = _RecordingScorer(result=[_risk()])
 
@@ -170,7 +171,7 @@ async def test_attrition_serves_fresh_scores_without_rescoring() -> None:
     result = await svc.attrition(TENANT, scorer=scorer)
 
     assert scorer.calls == 0
-    assert result == [_risk()]
+    assert result == [risk]
 
 
 async def test_attrition_rescores_when_latest_is_stale() -> None:
@@ -189,14 +190,15 @@ async def test_attrition_rescores_when_latest_is_stale() -> None:
 
 
 async def test_attrition_falls_back_to_stored_when_scorer_fails() -> None:
-    repo = _FakeAttritionRepo(latest=None, features=[_feature()], stored=[_risk()])
+    risk = _risk()
+    repo = _FakeAttritionRepo(latest=None, features=[_feature()], stored=[risk])
     audit = _FakeAudit()
     scorer = _RecordingScorer(raise_error=True)
 
     svc = _service(repo, audit)
     result = await svc.attrition(TENANT, scorer=scorer)
 
-    assert result == [_risk()]
+    assert result == [risk]
     # The failed score was never persisted.
     assert repo.upserts == []
 

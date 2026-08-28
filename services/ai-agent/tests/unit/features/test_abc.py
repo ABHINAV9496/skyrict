@@ -5,9 +5,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-import pytest
-
-from ai_agent.features.abc.classifier import classify_abc, AbcEntry
+from ai_agent.features.abc.classifier import classify_abc
 
 
 def _uuid() -> uuid.UUID:

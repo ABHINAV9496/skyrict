@@ -23,16 +23,7 @@ async def run_anomaly_scan_job() -> None:
         try:
             from ai_agent.db.session import async_session_factory
 
-            async with async_session_factory() as session:
-                from ai_agent.core.audit_service import AuditService
-                from ai_agent.db.anomaly_repository import AnomalyRepository
-                from ai_agent.db.audit_repository import AiAuditLogRepository
-                from ai_agent.features.anomalies.service import AnomalyService
-                from ai_agent.features.nl_query.gateway import (
-                    HttpInventoryGateway,
-                    InventoryGatewayPort,
-                )
-                from ai_agent.core.config import settings
+            async with async_session_factory():
                 from ai_agent.core.tenant_context import TenantContext
 
                 # For the background scan we need a system-level gateway.

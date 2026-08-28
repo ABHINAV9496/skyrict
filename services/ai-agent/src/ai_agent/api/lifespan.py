@@ -65,9 +65,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # --- Background jobs (SKY-68) -----------------------------------------
     bg_tasks: list[asyncio.Task[None]] = []
-    from ai_agent.core.jobs.suggestion_expiry import run_suggestion_expiry_job
     from ai_agent.core.jobs.anomaly_autoclose import run_anomaly_autoclose_job
     from ai_agent.core.jobs.anomaly_scan import run_anomaly_scan_job
+    from ai_agent.core.jobs.suggestion_expiry import run_suggestion_expiry_job
 
     bg_tasks.append(asyncio.create_task(run_suggestion_expiry_job()))
     bg_tasks.append(asyncio.create_task(run_anomaly_autoclose_job()))

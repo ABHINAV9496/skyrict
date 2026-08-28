@@ -6,9 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import pytest
-
-from ai_agent.features.forecast.calculator import compute_forecasts, ForecastResult
+from ai_agent.features.forecast.calculator import compute_forecasts
 from ai_agent.features.nl_query.gateway import MovementRow, ProductRef
 
 PRODUCT_ID = uuid.uuid4()

@@ -6,10 +6,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import pytest
-
-from ai_agent.features.restock.calculator import compute_suggestion, SuggestionDraft
 from ai_agent.features.nl_query.gateway import MovementRow, ProductRef
+from ai_agent.features.restock.calculator import compute_suggestion
 
 PRODUCT_ID = uuid.uuid4()
 WAREHOUSE_ID = uuid.uuid4()

@@ -7,8 +7,6 @@ not available here. Identity module-level constants are readable directly.
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestAiApprovePermission:
     def test_identity_permissions_has_constant(self) -> None:

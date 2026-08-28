@@ -5,13 +5,15 @@ Computes per-SKU moving-average forecasts over configurable horizons
 raw movement data.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import uuid
+
     from ai_agent.features.nl_query.gateway import MovementRow, ProductRef
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +53,7 @@ def _compute_single_forecast(
     """Moving-average demand over one horizon, plus weeks-of-supply and stockout date."""
     now = datetime.now(tz=UTC)
     cutoff = now - timedelta(weeks=horizon_weeks)
-    
+
     # Filter to issue movements (demand) for this product within horizon.
     relevant = [
         m for m in movements
@@ -60,11 +62,11 @@ def _compute_single_forecast(
         and m.qty < 0
         and _as_utc(m.created_at) >= cutoff
     ]
-    
+
     total_demand = sum(abs(m.qty) for m in relevant) if relevant else Decimal(0)
     horizon_days = horizon_weeks * 7
     avg_daily_demand = (total_demand / horizon_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if horizon_days > 0 else Decimal(0)
-    
+
     # Weeks of supply: how many weeks the current stock will last.
     weeks_of_supply: Decimal | None = None
     stockout_date: datetime | None = None
@@ -72,7 +74,7 @@ def _compute_single_forecast(
         days_remaining = (qty_on_hand / avg_daily_demand).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         weeks_of_supply = (qty_on_hand / avg_daily_demand / 7).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
         stockout_date = now + timedelta(days=int(days_remaining))
-    
+
     return ForecastResult(
         product_id=product.id,
         horizon_weeks=horizon_weeks,

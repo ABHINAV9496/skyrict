@@ -10,9 +10,10 @@ Revises: 0001
 Create Date: 2026-08-27
 """
 from __future__ import annotations
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from alembic import op
+from sqlalchemy.dialects.postgresql import UUID
 
 revision = "0002"
 down_revision = "0001"

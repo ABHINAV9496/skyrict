@@ -1,12 +1,15 @@
 """/ai/abc endpoints - ABC classification."""
 from __future__ import annotations
+
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
+
 from ai_agent.api.deps import get_current_user
 from ai_agent.api.v1.routers.nl_query import get_inventory_gateway
-from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 from ai_agent.features.abc.service import AbcService
-from pydantic import BaseModel
+from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 router = APIRouter(prefix="/ai/abc", tags=["ai-abc"])
 

@@ -6,14 +6,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import pytest
-
 from ai_agent.features.anomalies.rules import (
     detect_all,
-    detect_transfer_without_receipt,
-    detect_reorder_alert_ignored,
-    detect_negative_adjustment_spike,
     detect_ledger_mismatch,
+    detect_negative_adjustment_spike,
+    detect_reorder_alert_ignored,
+    detect_transfer_without_receipt,
 )
 from ai_agent.features.nl_query.gateway import MovementRow, StockLevelRow
 
@@ -174,7 +172,7 @@ class TestDetectAllWithStockLevels:
 
     def test_stock_levels_none_skips_ledger(self) -> None:
         m = _movement(movement_type="receipt", qty=Decimal(10))
-        level = _stock_level(qty_on_hand=Decimal(999))
+        _stock_level(qty_on_hand=Decimal(999))
         findings = detect_all([m], stock_levels=None)
         types = {f.anomaly_type for f in findings}
         assert "ledger_mismatch" not in types

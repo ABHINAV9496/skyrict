@@ -9,11 +9,11 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from ai_agent.api.v1.health import router as health_router
+from ai_agent.api.v1.routers.abc import router as abc_router
 from ai_agent.api.v1.routers.anomalies import router as anomalies_router
+from ai_agent.api.v1.routers.forecast import router as forecast_router
 from ai_agent.api.v1.routers.nl_query import router as nl_query_router
 from ai_agent.api.v1.routers.restock import router as restock_router
-from ai_agent.api.v1.routers.forecast import router as forecast_router
-from ai_agent.api.v1.routers.abc import router as abc_router
 
 api_router = APIRouter()
 

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import uuid
-from decimal import Decimal
-from types import SimpleNamespace
-from datetime import UTC, datetime, timedelta
-
-import pytest
-
-from ai_agent.features.nl_query.intent import IntentAction, ParsedIntent, parse_intent_payload, INTENT_SYSTEM_PROMPT
+from ai_agent.features.nl_query.intent import (
+    INTENT_SYSTEM_PROMPT,
+    IntentAction,
+    ParsedIntent,
+    parse_intent_payload,
+)
 
 
 class TestIntentActionEnum:

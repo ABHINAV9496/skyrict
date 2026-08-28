@@ -4,12 +4,25 @@ Pareto classification: A=80% revenue, B=next 15%, C=remaining 5%.
 Recalculated weekly via background job.
 """
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint, func, text
+
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
 from ai_agent.models.base import Base
+
 
 class AiAbcClassificationModel(Base):
     __tablename__ = "ai_abc_classifications"

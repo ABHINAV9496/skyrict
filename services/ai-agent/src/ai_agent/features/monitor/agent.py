@@ -4,11 +4,13 @@ Provides tools for querying stock and raising restock suggestions,
 composing the existing gateway and restock services.
 """
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import uuid
     from collections.abc import Awaitable, Callable
+
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 class InventoryMonitorAgent:

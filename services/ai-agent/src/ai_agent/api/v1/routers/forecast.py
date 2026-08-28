@@ -1,13 +1,16 @@
 """/ai/forecast endpoints - demand forecasting per product."""
 from __future__ import annotations
+
 import uuid
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
+
 from ai_agent.api.deps import get_current_user
 from ai_agent.api.v1.routers.nl_query import get_inventory_gateway
-from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 from ai_agent.features.forecast.service import ForecastService
-from pydantic import BaseModel
+from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 router = APIRouter(prefix="/ai/forecast", tags=["ai-forecast"])
 

@@ -4,12 +4,25 @@ Stores computed forecast results for each product at 4/8/12 week horizons.
 Refreshed by the forecast service on demand or via background recalc.
 """
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, UniqueConstraint, func, text
+
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    Numeric,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
 from ai_agent.models.base import Base
+
 
 class AiForecastModel(Base):
     __tablename__ = "ai_forecasts"

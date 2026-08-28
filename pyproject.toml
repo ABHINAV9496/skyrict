@@ -206,6 +206,12 @@ module = ["typer", "kafka", "user_agents", "geoip2", "maxminddb", "boto3"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# ragas is an optional, lazily-imported eval dependency (nightly workflow
+# installs it with `uv run --with`); treat as Any like the other untyped deps.
+module = ["ragas", "ragas.metrics"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # factory_boy ships py.typed but is only partially typed — treat as Any.
 module = ["factory"]
 follow_imports = "skip"

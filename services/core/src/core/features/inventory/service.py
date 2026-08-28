@@ -874,17 +874,16 @@ class InventoryService:
         order_id: uuid.UUID,
         lines: Sequence[SalesOrderLine],
         ref_type: str = "sale_order",
-    ) -> None:
+    ) -> list[tuple[uuid.UUID, Decimal, Decimal]]:
         """Fulfil every line of one order in a SINGLE transaction.
 
-        Consumption is serialized per line (guarded ``qty_reserved`` update),
-        so a replay or a second concurrent fulfil fails with 409 before any
-        movement is written — the sales service re-probes first and never
-        reaches this method for an already-fulfilled order.
+        Returns cost data as ``[(product_id, quantity, unit_cost), ...]`` so the
+        sales service can post COGS without a second round-trip.
         """
         tid = _as_uuid(tenant_id)
         ref_id = str(order_id)
         emitted: list[tuple[Product, Decimal, Decimal]] = []
+        cost_data: list[tuple[uuid.UUID, Decimal, Decimal]] = []
         for line in lines:
             if line.quantity <= 0:
                 raise ValidationError("Fulfilment quantity must be positive")
@@ -920,6 +919,7 @@ class InventoryService:
                 )
             )
             emitted.append((product, before, line.quantity))
+            cost_data.append((line.product_id, line.quantity, product.cost_price.amount))
 
         await self.inventory_repo.commit()
 
@@ -931,6 +931,8 @@ class InventoryService:
                 before=before,
                 after=before - qty,
             )
+
+        return cost_data
 
     # ------------------------------------------------------------------
     # Reads (thin forwards — the router owns response shaping)

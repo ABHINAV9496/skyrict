@@ -144,12 +144,14 @@ class InvoiceResponse(BaseModel):
     tenant_id: uuid.UUID
     invoice_number: str
     customer_id: uuid.UUID
+    customer_name: str | None = None
     invoice_date: date
     due_date: date
     status: InvoiceStatus
     total: Decimal
     source: str
     source_ref: str | None
+    source_order_number: str | None = None
     lines: list[InvoiceLineResponse]
     issued_at: datetime | None
     approved_at: datetime | None

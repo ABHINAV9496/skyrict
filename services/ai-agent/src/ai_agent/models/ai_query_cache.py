@@ -26,7 +26,9 @@ class AiQueryCacheModel(Base):
 
     __tablename__ = "ai_query_cache"
     __table_args__ = (
-        Index("idx_query_cache_tenant_hash", "tenant_id", "query_hash"),
+        # One cache entry per tenant+query (migration 0003 fixed the global
+        # unique constraint from 0002 to this tenant-scoped unique index).
+        Index("uq_ai_query_cache_tenant_hash", "tenant_id", "query_hash", unique=True),
         Index("idx_query_cache_expires", "expires_at"),
     )
 

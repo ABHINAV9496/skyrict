@@ -54,6 +54,7 @@ ERP_SALES_APPROVE = "erp.sales.approve"
 ERP_INVENTORY_READ = "erp.inventory.read"
 ERP_INVENTORY_WRITE = "erp.inventory.write"
 ERP_INVENTORY_APPROVE = "erp.inventory.approve"
+ERP_INVENTORY_AI_APPROVE = "erp.inventory.ai.approve"
 ERP_FINANCE_READ = "erp.finance.read"
 ERP_FINANCE_WRITE = "erp.finance.write"
 ERP_HR_READ = "erp.hr.read"
@@ -68,6 +69,13 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # ai-agent microservice. Same string as core's catalog so role grants stay
 # portable across the platform.
 ERP_AI_INVOKE = "erp.ai.invoke"
+
+# HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
+# L1 keys gate aggregate panels; L2 keys gate individual-level data.
+ERP_HR_AI_READ = "erp.hr.ai.read"
+ERP_HR_AI_INDIVIDUAL = "erp.hr.ai.individual"
+ERP_HR_AI_ACKNOWLEDGE = "erp.hr.ai.acknowledge"
+ERP_HR_AI_COPILOT = "erp.hr.ai.copilot"
 
 # Employee self-service portal (own leave balances / requests only)
 ERP_LEAVE_SELF = "erp.leave.self"
@@ -111,6 +119,7 @@ CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
     ERP_INVENTORY_WRITE,
     ERP_INVENTORY_APPROVE,
+    ERP_INVENTORY_AI_APPROVE,
     ERP_FINANCE_READ,
     ERP_FINANCE_WRITE,
     ERP_HR_READ,
@@ -120,6 +129,10 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_HR_AI_READ,
+    ERP_HR_AI_INDIVIDUAL,
+    ERP_HR_AI_ACKNOWLEDGE,
+    ERP_HR_AI_COPILOT,
     ERP_LEAVE_SELF,
     AGENTS_READ,
     INTELLIGENCE_READ,
@@ -143,7 +156,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "erp_inventory",
         "ERP Inventory",
-        (ERP_INVENTORY_READ, ERP_INVENTORY_WRITE, ERP_INVENTORY_APPROVE),
+        (ERP_INVENTORY_READ, ERP_INVENTORY_WRITE, ERP_INVENTORY_APPROVE, ERP_INVENTORY_AI_APPROVE),
     ),
     ("erp_finance", "ERP Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE)),
     ("erp_hr", "ERP HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
@@ -153,6 +166,11 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
     ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE,)),
+    (
+        "erp_hr_ai",
+        "ERP HR & Payroll AI",
+        (ERP_HR_AI_READ, ERP_HR_AI_INDIVIDUAL, ERP_HR_AI_ACKNOWLEDGE, ERP_HR_AI_COPILOT),
+    ),
     ("erp_leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
     ("agents", "AI Agents", (AGENTS_READ,)),
     ("intelligence", "Market Intelligence", (INTELLIGENCE_READ,)),
@@ -188,9 +206,14 @@ __all__ = [
     "ERP_CRM_WRITE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
+    "ERP_HR_AI_ACKNOWLEDGE",
+    "ERP_HR_AI_COPILOT",
+    "ERP_HR_AI_INDIVIDUAL",
+    "ERP_HR_AI_READ",
     "ERP_HR_APPROVE",
     "ERP_HR_READ",
     "ERP_HR_WRITE",
+    "ERP_INVENTORY_AI_APPROVE",
     "ERP_INVENTORY_APPROVE",
     "ERP_INVENTORY_READ",
     "ERP_INVENTORY_WRITE",

@@ -14,6 +14,7 @@ from ai_agent.core.audit_events import (
     AI_ANOMALY_DISMISSED,
     AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
+    AI_HR_COPILOT_EXCHANGE,
     AI_QUERY_EXECUTED,
     AI_SUGGESTION_APPROVED,
     AI_SUGGESTION_CREATED,
@@ -34,6 +35,8 @@ class TestAppendixBVocabulary:
         assert AI_ANOMALY_DISMISSED == "ai.anomaly.dismissed"
         # Documented spec-gap addition (see module docstring).
         assert AI_ANOMALY_ESCALATED == "ai.anomaly.escalated"
+        # HR-AI-001 feature 5 (spec §9).
+        assert AI_HR_COPILOT_EXCHANGE == "ai.hr.copilot.exchange"
 
     def test_all_events_covers_exactly_the_documented_constants(self) -> None:
         expected = {
@@ -45,6 +48,7 @@ class TestAppendixBVocabulary:
             audit_events.AI_ANOMALY_RESOLVED,
             audit_events.AI_ANOMALY_DISMISSED,
             audit_events.AI_ANOMALY_ESCALATED,
+            audit_events.AI_HR_COPILOT_EXCHANGE,
         }
         assert set(ALL_AI_AUDIT_EVENTS) == expected
 

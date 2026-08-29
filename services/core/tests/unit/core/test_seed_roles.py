@@ -121,6 +121,9 @@ class TestSeedCoreRolesForTenant:
             "erp.sales.read",
             "erp.sales.write",
             "erp.sales.approve",
+            "erp.hr.ai.read",
+            "erp.hr.ai.acknowledge",
+            "erp.hr.ai.copilot",
         ]
         assert merged.is_system_role is True
         assert len(session.added) == len(CORE_SYSTEM_ROLES) - 1
@@ -140,6 +143,7 @@ class TestSeedCoreRolesForTenant:
             "erp.payroll.read",
             "erp.crm.read",
             "erp.sales.read",
+            "erp.hr.ai.read",
         ]
 
 
@@ -160,6 +164,9 @@ class TestCoreSystemRolesDefinition:
             "erp.sales.read",
             "erp.sales.write",
             "erp.sales.approve",
+            "erp.hr.ai.read",
+            "erp.hr.ai.acknowledge",
+            "erp.hr.ai.copilot",
         }
         assert by_name["department_manager"] == (
             "erp.hr.read",
@@ -169,6 +176,9 @@ class TestCoreSystemRolesDefinition:
             "erp.crm.write",
             "erp.sales.read",
             "erp.sales.write",
+            "erp.hr.ai.read",
+            "erp.hr.ai.acknowledge",
+            "erp.hr.ai.copilot",
         )
         assert by_name["standard_user"] == ("erp.hr.read", "erp.crm.read", "erp.sales.read")
         assert by_name["auditor"] == (
@@ -176,4 +186,5 @@ class TestCoreSystemRolesDefinition:
             "erp.payroll.read",
             "erp.crm.read",
             "erp.sales.read",
+            "erp.hr.ai.read",
         )

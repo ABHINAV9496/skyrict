@@ -212,6 +212,11 @@ module = ["ragas", "ragas.metrics"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# scikit-learn, shap and numba ship no type stubs (ai-agent HR attrition model).
+module = ["shap", "sklearn", "sklearn.*", "numba", "numba.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # factory_boy ships py.typed but is only partially typed — treat as Any.
 module = ["factory"]
 follow_imports = "skip"

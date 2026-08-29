@@ -122,5 +122,32 @@ def sweep_caches() -> None:
     typer.echo(f"Deleted {deleted} expired query cache row(s).")
 
 
+@app.command()
+def attrition_train(
+    dataset: str = typer.Option(
+        "", "--dataset", help="optional CSV (see features/attrition/cli.py)"
+    ),
+    version: str = typer.Option("v1-gbc-2026-08", "--version"),
+    output: str = typer.Option(
+        "", "--output", help="artifact path (default: bundled artifacts dir)"
+    ),
+    max_depth: int = typer.Option(3, "--max-depth"),
+    estimators: int = typer.Option(40, "--estimators"),
+) -> None:
+    """Manually train + export the HR attrition GBC model (spec §6 cadence)."""
+    from ai_agent.features.attrition.cli import train as attrition_train_cmd
+
+    out = output or str(
+        _PACKAGE_ROOT / "src" / "ai_agent" / "features" / "attrition" / "artifacts" / "model.joblib"
+    )
+    attrition_train_cmd(
+        dataset=dataset,
+        version=version,
+        output=out,
+        max_depth=max_depth,
+        estimators=estimators,
+    )
+
+
 if __name__ == "__main__":
     app()

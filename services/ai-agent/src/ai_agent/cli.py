@@ -46,6 +46,83 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
 
 
 @app.command()
+def ingest(
+    source: str = typer.Option(
+        "docs", help="source: 'docs' (markdown dir) or 'module' (core data)"
+    ),
+    module: str = typer.Option("docs", help="module name ('docs' or e.g. 'products')"),
+    tenant: str = typer.Option(..., help="tenant slug (required)"),
+    path: Path | None = None,
+    mode: str = typer.Option(
+        "incremental", help="'incremental' or 'full' (both replace idempotently)"
+    ),
+) -> None:
+    """Ingest documents into the RAG vector store (SKY-58).
+
+    --path: markdown directory root when --source=docs. Re-running a document
+    is always safe (both modes replace idempotently).
+
+    Requires an embedding provider: AI_EMBEDDING_PROVIDER + AI_EMBEDDING_API_KEY.
+    """
+    import asyncio
+
+    from ai_agent.ingest import run_ingest
+
+    asyncio.run(run_ingest(source=source, module=module, tenant=tenant, path=path, mode=mode))
+
+
+@app.command(name="eval")
+def evaluate(
+    tenant: str = typer.Option(..., help="tenant slug or UUID (required)"),
+    module: str | None = typer.Option(
+        None, help="restrict eval cases to one module ('docs' or 'products')"
+    ),
+    faithfulness: float = typer.Option(0.80, min=0.0, max=1.0, help="minimum faithfulness"),
+    answer_relevancy: float = typer.Option(0.75, min=0.0, max=1.0, help="minimum answer relevancy"),
+    context_precision: float = typer.Option(
+        0.70, min=0.0, max=1.0, help="minimum context precision"
+    ),
+    context_recall: float = typer.Option(0.70, min=0.0, max=1.0, help="minimum context recall"),
+) -> None:
+    """Run the nightly RAGAS retrieval-quality gate (SKY-58).
+
+    Runs every curated eval case through the REAL retrieval pipeline, scores
+    the pairs with RAGAS, persists the run to ai_eval_runs, and exits nonzero
+    when any metric drops below its threshold (CI gate).
+
+    Requires ragas (nightly workflow installs it ephemerally):
+    uv run --with "ragas>=0.2,<0.3" ai-agent eval --tenant <slug|uuid>
+    """
+    import asyncio
+
+    from ai_agent.rag_eval import run_eval
+
+    thresholds = {
+        "faithfulness": faithfulness,
+        "answer_relevancy": answer_relevancy,
+        "context_precision": context_precision,
+        "context_recall": context_recall,
+    }
+    outcome = asyncio.run(run_eval(tenant=tenant, module=module, thresholds=thresholds))
+    means = ", ".join(f"{name}={value:.4f}" for name, value in sorted(outcome.means.items()))
+    status = "PASS" if outcome.passed else f"FAIL: below threshold - {', '.join(outcome.failures)}"
+    typer.echo(f"RAGAS run {outcome.run_id}: {outcome.sample_count} sample(s) - {means} - {status}")
+    if not outcome.passed:
+        raise typer.Exit(1)
+
+
+@app.command()
+def sweep_caches() -> None:
+    """Purge expired ai_query_cache rows for every tenant (SKY-58)."""
+    import asyncio
+
+    from ai_agent.sweep import sweep_expired_query_cache
+
+    deleted = asyncio.run(sweep_expired_query_cache())
+    typer.echo(f"Deleted {deleted} expired query cache row(s).")
+
+
+@app.command()
 def attrition_train(
     dataset: str = typer.Option(
         "", "--dataset", help="optional CSV (see features/attrition/cli.py)"

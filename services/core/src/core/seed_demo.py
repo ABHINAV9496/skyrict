@@ -59,7 +59,7 @@ def _opening_balance_rows(
     reservation_types = {"reservation", "release"}
     ledger_sum: dict[tuple[int, int], Decimal] = {}
     for mrow in stock_movements:
-        if mrow["type"].value in reservation_types:
+        if getattr(mrow["type"], "value", mrow["type"]) in reservation_types:
             continue
         key = (int(str(mrow["prod"])), int(str(mrow["wh"])))
         ledger_sum[key] = ledger_sum.get(key, Decimal(0)) + Decimal(str(mrow["qty"]))
@@ -68,20 +68,14 @@ def _opening_balance_rows(
     for srow in stock_levels:
         prod_idx = int(str(srow["prod"]))
         wh_idx = int(str(srow["wh"]))
-        delta = Decimal(str(srow["on_hand"])) - ledger_sum.get(
-            (prod_idx, wh_idx), Decimal(0)
-        )
+        delta = Decimal(str(srow["on_hand"])) - ledger_sum.get((prod_idx, wh_idx), Decimal(0))
         if delta == 0:
             continue
         balance.append(
             {
                 "prod": prod_idx,
                 "wh": wh_idx,
-                "type": (
-                    StockMovementType.RECEIPT
-                    if delta > 0
-                    else StockMovementType.ISSUE
-                ),
+                "type": (StockMovementType.RECEIPT if delta > 0 else StockMovementType.ISSUE),
                 "qty": delta,
             }
         )
@@ -2190,8 +2184,8 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             session.add(
                 ErpStockMovementModel(
                     tenant_id=tenant_id,
-                    product_id=product_ids[orow["prod"]],
-                    warehouse_id=wh_ids[orow["wh"]],
+                    product_id=product_ids[int(str(orow["prod"]))],
+                    warehouse_id=wh_ids[int(str(orow["wh"]))],
                     movement_type=orow["type"],
                     qty=orow["qty"],
                     ref_type="opening_balance",

@@ -1,4 +1,5 @@
 """ABC classification service - weekly recalc orchestration."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -14,12 +15,14 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger("ai_agent.abc_service")
 
+
 class AbcService:
     def __init__(self, *, gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]]) -> None:
         self._gateway_factory = gateway_factory
 
     async def compute_classification(self) -> list[dict[str, object]]:
         from ai_agent.features.abc.classifier import classify_abc
+
         gateway = await self._gateway_factory()
         products = await gateway.list_products()
         movements = await gateway.list_movements()
@@ -32,7 +35,9 @@ class AbcService:
                 cost = cost_map.get(m.product_id)
                 if cost is not None:
                     revenue = abs(m.qty) * cost
-                    revenue_by_product[m.product_id] = revenue_by_product.get(m.product_id, Decimal(0)) + revenue
+                    revenue_by_product[m.product_id] = (
+                        revenue_by_product.get(m.product_id, Decimal(0)) + revenue
+                    )
 
         items = list(revenue_by_product.items())
         entries = classify_abc(items)
@@ -41,7 +46,9 @@ class AbcService:
         return [
             {
                 "product_id": str(e.product_id),
-                "product_name": product_map[e.product_id].name if e.product_id in product_map else str(e.product_id),
+                "product_name": product_map[e.product_id].name
+                if e.product_id in product_map
+                else str(e.product_id),
                 "sku": product_map[e.product_id].sku if e.product_id in product_map else "",
                 "revenue": str(e.revenue),
                 "revenue_share": str(e.revenue_share),

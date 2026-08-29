@@ -31,6 +31,6 @@ def test_every_stock_level_reconciles_with_ledger() -> None:
     assert STOCK_LEVEL_ROWS, "expected at least one stock level row"
     for srow in STOCK_LEVEL_ROWS:
         key = (int(str(srow["prod"])), int(str(srow["wh"])))
-        assert (
-            ledger_sum.get(key, Decimal(0)) == Decimal(str(srow["on_hand"]))
-        ), f"stock level {srow} does not reconcile with the movement ledger"
+        assert ledger_sum.get(key, Decimal(0)) == Decimal(str(srow["on_hand"])), (
+            f"stock level {srow} does not reconcile with the movement ledger"
+        )

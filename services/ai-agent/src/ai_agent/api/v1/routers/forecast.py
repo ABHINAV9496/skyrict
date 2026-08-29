@@ -1,4 +1,5 @@
 """/ai/forecast endpoints - demand forecasting per product."""
+
 from __future__ import annotations
 
 import uuid
@@ -14,6 +15,7 @@ from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 router = APIRouter(prefix="/ai/forecast", tags=["ai-forecast"])
 
+
 class ForecastItem(BaseModel):
     product_id: str
     horizon_weeks: int
@@ -21,8 +23,10 @@ class ForecastItem(BaseModel):
     weeks_of_supply: str | None
     stockout_date: str | None
 
+
 class ForecastResponse(BaseModel):
     data: list[ForecastItem]
+
 
 def get_forecast_service(
     request: Request,
@@ -30,7 +34,9 @@ def get_forecast_service(
 ) -> ForecastService:
     async def gateway_factory() -> InventoryGatewayPort:
         return gateway
+
     return ForecastService(gateway_factory=gateway_factory)
+
 
 @router.get("/{product_id}", response_model=ForecastResponse)
 async def get_product_forecast(
@@ -39,4 +45,4 @@ async def get_product_forecast(
     service: Annotated[ForecastService, Depends(get_forecast_service)],
 ) -> ForecastResponse:
     items = await service.get_forecast(product_id=product_id)
-    return ForecastResponse(data=[ForecastItem(**item) for item in items])
+    return ForecastResponse(data=[ForecastItem.model_validate(item) for item in items])

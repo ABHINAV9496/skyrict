@@ -7,6 +7,7 @@ import {
     Blocks,
     BookOpen,
     Building2,
+    Calendar,
     CalendarClock,
     CalendarDays,
     Coins,

@@ -161,7 +161,9 @@ class FakeGateway:
     def __init__(self, movements: list[MovementRow]) -> None:
         self.movements = movements
 
-    async def list_movements(self, *, product_id=None, warehouse_id=None, movement_type=None) -> list[MovementRow]:
+    async def list_movements(
+        self, *, product_id=None, warehouse_id=None, movement_type=None
+    ) -> list[MovementRow]:
         return self.movements
 
     async def get_stock_levels(self, *, product_id=None, warehouse_id=None):

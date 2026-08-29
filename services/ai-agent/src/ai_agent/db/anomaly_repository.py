@@ -161,4 +161,4 @@ class AnomalyRepository:
             )
         )
         await self.session.flush()
-        return result.rowcount
+        return int(result.rowcount or 0)  # type: ignore[attr-defined]

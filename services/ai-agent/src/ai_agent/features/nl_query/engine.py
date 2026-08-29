@@ -372,9 +372,7 @@ class NlQueryEngine:
         product: ProductRef,
     ) -> _ActionOutcome:
         """Most recent receipt movement for a given product."""
-        movements = await gateway.list_movements(
-            product_id=product.id, movement_type="receipt"
-        )
+        movements = await gateway.list_movements(product_id=product.id, movement_type="receipt")
         if not movements:
             return _ActionOutcome(
                 answer=f"No receipt movements found for {product.name}.",

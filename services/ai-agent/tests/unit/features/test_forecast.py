@@ -50,13 +50,17 @@ class TestComputeForecasts:
 
     def test_demand_computed_from_issues(self) -> None:
         movements = [_issue(hours_ago=i * 20, qty=Decimal(-5)) for i in range(10)]
-        results = compute_forecasts(product=_product(), movements=movements, qty_on_hand=Decimal(200))
+        results = compute_forecasts(
+            product=_product(), movements=movements, qty_on_hand=Decimal(200)
+        )
         four_week = next(r for r in results if r.horizon_weeks == 4)
         assert four_week.avg_daily_demand > Decimal("0")
 
     def test_weeks_of_supply_computed_when_demand_exists(self) -> None:
         movements = [_issue(hours_ago=i * 10, qty=Decimal(-2)) for i in range(15)]
-        results = compute_forecasts(product=_product(), movements=movements, qty_on_hand=Decimal(100))
+        results = compute_forecasts(
+            product=_product(), movements=movements, qty_on_hand=Decimal(100)
+        )
         four_week = next(r for r in results if r.horizon_weeks == 4)
         assert four_week.weeks_of_supply is not None
         assert four_week.stockout_date is not None
@@ -74,6 +78,8 @@ class TestComputeForecasts:
                 ref_id=None,
             )
         ]
-        results = compute_forecasts(product=_product(), movements=other_movements, qty_on_hand=Decimal(100))
+        results = compute_forecasts(
+            product=_product(), movements=other_movements, qty_on_hand=Decimal(100)
+        )
         for r in results:
             assert r.avg_daily_demand == Decimal("0.00")

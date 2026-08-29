@@ -16,8 +16,13 @@ class TestIntentActionEnum:
         assert len(actions) == 7
         names = {a.name for a in actions}
         assert names == {
-            "STOCK_COUNT", "BELOW_REORDER", "RECENT_MOVEMENTS",
-            "TOTAL_STOCK_VALUE", "HIGHEST_RESERVED", "LAST_RECEIPT", "WAREHOUSE_COUNT",
+            "STOCK_COUNT",
+            "BELOW_REORDER",
+            "RECENT_MOVEMENTS",
+            "TOTAL_STOCK_VALUE",
+            "HIGHEST_RESERVED",
+            "LAST_RECEIPT",
+            "WAREHOUSE_COUNT",
         }
 
     def test_stock_count_value(self) -> None:

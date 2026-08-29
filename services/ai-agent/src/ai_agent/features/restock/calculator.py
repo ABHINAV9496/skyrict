@@ -78,9 +78,7 @@ def compute_suggestion(
     reason = f"Stock ({qty_on_hand}) below reorder point ({product.reorder_point})."
     # Cost prices are LOCAL-ONLY data (spec 5.5): used for the estimate
     # here and returned to the tenant - never sent to any LLM provider.
-    estimated_cost = (
-        suggested_qty * product.cost_price if product.cost_price is not None else None
-    )
+    estimated_cost = suggested_qty * product.cost_price if product.cost_price is not None else None
 
     if movements:
         confidence = _four_factor_confidence(
@@ -136,7 +134,10 @@ def _four_factor_confidence(
         + f_proximity * _W_PROXIMITY
         + f_recency * _W_REPLENISHMENT_RECENCY
     )
-    return max(_CONFIDENCE_FLOOR, min(_CONFIDENCE_CEILING, raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
+    return max(
+        _CONFIDENCE_FLOOR,
+        min(_CONFIDENCE_CEILING, raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+    )
 
 
 def _data_quality_factor(movements: list[MovementRow]) -> Decimal:
@@ -160,7 +161,7 @@ def _demand_stability_factor(issues: list[MovementRow]) -> Decimal:
     import statistics
 
     sigma = Decimal(str(statistics.stdev(float(q) for q in quantities)))
-    cv = sigma / mean
+    cv = sigma / Decimal(str(mean)) if mean else Decimal(0)
     if cv <= _CV_STABLE:
         return _FACTOR_CEILING
     if cv >= _CV_ERRATIC:

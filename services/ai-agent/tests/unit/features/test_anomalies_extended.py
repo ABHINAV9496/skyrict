@@ -64,8 +64,15 @@ class TestTransferWithoutReceipt:
         assert findings[0].related_movement_ids == [m.id]
 
     def test_paired_transfer_no_flag(self) -> None:
-        source = _movement(movement_type="transfer", qty=Decimal(-20), ref_id="TRF-002", warehouse_id=WAREHOUSE_ID)
-        dest = _movement(movement_type="transfer", qty=Decimal(20), ref_id="TRF-002", warehouse_id=DEST_WAREHOUSE_ID)
+        source = _movement(
+            movement_type="transfer", qty=Decimal(-20), ref_id="TRF-002", warehouse_id=WAREHOUSE_ID
+        )
+        dest = _movement(
+            movement_type="transfer",
+            qty=Decimal(20),
+            ref_id="TRF-002",
+            warehouse_id=DEST_WAREHOUSE_ID,
+        )
         findings = detect_transfer_without_receipt([source, dest])
         assert len(findings) == 0
 
@@ -100,8 +107,7 @@ class TestReorderAlertIgnored:
 class TestNegativeAdjustmentSpike:
     def test_six_negative_adjustments_in_7d_flags(self) -> None:
         negatives = [
-            _movement(movement_type="adjustment", qty=Decimal(-1), hours_ago=i)
-            for i in range(6)
+            _movement(movement_type="adjustment", qty=Decimal(-1), hours_ago=i) for i in range(6)
         ]
         findings = detect_negative_adjustment_spike(negatives)
         assert len(findings) == 1
@@ -111,15 +117,13 @@ class TestNegativeAdjustmentSpike:
 
     def test_five_negative_adjustments_no_flag(self) -> None:
         negatives = [
-            _movement(movement_type="adjustment", qty=Decimal(-1), hours_ago=i)
-            for i in range(5)
+            _movement(movement_type="adjustment", qty=Decimal(-1), hours_ago=i) for i in range(5)
         ]
         assert detect_negative_adjustment_spike(negatives) == []
 
     def test_positive_adjustments_not_counted(self) -> None:
         positives = [
-            _movement(movement_type="adjustment", qty=Decimal(1), hours_ago=i)
-            for i in range(7)
+            _movement(movement_type="adjustment", qty=Decimal(1), hours_ago=i) for i in range(7)
         ]
         assert detect_negative_adjustment_spike(positives) == []
 

@@ -122,7 +122,7 @@ class SuggestionRepository:
             .values(status="expired")
         )
         await self.session.flush()
-        return result.rowcount
+        return int(result.rowcount or 0)  # type: ignore[attr-defined]
 
 
 def _utcnow() -> datetime:

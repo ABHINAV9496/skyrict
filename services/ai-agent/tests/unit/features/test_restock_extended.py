@@ -51,16 +51,20 @@ class TestFourFactorConfidence:
     def test_with_movements_uses_four_factor(self) -> None:
         movements = [_receipt(hours_ago=24 * i, qty=Decimal(50)) for i in range(10)]
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=movements,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=movements,
         )
         assert draft.confidence >= Decimal("0.50")
         assert draft.confidence <= Decimal("0.95")
 
     def test_without_movements_uses_v1_fallback(self) -> None:
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=None,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=None,
         )
         assert draft.confidence >= Decimal("0.50")
         assert draft.confidence <= Decimal("0.95")
@@ -69,37 +73,48 @@ class TestFourFactorConfidence:
         few = [_receipt(hours_ago=24 * i) for i in range(5)]
         many = [_receipt(hours_ago=24 * i) for i in range(60)]
         draft_few = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=few,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=few,
         )
         draft_many = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=many,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=many,
         )
         assert draft_many.confidence >= draft_few.confidence
 
     def test_no_receipts_high_recency_score(self) -> None:
         issues_only = [_issue(hours_ago=24 * i) for i in range(10)]
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=issues_only,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=issues_only,
         )
         assert draft.confidence >= Decimal("0.50")
 
     def test_deeper_deficit_higher_proximity_score(self) -> None:
         shallow = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(9), movements=[_receipt(hours_ago=1)],
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(9),
+            movements=[_receipt(hours_ago=1)],
         )
         deep = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(-10), movements=[_receipt(hours_ago=1)],
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(-10),
+            movements=[_receipt(hours_ago=1)],
         )
         assert deep.confidence >= shallow.confidence
 
     def test_suggested_qty_always_double_reorder(self) -> None:
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
             qty_on_hand=Decimal(3),
         )
         assert draft.suggested_qty == Decimal(20)
@@ -107,15 +122,19 @@ class TestFourFactorConfidence:
     def test_confidence_never_exceeds_095(self) -> None:
         movements = [_receipt(hours_ago=24 * i) for i in range(120)]
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(-20), movements=movements,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(-20),
+            movements=movements,
         )
         assert draft.confidence <= Decimal("0.95")
 
     def test_confidence_never_below_050(self) -> None:
         draft = compute_suggestion(
-            product=_product(cost=None), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(9), movements=[],
+            product=_product(cost=None),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(9),
+            movements=[],
         )
         assert draft.confidence >= Decimal("0.50")
 
@@ -123,13 +142,19 @@ class TestFourFactorConfidence:
         other_id = uuid.uuid4()
         other_movements = [
             MovementRow(
-                id=uuid.uuid4(), product_id=other_id, warehouse_id=WAREHOUSE_ID,
-                movement_type="issue", qty=Decimal(-50),
-                created_at=datetime.now(tz=UTC) - timedelta(hours=1), ref_id=None,
+                id=uuid.uuid4(),
+                product_id=other_id,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="issue",
+                qty=Decimal(-50),
+                created_at=datetime.now(tz=UTC) - timedelta(hours=1),
+                ref_id=None,
             )
         ]
         draft = compute_suggestion(
-            product=_product(), warehouse_id=WAREHOUSE_ID,
-            qty_on_hand=Decimal(3), movements=other_movements,
+            product=_product(),
+            warehouse_id=WAREHOUSE_ID,
+            qty_on_hand=Decimal(3),
+            movements=other_movements,
         )
         assert draft.confidence <= Decimal("0.95")

@@ -4,6 +4,7 @@ Classifies products into A (80% cumulative revenue), B (next 15%),
 and C (remaining 5%) bands. Revenue is computed from issue movements
 * cost_price over a rolling window.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import uuid
 
+
 @dataclass(frozen=True, slots=True)
 class AbcEntry:
     product_id: uuid.UUID
@@ -20,9 +22,11 @@ class AbcEntry:
     revenue_share: Decimal
     band: str  # "A", "B", or "C"
 
+
 # Spec thresholds.
 _BAND_A_THRESHOLD = Decimal("0.80")  # top 80% of revenue
 _BAND_B_THRESHOLD = Decimal("0.95")  # next 15% (80% -> 95%)
+
 
 def classify_abc(
     products_with_revenue: list[tuple[uuid.UUID, Decimal]],

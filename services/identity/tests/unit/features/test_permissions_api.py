@@ -236,7 +236,7 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-# 40 unique keys (erp.ai.invoke since SKY-57, erp.leave.self since
+        # 40 unique keys (erp.ai.invoke since SKY-57, erp.leave.self since
         # SKY-57 HR, and erp.inventory.ai.approve since SKY-68)
         assert len(all_keys) == 40
         assert len(module_keys_set) == 40

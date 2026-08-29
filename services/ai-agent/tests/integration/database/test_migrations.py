@@ -120,6 +120,10 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
         }
         artifacts["version"] = await conn.fetchval("SELECT version_num FROM alembic_version_ai")
 
+        artifacts["agent_names"] = {
+            row["name"] for row in await conn.fetch("SELECT name FROM agent_registry")
+        }
+
         artifacts["rls_tables"] = {
             row["tablename"]
             for row in await conn.fetch(
@@ -286,6 +290,7 @@ class TestAiMigrationRoundTrip:
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
             assert artifacts["version"] == "0002"
+            assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
             assert artifacts["rls_tables"] == set(_TENANT_SCOPED_TABLES)

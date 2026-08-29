@@ -66,6 +66,14 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # ai-agent microservice - permissionless calls never reach the AI service.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
+# Checked at the core edge for /api/v1/ai/hr/*. Same strings as identity's
+# catalog so role grants stay portable across the platform.
+ERP_HR_AI_READ = "erp.hr.ai.read"
+ERP_HR_AI_INDIVIDUAL = "erp.hr.ai.individual"
+ERP_HR_AI_ACKNOWLEDGE = "erp.hr.ai.acknowledge"
+ERP_HR_AI_COPILOT = "erp.hr.ai.copilot"
+
 # Employee self-service portal (own leave balances/requests only; mirrors
 # identity's catalog so the invite flow can grant it portably)
 ERP_LEAVE_SELF = "erp.leave.self"
@@ -98,6 +106,10 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_HR_AI_READ,
+    ERP_HR_AI_INDIVIDUAL,
+    ERP_HR_AI_ACKNOWLEDGE,
+    ERP_HR_AI_COPILOT,
     ERP_LEAVE_SELF,
 )
 
@@ -123,6 +135,11 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
     ("ai", "AI assistant", (ERP_AI_INVOKE,)),
+    (
+        "hr_ai",
+        "HR & Payroll AI",
+        (ERP_HR_AI_READ, ERP_HR_AI_INDIVIDUAL, ERP_HR_AI_ACKNOWLEDGE, ERP_HR_AI_COPILOT),
+    ),
     ("leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
 )
 
@@ -152,6 +169,10 @@ __all__ = [
     "ERP_FINANCE_APPROVE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
+    "ERP_HR_AI_ACKNOWLEDGE",
+    "ERP_HR_AI_COPILOT",
+    "ERP_HR_AI_INDIVIDUAL",
+    "ERP_HR_AI_READ",
     "ERP_HR_APPROVE",
     "ERP_HR_READ",
     "ERP_HR_WRITE",

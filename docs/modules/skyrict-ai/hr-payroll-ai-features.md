@@ -1,0 +1,370 @@
+# HR/Payroll AI Features — Technical Specification
+
+This document specifies the AI-powered HR & Payroll slice delivered by ticket
+**HR-AI-001**. It is the scoped, reviewable implementation plan for the first
+L1–L2 portion of the broader *AI Implementation in HR & Payroll Module*
+proposal (`ai-hr-payroll-proposal.md`). Every feature is an **advisor** — it
+suggests, flags, and explains; it never executes a human-gated decision on its
+own.
+
+> **Status:** Implemented (HR-AI-001).
+> **Security posture:** Read-only aggregates by default; individual indicators
+> gated by `erp.hr.ai.individual`; every outbound LLM payload passes through the
+> PII redaction pipeline.
+> **Scope note:** This doc covers only the L1–L2 slice. The full 45-opportunity
+> proposal (salary benchmarking, pay equity, budget forecasting, org
+> optimization, etc.) is future work and is **not** part of this ticket.
+
+---
+
+## Table of contents
+
+1. [Overview](#1-overview)
+2. [Data-scope model (L1 vs L2)](#2-data-scope-model-l1-vs-l2)
+3. [Permission matrix](#3-permission-matrix)
+4. [PII redaction pipeline (prereq gate)](#4-pii-redaction-pipeline-prereq-gate)
+5. [Feature 1 — L1 aggregates & narratives](#5-feature-1--l1-aggregates--narratives)
+6. [Feature 2 — Attrition model & factors](#6-feature-2--attrition-model--factors)
+7. [Feature 3 — Payroll anomaly detection](#7-feature-3--payroll-anomaly-detection)
+8. [Feature 4 — Compliance engine v1](#8-feature-4--compliance-engine-v1)
+9. [Feature 5 — HR Copilot agent](#9-feature-5--hr-copilot-agent)
+10. [Security architecture](#10-security-architecture)
+11. [Database design](#11-database-design)
+12. [Test strategy](#12-test-strategy)
+
+---
+
+## 1. Overview
+
+### 1.1 What we are adding
+
+| Feature | Purpose | Data scope |
+|---------|---------|-----------|
+| PII redaction pipeline | Mask/strip names, IDs, bank fragments, salaries in every outbound LLM payload | Cross-cutting gate |
+| L1 aggregates + narratives | Headcount trend, department distribution, tenure-band summaries — **zero individual rows leave the service** | L1 (aggregate) |
+| Attrition model + factors | Per-employee risk score + top-3 SHAP-style factor explanations | L2 (individual) |
+| Payroll anomaly detection | Net-pay delta MoM, duplicate accounts, ghost-employee signals | L3 (financial) |
+| Compliance engine v1 | Document expiry, required training overdue, missing contract fields | L3 (financial) |
+| HR Copilot agent | Aggregate HR reads + draft leave-policy answers via RAG; refuses out-of-permission PII | L1 / L2-gated |
+
+### 1.2 Why
+
+HR & Payroll are manual CRUD today. This slice adds *intelligent* surfaces:
+managers see which teams carry attrition risk (with *why*), payroll admins are
+warned before anomalies are finalized, and HR conversations become natural
+language — all without ever leaking an individual's personal data to a model
+or to an unauthorized user.
+
+### 1.3 Architecture summary
+
+```
+apps/web (BFF /api/v1/ai/hr/*, ModuleAccessBoundary + L1/L2 scope labels)
+   │
+   ▼
+services/core  ── features/ai_hr/
+   │              ├─ router (authz: erp.hr.ai.* + erp.ai.invoke)
+   │              ├─ L1 aggregates  (SQL GROUP BY only — zero rows leave)
+   │              ├─ L2 individual  (requires erp.hr.ai.individual; else 403 + L1 body)
+   │              └─ proxy /ai/hr/copilot → ai-agent
+   ▼
+services/ai-agent
+   ├── redaction/          (PII gate on EVERY outbound provider call)
+   ├── features/attrition/ (GradientBoosted model + SHAP factors, model card)
+   └── features/hr_copilot/(registered via agent_registry, SKY-59)
+```
+
+### 1.4 Design principles
+
+1. **AI is a proxy, not a bypass.** Every AI path passes the same JWT, RBAC,
+   RLS, and audit checks as a human user.
+2. **Suggest, don't execute.** Anomalies and compliance findings are alerts;
+   the acknowledge flow records human review. No AI decision mutates payroll.
+3. **PII never reaches a provider.** The redaction pipeline gates every
+   outbound LLM payload, fails closed, and is corpus-tested.
+4. **Scope is explicit.** Every AI panel is labeled L1 (aggregate) or
+   L2 (individual). Individual data requires `erp.hr.ai.individual` and is
+   refused server-side otherwise.
+5. **Full audit trail.** Every score view, acknowledge, anomaly, compliance
+   finding, and Copilot exchange is logged with tenant, user, timestamp, and
+   (for model output) model version.
+
+---
+
+## 2. Data-scope model (L1 vs L2)
+
+The task's **L1/L2 data-scope levels** govern how much of a tenant's data a
+consumer may see. They are orthogonal to (but map onto) the proposal's
+"Security Levels 1–4":
+
+- **L1 — Aggregate (public/internal):** counted, grouped, narrative summaries.
+  No employee identifier, name, or per-person figure is returned. Examples:
+  `overview`, `tenure`, the **team-risk list** (counts per band per department —
+  **not** per-employee rows).
+- **L2 — Individual (sensitive):** per-employee attrition score + top-3 factor
+  explanations. The proposal classifies retention/attrition scoring as
+  **Security Level 4** ("Organization owners, Executive leadership only"), so
+  L2 access requires `erp.hr.ai.individual`, granted to the owner role plus a
+  dedicated executive role only — **not** blanket `organization_admin`.
+- **L3 — Financial:** compensation/payroll data underlying anomaly and
+  compliance findings. Access aligns with existing `erp.payroll.read`.
+
+**Scope labels:** every AI panel in the UI carries an **L1** or **L2** badge so
+the consumer knows at a glance whether they are looking at aggregate or
+individual data.
+
+---
+
+## 3. Permission matrix
+
+All keys under `erp.hr.ai.*`, added to **both** the identity and core catalogs,
+seeded via identity migration, and enforced at the core edge before any AI work
+`erp.ai.invoke` base gate also applies to every AI path.
+
+| Key | Scope | Meaning | Granted to |
+|-----|-------|---------|-----------|
+| `erp.hr.ai.read` | L1 | View aggregate HR AI panels | owner, organization_admin, department_manager, auditor |
+| `erp.hr.ai.individual` | L2 | View individual attrition + factor explanations | **owner + dedicated executive role only** |
+| `erp.hr.ai.acknowledge` | L2 | Acknowledge a team-risk item (audited) | owner, organization_admin, department_manager |
+| `erp.hr.ai.copilot` | L1 | Use the HR Copilot | owner, organization_admin, department_manager |
+| `erp.ai.invoke` | base | Existing gate; every AI path requires it | existing |
+
+**Gate semantics (Gherkin: permission gate on predictions):** a manager with
+`erp.hr.ai.read` but **without** `erp.hr.ai.individual` requesting a
+direct-report's attrition detail receives **403 with an aggregates-only body**
+(the endpoint downgrades to the L1 shape when the L2 key is absent) — never a
+has-the-row-then-censors response, and never an empty body.
+
+---
+
+## 4. PII redaction pipeline (prereq gate)
+
+**Location:** `services/ai-agent/src/ai_agent/redaction/`. This is the **prereq
+gate** — nothing that touches an LLM is implemented until it exists.
+
+**Gate point:** the redactor is applied inside `LlmRouter.complete()` to every
+`LlmRequest` (system + user prompt) **before** the request reaches any provider
+adapter. Because the router is the ONLY path to an LLM in ai-agent, one
+injection point gates **every** outbound provider payload. It **fails closed**:
+anything that matches a sensitive pattern is masked; the original value is never
+forwarded.
+
+**Patterns masked (v1):**
+
+| Pattern | Token |
+|---------|-------|
+| Malaysian MyKad / NRIC (`000101-10-1234`, `010203-04-5678`) | `[NRIC]` |
+| Phone numbers | `[PHONE]` |
+| Email addresses | `[EMAIL]` |
+| Employee numbers (`EMP-*`) | `[EMPLOYEE_NO]` |
+| Bank / account digit-group fragments | `[ACCOUNT]` |
+| Salary figures (`RM 8,500`, `MYR 8,500`, `8,500.00`, `RM12,345`) | `[SALARY]` |
+| Person names (given/family heuristics on labelled fields) | `[NAME]` |
+
+**Corpus test (Gherkin: redaction protects providers):** free text containing a
+MyKad fragment **and** a salary figure, including **mixed Malay/English** text,
+is passed through the pipeline pre-LLM. The assertion checks that masked tokens
+are present and raw values are **absent** from the (simulated) outbound payload.
+
+Example corpus entry (mixed language):
+```
+"Gaji Wong Kar Wai RM 8,500 sebulan, kad pengenalan 000101-10-1234"
+→ "Gaji [NAME] [SALARY] sebulan, kad pengenalan [NRIC]"
+```
+
+---
+
+## 5. Feature 1 — L1 aggregates & narratives
+
+**Location:** `services/core/src/core/features/ai_hr/`.
+
+Endpoints (require `erp.ai.invoke` + `erp.hr.ai.read`):
+
+| Endpoint | Output |
+|----------|--------|
+| `GET /api/v1/ai/hr/overview` | headcount trend by month, department distribution, tenure-band counts + rule-based narrative strings |
+| `GET /api/v1/ai/hr/tenure` | tenure-band aggregate summary + narrative |
+
+**Guarantee:** all computation is SQL `GROUP BY`/aggregate in the repository —
+no employee row is ever selected and serialized. A test asserts the serialized
+response contains no `employee_id`, `first_name`/`last_name`/`EMPLOYEE_NO`/
+email/phone values.
+
+Narratives are deterministic rule-based templates over the aggregate numbers
+(e.g. "Headcount grew 4.2% MoM, led by Engineering (+3); tenure is
+concentrated at 1–3 years (58%).") No LLM is involved in these — they are fast,
+deterministic, and unit-testable.
+
+---
+
+## 6. Feature 2 — Attrition model & factors
+
+**Location:** `services/ai-agent/src/ai_agent/features/attrition/`.
+
+- **Model:** `GradientBoostingClassifier` (scikit-learn) scoring
+  `risk = P(attrition)` on features derived from HR/payroll data:
+  - tenure (years from `hire_date`),
+  - compa-ratio band (current salary vs its department baseline),
+  - promotion gap (months since last compensation `effective_from` change),
+  - activity (count of recent leave movements / attendance).
+- **Explanations:** `shap.TreeExplainer` yields the top-3 feature
+  contributions stored per score (`factors JSONB`):
+  `[{feature, contribution, direction}]`, where direction is
+  `increases|decreases` risk.
+- **Abstention rule (business-wide):** `confidence < 0.75` → no score is
+  returned/stored (abstain) rather than exposing a low-confidence number.
+- **Model card (`model_card.json`, committed):** features, training cadence
+  (manual/explicit `cli.py`), known limitations, and the staleness window.
+- **Refresh (lazy-on-read TTL):** the platform has **no scheduler** (matching
+  the leave-accrual precedent, which uses a lazy Jan-1 reset). Scores are
+  re-generated for a tenant when the attrition endpoint is read and the latest
+  `generated_at` is older than `AI_HR_REFRESH_INTERVAL_DAYS` (default 7).
+  Re-scoring is idempotent per `(employee, model_version)`.
+
+> **Staleness disclosure:** because scores refresh on a lazy TTL, a displayed
+> score reflects the model run whose `generated_at` is shown and may be up to
+> 7 days stale — it is **not** necessarily "as of today." Every score-bearing
+> response includes `generated_at`, and the UI renders an "as of <date>" label.
+
+Endpoints (core):
+
+| Endpoint | Permission | Output |
+|----------|-----------|--------|
+| `GET /api/v1/ai/hr/attrition` | `erp.hr.ai.read` (L1 shape) or `erp.hr.ai.individual` (L2) | **L1:** team-risk list grouped by department (band counts, dept-level summaries). **L2:** per-employee score + factors. Without the L2 key → **403 + L1 body** |
+| `POST /api/v1/ai/hr/attrition/{employee_id}/acknowledge` | `erp.hr.ai.acknowledge` | Record human acknowledgement (audited, `hr.ai.risk.acknowledged`) |
+
+---
+
+## 7. Feature 3 — Payroll anomaly detection
+
+**Location:** `services/core/src/core/features/ai_hr/`; rows in
+`ai_payroll_anomaly_log`. The scan runs on payroll-run **approve** and via an
+explicit CLI command.
+
+### 7.1 Anomaly types & severity map
+
+| Anomaly | Detection | Severity | Evidence |
+|---------|-----------|----------|----------|
+| `net_pay_delta` | \|Δ net MoM\| per employee > threshold | `low` < 10%, `medium` < 25%, `high` otherwise | run/entry ids, before/after net |
+| `duplicate_account` | same account number across entries in a run | `high` | run id, affected entry ids, account fragment |
+| `ghost_employee` | active pay + zero activity (no attendance/leave movements) | `medium` | run id, entry id, activity query link |
+
+> **Gherkin: ghost employee flagged.** Given an employee with active pay and
+> zero recorded activity is seeded, when the anomaly scan runs, a `ghost_employee`
+> signal is logged at **medium** severity with evidence links.
+
+### 7.2 Lifecycle
+
+`open → acknowledged | dismissed | resolved`. Acknowledge records
+`acknowledged_by`/`acknowledged_at` for audit. Auto-close after 30 days.
+
+---
+
+## 8. Feature 4 — Compliance engine v1
+
+**Location:** `services/core/src/core/features/ai_hr/`; rows in
+`ai_compliance_checks` from the v1 `rule_pack.py`.
+
+### 8.1 Rule pack v1
+
+| Check | Signal source | Severity |
+|-------|---------------|----------|
+| `document_expiry` | `erp_employee_documents` where `doc_type` in (`work_permit`,`visa`,`passport`,`national_id`) and `expiry_date` is within 30 days or past | `high` (past) / `medium` (30 days) |
+| `training_overdue` | required `certification` document missing **or** expired (`erp_employee_documents`) | `medium` |
+| `contract_missing_field` | existing employee fields missing (`email`, `department_id`, `job_title`, `phone`) | `low` |
+
+Each check carries `severity`, `owner_rule` routing, and `evidence JSONB`.
+`owner_rule` names the routing owner key (e.g. `hr_admin`, `compliance_officer`)
+for owner assignment.
+
+---
+
+## 9. Feature 5 — HR Copilot agent
+
+**Location:** `services/ai-agent/src/ai_agent/features/hr_copilot/`. Registered
+in `agent_registry` (the SKY-59 table) as
+`{name: "hr_copilot", module: "ai_agent.features.hr_copilot.engine", enabled: true}`.
+
+**Tool surface (deliberately narrow):**
+- **Aggregate HR reads** (the L1 endpoints' results only) — never individual rows.
+- **Draft leave-policy answers via RAG** over `erp_leave_policies` (tenant leave
+  policy documents).
+
+**Guardrails:**
+- **Refuses PII / individual queries beyond caller permission.** Permission is
+  resolved **server-side**; the Copilot never queries individual data for a
+  caller lacking `erp.hr.ai.individual`, and never emits individual data into a
+  prompt. All exchanges pass through the redaction gate.
+- Aggregate-only reads return L1 shapes; an out-of-scope request returns a
+  refusal rather than a downgraded individual leak.
+
+**Core proxy:** `POST /api/v1/ai/hr/copilot/chat` requiring `erp.ai.invoke` +
+`erp.hr.ai.copilot`, forwarding to ai-agent (same pattern as the inventory AI
+proxy).
+
+---
+
+## 10. Security architecture
+
+- **Authentication/authorization:** JWT + DB-resolved `require_permission` at
+  the core edge before any proxy/forward; `erp.ai.invoke` + the relevant
+  `erp.hr.ai.*` key.
+- **Data isolation:** RLS on every new tenant-scoped table; repository-layer
+  `tenant_id` filter as defense in depth.
+- **PII:** redaction gate on every outbound LLM payload; fails closed; corpus
+  tested incl. mixed-language text.
+- **No individual data in prompts without L2 permission, verified
+  server-side** (guardrail, §9).
+- **Audit:** every score view / acknowledge / anomaly / compliance finding /
+  Copilot exchange audited via `AuditService`.
+- **Rate limiting:** existing per-user/per-tenant limiter applies to Copilot
+  chat and AI endpoints.
+
+---
+
+## 11. Database design
+
+Conventions: `tenant_id` (composite partial PK), `id UUID` PK, `created_at`
+(and `updated_at` where mutable), RLS enabled + tenant policy, composite FKs to
+`erp_employees`/`erp_payroll_runs`. AI tables use the `ai_` prefix.
+
+**`erp_employee_documents`** (enables document/training rules)
+- `employee_id` (composite FK), `doc_type` (**enum `erp_document_type`**:
+  `work_permit, visa, national_id, passport, contract, certification, medical, other`),
+  `expiry_date DATE NULL`, `is_required BOOLEAN`, `status`.
+
+**`ai_hr_attrition_scores`**
+- `employee_id` (composite FK), `department_id` (denormalized for L1 grouping),
+  `score NUMERIC(5,4)`, `risk_band` (`low|medium|high`), `confidence NUMERIC(3,2)`,
+  `factors JSONB` (top-3), `model_version TEXT`, `generated_at`.
+- idx `(tenant_id, department_id, risk_band)`, `(tenant_id, generated_at)`.
+
+**`ai_payroll_anomaly_log`**
+- `anomaly_type` (`net_pay_delta|duplicate_account|ghost_employee`),
+  `severity` (`low|medium|high|critical`), `run_id`/`employee_id` (composite FK,
+  nullable), `evidence JSONB`, `status`
+  (`open|acknowledged|dismissed|resolved`), `acknowledged_by`, `acknowledged_at`,
+  `created_at`.
+
+**`ai_compliance_checks`**
+- `check_type` (`document_expiry|training_overdue|contract_missing_field`),
+  `severity`, `owner_rule TEXT`, `owner_user_id` (nullable), `employee_id`
+  (nullable), `status` (`open|acknowledged|resolved`), `evidence JSONB`,
+  `created_at`.
+
+**Migration chain:** core `0020_hr_ai_tables` off `0019_leave_type_rework`;
+ai-agent `0002_hr_copilot` off `0001_ai_foundation_tables` (seeds the
+`agent_registry` row).
+
+---
+
+## 12. Test strategy
+
+| Area | Coverage |
+|------|----------|
+| Redaction (unit) | corpus incl. Malay/English mixed — raw absent, tokens present; fails closed |
+| Permission gate (integration) | L2 request w/o `individual` → 403 + L1 body |
+| Ghost employee (integration) | active pay + zero activity → medium severity + evidence links |
+| Anomalies (integration) | all three types on seed data with correct severity |
+| Acknowledge (integration) | audited via `hr.ai.risk.acknowledged` |
+| Aggregates (integration) | L1 shapes only; no employee identifiers in serialized body |
+| RLS (integration) | new tables cross-tenant read filtered / write blocked |

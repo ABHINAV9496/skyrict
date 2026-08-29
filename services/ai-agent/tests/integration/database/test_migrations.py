@@ -54,8 +54,24 @@ _AI_TABLES = (
     "ai_anomalies",
     "ai_audit_log",
     "agent_registry",
+    # SKY-58 RAG tables (migration 0004)
+    "ai_rag_parents",
+    "ai_rag_chunks",
+    "ai_episodic_memory",
+    "ai_query_cache",
+    "ai_eval_runs",
 )
-_TENANT_SCOPED_TABLES = ("ai_query_log", "ai_suggestions", "ai_anomalies", "ai_audit_log")
+_TENANT_SCOPED_TABLES = (
+    "ai_query_log",
+    "ai_suggestions",
+    "ai_anomalies",
+    "ai_audit_log",
+    # SKY-58 tenant-scoped RAG tables (ai_eval_runs is global — no RLS)
+    "ai_rag_parents",
+    "ai_rag_chunks",
+    "ai_episodic_memory",
+    "ai_query_cache",
+)
 
 _EXPECTED_CHECKS = {
     "ck_ai_suggestions_status",
@@ -289,7 +305,7 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0003"
+            assert artifacts["version"] == "0005"
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}

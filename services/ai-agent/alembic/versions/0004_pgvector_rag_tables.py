@@ -18,8 +18,14 @@ as migration 0001). The vector index uses ``ivfflat`` with ``lists=100``
 suitable for corpora under 100k chunks; bump to ``lists=200`` above that
 threshold.
 
-Revision ID: 0002
-Revises: 0001
+Renumbered from 0002 to 0004 on 2026-08-29 after dev merged SKY-72
+(0002_hr_copilot) and SKY-68 (0003_forecast_abc_inventory_monitor) while this
+branch was in flight; both expected the next free id. Final ai-agent chain:
+0001 (foundation) -> 0002 (hr copilot) -> 0003 (forecast/abc/monitor) ->
+0004 (this RAG work) -> 0005 (query-cache unique fix).
+
+Revision ID: 0004
+Revises: 0003
 Create Date: 2026-08-27
 """
 
@@ -32,8 +38,8 @@ from alembic import op
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
-revision = "0002"
-down_revision = "0001"
+revision = "0004"
+down_revision = "0003"
 branch_labels = None
 depends_on = None
 

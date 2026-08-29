@@ -25,6 +25,7 @@ from ai_agent.core.config import settings
 from ai_agent.core.email import build_email_service
 from ai_agent.core.rate_limit import limiter
 from ai_agent.db.anomaly_repository import AnomalyRepository
+from ai_agent.db.anomaly_rule_stats_repository import AnomalyRuleStatsRepository
 from ai_agent.db.audit_repository import AiAuditLogRepository
 from ai_agent.db.settings_repository import SettingsRepository
 from ai_agent.features.anomalies.service import AnomalyService
@@ -75,6 +76,7 @@ def get_anomaly_service(
         notify_addresses=notify_addresses,
         notify_enabled=notify_enabled,
         review_base_url=settings.ANOMALY_REVIEW_BASE_URL,
+        rule_stats=AnomalyRuleStatsRepository(session),
     )
 
 

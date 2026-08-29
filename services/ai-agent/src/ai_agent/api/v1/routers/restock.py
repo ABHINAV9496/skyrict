@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_agent.api.deps import get_current_user, get_db
 from ai_agent.api.v1.routers.nl_query import get_inventory_gateway
 from ai_agent.api.v1.schemas.restock import (
+    RestockSettingsResponse,
+    RestockSettingsUpdate,
     ReviewDecisionRequest,
     ScanResponse,
     SuggestionItem,
@@ -108,6 +110,47 @@ async def trigger_scan(
         skipped_pending=report.skipped_pending,
         considered=report.considered,
     )
+
+
+def _to_settings_response(row: Any) -> RestockSettingsResponse:
+    return RestockSettingsResponse(
+        tenant_id=row.tenant_id,
+        lead_time_days=row.lead_time_days,
+        safety_factor=row.safety_factor,
+        v2_enabled=row.v2_enabled,
+        sensitivity=row.sensitivity,
+        fp_threshold=row.fp_threshold,
+        email_alerts_enabled=row.email_alerts_enabled,
+    )
+
+
+@router.get("/settings", response_model=RestockSettingsResponse)
+async def get_settings(
+    user: Annotated[dict[str, Any], Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> RestockSettingsResponse:
+    """The tenant's AI tunables; conservative defaults when no row exists."""
+    row = await SettingsRepository(session).get_or_create_default(tenant_id=user["tenant_id"])
+    return _to_settings_response(row)
+
+
+@router.patch("/settings", response_model=RestockSettingsResponse)
+async def patch_settings(
+    body: RestockSettingsUpdate,
+    user: Annotated[dict[str, Any], Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> RestockSettingsResponse:
+    """Update one or more AI tunables; returns the merged snapshot."""
+    row = await SettingsRepository(session).update(
+        tenant_id=user["tenant_id"],
+        lead_time_days=body.lead_time_days,
+        safety_factor=body.safety_factor,
+        v2_enabled=body.v2_enabled,
+        sensitivity=body.sensitivity,
+        fp_threshold=body.fp_threshold,
+        email_alerts_enabled=body.email_alerts_enabled,
+    )
+    return _to_settings_response(row)
 
 
 @router.post("/{suggestion_id}/approve", response_model=SuggestionItem)

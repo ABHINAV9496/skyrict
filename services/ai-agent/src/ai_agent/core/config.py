@@ -227,6 +227,16 @@ class Settings(BaseSettings):
             "https://app.skyrict.io/anomalies. Empty omits the button."
         ),
     )
+    ANOMALY_SCAN_SERVICE_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token the scheduled anomaly scan (spec §4.3) presents to "
+            "core's inventory API. A background task has no user JWT, so it "
+            "authenticates with this service token + per-tenant X-Tenant-Slug "
+            "instead. Empty disables the scheduled pass (log-only), mirroring "
+            "the log-only SMTP default."
+        ),
+    )
 
     # --- Rate limits (spec §5.4) ---
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(

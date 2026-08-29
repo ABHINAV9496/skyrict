@@ -12,12 +12,18 @@ through the injected :class:`EmailService`. Dispatch is gated by
 predicate (per-tenant ``email_alerts_enabled``, evaluated by the router's
 composition root) and (3) severity == ``critical``. Delivery failures are
 logged, never raised — audit events stay the source of truth.
+
+Rule stats feedback (spec §4.5): every NEW detection bumps the finding
+counter and every dismissal bumps the false-positive counter of the
+:class:`RuleStatsRecorder` (implemented by AnomalyRuleStatsRepository at
+the composition root — the feature layer never imports DB modules). These
+counters drive the per-rule FP-rate tuning loop.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import structlog
 
@@ -51,6 +57,19 @@ _TRANSITIONS: dict[str, tuple[str, ...]] = {
 }
 
 
+class RuleStatsRecorder(Protocol):
+    """Per-rule detection-outcome counters for the sensitivity tuning loop.
+
+    AnomalyRuleStatsRepository implements this structurally at the router's
+    composition root; the feature layer depends only on this interface so
+    DB details never leak into the service (import-linter contract).
+    """
+
+    async def bump_finding(self, *, tenant_id: uuid.UUID, anomaly_type: str) -> None: ...
+
+    async def bump_false_positive(self, *, tenant_id: uuid.UUID, anomaly_type: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DetectionReport:
     detected: int
@@ -70,6 +89,7 @@ class AnomalyService:
         notify_addresses: tuple[str, ...] = (),
         notify_enabled: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
         review_base_url: str = "",
+        rule_stats: RuleStatsRecorder | None = None,
     ) -> None:
         self._gateway_factory = gateway_factory
         self._anomalies = anomalies
@@ -78,6 +98,7 @@ class AnomalyService:
         self._notify_addresses = notify_addresses
         self._notify_enabled = notify_enabled
         self._review_base_url = review_base_url.rstrip("/")
+        self._rule_stats = rule_stats
 
     async def run_scan(self, *, tenant_id: uuid.UUID) -> DetectionReport:
         """Detect anomalies over recent movements; dedupe open repeats."""
@@ -115,6 +136,10 @@ class AnomalyService:
                 input_payload={"anomaly_type": finding.anomaly_type},
                 output_payload={"anomaly_id": str(row.id), "severity": finding.severity},
             )
+            if self._rule_stats is not None:
+                await self._rule_stats.bump_finding(
+                    tenant_id=tenant_id, anomaly_type=finding.anomaly_type
+                )
             if finding.severity == "critical":
                 await self._notify_critical(tenant_id=tenant_id, row=row)
             created += 1
@@ -154,6 +179,10 @@ class AnomalyService:
         )
         if decision == "escalated":
             await self._notify_critical(tenant_id=tenant_id, row=row)
+        if decision == "dismissed" and self._rule_stats is not None:
+            await self._rule_stats.bump_false_positive(
+                tenant_id=tenant_id, anomaly_type=row.anomaly_type
+            )
 
     async def _notify_critical(self, *, tenant_id: uuid.UUID, row: AiAnomalyModel) -> None:
         """Dispatch the admin alert for ONE critical anomaly (best-effort).

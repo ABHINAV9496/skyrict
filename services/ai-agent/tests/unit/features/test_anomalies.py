@@ -613,5 +613,147 @@ class TestAdminNotification:
             assert len(audit.actions) == 1
 
 
+class FakeRecorder:
+    """Records detection/false-positive bumps for rule-stats assertions."""
+
+    def __init__(self) -> None:
+        self.findings: list[tuple[uuid.UUID, str]] = []
+        self.false_positives: list[tuple[uuid.UUID, str]] = []
+
+    async def bump_finding(self, *, tenant_id: uuid.UUID, anomaly_type: str) -> None:
+        self.findings.append((tenant_id, anomaly_type))
+
+    async def bump_false_positive(self, *, tenant_id: uuid.UUID, anomaly_type: str) -> None:
+        self.false_positives.append((tenant_id, anomaly_type))
+
+
+class TestRuleStats:
+    """Spec §4.5: NEW findings and dismissals are the two counter inputs."""
+
+    def _service(self, recorder: FakeRecorder) -> AnomalyService:
+        return AnomalyService(
+            gateway_factory=_critical_gateway_factory,
+            anomalies=FakeAnomalies(),
+            audit=FakeAudit(),
+            rule_stats=recorder,
+        )
+
+    async def test_detection_bumps_finding_counter(self) -> None:
+        recorder = FakeRecorder()
+        service = self._service(recorder)
+
+        report = await service.run_scan(tenant_id=TENANT_ID)
+
+        assert report.detected == 1
+        assert (TENANT_ID, "ledger_mismatch") in recorder.findings
+        assert recorder.false_positives == []
+
+    async def test_non_critical_detection_bumps_too(self) -> None:
+        # Rule stats record ALL new findings; only the email gate cares about
+        # severity (critical). Regression: don't couple counters to severity.
+        recorder = FakeRecorder()
+        service = self._service(recorder)
+        base = datetime.now(tz=UTC).replace(hour=14, minute=0, second=0, microsecond=0)
+        movements = [
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="receipt",
+                qty=Decimal(100),
+                created_at=base,
+                ref_id=None,
+            ),
+            MovementRow(
+                id=uuid.uuid4(),
+                product_id=PRODUCT_ID,
+                warehouse_id=WAREHOUSE_ID,
+                movement_type="issue",
+                qty=Decimal(-80),
+                created_at=base + timedelta(hours=2),
+                ref_id=None,
+            ),
+        ]
+
+        async def factory():
+            return FakeGateway(movements)
+
+        service._gateway_factory = factory  # type: ignore[attr-defined]
+
+        report = await service.run_scan(tenant_id=TENANT_ID)
+
+        assert report.detected == 1
+        assert (TENANT_ID, "sudden_stock_drop") in recorder.findings
+        assert recorder.false_positives == []
+
+    async def test_duplicate_detection_does_not_bump(self) -> None:
+        recorder = FakeRecorder()
+        service = self._service(recorder)
+        service._anomalies.open_scopes.add(  # type: ignore[attr-defined]
+            ("ledger_mismatch", PRODUCT_ID, WAREHOUSE_ID)
+        )
+
+        report = await service.run_scan(tenant_id=TENANT_ID)
+
+        assert report.detected == 0
+        assert report.duplicates_skipped == 1
+        assert recorder.findings == []
+
+    async def test_dismissal_bumps_false_positive_counter(self) -> None:
+        recorder = FakeRecorder()
+        service = self._service(recorder)
+        row = SimpleNamespace(id=uuid.uuid4(), status="open", anomaly_type="ledger_mismatch")
+
+        async def fake_get(*, tenant_id, anomaly_id):
+            return row
+
+        async def fake_record(**kwargs):
+            kwargs["row"].status = kwargs["status"]
+            return kwargs["row"]
+
+        service._anomalies.get = fake_get  # type: ignore[attr-defined]
+        service._anomalies.record_review = fake_record  # type: ignore[attr-defined]
+
+        await service.review(
+            tenant_id=TENANT_ID,
+            user_id=uuid.uuid4(),
+            anomaly_id=row.id,
+            decision="dismissed",
+            note="false alarm",
+        )
+
+        assert (TENANT_ID, "ledger_mismatch") in recorder.false_positives
+        assert recorder.findings == []
+
+    async def test_resolved_and_escalated_do_not_bump(self) -> None:
+        for decision in ("resolved", "escalated"):
+            recorder = FakeRecorder()
+            service = self._service(recorder)
+            row = SimpleNamespace(id=uuid.uuid4(), status="open", anomaly_type="ledger_mismatch")
+            audit = FakeAudit()
+            service._audit = audit  # type: ignore[attr-defined]
+
+            async def fake_get(*, tenant_id, anomaly_id, this_row=row):
+                return this_row
+
+            async def fake_record(**kwargs):
+                kwargs["row"].status = kwargs["status"]
+                return kwargs["row"]
+
+            service._anomalies.get = fake_get  # type: ignore[attr-defined]
+            service._anomalies.record_review = fake_record  # type: ignore[attr-defined]
+
+            await service.review(
+                tenant_id=TENANT_ID,
+                user_id=uuid.uuid4(),
+                anomaly_id=row.id,
+                decision=decision,
+                note=None,
+            )
+
+            assert recorder.findings == [], f"{decision} must not bump findings"
+            assert recorder.false_positives == [], f"{decision} must not bump FP"
+
+
 async def _critical_gateway_factory():
     return FakeGateway(_ledger_mismatch_movements(), stock_levels=_mismatched_level())

@@ -277,6 +277,8 @@ Manager sees "Restock Suggestions" panel with cards
 | `/ai/suggestions/{id}/approve` | POST | `erp.inventory.ai.approve` | Approve a suggestion |
 | `/ai/suggestions/{id}/reject` | POST | `erp.inventory.ai.approve` | Reject a suggestion |
 | `/ai/suggestions/scan` | POST | `erp.inventory.ai.approve` | Trigger manual scan |
+| `/ai/suggestions/settings` | GET | `erp.inventory.read` | Read AI tunables (v2 toggle, thresholds, email alerts) |
+| `/ai/suggestions/settings` | PATCH | `erp.inventory.write` | Update one or more AI tunables |
 
 **GET /ai/suggestions — Response:**
 ```json
@@ -386,6 +388,17 @@ Notification:
   - In-app alert feed (all users with erp.inventory.read)
   - Email to admin (critical only)
 ```
+
+**Scheduled scan (INV-AI-002):** the background job is real — it enumerates
+active `tenants` (permissive `tenants_readable` policy), then runs one
+detection pass per tenant under its own row-level-security context every 15
+minutes. It authenticates to core's inventory API with
+`AI_ANOMALY_SCAN_SERVICE_TOKEN` (a background task has no user JWT); while
+that stays empty the pass is skipped (log-only), matching the log-only SMTP
+default. Dismissals feed the per-rule false-positive counters
+(`ai_anomaly_rule_stats`, §4.5) which tune detection `sensitivity`; the
+counters are bumped on every new finding and every dismissal and are visible
+through the settings endpoint.
 
 ### 4.4 Alert workflow
 
@@ -741,3 +754,12 @@ services:
 | `AI_RATE_LIMIT_PER_USER` | No | `30` | Max NL queries per minute per user |
 | `AI_SUGGESTION_EXPIRY_DAYS` | No | `7` | Days before suggestion auto-expires |
 | `AI_ANOMALY_AUTO_CLOSE_DAYS` | No | `30` | Days before open anomaly auto-closes |
+| `AI_EMAIL_SMTP_HOST` | No | — | SMTP relay host for critical-anomaly alerts; empty = log-only transport |
+| `AI_EMAIL_SMTP_PORT` | No | `1025` | SMTP relay port |
+| `AI_EMAIL_SMTP_USERNAME` | No | — | SMTP auth username (MailHog needs none) |
+| `AI_EMAIL_SMTP_PASSWORD` | No | — | SMTP auth password |
+| `AI_EMAIL_SMTP_USE_TLS` | No | `false` | Enable STARTTLS to the relay |
+| `AI_EMAIL_FROM_ADDR` | No | `Skyrict <no-reply@skyrict.dev>` | From address for alert email |
+| `AI_ANOMALY_NOTIFY_EMAILS` | No | — | Comma-separated admin recipients of critical-anomaly + escalation alerts |
+| `AI_ANOMALY_REVIEW_BASE_URL` | No | — | Base URL for the "Review anomaly" button (empty omits it) |
+| `AI_ANOMALY_SCAN_SERVICE_TOKEN` | No | — | Bearer token the scheduled scan presents to core; empty disables the pass |

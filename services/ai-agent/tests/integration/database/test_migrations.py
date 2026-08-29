@@ -223,6 +223,27 @@ async def _collect_downgrade_state(dsn: str) -> tuple[set[str], int]:
         await conn.close()
 
 
+async def _probe_active_tenant_enumeration(dsn: str) -> bool:
+    """Insert one tenant and prove ``is_active`` rows are visible with NO GUC
+    set — the premise of the scheduled anomaly scan, which enumerates active
+    tenants before any request tenant context exists (permissive
+    ``tenants_readable`` policy from identity 0001)."""
+    slug = f"sched-probe-{uuid.uuid4().hex[:8]}"
+    conn = await asyncpg.connect(dsn)
+    try:
+        await conn.execute(
+            "INSERT INTO public.tenants (name, slug) VALUES ($1, $2)",
+            "Scheduled scan probe",
+            slug,
+        )
+        visible = await conn.fetchval(
+            "SELECT count(*) FROM public.tenants WHERE slug = $1 AND is_active = true", slug
+        )
+        return visible == 1
+    finally:
+        await conn.close()
+
+
 class TestAiMigrationRoundTrip:
     def test_full_chain_identity_then_upgrade_downgrade_upgrade(self) -> None:
         base_url = os.environ.get("AI_DATABASE_URL", "")
@@ -335,6 +356,10 @@ class TestAiMigrationRoundTrip:
 
             assert artifacts["checks"] >= _EXPECTED_CHECKS
             assert artifacts["tenant_fks"] == len(_TENANT_FK_TABLES)
+
+            # Scheduled scan premise: active tenants are enumerable with no
+            # request tenant context (permissive SELECT policy on tenants).
+            assert asyncio.run(_probe_active_tenant_enumeration(scratch_dsn))
 
             # Full unwind -> nothing survives; the version table may remain
             # but must be empty (same contract as core's roundtrip test).

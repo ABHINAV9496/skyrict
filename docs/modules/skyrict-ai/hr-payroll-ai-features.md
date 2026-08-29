@@ -30,7 +30,9 @@ own.
 9. [Feature 5 — HR Copilot agent](#9-feature-5--hr-copilot-agent)
 10. [Security architecture](#10-security-architecture)
 11. [Database design](#11-database-design)
-12. [Test strategy](#12-test-strategy)
+12. [Model eval harness (HR-AI-002 / SKY-72)](#12-model-eval-harness-hr-ai-002--sky-72)
+13. [HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
+14. [Test strategy](#14-test-strategy)
 
 ---
 
@@ -126,6 +128,7 @@ seeded via identity migration, and enforced at the core edge before any AI work
 | `erp.hr.ai.individual` | L2 | View individual attrition + factor explanations | **owner + dedicated executive role only** |
 | `erp.hr.ai.acknowledge` | L2 | Acknowledge a team-risk item (audited) | owner, organization_admin, department_manager |
 | `erp.hr.ai.copilot` | L1 | Use the HR Copilot | owner, organization_admin, department_manager |
+| `erp.hr.ai.eval` | ops | Record ai-agent model-eval precision results (SKY-72) | operator / owner wildcard |
 | `erp.ai.invoke` | base | Existing gate; every AI path requires it | existing |
 
 **Gate semantics (Gherkin: permission gate on predictions):** a manager with
@@ -353,11 +356,210 @@ Conventions: `tenant_id` (composite partial PK), `id UUID` PK, `created_at`
 
 **Migration chain:** core `0020_hr_ai_tables` off `0019_leave_type_rework`;
 ai-agent `0002_hr_copilot` off `0001_ai_foundation_tables` (seeds the
-`agent_registry` row).
+`agent_registry` row). The HR-AI-002 wave-2 additions (HR-AI-002, Commit 1-5):
+core `0022_hr_ai_wave2` creates `ai_hr_quality_scores`, `ai_hr_utilization_alerts`,
+`ai_hr_leave_anomalies`, `ai_hr_leave_suggestions` and `hr_eval_runs`; core
+`0023_hr_ai_eval_permission` seeds the `erp.hr.ai.eval` catalog key.
 
 ---
 
-## 12. Test strategy
+## 12. Model eval harness (HR-AI-002 / SKY-72)
+
+**Location:** `services/ai-agent/src/ai_agent/eval/` + CLI command
+`ai-agent eval-hr-models`; recording endpoint in core
+`POST /api/v1/ai/hr/eval-runs`.
+
+The harness is the model-quality check for the deterministic HR models: it runs
+each labeled seed set from
+`services/ai-agent/tests/eval/hr_models.yaml` through the **same scorer the
+runtime uses** and computes per-metric precision. Two model kinds are graded:
+
+- **attrition** (`attrition_precision`): the bundled GBC model via
+  `score_employee` incl. its abstention rule.
+- **anomaly** (`anomaly_precision`): the leave rules engine ran by core's
+  `ai_hr_leave_anomalies` inbox — `skyrict_common.ai_hr_rules.
+  detect_leave_pattern_anomalies` (the literal deployed code, imported from the
+  workspace `skyrict-common` lib). Feature/request vectors in `hr_models.yaml`
+  pin `today` and the 2026 holiday calendar, so runs are reproducible.
+
+It is non-LLM and reproducible (bundled fixed-seed model + stable seed sets).
+Seed rows carry feature arrays + labels only — never employee PII.
+
+**Warn-not-fail contract:** precision below the documented `0.70` minimum
+prints a `WARN` line (exit code 0) — an eval regression is an operator alert,
+not a hard deploy gate. For `anomaly_precision` the report also records recall
+(TP/(TP+FN)) in `details`; the anomaly seed mix is two recall probes (the
+`short_notice_monday_friday` and `pre_holiday_spike` patterns MUST fire) and
+two near-miss guards (the same patterns MUST NOT fire just outside their
+window/threshold). Results are recorded append-only in core's
+`hr_eval_runs` (`metric`, `precision`, `considered`, `threshold`,
+`met_threshold`, `details JSONB`; RLS tenant-scoped; index
+`(tenant_id, model_name, generated_at)`) via the core API, gated by the seeded
+`erp.hr.ai.eval` permission (owner wildcard passes). Precision/threshold
+bounds are re-validated at the core edge.
+
+**Operate:**
+```
+uv run --directory services/ai-agent ai-agent eval-hr-models \
+  --core-url http://localhost:8000 --token <jwt> --tenant-slug <slug>
+```
+Drop `--core-url/--token/--tenant-slug` for a local-only dry-run
+(`--dry-run` forces the same).
+
+---
+
+## 13. HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data
+
+Wave 2 turns the HR leave records into two low-fiend, deterministic surfaces:
+a **leave-pattern anomaly inbox** (managers see teams abusing leave patterns)
+and **calendar-aware use-it-or-lose-it suggestions** (the portal tells an
+employee *when* a window is actually sensible before it forfeits). Both are fed
+by **pattern data** — org/department public holidays and leave blackouts.
+
+**Locations:** core feature `core/features/ai_hr/` (anomaly, suggestion,
+pattern-data modules), shared pure engine `libs/skyrict-common/skyrict_common/
+ai_hr_rules.py`, migrations `0022_hr_ai_wave2` (anomaly + suggestion tables),
+`0023_hr_ai_eval_permission`, `0024_hr_ai_pattern_data`.
+
+### 13.1 Leave anomaly inbox (`ai_hr_leave_anomalies`)
+
+Detection runs in pure code (`skyrict_common.ai_hr_rules
+.detect_leave_pattern_anomalies`) — the SAME code the eval harness grades, so
+what the inbox flags is exactly what the `anomaly_precision` metric measures.
+Every rule is gated: teams with fewer than **4 active members abstain**, and
+the median-comparison rules need the team median to be measurable (>= 1 day).
+
+| Anomaly type | Detection | Severity |
+|--------------|-----------|----------|
+| `leave_overuse` | trailing leave days >= 3x team median | ratio bands: >=5 critical, >=4 high, else medium |
+| `frequent_absence` | request count >= 3x team median | ratio bands as above |
+| `short_notice_monday_friday` | a Mon/Fri-touching block filed < 14 days ahead AND >= 3x team median days | high if filed <= 3 days ahead, else medium |
+| `pre_holiday_spike` | span within 2 days of an org/department holiday AND >= 3x team median days | high if it overlaps the holiday date, else medium |
+
+**Inputs / lifecycle:** approved + pending requests in the trailing 90 days,
+holidays from `ai_hr_public_holidays` (org-wide + department-scoped), all
+resolved as of run time. Findings are persisted append-only with the 7-day
+stale refresh and the open/acknowledged/dismissed/resolved lifecycle from wave
+1; narratives explain the evidence (ratio, median, advance, holiday).
+
+### 13.2 Calendar-aware leave suggestions (`ai_hr_leave_suggestions`)
+
+Suggestions are generated only for employees with a **forfeit-risk utilization
+alert** and are prefill-only (the employee still files the request; nothing is
+auto-booked). Wave 2 replaced the fixed "last N days" block with a
+**calendar-aware planner** (`AiHrSuggestionRepository._plan_best_block`):
+
+1. Candidate 14-day windows run from today to the year end (respecting the
+   employee's annual balance for the planned chunk).
+2. Windows that overlap the employee's **own** approved/pending requests, an
+   **org-wide blackout**, or their **department's blackout** are excluded.
+3. Remaining windows are ranked by **(a) lowest teammate leave overlap**, then
+   **(b) alignment with a public holiday within 2 days** (same adjacency the
+   anomaly engine uses), then **(c) latest start** (recency).
+4. If every window is blocked, the suggestion **falls back to the loss-mitigation
+   window with an explicit conflict reason** (never silently books into a
+   blackout). Suggested block = min(balance, 14, days until year end).
+
+The reason list surfaces the ranking: teammate overlap count for the chosen
+window, the aligned holiday name when present, and blackout clearance.
+
+### 13.3 Pattern data (`public holidays` + `leave blackouts`)
+
+`ai_hr_public_holidays` (unique per tenant+department+date; org-wide when
+department is NULL) and `ai_hr_leave_blackout_periods` (enforced end >= start)
+are managed via CRUD endpoints under `/api/v1/ai/hr/pattern-data/*`, gated
+read by `erp.hr.read` and write by `erp.hr.write`. Seed carries a Malaysia
+2026 holiday calendar and a Finance year-end-close blackout
+(2026-12-20..12-31) so the calendar-aware suggestion is demoable out of the
+box.
+
+### 13.4 Coverage matrix (Gherkin scenarios)
+
+**HR-AI-002 wave-2 delivery — shipped:**
+
+| Ticket scope | Status | Where |
+|--------------|--------|-------|
+| 8.1.3 data quality scoring + org KPI + weekly recalc | shipped | `core/features/ai_hr/quality*`, quality panel, `POST /quality/refresh`, `.github/workflows/weekly-quality-recalc.yml` |
+| 8.1.4 balance utilization alerts (forfeit + negative accrual) | shipped | `core/features/ai_hr/utilization*`, seeded 18/55 fixture, severity bands §13.6 |
+| 8.2.1 leave pattern anomaly detection + inbox | shipped | `skyrict_common.ai_hr_rules`, table §13.1, team-size gate, eval `anomaly_precision` |
+| 8.2.4 smart leave suggestions (prefill-only) | shipped | calendar-aware `_plan_best_block`, chips in leave-portal + log-leave-dialog |
+| Eval harness + nightly runner (`hr_eval_runs`) | shipped | §12, `tests/eval/hr_models.yaml`, `.github/workflows/nightly-hr-eval.yml` |
+
+| Scenario (feature file) | Engine | Covered by |
+|-------------------------|--------|------------|
+| short-notice Monday/Friday request, filed < 14 days ahead, >= 3x median | rules | lib test + eval case 1 (`anomaly_precision`) |
+| pre-holiday request within 2 days of a public holiday, >= 3x median | rules | lib test + eval case 2 + seeded National Day |
+| **near-miss: holiday 3+ days away must NOT fire** | rules | eval case 3 |
+| **near-miss: filed 14+ days ahead must NOT fire** | rules | eval case 4 |
+| thin team (< 4 active) abstains entirely | rules | lib test `test_team_size_gate_abstains_for_three_members` |
+| suggestion: empty load/blackouts -> latest loss-mitigation window (Dec 18..31) | planner | unit `test_plan_best_block_defaults_to_latest_calm_window` |
+| suggestion: department blackout pulls the window ahead | planner | unit `test_plan_best_block_avoids_department_blackout` |
+| suggestion: picks lowest teammate-overlap window | planner | unit `test_plan_best_block_prefers_lowest_team_load` |
+| suggestion: ties break toward holiday alignment | planner | unit `test_plan_best_block_breaks_load_ties_toward_holiday_alignment` |
+| suggestion: own-request windows skipped | planner | unit `test_plan_best_block_skips_windows_blocked_by_own_requests` |
+| suggestion: fully blacked-out -> forfeit window + conflict reason | planner | unit `test_plan_best_block_falls_back_to_forfeit_window_when_fully_blacked_out` |
+
+> **Demo seed — live vs pre-seeded.** The `core seed-demo --force` scenario
+> mix deliberately splits determinism from end-to-end "first read" freshness:
+>
+> | Sample | Provisioning | Why |
+> |--------|--------------|-----|
+> | `leave_overuse` (Grace, EMP-0007) | **live-computed** — anomaly table left empty after force-reseed, so the portal/admin's first read runs the scan and materializes the finding | demo shows the compute path, not just a table read |
+> | `short_notice_monday_friday` (EMP-0007) | **live-computed** — approved block filed+starting today (advance 0), ending on the next Friday (Fri fringe), 7 days vs 2.0 team median | end-on-Friday is the only construction that fires for *any* seed weekday (proven over all 7) |
+> | `pre_holiday_spike` (EMP-0007) | **live-computed** — the 2026 demo calendar seeds National Day (08-31) inside the block (distance 0 -> high) | high requires overlap; a non-overlapping holiday can only reach medium |
+> | forfeit utilization alert (emp 1, 18/55) | **pre-seeded** fixture row (`ai_hr_utilization_alerts`, `created_at=now-0.5d` so the 1-day refresh keeps it fresh) | the forfeit scan only fires when < 60 days remain — mid-year (124 left on 08-29) it physically cannot fire live |
+> | thin-team abstention | **unit-tested only** | `>= 4` active members are required to scan; seed teams are all >= 4 so the live demo cannot produce it |
+>
+> Freshness mechanics: anomaly/quality feeds refresh after 7 days,
+> utilization after 1 day (`max(created_at)` + elapsed >= refresh window).
+> The quality feed also has an explicit **weekly recalc** — the ops cron in
+> §13.5 calls `POST /api/v1/ai/hr/quality/refresh` (force re-score; L1
+> maintenance response) every Sunday 03:17 UTC so the panel always has a
+> current run regardless of TTL.
+> The team-size gate and the four rule near-miss cases are pinned by the lib
+> tests and the `anomaly_precision` eval seed (rows above).
+
+### 13.5 Nightly / CI model-quality hook
+
+The eval harness is deterministic and cheap; wire the same command to a
+nightly job so a rules/model regression is caught within a day and the metric
+history lands in `hr_eval_runs`. This repository ships the job at
+`.github/workflows/nightly-hr-eval.yml` — runs at **02:17 UTC** and on
+`workflow_dispatch`, installs with `uv sync --all-packages --frozen`, then runs
+`uv run --project services/ai-agent ai-agent eval-hr-models` with
+`SKYRICT_CORE_URL` / `SKYRICT_CORE_TOKEN` / `SKYRICT_TENANT_SLUG` supplied from
+Actions secrets.
+
+The quality feed's **weekly recalc** ships as `.github/workflows/
+weekly-quality-recalc.yml` — Sunday **03:17 UTC** + `workflow_dispatch`, a
+dependency-free `curl` POST to `POST /api/v1/ai/hr/quality/refresh` reusing the
+same three secrets. Local equivalent:
+
+```
+uv run --directory services/ai-agent ai-agent eval-hr-models --dry-run
+```
+
+Webhook alerting on a WARN line can fan out to the on-call channel (the metric
+row is already persisted). Same pattern already powers the CI `ci-core.yml`
+gates for ruff/mypy; this hook extends CI to model quality.
+
+### 13.6 Audit reconciliation
+
+Two accepted deviations from the ticket's literal wording (reasoned, tested,
+and documented here so the DoD surface matches reality):
+
+| Bulk-of-ticket wording | Delivered | Reason |
+|------------------------|-----------|--------|
+| data-quality scores over "company data incl. banking" | quality engine scores from **compensation** + **work-documents** proxies in this schema (no banking `erp_*` table exists) | proxies are the populated substitutes; contribution weights and issue codes are still per-rule and tested |
+| use-it-or-lose-it forfeit "urgency" by time-to-forfeit | forfeit fires only within `FORFEIT_WINDOW_DAYS = 60` of year end, severity by **balance magnitude** (`>= 20` high, `>= 10` medium, else low) | a mid-year 18-days/55-remaining case satisfies the demo's *medium severity* intent without inventing a nonexistent near-year-end trigger |
+
+The demo seed's forfeit fixture row literally materializes that second row
+(balance 18, 55 remaining, medium). Everything else in §13.4 is either live
+computed or unit-pinned as marked.
+
+---
+
+## 14. Test strategy
 
 | Area | Coverage |
 |------|----------|
@@ -368,3 +570,10 @@ ai-agent `0002_hr_copilot` off `0001_ai_foundation_tables` (seeds the
 | Acknowledge (integration) | audited via `hr.ai.risk.acknowledged` |
 | Aggregates (integration) | L1 shapes only; no employee identifiers in serialized body |
 | RLS (integration) | new tables cross-tenant read filtered / write blocked |
+| Eval harness (unit) | seed-set precision ≥ threshold on the bundled model; abstentions excluded; unknown model fails fast |
+| Eval recording (integration) | migration round-trip includes 0022/0023/0024 + `hr_eval_runs` / `erp.hr.ai.eval` sentinels |
+| Leave rule engine (unit) | `skyrict_common.ai_hr_rules` — 13 tests: each pattern fires, near-misses abstain, thin teams abstain, ratio severity bands |
+| Anomaly eval (unit) | `anomaly_precision` seed (4 cases) = 1.0 precision/recall; missing-label case registers a recall miss |
+| Leave anomaly inbox (unit) | 12 tests over all four types incl. the two wave-2 patterns at high severity |
+| Suggestion planner (unit) | calendar-aware `_plan_best_block`: load/blackout/own-request windows, holiday ties, forfeit fallback; legacy `_plan_block` kept |
+| Pattern data (integration) | round-trip sentinels 0024 + endpoint read/write via `erp.hr.read`/`erp.hr.write` |

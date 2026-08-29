@@ -29,7 +29,15 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
+    from core.features.ai_hr.anomaly_service import AnomalyService
+    from core.features.ai_hr.eval_repository import EvalRunRepository
+    from core.features.ai_hr.pattern_data_repository import (
+        AiHrPatternDataRepository as PatternDataRepository,
+    )
+    from core.features.ai_hr.quality_service import QualityService
     from core.features.ai_hr.service import AiHrService
+    from core.features.ai_hr.suggestion_service import SuggestionService
+    from core.features.ai_hr.utilization_service import UtilizationService
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
@@ -312,6 +320,76 @@ def get_ai_hr_service(
         audit=audit,
         attrition_refresh_days=settings.AI_HR_REFRESH_INTERVAL_DAYS,
     )
+
+
+def get_quality_service(
+    db: AsyncSession = Depends(get_db),
+) -> QualityService:
+    """Composition root for the HR data-quality scorer (HR-AI-002, 8.1.3)."""
+    from core.core.config import settings
+    from core.features.ai_hr.quality_repository import AiHrQualityRepository
+    from core.features.ai_hr.quality_service import QualityService
+
+    return QualityService(
+        repository=AiHrQualityRepository(db),
+        refresh_days=settings.AI_HR_REFRESH_INTERVAL_DAYS,
+    )
+
+
+def get_utilization_service(
+    db: AsyncSession = Depends(get_db),
+) -> UtilizationService:
+    """Composition root for the leave-balance utilization scanner (8.1.4)."""
+    from core.core.config import settings
+    from core.features.ai_hr.utilization_repository import AiHrUtilizationRepository
+    from core.features.ai_hr.utilization_service import UtilizationService
+
+    return UtilizationService(
+        repository=AiHrUtilizationRepository(db),
+        refresh_days=settings.AI_HR_UTILIZATION_SCAN_INTERVAL_DAYS,
+    )
+
+
+def get_anomaly_service(
+    db: AsyncSession = Depends(get_db),
+) -> AnomalyService:
+    """Composition root for the leave-pattern anomaly scanner (8.2.1)."""
+    from core.core.config import settings
+    from core.features.ai_hr.anomaly_repository import AiHrAnomalyRepository
+    from core.features.ai_hr.anomaly_service import AnomalyService
+
+    return AnomalyService(
+        repository=AiHrAnomalyRepository(db),
+        refresh_days=settings.AI_HR_ANOMALY_SCAN_INTERVAL_DAYS,
+    )
+
+
+def get_suggestion_service(
+    db: AsyncSession = Depends(get_db),
+) -> SuggestionService:
+    """Composition root for the smart leave-window suggestion engine (8.2.4)."""
+    from core.core.config import settings
+    from core.features.ai_hr.suggestion_repository import AiHrSuggestionRepository
+    from core.features.ai_hr.suggestion_service import SuggestionService
+
+    return SuggestionService(
+        repository=AiHrSuggestionRepository(db),
+        refresh_days=settings.AI_HR_SUGGESTION_SCAN_INTERVAL_DAYS,
+    )
+
+
+def get_eval_repository(db: AsyncSession = Depends(get_db)) -> EvalRunRepository:
+    """Composition root for the model-eval telemetry repository (SKY-72)."""
+    from core.features.ai_hr.eval_repository import EvalRunRepository
+
+    return EvalRunRepository(db)
+
+
+def get_pattern_data_repository(db: AsyncSession = Depends(get_db)) -> PatternDataRepository:
+    """Composition root for the AI pattern-engine config tables (0024)."""
+    from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
+
+    return AiHrPatternDataRepository(db)
 
 
 async def get_hr_ai_individual(

@@ -194,6 +194,23 @@ class PayrollService:
     async def get_settings(self, tenant_id: uuid.UUID) -> ent.PayrollSettings | None:
         return await self._repo.get_settings(tenant_id)
 
+    async def find_overlapping_run(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        period_start: date,
+        period_end: date,
+    ) -> ent.PayrollRun | None:
+        """First non-void run overlapping the period (Rule 10) — read seam.
+
+        Exposes the repository's overlap guard so external consumers (the
+        payroll automation engine's pre-flight period check) can probe the
+        period without bypassing RLS or duplicating the rule.
+        """
+        return await self._repo.find_overlapping_run(
+            tenant_id, period_start=period_start, period_end=period_end
+        )
+
     async def update_settings(
         self,
         settings: ent.PayrollSettings,
@@ -204,7 +221,13 @@ class PayrollService:
         updated = await self._repo.upsert_settings(settings)
         changed: dict[str, object] = {}
         if existing is not None:
-            for field_name in ("default_currency", "pf_rate", "tax_rate", "rounding"):
+            for field_name in (
+                "default_currency",
+                "pf_rate",
+                "tax_rate",
+                "rounding",
+                "ai_automation_enabled",
+            ):
                 new_value = getattr(settings, field_name)
                 old_value = getattr(existing, field_name)
                 if new_value != old_value:

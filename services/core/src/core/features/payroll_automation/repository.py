@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.features.payroll_automation.constants import (
+    BATCH_ABORTED,
     BATCH_PROCESSING,
     BATCH_QUEUED,
     ITEM_DONE,
@@ -113,6 +114,7 @@ class PostgresPayrollAutomationRepository:
         source_ref: str,
         dry_run: bool,
         totals: dict[str, object],
+        preflight: dict[str, object] | None = None,
     ) -> PayrollBatchRun:
         row = RunModel(
             tenant_id=tenant_id,
@@ -121,6 +123,7 @@ class PostgresPayrollAutomationRepository:
             status=BATCH_QUEUED,
             dry_run=dry_run,
             totals=totals,
+            preflight=preflight,
         )
         self._session.add(row)
         await self._session.flush()
@@ -197,6 +200,68 @@ class PostgresPayrollAutomationRepository:
             )
             .values(status=status, totals=totals, finished_at=finished_at)
         )
+
+    async def abort_batch(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        totals: dict[str, object],
+        finished_at: object,
+    ) -> PayrollBatchRun:
+        stmt = (
+            sa.update(RunModel)
+            .where(
+                RunModel.tenant_id == tenant_id,
+                RunModel.id == batch_id,
+                RunModel.status.in_([BATCH_QUEUED, BATCH_PROCESSING]),
+            )
+            .values(status=BATCH_ABORTED, totals=totals, finished_at=finished_at)
+            .returning(RunModel)
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise ValueError(f"batch {batch_id} is not abortable")
+        return _to_run(row)
+
+    async def reset_batch(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        dry_run: bool,
+        totals: dict[str, object],
+        preflight: dict[str, object],
+    ) -> PayrollBatchRun:
+        """Re-arm an aborted batch as ``queued`` for a fresh submission.
+
+        The unique ``(tenant_id, source, source_ref)`` index keeps ONE batch row
+        per run; when a previous submission was blocked by pre-flight, re-enqueue
+        clears its claim/timestamps and stamps the new attempt's config instead
+        of inserting a colliding row. Only ``aborted`` rows can be re-armed.
+        """
+        stmt = (
+            sa.update(RunModel)
+            .where(
+                RunModel.tenant_id == tenant_id,
+                RunModel.id == batch_id,
+                RunModel.status == BATCH_ABORTED,
+            )
+            .values(
+                status=BATCH_QUEUED,
+                claimed_by=None,
+                started_at=None,
+                finished_at=None,
+                dry_run=dry_run,
+                totals=totals,
+                preflight=preflight,
+            )
+            .returning(RunModel)
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise ValueError(f"batch {batch_id} is not aborted and cannot be reset")
+        return _to_run(row)
 
     # --- Item lifecycle -------------------------------------------------------
 

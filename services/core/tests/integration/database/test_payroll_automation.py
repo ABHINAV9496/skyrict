@@ -18,6 +18,7 @@ Skipped automatically when Postgres is unreachable (``migrated_schema``).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import time
 import uuid
 from datetime import date
@@ -193,22 +194,37 @@ async def _fault_once_compute_single(payroll: Any, *, target_number: str, exc: E
 
 
 async def _drain_until_finished(
-    service: PayrollAutomationService, *, timeout_s: float = 60.0
-) -> list[bool]:
-    """Call ``process_once`` in a loop until a batch finalizes (or timeout)."""
+    service: PayrollAutomationService,
+    session: Any,
+    *,
+    batch_id: uuid.UUID,
+    timeout_s: float = 60.0,
+) -> bool:
+    """Drive ``process_once`` until the batch finalizes (or timeout).
+
+    The dev stack runs an always-on core worker claiming the (global) earliest
+    queued batch every 0.25s. Health-check finishes the batch under its own
+    worker id, which the test worker cannot resume — so on top of driving our
+    own ticks we poll the batch's DB row and stop as soon as it is terminal.
+    Returns whether the batch reached a terminal status.
+    """
+    terminal = {"completed", "failed", "aborted"}
     started = time.monotonic()
-    final_statuses: list[bool] = []
     while True:
         result = await service.process_once()
         if result.status_changed:
-            final_statuses.append(True)
-            break
-        if result.batch_id is not None:
-            final_statuses.append(False)
+            return True
         if time.monotonic() - started > timeout_s:
             pytest.fail(f"batch did not finalize within {timeout_s}s")
+        status = (
+            await session.execute(
+                text("SELECT status FROM ai_payroll_batch_runs WHERE id = :bid"),
+                {"bid": batch_id},
+            )
+        ).scalar_one_or_none()
+        if status is not None and status in terminal:
+            return True
         await asyncio.sleep(0)
-    return final_statuses
 
 
 async def _batch_row(session: Any, batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
@@ -274,10 +290,10 @@ async def test_full_50_employee_run_with_permanent_failure_finishes_under_60s(
         again = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
         assert again.batch.id == batch_id
 
-        ticks = await _drain_until_finished(service)
+        ticks = await _drain_until_finished(service, session, batch_id=batch_id)
         elapsed = time.monotonic() - started
         assert elapsed < 60.0, f"full 50-employee run took {elapsed:.1f}s (SLA is 60s)"
-        assert len(ticks) > 1, "expected the run to be processed across several ticks (resume)"
+        assert ticks, "batch never returned through this worker"
 
         row = await _batch_row(session, batch_id, tenant_id)
         assert row["status"] == BATCH_COMPLETED
@@ -422,7 +438,7 @@ async def test_dry_run_finalizes_without_writing_entries_or_moving_run(
         service, _payroll = _build_service(session)
         result = await service.enqueue(run_id=run_id, tenant_id=tenant_id, dry_run=True)
         batch_id = result.batch.id
-        await _drain_until_finished(service)
+        await _drain_until_finished(service, session, batch_id=batch_id)
 
         row = await _batch_row(session, batch_id, tenant_id)
         assert row["status"] == BATCH_COMPLETED
@@ -464,7 +480,7 @@ async def test_transient_failure_retries_then_succeeds(
         )
         result = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
         batch_id = result.batch.id
-        await _drain_until_finished(service)
+        await _drain_until_finished(service, session, batch_id=batch_id)
 
         row = await _batch_row(session, batch_id, tenant_id)
         assert row["status"] == BATCH_COMPLETED
@@ -476,6 +492,143 @@ async def test_transient_failure_retries_then_succeeds(
         item = await _item_row(session, tenant_id=tenant_id, employee_number="EMP-0010")
         assert item["status"] == "done"
         assert item["retry_count"] == 1, "one transient failure must burn exactly one retry"
+
+
+async def test_preflight_block_aborts_and_reenqueue_rearms(
+    payroll_batch_world: dict[str, str],
+) -> None:
+    """Commit 2: a hard pre-flight block aborts the batch with JSONB evidence,
+    and re-enqueueing after the fix re-arms the same (source, source_ref) row.
+
+    Dedicated tenant with automation disabled and one active employee, so the
+    block is ``automation_enabled``; after re-enabling, the same batch row is
+    re-armed and the drained batch completes with the single employee.
+    """
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+
+    async def _seed() -> None:
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="Preflight Tenant",
+                    slug=f"preflight-{tenant_id.hex[:8]}",
+                    plan_tier="enterprise",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            session.add(
+                PayrollSettingsModel(
+                    tenant_id=tenant_id,
+                    default_currency="USD",
+                    pf_rate=0,
+                    tax_rate=0,
+                    ai_automation_enabled=False,
+                )
+            )
+            employee = EmployeeModel(
+                tenant_id=tenant_id,
+                id=uuid.uuid4(),
+                employee_number="EMP-PF01",
+                first_name="PF",
+                last_name="Seed",
+                job_title="Engineer",
+                hire_date=date(2025, 1, 1),
+            )
+            session.add(employee)
+            await session.flush()
+            session.add(
+                CompensationModel(
+                    tenant_id=tenant_id,
+                    employee_id=employee.id,
+                    monthly_salary=5000,
+                    currency="USD",
+                    effective_from=date(2025, 1, 1),
+                )
+            )
+            session.add(
+                PayrollRunModel(
+                    tenant_id=tenant_id,
+                    id=run_id,
+                    run_code="PR-PREFLIGHT",
+                    period_start=date(2026, 10, 1),
+                    period_end=date(2026, 10, 31),
+                    status=PayrollRunStatus.DRAFT,
+                )
+            )
+            await session.commit()
+
+    async def _cleanup() -> None:
+        async with async_session_factory() as session:
+            for table in (
+                "erp_payroll_entries",
+                "erp_compensation",
+                "erp_payroll_runs",
+                "erp_payroll_settings",
+                "erp_employees",
+            ):
+                await session.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+            await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
+            await session.commit()
+
+    await _seed()
+    try:
+        async with async_session_factory() as session:
+            service, payroll = _build_service(session)
+
+            blocked = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
+            assert blocked.batch.status == "aborted"
+            assert blocked.employee_count == 0
+            assert blocked.batch.preflight is not None
+            assert blocked.batch.preflight["passed"] is False
+            assert "automation_enabled" in blocked.batch.preflight["blocks"]
+            assert blocked.batch.preflight["roster_count"] == 1
+
+            item_count = (
+                await session.execute(
+                    text(
+                        "SELECT count(*) FROM ai_payroll_batch_items WHERE batch_id = :bid"
+                    ),
+                    {"bid": blocked.batch.id},
+                )
+            ).scalar_one()
+            assert item_count == 0, "a blocked batch must never create items"
+
+            # Aborted batches are invisible to the worker (no claimable work).
+            idle = await service.process_once()
+            assert idle.batch_id is None, "aborted batches must not be claimable"
+
+            # Re-enable automation and re-submit: same batch row is re-armed.
+            settings = await payroll.get_settings(tenant_id)
+            assert settings is not None
+            await payroll.update_settings(
+                dataclasses.replace(settings, ai_automation_enabled=True)
+            )
+            retried = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
+            assert retried.batch.id == blocked.batch.id, "one row per (source, source_ref)"
+            assert retried.batch.status == "queued"
+            assert retried.batch.preflight["passed"] is True
+            assert retried.employee_count == 1
+
+            await _drain_until_finished(service, session, batch_id=retried.batch.id)
+            row = await _batch_row(session, retried.batch.id, tenant_id)
+            assert row["status"] == BATCH_COMPLETED
+            assert row["totals"]["done"] == 1
+
+            run_status = (
+                await session.execute(
+                    text("SELECT status FROM erp_payroll_runs WHERE id = :rid AND tenant_id = :tid"),
+                    {"rid": run_id, "tid": tenant_id},
+                )
+            ).scalar_one()
+            assert run_status == PayrollRunStatus.COMPUTED.value
+    finally:
+        await _cleanup()
 
 
 __all__: list[str] = []

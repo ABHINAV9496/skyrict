@@ -56,6 +56,7 @@ class PayrollSettingsIn(BaseModel):
     pf_rate: Decimal | None = Field(default=None, ge=0, le=1)
     tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     rounding: Literal["nearest", "up", "down"] | None = None
+    ai_automation_enabled: bool | None = None
 
 
 class PayrollSettingsOut(BaseModel):
@@ -64,6 +65,7 @@ class PayrollSettingsOut(BaseModel):
     pf_rate: Decimal
     tax_rate: Decimal
     rounding: str
+    ai_automation_enabled: bool
 
     @field_validator("pf_rate", "tax_rate", mode="after")
     @classmethod
@@ -81,6 +83,7 @@ class PayrollSettingsOut(BaseModel):
             pf_rate=settings.pf_rate,
             tax_rate=settings.tax_rate,
             rounding=settings.rounding.value,
+            ai_automation_enabled=settings.ai_automation_enabled,
         )
 
 

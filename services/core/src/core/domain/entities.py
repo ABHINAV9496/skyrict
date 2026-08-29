@@ -435,6 +435,9 @@ class PayrollSettings:
     pf_rate: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
     rounding: PayrollRounding = PayrollRounding.NEAREST
+    # HR-AUT-001 (0026): whether the tenant allows the payroll automation batch
+    # engine to drive runs; pre-flight blocks a batch when this is off.
+    ai_automation_enabled: bool = True
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

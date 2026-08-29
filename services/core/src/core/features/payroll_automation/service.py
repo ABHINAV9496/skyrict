@@ -35,12 +35,14 @@ from core.core.audit_service import AuditService
 from core.core.tenant_context import TenantContext
 from core.domain import entities as ent
 from core.features.payroll_automation.constants import (
+    BATCH_ABORTED,
     BATCH_COMPLETED,
     BATCH_FAILED,
     SOURCE_PAYROLL_RUN,
 )
 from core.features.payroll_automation.domain import PayrollBatchRun
 from core.features.payroll_automation.ports import PayrollAutomationRepositoryPort
+from core.features.payroll_automation.preflight import run_preflight
 
 logger = logging.getLogger(__name__)
 
@@ -149,43 +151,103 @@ class PayrollAutomationService:
     ) -> EnqueueResult:
         """Submit a payroll run for batch processing; idempotent per run.
 
-        Returns the existing batch (``recomputed=False``) when the run was
-        already enqueued, so PATCH-style retries and recompute submissions are
-        safe. Guards: the run must exist and be draft/computed (recomputable),
-        and payroll settings must exist.
+        Pre-flight (Commit 2): before any item is created, the run is validated
+        against the tenant's settings/automation flag, the run's own
+        recomputability, the period's winning run and the active roster. A hard
+        block (automation disabled, period already won, no active employees,
+        ...) aborts the batch immediately — status ``aborted``, the preflight
+        evidence stored in the batch's JSONB, zero items — instead of raising.
+        A missing run still raises ``ValueError``: there is no batch to record
+        for a run that does not exist.
+
+        Idempotency: re-submitting a run returns the existing batch unchanged,
+        EXCEPT an ``aborted`` batch, which is re-armed (same row, fresh preflight
+        and totals) so fixing the block and re-submitting creates a runnable
+        batch instead of colliding with the unique (source, source_ref) index.
         """
         run = await self._payroll.get_run(run_id, tenant_id=tenant_id)
         if run is None:
             raise ValueError(f"payroll run {run_id} not found")
-        if not await self._payroll.is_computable(run):
-            raise ValueError(
-                f"payroll run {run_id} is not computable (status={run.status.value})"
-            )
-        settings = await self._payroll.get_settings(tenant_id)
-        if settings is None:
-            raise ValueError(f"payroll settings missing for tenant {tenant_id}")
 
         existing = await self._repo.get_batch(
             tenant_id=tenant_id,
             source=SOURCE_PAYROLL_RUN,
             source_ref=str(run_id),
         )
-        if existing is not None:
+        if existing is not None and existing.status != BATCH_ABORTED:
             return EnqueueResult(batch=existing, employee_count=int(
                 (existing.totals or {}).get("total", 0)
             ))
 
-        source_ref = str(run_id)
-        roster = await self._payroll.active_employees(run_id, tenant_id=tenant_id)
-        employee_ids = [employee.id for employee in roster if employee.id is not None]
-        totals = _empty_totals(len(employee_ids))
-        batch = await self._repo.create_batch(
-            tenant_id=tenant_id,
-            source=SOURCE_PAYROLL_RUN,
-            source_ref=source_ref,
-            dry_run=dry_run,
-            totals=totals,
+        settings = await self._payroll.get_settings(tenant_id)
+        overlapping = await self._payroll.find_overlapping_run(
+            tenant_id,
+            period_start=run.period_start,
+            period_end=run.period_end,
         )
+        roster = await self._payroll.active_employees(run_id, tenant_id=tenant_id)
+        preflight_result = run_preflight(
+            run=run,
+            settings=settings,
+            overlapping=overlapping,
+            roster=roster,
+        )
+        preflight = preflight_result.to_json()
+
+        source_ref = str(run_id)
+        employee_ids = [employee.id for employee in roster if employee.id is not None]
+        if not preflight_result.passed:
+            totals = _empty_totals(0)
+            if existing is not None:
+                batch = await self._repo.reset_batch(
+                    batch_id=existing.id,
+                    tenant_id=tenant_id,
+                    dry_run=dry_run,
+                    totals=totals,
+                    preflight=preflight,
+                )
+            else:
+                batch = await self._repo.create_batch(
+                    tenant_id=tenant_id,
+                    source=SOURCE_PAYROLL_RUN,
+                    source_ref=source_ref,
+                    dry_run=dry_run,
+                    totals=totals,
+                    preflight=preflight,
+                )
+            batch = await self._repo.abort_batch(
+                batch_id=batch.id,
+                tenant_id=tenant_id,
+                totals=totals,
+                finished_at=datetime.now(UTC),
+            )
+            await self.commit()
+            logger.info(
+                "aborted payroll automation batch %s for run %s: pre-flight blocked by %s",
+                batch.id,
+                run_id,
+                preflight_result.blocks,
+            )
+            return EnqueueResult(batch=batch, employee_count=0)
+
+        totals = _empty_totals(len(employee_ids))
+        if existing is not None:
+            batch = await self._repo.reset_batch(
+                batch_id=existing.id,
+                tenant_id=tenant_id,
+                dry_run=dry_run,
+                totals=totals,
+                preflight=preflight,
+            )
+        else:
+            batch = await self._repo.create_batch(
+                tenant_id=tenant_id,
+                source=SOURCE_PAYROLL_RUN,
+                source_ref=source_ref,
+                dry_run=dry_run,
+                totals=totals,
+                preflight=preflight,
+            )
         await self._repo.add_items(
             batch_id=batch.id,
             tenant_id=tenant_id,

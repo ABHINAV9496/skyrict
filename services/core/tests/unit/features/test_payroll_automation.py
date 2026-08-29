@@ -2,15 +2,17 @@
 
 Doubles implement the two ports (:class:`PayrollAutomationRepositoryPort` and
 the compute seam) in memory, so these tests pin the engine's own invariants:
-enqueue guards + idempotency, the transient/retry-budget state machine, the
-``PermanentBatchItemError`` terminal path, dry-run, and run finalization.
+enqueue guards + idempotency, pre-flight blocking (settings/automation/period/
+roster/run checks abort the batch with JSONB evidence), the transient/retry
+budget state machine, the ``PermanentBatchItemError`` terminal path, dry-run,
+and run finalization.
 """
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -47,6 +49,14 @@ def _uid() -> uuid.UUID:
 class _Run:
     id: uuid.UUID
     status: PayrollRunStatus = PayrollRunStatus.DRAFT
+    run_code: str = "PR-0001"
+    period_start: date = date(2026, 7, 1)
+    period_end: date = date(2026, 7, 31)
+
+
+@dataclass
+class _Settings:
+    ai_automation_enabled: bool = True
 
 
 @dataclass
@@ -70,6 +80,8 @@ class FakePayroll:
         self.failures: dict[uuid.UUID, list[Exception]] = {}
         self.skip_employee: uuid.UUID | None = None
         self.finalized: list[dict[str, object]] = []
+        self.settings: _Settings | None = _Settings()
+        self.overlapping: _Run | None = None
 
     async def get_run(self, run_id: uuid.UUID, *, tenant_id: uuid.UUID) -> _Run | None:
         return self.runs.get(run_id)
@@ -77,8 +89,13 @@ class FakePayroll:
     async def is_computable(self, run: _Run) -> bool:
         return run.status in (PayrollRunStatus.DRAFT, PayrollRunStatus.COMPUTED)
 
-    async def get_settings(self, tenant_id: uuid.UUID) -> object:
-        return object()  # presence only
+    async def get_settings(self, tenant_id: uuid.UUID) -> _Settings | None:
+        return self.settings
+
+    async def find_overlapping_run(
+        self, tenant_id: uuid.UUID, *, period_start, period_end
+    ) -> _Run | None:
+        return self.overlapping
 
     async def active_employees(self, run_id: uuid.UUID, *, tenant_id: uuid.UUID) -> list[_Emp]:
         return list(self.roster)
@@ -143,6 +160,7 @@ class FakeRepo:
             status=b["status"],
             dry_run=b["dry_run"],
             claimed_by=b["claimed_by"],
+            preflight=b.get("preflight"),
             totals=b["totals"],
             started_at=b["started_at"],
             finished_at=b["finished_at"],
@@ -154,7 +172,7 @@ class FakeRepo:
                 return self._to_run(b)
         return None
 
-    async def create_batch(self, *, tenant_id, source, source_ref, dry_run, totals):
+    async def create_batch(self, *, tenant_id, source, source_ref, dry_run, totals, preflight=None):
         batch = {
             "id": _uid(),
             "tenant_id": tenant_id,
@@ -163,6 +181,7 @@ class FakeRepo:
             "status": "queued",
             "dry_run": dry_run,
             "claimed_by": None,
+            "preflight": preflight,
             "totals": dict(totals),
             "started_at": None,
             "finished_at": None,
@@ -201,6 +220,32 @@ class FakeRepo:
                 b["status"] = status
                 b["totals"] = dict(totals)
                 b["finished_at"] = finished_at
+
+    async def abort_batch(self, *, batch_id, tenant_id, totals, finished_at):
+        for b in self.batches:
+            if b["id"] == batch_id and b["tenant_id"] == tenant_id:
+                b["status"] = "aborted"
+                b["totals"] = dict(totals)
+                b["finished_at"] = finished_at
+                return self._to_run(b)
+        raise ValueError(f"batch {batch_id} is not abortable")
+
+    async def reset_batch(self, *, batch_id, tenant_id, dry_run, totals, preflight):
+        for b in self.batches:
+            if (
+                b["id"] == batch_id
+                and b["tenant_id"] == tenant_id
+                and b["status"] == "aborted"
+            ):
+                b["status"] = "queued"
+                b["claimed_by"] = None
+                b["started_at"] = None
+                b["finished_at"] = None
+                b["dry_run"] = dry_run
+                b["totals"] = dict(totals)
+                b["preflight"] = preflight
+                return self._to_run(b)
+        raise ValueError(f"batch {batch_id} is not aborted and cannot be reset")
 
     async def claim_next_item(self, *, batch_id, tenant_id, max_retries):
         for item in self.items:
@@ -286,6 +331,8 @@ class TestEnqueue:
         assert result.batch.source_ref == str(RUN_ID)
         assert result.batch.status == "queued"
         assert result.batch.totals["total"] == 2
+        assert result.batch.preflight is not None
+        assert result.batch.preflight["passed"] is True
         assert len([i for i in repo.items if i["batch_id"] == result.batch.id]) == 2
 
     async def test_enqueue_is_idempotent_per_run(self):
@@ -303,11 +350,72 @@ class TestEnqueue:
         with pytest.raises(ValueError, match="not found"):
             await _enqueue(service)
 
-    async def test_non_computable_run_is_rejected(self):
-        service, _repo, payroll = _make_engine()
+    async def test_non_computable_run_is_aborted_with_preflight_evidence(self):
+        service, repo, payroll = _make_engine()
         payroll.runs[RUN_ID].status = PayrollRunStatus.APPROVED
-        with pytest.raises(ValueError, match="not computable"):
-            await _enqueue(service)
+        result = await _enqueue(service)
+        assert result.batch.status == "aborted"
+        assert result.employee_count == 0
+        assert result.batch.totals["total"] == 0
+        preflight = result.batch.preflight
+        assert preflight["passed"] is False
+        assert "run" in preflight["blocks"]
+        assert len([i for i in repo.items if i["batch_id"] == result.batch.id]) == 0
+
+    async def test_missing_settings_is_aborted(self):
+        service, _repo, payroll = _make_engine()
+        payroll.settings = None
+        result = await _enqueue(service)
+        assert result.batch.status == "aborted"
+        assert "settings" in result.batch.preflight["blocks"]
+
+    async def test_automation_disabled_is_aborted(self):
+        service, repo, payroll = _make_engine()
+        payroll.settings = _Settings(ai_automation_enabled=False)
+        result = await _enqueue(service)
+        assert result.batch.status == "aborted"
+        assert result.batch.preflight["passed"] is False
+        assert "automation_enabled" in result.batch.preflight["blocks"]
+        assert len([i for i in repo.items if i["batch_id"] == result.batch.id]) == 0
+
+    async def test_period_conflict_is_aborted(self):
+        service, repo, payroll = _make_engine()
+        payroll.overlapping = _Run(_uid(), run_code="PR-WINNER")
+        result = await _enqueue(service)
+        assert result.batch.status == "aborted"
+        assert "period" in result.batch.preflight["blocks"]
+        assert "PR-WINNER" in result.batch.preflight["checks"]["period"]["detail"]
+        assert len([i for i in repo.items if i["batch_id"] == result.batch.id]) == 0
+
+    async def test_empty_roster_is_aborted(self):
+        service, _repo, payroll = _make_engine()
+        payroll.roster = []
+        result = await _enqueue(service)
+        assert result.batch.status == "aborted"
+        assert "roster" in result.batch.preflight["blocks"]
+        assert result.batch.preflight["roster_count"] == 0
+
+    async def test_blocked_dry_run_aborts_too(self):
+        service, _repo, payroll = _make_engine()
+        payroll.settings = _Settings(ai_automation_enabled=False)
+        result = await _enqueue(service, dry_run=True)
+        assert result.batch.status == "aborted"
+        assert result.batch.dry_run is True
+
+    async def test_reenqueue_after_abort_rearms_same_batch_row(self):
+        service, repo, payroll = _make_engine()
+        payroll.settings = _Settings(ai_automation_enabled=False)
+        blocked = await _enqueue(service)
+        assert blocked.batch.status == "aborted"
+
+        payroll.settings = _Settings(ai_automation_enabled=True)
+        retried = await _enqueue(service)
+        assert retried.batch.id == blocked.batch.id, "one row per (source, source_ref)"
+        assert retried.batch.status == "queued"
+        assert retried.batch.preflight["passed"] is True
+        assert retried.employee_count == 2
+        assert len(repo.batches) == 1
+        assert len([i for i in repo.items if i["batch_id"] == retried.batch.id]) == 2
 
 
 class TestProcessOnce:
@@ -429,6 +537,8 @@ class TestBatchStatus:
         assert projection["dry_run"] is False
         assert projection["totals"]["total"] == 2
         assert projection["claimed_by"] is None
+        assert projection["preflight"] is not None
+        assert projection["preflight"]["passed"] is True
         with pytest.raises(ValueError, match="not found"):
             await service.batch_status(_uid(), tenant_id=TENANT_ID)
 

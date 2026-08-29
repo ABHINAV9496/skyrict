@@ -114,6 +114,7 @@ def _settings_from_orm(model: PayrollSettingsModel) -> ent.PayrollSettings:
         pf_rate=model.pf_rate,
         tax_rate=model.tax_rate,
         rounding=PayrollRounding(model.rounding.value),
+        ai_automation_enabled=model.ai_automation_enabled,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -209,6 +210,7 @@ class PayrollRepository:
                 pf_rate=settings.pf_rate,
                 tax_rate=settings.tax_rate,
                 rounding=PayrollRoundingModel(settings.rounding.value),
+                ai_automation_enabled=settings.ai_automation_enabled,
             )
             .on_conflict_do_update(
                 index_elements=[PayrollSettingsModel.tenant_id],
@@ -217,6 +219,7 @@ class PayrollRepository:
                     "pf_rate": settings.pf_rate,
                     "tax_rate": settings.tax_rate,
                     "rounding": PayrollRoundingModel(settings.rounding.value),
+                    "ai_automation_enabled": settings.ai_automation_enabled,
                     "updated_at": func.now(),
                 },
             )

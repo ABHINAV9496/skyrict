@@ -39,6 +39,7 @@ class PayrollAutomationRepositoryPort(Protocol):
         source_ref: str,
         dry_run: bool,
         totals: dict[str, object],
+        preflight: dict[str, object] | None = None,
     ) -> PayrollBatchRun: ...
 
     async def add_items(
@@ -68,6 +69,40 @@ class PayrollAutomationRepositoryPort(Protocol):
         totals: dict[str, object],
         finished_at: object,
     ) -> None: ...
+
+    async def abort_batch(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        totals: dict[str, object],
+        finished_at: object,
+    ) -> PayrollBatchRun:
+        """Flip a queued (or processing) batch to ``aborted``.
+
+        The pre-flight aborts a batch before any item work: the row is created,
+        the preflight evidence is stored, then ``abort_batch`` marks it terminal
+        so :meth:`claim_next_batch` can never pick it up. Returns the updated
+        run so the caller reflects the terminal state.
+        """
+        ...
+
+    async def reset_batch(
+        self,
+        *,
+        batch_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        dry_run: bool,
+        totals: dict[str, object],
+        preflight: dict[str, object],
+    ) -> PayrollBatchRun:
+        """Re-arm an ``aborted`` batch as ``queued`` for a fresh submission.
+
+        The unique ``(tenant_id, source, source_ref)`` index keeps one batch row
+        per run, so re-enqueue after a pre-flight block resets this row rather
+        than inserting a colliding one.
+        """
+        ...
 
     # --- Item lifecycle ---
     async def claim_next_item(

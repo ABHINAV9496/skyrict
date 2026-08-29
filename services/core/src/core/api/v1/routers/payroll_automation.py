@@ -55,6 +55,14 @@ async def enqueue_batch(
         )
     except ValueError as exc:
         raise_from_service_error(exc)
+    status = result.batch.status
+    if status == "aborted":
+        blocks = (result.batch.preflight or {}).get("blocks", [])
+        message = (
+            f"Payroll batch blocked by pre-flight checks: {', '.join(blocks)}"
+        )
+    else:
+        message = f"Enqueued payroll batch for {result.employee_count} employees"
     return ResponseEnvelope(
         data=PayrollBatchOut(
             batch_id=result.batch.id,
@@ -69,7 +77,7 @@ async def enqueue_batch(
             started_at=result.batch.started_at,
             finished_at=result.batch.finished_at,
         ),
-        message=f"Enqueued payroll batch for {result.employee_count} employees",
+        message=message,
     )
 
 

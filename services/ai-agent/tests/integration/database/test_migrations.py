@@ -8,7 +8,7 @@ real migrations against real Postgres, never ``create_all``. Then unwinds all
 the way back to nothing and re-applies, proving the whole round-trip.
 
 Sentinel assertions probe one representative artefact per concern: table
-existence, version-table bookkeeping, RLS policies on exactly the four
+existence, version-table bookkeeping, RLS policies on exactly the seven
 tenant-scoped tables (``agent_registry`` is global and must have NONE), the
 partial unique pending index with its WHERE clause, named CHECK constraints,
 the ``tenants`` FKs, and the DESC ordering of the history index.
@@ -54,8 +54,30 @@ _AI_TABLES = (
     "ai_anomalies",
     "ai_audit_log",
     "agent_registry",
+    "ai_restock_demand_stats",
+    "ai_restock_settings",
+    "ai_anomaly_rule_stats",
 )
-_TENANT_SCOPED_TABLES = ("ai_query_log", "ai_suggestions", "ai_anomalies", "ai_audit_log")
+_TENANT_SCOPED_TABLES = (
+    "ai_query_log",
+    "ai_suggestions",
+    "ai_anomalies",
+    "ai_audit_log",
+    "ai_restock_demand_stats",
+    "ai_restock_settings",
+    "ai_anomaly_rule_stats",
+)
+# Demand stats carries composite FKs into core-owned erp_products/erp_warehouses
+# and NO direct FK to tenants (cross-service idiom); only the tables below are
+# direct children of ``tenants``.
+_TENANT_FK_TABLES = (
+    "ai_query_log",
+    "ai_suggestions",
+    "ai_anomalies",
+    "ai_audit_log",
+    "ai_restock_settings",
+    "ai_anomaly_rule_stats",
+)
 
 _EXPECTED_CHECKS = {
     "ck_ai_suggestions_status",
@@ -63,6 +85,11 @@ _EXPECTED_CHECKS = {
     "ck_ai_suggestions_confidence_range",
     "ck_ai_anomalies_severity",
     "ck_ai_anomalies_status",
+    "ck_ai_restock_settings_lead_time_positive",
+    "ck_ai_restock_settings_safety_factor_positive",
+    "ck_ai_restock_settings_sensitivity_range",
+    "ck_ai_restock_settings_fp_threshold_range",
+    "ck_ai_anomaly_rule_stats_counts_non_negative",
 }
 
 
@@ -168,7 +195,7 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
                     "WHERE con.contype = 'f' "
                     "AND confrelid = 'public.tenants'::regclass "
                     "AND rel.relname = ANY($1::text[])",
-                    list(_TENANT_SCOPED_TABLES),
+                    list(_TENANT_FK_TABLES),
                 )
             )
         )
@@ -289,7 +316,7 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0003"
+            assert artifacts["version"] == "0004"
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
@@ -307,7 +334,7 @@ class TestAiMigrationRoundTrip:
             assert "DESC" in str(query_log_index).upper()
 
             assert artifacts["checks"] >= _EXPECTED_CHECKS
-            assert artifacts["tenant_fks"] == len(_TENANT_SCOPED_TABLES)
+            assert artifacts["tenant_fks"] == len(_TENANT_FK_TABLES)
 
             # Full unwind -> nothing survives; the version table may remain
             # but must be empty (same contract as core's roundtrip test).

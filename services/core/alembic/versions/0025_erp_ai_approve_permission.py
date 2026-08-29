@@ -5,17 +5,21 @@ suggestions require a dedicated permission separate from erp.inventory.write.
 The core AI proxy router uses this key to gate /ai/suggestions/scan,
 /ai/suggestions/{id}/approve, and /ai/suggestions/{id}/reject.
 
-Revision ID: 0022
-Revises: 0021
+Revision ID: 0025
+Revises: 0024
 Create Date: 2026-08-27
+
+Renumbered from 0022 to 0025 on the HR-AI-002 branch: dev's 0022 collided
+with the HR-AI-002 wave-2 schema migration, so this inventory-approve
+permission is appended after 0024 (the last HR-AI-002 pattern-engine head).
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0022"
-down_revision = "0021"
+revision = "0025"
+down_revision = "0024"
 branch_labels = None
 depends_on = None
 

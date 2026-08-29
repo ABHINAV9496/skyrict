@@ -72,6 +72,8 @@ _ERP_PERMISSION_KEYS = (
     "erp.hr.ai.copilot",
     # 0023: ai-agent eval-harness record permission (HR-AI-002, SKY-72).
     "erp.hr.ai.eval",
+    # 0025: inventory AI approve permission (SKY-68, renumbered on HR-AI-002).
+    "erp.inventory.ai.approve",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -155,7 +157,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0024", f"head is {version}, expected 0024"
+            assert version == "0025", f"head is {version}, expected 0025"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -199,7 +201,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
             )
 
-            # 0022: erp.inventory.ai.approve is a first-class catalog permission.
+            # 0025: erp.inventory.ai.approve is a first-class catalog permission.
             ai_approve_row = (
                 await conn.execute(
                     text(
@@ -208,7 +210,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one_or_none()
-            assert ai_approve_row is not None, "0022 must register erp.inventory.ai.approve"
+            assert ai_approve_row is not None, "0025 must register erp.inventory.ai.approve"
 
             row = (
                 await conn.execute(

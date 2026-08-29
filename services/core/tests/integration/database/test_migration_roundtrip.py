@@ -143,7 +143,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0021", f"head is {version}, expected 0021"
+            assert version == "0022", f"head is {version}, expected 0022"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -186,6 +186,17 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert expected_cols <= set(policy_cols), (
                 f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
             )
+
+            # 0022: erp.inventory.ai.approve is a first-class catalog permission.
+            ai_approve_row = (
+                await conn.execute(
+                    text(
+                        "SELECT description FROM core_permissions "
+                        "WHERE key = 'erp.inventory.ai.approve'"
+                    )
+                )
+            ).scalar_one_or_none()
+            assert ai_approve_row is not None, "0022 must register erp.inventory.ai.approve"
 
             row = (
                 await conn.execute(

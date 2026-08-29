@@ -1621,8 +1621,20 @@ async def _resolve_owner_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid
     return row if row is None else uuid.UUID(str(row))
 
 
-async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[str, int]:
-    """Seed demo data for all ERP modules. Idempotent unless force=True."""
+async def seed_demo_data(
+    tenant_id: uuid.UUID,
+    *,
+    force: bool = False,
+    employees: int = 15,
+) -> dict[str, int]:
+    """Seed demo data for all ERP modules. Idempotent unless force=True.
+
+    ``employees`` sizes the HR/payroll roster: the first ``employees`` rows of
+    ``EMPLOYEE_ROWS`` plus synthetic extras when larger. Compensation follows
+    the same cut (base rows for indices 0-12 and 14, so employee index 13 is
+    ALWAYS uncompensated — the demo's "skipped" employee), then synthetic rows
+    for indices >= 15. The payroll automation acceptance scrub seeds 50.
+    """
     from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
     from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
     from core.features.ai_hr.models.public_holiday import AiHrPublicHolidayModel
@@ -1652,6 +1664,43 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
     from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
     from core.features.sales.models.order import ErpSalesOrderModel
     from core.features.sales.models.order_line import ErpSalesOrderLineModel
+
+    if employees < 1:
+        raise ValueError("employees must be positive")
+
+    # Roster cut + synthetic extras for employees beyond the static rows.
+    employee_rows: list[dict[str, object]] = list(EMPLOYEE_ROWS[:employees])
+    for idx in range(len(EMPLOYEE_ROWS), employees):
+        employee_rows.append(
+            {
+                "num": f"E-{idx + 1:04d}",
+                "first": f"Ext{idx + 1}",
+                "last": f"Employee{idx + 1}",
+                "email": f"ext{idx + 1}@skyrict.com",
+                "phone": f"+1 415 555 {9000 + idx}",
+                "dept": idx % 7,
+                "title": f"Operations Associate {idx % 7 + 1}",
+                "status": "active",
+                "hire_days_ago": 120 + (idx % 90),
+            }
+        )
+
+    # Compensation cut: base rows kept up to the roster, then synthetic rows
+    # for indices >= 15 (5000 + (idx % 10) * 500). Employee index 13 stays
+    # permanently uncompensated so every seeded roster exercises the skip path.
+    compensation_rows: list[dict[str, object]] = [
+        row for row in COMPENSATION_ROWS if int(str(row["emp"])) < employees
+    ]
+    for idx in range(15, employees):
+        compensation_rows.append(
+            {
+                "emp": idx,
+                "monthly": Decimal(f"{5000 + (idx % 10) * 500}"),
+                "currency": "USD",
+                "effective_days_ago": 420,
+            }
+        )
+    comp_by_emp = {int(str(row["emp"])): row for row in compensation_rows}
 
     async with async_session_factory() as session:
         if force:
@@ -1742,7 +1791,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
 
         # ── EMPLOYEES ────────────────────────────────────────────────
         emp_ids: list[uuid.UUID] = []
-        for row in EMPLOYEE_ROWS:
+        for row in employee_rows:
             dept_idx = int(str(row["dept"]))
             term_date = None
             if row["status"] == "terminated":
@@ -2121,7 +2170,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         counts["products"] = len(product_ids)
 
         # ── COMPENSATION ─────────────────────────────────────────────
-        for row in COMPENSATION_ROWS:
+        for row in compensation_rows:
             emp_idx = int(str(row["emp"]))
             comp = CompensationModel(
                 tenant_id=tenant_id,
@@ -2132,7 +2181,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 is_active=True,
             )
             session.add(comp)
-        counts["compensation"] = len(COMPENSATION_ROWS)
+        counts["compensation"] = len(compensation_rows)
 
         # ── PAYROLL RUNS + ENTRIES ───────────────────────────────────
         for run_row in PAYROLL_RUN_ROWS:
@@ -2161,10 +2210,11 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             await session.flush()
 
             if run_row["status"] in ("paid", "approved", "computed"):
-                for emp_idx, comp_row in enumerate(COMPENSATION_ROWS):
-                    if emp_idx >= len(emp_ids):
-                        break
-                    emp_status = EMPLOYEE_ROWS[emp_idx]["status"]
+                for emp_idx in range(len(emp_ids)):
+                    comp_row = comp_by_emp.get(emp_idx)
+                    if comp_row is None:
+                        continue
+                    emp_status = employee_rows[emp_idx]["status"]
                     if emp_status == "terminated":
                         continue
                     base = Decimal(str(comp_row["monthly"]))

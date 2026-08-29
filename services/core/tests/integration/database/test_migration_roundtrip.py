@@ -74,6 +74,11 @@ _ERP_PERMISSION_KEYS = (
     "erp.hr.ai.eval",
     # 0025: inventory AI approve permission (SKY-68, renumbered on HR-AI-002).
     "erp.inventory.ai.approve",
+    # 0026: payroll automation permissions (HR-AUT-001).
+    "erp.payroll.ai.read",
+    "erp.payroll.ai.run",
+    "erp.payroll.ai.notify",
+    "erp.payroll.ai.approve",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -92,6 +97,9 @@ _HR_AI_TABLES = (
     # 0024: HR-AI-002 pattern-engine input tables (holidays + blackouts).
     "ai_hr_public_holidays",
     "ai_hr_leave_blackout_periods",
+    # 0026: payroll automation engine tables (HR-AUT-001, Commit 1).
+    "ai_payroll_batch_runs",
+    "ai_payroll_batch_items",
 )
 
 
@@ -157,7 +165,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0025", f"head is {version}, expected 0025"
+            assert version == "0026", f"head is {version}, expected 0026"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -364,6 +372,35 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert set(rls_tables) == set(_HR_AI_TABLES), (
                 f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
             )
+
+            # 0026: payroll automation columns on settings + employees.
+            settings_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_settings' "
+                        "AND column_name = 'ai_automation_enabled'"
+                    )
+                )
+            ).one_or_none()
+            assert settings_col is not None, "0026 must add erp_payroll_settings.ai_automation_enabled"
+            assert settings_col[0] == "boolean"
+
+            for col_name in ("bank_account", "bank_name"):
+                bank_col = (
+                    await conn.execute(
+                        text(
+                            "SELECT data_type FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_employees' "
+                            "AND column_name = :name"
+                        ),
+                        {"name": col_name},
+                    )
+                ).one_or_none()
+                assert bank_col is not None, f"0026 must add erp_employees.{col_name}"
+                assert bank_col[0] == "character varying"
     finally:
         await engine.dispose()
 

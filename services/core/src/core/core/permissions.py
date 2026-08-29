@@ -79,6 +79,14 @@ ERP_HR_AI_EVAL = "erp.hr.ai.eval"
 # identity's catalog so the invite flow can grant it portably)
 ERP_LEAVE_SELF = "erp.leave.self"
 
+# Payroll automation (HR-AUT-001, docs/modules/skyrict-ai/hr-payroll-ai-features.md).
+# Batch engine keys — same string catalog as identity seeds so role grants stay
+# portable across the platform.
+ERP_PAYROLL_AI_READ = "erp.payroll.ai.read"
+ERP_PAYROLL_AI_RUN = "erp.payroll.ai.run"
+ERP_PAYROLL_AI_NOTIFY = "erp.payroll.ai.notify"
+ERP_PAYROLL_AI_APPROVE = "erp.payroll.ai.approve"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -113,6 +121,10 @@ CATALOG: tuple[str, ...] = (
     ERP_HR_AI_COPILOT,
     ERP_HR_AI_EVAL,
     ERP_LEAVE_SELF,
+    ERP_PAYROLL_AI_READ,
+    ERP_PAYROLL_AI_RUN,
+    ERP_PAYROLL_AI_NOTIFY,
+    ERP_PAYROLL_AI_APPROVE,
 )
 
 # Permission module groupings.
@@ -149,6 +161,16 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ),
     ),
     ("leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
+    (
+        "payroll_ai",
+        "Payroll automation",
+        (
+            ERP_PAYROLL_AI_READ,
+            ERP_PAYROLL_AI_RUN,
+            ERP_PAYROLL_AI_NOTIFY,
+            ERP_PAYROLL_AI_APPROVE,
+        ),
+    ),
 )
 
 
@@ -194,6 +216,10 @@ __all__ = [
     "ERP_INVOICE_READ",
     "ERP_INVOICE_WRITE",
     "ERP_LEAVE_SELF",
+    "ERP_PAYROLL_AI_APPROVE",
+    "ERP_PAYROLL_AI_NOTIFY",
+    "ERP_PAYROLL_AI_READ",
+    "ERP_PAYROLL_AI_RUN",
     "ERP_PAYROLL_APPROVE",
     "ERP_PAYROLL_READ",
     "ERP_PAYROLL_WRITE",

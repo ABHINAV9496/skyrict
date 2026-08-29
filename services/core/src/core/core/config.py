@@ -154,6 +154,31 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Payroll automation worker (HR-AUT-001, Commit 1) ---
+    PAYROLL_AUTO_WORKER_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "run the in-process payroll batch worker (a background asyncio "
+            "loop that claims and drains queued batches). Disabled under the "
+            "test environment so integration tests drive process_once() directly."
+        ),
+    )
+    PAYROLL_AUTO_POLL_SECONDS: float = Field(
+        default=0.25,
+        gt=0,
+        description="interval between worker claim passes when the queue is idle",
+    )
+    PAYROLL_AUTO_ITEMS_PER_TICK: int = Field(
+        default=10,
+        ge=1,
+        description="max payroll items one claim pass processes before committing/yielding",
+    )
+    PAYROLL_AUTO_MAX_RETRIES: int = Field(
+        default=2,
+        ge=1,
+        description="per-item retry budget before an item is marked failed permanently",
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
 

@@ -166,6 +166,12 @@ def seed_demo(
         "--force",
         help="Clear existing demo data for the tenant, then reseed",
     ),
+    employees: int = typer.Option(
+        15,
+        "--employees",
+        min=1,
+        help="Number of employees to seed (15 default; 50 for the payroll automation acceptance scrub)",
+    ),
 ) -> None:
     """Seed 10+ demo records per ERP module (Finance, HR, Payroll, Sales).
 
@@ -200,7 +206,7 @@ def seed_demo(
 
         from core.seed_demo import seed_demo_data
 
-        counts = await seed_demo_data(target, force=force)
+        counts = await seed_demo_data(target, force=force, employees=employees)
         typer.echo(f"seeded demo data for tenant {target}:")
         for key, value in counts.items():
             typer.echo(f"  {key}: {value}")

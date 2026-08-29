@@ -34,6 +34,11 @@ from core.api.v1.schemas.payroll import (
     RunComputeOut,
     SkippedEmployeeOut,
 )
+from core.api.v1.schemas.payroll_automation import (
+    PayrollBatchEnqueueRequest,
+    PayrollBatchOut,
+    PayrollBatchTickOut,
+)
 
 __all__ = [
     "AttendanceRecordOut",
@@ -58,6 +63,9 @@ __all__ = [
     "LeaveRequestOut",
     "LeaveRequestRejectBody",
     "MoneyOut",
+    "PayrollBatchEnqueueRequest",
+    "PayrollBatchOut",
+    "PayrollBatchTickOut",
     "PayrollEntryOut",
     "PayrollRunCreate",
     "PayrollRunOut",

@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     )
     from core.features.inventory.service import InventoryService
     from core.features.payroll.service import PayrollService
+    from core.features.payroll_automation.service import PayrollAutomationService
     from core.features.sales.service import SalesService
 
 logger = get_logger("core.deps")
@@ -197,11 +198,21 @@ def get_hr_repo(db: AsyncSession = Depends(get_db)) -> HrRepository:
     return HrRepository(db, next_sequence=SequenceRepository(db).next_value)
 
 
-def get_core_audit_service(db: AsyncSession = Depends(get_db)) -> CoreAuditService:
+def make_core_audit_service(db: AsyncSession) -> CoreAuditService:
+    """Plain factory — build :class:`AuditService` without FastAPI resolution.
+
+    Shared by the FastAPI dependency below and the background payroll
+    automation worker, which constructs its own services on a per-tick session
+    and cannot go through ``Depends``.
+    """
     from core.core.audit_service import AuditService
     from core.db.audit_repository import AuditLogRepository
 
     return AuditService(AuditLogRepository(db))
+
+
+def get_core_audit_service(db: AsyncSession = Depends(get_db)) -> CoreAuditService:
+    return make_core_audit_service(db)
 
 
 def get_department_service(
@@ -272,6 +283,29 @@ def get_attendance_service(
     return AttendanceService(repository=repo, audit=audit)
 
 
+def make_payroll_service(db: AsyncSession, audit: CoreAuditService | None = None) -> PayrollService:
+    """Plain factory — build :class:`PayrollService` without FastAPI resolution.
+
+    Used by the FastAPI dependency below and by the payroll automation worker
+    (which constructs services on its own per-tick session). When ``audit`` is
+    omitted a core audit service on the same session is built.
+    """
+    from core.db.sequence_repository import SequenceRepository
+    from core.features.hr.repository import HrRepository
+    from core.features.hr.service import LeaveService
+    from core.features.payroll.repository import PayrollRepository
+    from core.features.payroll.service import PayrollService
+
+    return PayrollService(
+        repository=PayrollRepository(db, next_sequence=SequenceRepository(db).next_value),
+        leave_ledger=LeaveService(
+            repository=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
+            audit=audit or make_core_audit_service(db),
+        ),
+        audit=audit or make_core_audit_service(db),
+    )
+
+
 def get_payroll_service(
     db: AsyncSession = Depends(get_db),
     audit: CoreAuditService = Depends(get_core_audit_service),
@@ -284,19 +318,34 @@ def get_payroll_service(
     is shared (same ``db`` session), keeping payroll-driven accrual in the same
     transaction as the compute.
     """
-    from core.db.sequence_repository import SequenceRepository
-    from core.features.hr.repository import HrRepository
-    from core.features.hr.service import LeaveService
-    from core.features.payroll.repository import PayrollRepository
-    from core.features.payroll.service import PayrollService
+    return make_payroll_service(db, audit)
 
-    return PayrollService(
-        repository=PayrollRepository(db, next_sequence=SequenceRepository(db).next_value),
-        leave_ledger=LeaveService(
-            repository=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
-            audit=audit,
-        ),
+
+def get_payroll_automation_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> PayrollAutomationService:
+    """Composition root for the payroll automation engine (HR-AUT-001).
+
+    The engine shares ONE request-scoped session with its payroll compute seam
+    so item claims, per-employee entries, totals and backend state commit
+    atomically per item. Config drives the retry budget and tick size.
+    """
+    from core.core.config import settings
+    from core.features.payroll_automation.repository import PostgresPayrollAutomationRepository
+    from core.features.payroll_automation.service import PayrollAutomationService
+
+    return PayrollAutomationService(
+        repository=PostgresPayrollAutomationRepository(db),
+        payroll=make_payroll_service(db, audit),
         audit=audit,
+        # Stable id so sequential /tick calls act as ONE worker: the claim owners
+        # a batch across ticks and only the same worker may resume it (the batch
+        # stays processing until every item is terminal). A fresh id per request
+        # would dead-lock a half-finished batch for hours.
+        worker_id="manual-tick",
+        max_retries=settings.PAYROLL_AUTO_MAX_RETRIES,
+        items_per_tick=settings.PAYROLL_AUTO_ITEMS_PER_TICK,
     )
 
 

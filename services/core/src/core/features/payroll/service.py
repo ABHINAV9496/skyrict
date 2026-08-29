@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
@@ -285,6 +286,32 @@ class PayrollService:
             await self._repo.list_runs(tenant_id, status=status, limit=limit, offset=offset)
         )
 
+    async def is_computable(self, run: ent.PayrollRun) -> bool:
+        """Whether a run may be (re)computed — draft/computed only.
+
+        Pure (no IO): mirrors the guard enforced by :meth:`compute_run`. The
+        batch engine calls this before enqueueing items for a run, so an
+        approved/paid/void run can never be claimed for processing.
+        """
+        return _RUN_MACHINE.can_transition(run.status.value, PayrollRunStatus.COMPUTED.value)
+
+    async def active_employees(
+        self, run_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> Sequence[ent.Employee]:
+        """Roster for a run's period — the one sanctioned cross-feature read.
+
+        Used by the batch engine to build the per-employee item list without
+        importing the HR feature.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        return await self._repo.list_active_employees(
+            tenant_id,
+            period_start=run.period_start,
+            period_end=run.period_end,
+        )
+
     async def compute_run(
         self,
         *,
@@ -452,6 +479,179 @@ class PayrollService:
                 tenant_id=tenant_id,
             )
         return ComputeResult(run=computed, entries=entries, skipped=skipped)
+
+    async def compute_single(
+        self,
+        *,
+        run_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        persist: bool = True,
+    ) -> tuple[ent.PayrollEntry | None, str | None]:
+        """Compute ONE roster employee's entry — the batch engine's checkpoint seam.
+
+        Mirrors exactly one iteration of :meth:`compute_run`'s roster loop,
+        including the Rule 4 annual accrual for that employee. The accrual takes
+        that employee's single balance-row lock (per item), which preserves the
+        single-row lock ordering contract with a concurrent approver and avoids
+        the aggregate lock-acquisition ordering a whole-roster compute needs.
+
+        Returns ``(entry, None)`` on success — a ``None`` entry means the
+        employee has no effective compensation or no payable days (nothing owed)
+        — or ``(None, reason)`` when the employee could not be computed. With
+        ``persist=False`` (dry-run) the entry is computed but never written.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        try:
+            _RUN_MACHINE.transition(run.status.value, PayrollRunStatus.COMPUTED.value)
+        except InvalidTransitionError:
+            raise IllegalStateTransitionError(
+                "only draft/computed runs can be (re)computed"
+            ) from None
+
+        settings = await self._repo.get_settings(tenant_id)
+        if settings is None:
+            raise ValueError(f"payroll settings missing for tenant {tenant_id}")
+
+        employees = await self._repo.list_active_employees(
+            tenant_id,
+            period_start=run.period_start,
+            period_end=run.period_end,
+        )
+        employee = next((e for e in employees if e.id == employee_id), None)
+        if employee is None:
+            return None, "employee not on the active roster for this period"
+        employee_id = _require_id(employee, "employee")
+
+        compensation = await self._repo.get_compensation(
+            employee_id,
+            tenant_id=tenant_id,
+            effective_for=run.period_end,
+        )
+        if compensation is None:
+            return None, "no effective compensation for this period"
+
+        # Rule 4 (docs §4.4): idempotent annual accrual for this employee only.
+        accrual_types = await self._leave_ledger.list_accrual_leave_types(tenant_id)
+        for leave_type in accrual_types:
+            await self._leave_ledger.accrue(
+                tenant_id=tenant_id,
+                employee_id=employee_id,
+                leave_type=leave_type,
+                year=run.period_start.year,
+            )
+
+        unpaid_days = await self._leave_ledger.approved_unpaid_days(
+            employee_id,
+            tenant_id=tenant_id,
+            period_start=run.period_start,
+            period_end=run.period_end,
+        )
+        days = PayrollCompute.pay_days(
+            period_start=run.period_start,
+            period_end=run.period_end,
+            hire_date=employee.hire_date,
+            termination_date=employee.termination_date,
+            unpaid_days=unpaid_days,
+        )
+        if days <= 0:
+            return None, "no payable days in this period"
+
+        existing = await self._repo.get_entry(run_id, employee_id, tenant_id=tenant_id)
+        adjustments = existing.adjustments if existing is not None else None
+        days_in_period = (run.period_end - run.period_start).days + 1
+        gross, deductions, net = PayrollCompute.compute_entry(
+            base_salary=compensation.monthly_salary,
+            pay_days=days,
+            days_in_period=days_in_period,
+            pf_rate=settings.pf_rate,
+            tax_rate=settings.tax_rate,
+            rounding=settings.rounding,
+            adjustments=adjustments,
+        )
+        entry = ent.PayrollEntry(
+            tenant_id=tenant_id,
+            run_id=run.id if run.id is not None else run_id,
+            employee_id=employee_id,
+            base_salary=compensation.monthly_salary,
+            pay_days=days,
+            gross=gross,
+            deductions=deductions,
+            net=net,
+            adjustments=adjustments,
+            id=existing.id if existing is not None else uuid.uuid4(),
+        )
+        if persist:
+            await self._repo.upsert_entries([entry], tenant_id=tenant_id)
+        return entry, None
+
+    async def finalize_compute(
+        self,
+        *,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None = None,
+        skipped: list[dict[str, str]] | None = None,
+    ) -> ent.PayrollRun:
+        """Close a batch-computed run — totals, transition, audit, event.
+
+        The batch engine persists entries item-by-item; once every item is
+        terminal this finalizes the run exactly like :meth:`compute_run`'s
+        tail: totals from the persisted entries, ``draft -> computed``
+        (recompute ``computed -> computed``), audit row + ``payroll.run.computed``
+        event.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        try:
+            _RUN_MACHINE.transition(run.status.value, PayrollRunStatus.COMPUTED.value)
+        except InvalidTransitionError:
+            raise IllegalStateTransitionError(
+                "only draft/computed runs can be (re)computed"
+            ) from None
+
+        settings = await self._repo.get_settings(tenant_id)
+        entries = await self._repo.list_entries(run_id, tenant_id=tenant_id)
+        if entries:
+            total_gross, total_net = PayrollCompute.compute_totals(entries)
+        else:
+            currency = settings.default_currency if settings is not None else "USD"
+            total_gross = Money(Decimal("0"), currency)
+            total_net = Money(Decimal("0"), currency)
+
+        computed = await self._repo.transition_run_status(
+            run_id,
+            run.status.value,
+            PayrollRunStatus.COMPUTED.value,
+            tenant_id=tenant_id,
+            computed_by=actor_user_id,
+            computed_at=datetime.now(UTC),
+            total_gross=total_gross,
+            total_net=total_net,
+            skipped_employees=skipped or [],
+        )
+        if computed is None:
+            raise IllegalStateTransitionError(f"run is not in {run.status.value} state") from None
+        await self._audit.log(
+            action=audit_events.PAYROLL_RUN_COMPUTED,
+            target=f"payroll_run:{run_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            details={"entry_count": len(entries), "skipped_count": len(skipped or [])},
+        )
+        if computed.id is not None:
+            await emit_run_computed(
+                run_id=run_id,
+                period_start=run.period_start.isoformat(),
+                period_end=run.period_end.isoformat(),
+                total_gross=str(total_gross.amount),
+                total_net=str(total_net.amount),
+                tenant_id=tenant_id,
+            )
+        return computed
 
     async def approve_run(
         self,

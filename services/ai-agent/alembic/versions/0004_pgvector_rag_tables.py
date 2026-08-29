@@ -148,7 +148,7 @@ def upgrade() -> None:
         # pgvector vector column — dimensions match the embedding model config.
         # Using 512 for Matryoshka-reduced text-embedding-3-small (3x storage
         # savings vs 1536d with ~2% quality drop, well within noise for ERP).
-        Vector(512),
+        sa.Column("embedding", Vector(512), nullable=False),
         sa.Column("module", sa.String(100), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("metadata", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'")),

@@ -105,10 +105,8 @@ def evaluate(
     }
     outcome = asyncio.run(run_eval(tenant=tenant, module=module, thresholds=thresholds))
     means = ", ".join(f"{name}={value:.4f}" for name, value in sorted(outcome.means.items()))
-    typer.echo(
-        f"RAGAS run {outcome.run_id}: {outcome.sample_count} sample(s) - {means} "
-        f"- {'PASS' if outcome.passed else 'FAIL: below threshold - ' + ', '.join(outcome.failures)}"
-    )
+    status = "PASS" if outcome.passed else f"FAIL: below threshold - {', '.join(outcome.failures)}"
+    typer.echo(f"RAGAS run {outcome.run_id}: {outcome.sample_count} sample(s) - {means} - {status}")
     if not outcome.passed:
         raise typer.Exit(1)
 

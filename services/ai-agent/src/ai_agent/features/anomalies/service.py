@@ -4,6 +4,14 @@
 the deterministic rule set, dedupes against OPEN anomalies of the same
 type, and persists new findings with audit events. ``review`` applies the
 open -> resolved | dismissed | escalated transitions.
+
+Admin notification (spec §4.3 "Email to admin (critical only)"): every
+critical detection and every escalated review dispatches an alert email
+through the injected :class:`EmailService`. Dispatch is gated by
+(1) addresses being configured, (2) the injected ``notify_enabled``
+predicate (per-tenant ``email_alerts_enabled``, evaluated by the router's
+composition root) and (3) severity == ``critical``. Delivery failures are
+logged, never raised — audit events stay the source of truth.
 """
 
 from __future__ import annotations
@@ -13,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from ai_agent.core.anomaly_email_templates import CriticalAnomalyAlert
 from ai_agent.core.audit_events import (
     AI_ANOMALY_DETECTED,
     AI_ANOMALY_DISMISSED,
@@ -27,8 +36,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from ai_agent.core.audit_service import AuditService
+    from ai_agent.core.email import EmailService
     from ai_agent.db.anomaly_repository import AnomalyRepository
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
+    from ai_agent.models.ai_anomaly import AiAnomalyModel
 
 logger = structlog.get_logger("ai_agent.anomaly_service")
 
@@ -55,10 +66,18 @@ class AnomalyService:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         anomalies: AnomalyRepository,
         audit: AuditService,
+        email: EmailService | None = None,
+        notify_addresses: tuple[str, ...] = (),
+        notify_enabled: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
+        review_base_url: str = "",
     ) -> None:
         self._gateway_factory = gateway_factory
         self._anomalies = anomalies
         self._audit = audit
+        self._email = email
+        self._notify_addresses = notify_addresses
+        self._notify_enabled = notify_enabled
+        self._review_base_url = review_base_url.rstrip("/")
 
     async def run_scan(self, *, tenant_id: uuid.UUID) -> DetectionReport:
         """Detect anomalies over recent movements; dedupe open repeats."""
@@ -96,6 +115,8 @@ class AnomalyService:
                 input_payload={"anomaly_type": finding.anomaly_type},
                 output_payload={"anomaly_id": str(row.id), "severity": finding.severity},
             )
+            if finding.severity == "critical":
+                await self._notify_critical(tenant_id=tenant_id, row=row)
             created += 1
 
         logger.info("anomaly_scan.completed", created=created, duplicates_skipped=skipped)
@@ -131,3 +152,30 @@ class AnomalyService:
             input_payload={"anomaly_id": str(anomaly_id)},
             output_payload={"decision": decision, "note": note},
         )
+        if decision == "escalated":
+            await self._notify_critical(tenant_id=tenant_id, row=row)
+
+    async def _notify_critical(self, *, tenant_id: uuid.UUID, row: AiAnomalyModel) -> None:
+        """Dispatch the admin alert for ONE critical anomaly (best-effort).
+
+        Failures are swallowed by the transport; this method never raises so
+        scans and reviews complete even when mail delivery is broken.
+        """
+        if self._email is None or not self._notify_addresses:
+            return
+        if self._notify_enabled is not None and not await self._notify_enabled(tenant_id):
+            return
+        review_url = f"{self._review_base_url}/{row.id}" if self._review_base_url else None
+        alert = CriticalAnomalyAlert(
+            to=", ".join(self._notify_addresses),
+            tenant_id=str(tenant_id),
+            anomaly_id=str(row.id),
+            anomaly_type=row.anomaly_type,
+            severity=row.severity,
+            title=row.title,
+            description=row.description,
+            status=row.status,
+            created_at=row.created_at.isoformat(),
+            review_url=review_url,
+        )
+        await self._email.send_critical_anomaly_alert(alert=alert)

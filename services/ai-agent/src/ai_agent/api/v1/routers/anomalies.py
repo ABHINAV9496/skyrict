@@ -22,9 +22,11 @@ from ai_agent.api.v1.schemas.anomalies import (
 )
 from ai_agent.core.audit_service import AuditService
 from ai_agent.core.config import settings
+from ai_agent.core.email import build_email_service
 from ai_agent.core.rate_limit import limiter
 from ai_agent.db.anomaly_repository import AnomalyRepository
 from ai_agent.db.audit_repository import AiAuditLogRepository
+from ai_agent.db.settings_repository import SettingsRepository
 from ai_agent.features.anomalies.service import AnomalyService
 from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
@@ -35,15 +37,44 @@ def get_anomaly_service(
     session: Annotated[AsyncSession, Depends(get_db)],
     gateway: Annotated[InventoryGatewayPort, Depends(get_inventory_gateway)],
 ) -> AnomalyService:
-    """Compose the anomaly stack for one request."""
+    """Compose the anomaly stack for one request.
+
+    The email transport and per-tenant alert gate are built here (composition
+    root) so the service layer stays free of DB and config concerns. No SMTP
+    relay and/or no configured recipients means no transport — scans stay
+    silent and skip the settings lookup entirely.
+    """
 
     async def gateway_factory() -> InventoryGatewayPort:
         return gateway
+
+    email = None
+    notify_addresses: tuple[str, ...] = ()
+    notify_enabled = None
+    if settings.anomaly_notify_emails:
+        email = build_email_service(
+            host=settings.EMAIL_SMTP_HOST,
+            port=settings.EMAIL_SMTP_PORT,
+            from_addr=settings.EMAIL_FROM_ADDR,
+            username=settings.EMAIL_SMTP_USERNAME,
+            password=settings.EMAIL_SMTP_PASSWORD,
+            use_tls=settings.EMAIL_SMTP_USE_TLS,
+        )
+        notify_addresses = tuple(settings.anomaly_notify_emails)
+        settings_repo = SettingsRepository(session)
+
+        async def notify_enabled(tenant_id: uuid.UUID) -> bool:
+            row = await settings_repo.get(tenant_id=tenant_id)
+            return row.email_alerts_enabled if row else False
 
     return AnomalyService(
         gateway_factory=gateway_factory,
         anomalies=AnomalyRepository(session),
         audit=AuditService(AiAuditLogRepository(session)),
+        email=email,
+        notify_addresses=notify_addresses,
+        notify_enabled=notify_enabled,
+        review_base_url=settings.ANOMALY_REVIEW_BASE_URL,
     )
 
 

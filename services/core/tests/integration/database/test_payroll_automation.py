@@ -44,6 +44,8 @@ from core.features.payroll_automation.service import (
     PayrollAutomationService,
     PermanentBatchItemError,
 )
+from core.models.core_role import CoreRoleModel
+from core.models.core_user_role import CoreUserRoleModel
 from core.models.tenant import TenantModel
 
 pytestmark = pytest.mark.integration
@@ -872,3 +874,438 @@ async def test_preflight_warnings_recorded_but_do_not_abort() -> None:
 
 
 __all__: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Commit 3 — notifications (payslip-ready + admin digest) and schedules (§5.8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def commit3_world(migrated_schema: None) -> dict[str, str]:
+    """Tenant with a DRAFT run, 3 employees (2 with identity links), one
+    payroll-admin role, and payroll settings — the Commit 3 integration stage."""
+
+    async def _setup() -> dict[str, str]:
+        tenant_id = str(uuid.uuid4())
+        run_id = str(uuid.uuid4())
+        batch_id = str(uuid.uuid4())
+        role_id = str(uuid.uuid4())
+        user_ids = {
+            "user_1": str(uuid.uuid4()),
+            "user_2": str(uuid.uuid4()),
+            "admin": str(uuid.uuid4()),
+        }
+        employee_ids: dict[str, str] = {}
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=uuid.UUID(tenant_id),
+                    name="Commit3 Tenant",
+                    slug=f"commit3-{tenant_id[:8]}",
+                    plan_tier="enterprise",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            session.add(
+                PayrollSettingsModel(
+                    tenant_id=uuid.UUID(tenant_id),
+                    default_currency="USD",
+                    pf_rate=0,
+                    tax_rate=0,
+                )
+            )
+            for key, number, linked_user in (
+                ("emp_1", "C3-0001", "user_1"),
+                ("emp_2", "C3-0002", "user_2"),
+                ("emp_3", "C3-0003", None),
+            ):
+                emp = EmployeeModel(
+                    tenant_id=uuid.UUID(tenant_id),
+                    id=uuid.uuid4(),
+                    employee_number=number,
+                    first_name=key,
+                    last_name="Seed",
+                    job_title="Engineer",
+                    hire_date=date(2025, 1, 1),
+                    user_id=(
+                        uuid.UUID(user_ids[linked_user]) if linked_user is not None else None
+                    ),
+                    bank_account="US1234567890",
+                    bank_name="Test Bank",
+                )
+                session.add(emp)
+                await session.flush()
+                employee_ids[key] = str(emp.id)
+            session.add(
+                PayrollRunModel(
+                    tenant_id=uuid.UUID(tenant_id),
+                    id=uuid.UUID(run_id),
+                    run_code="PR-C3-1",
+                    period_start=date(2026, 7, 1),
+                    period_end=date(2026, 7, 31),
+                    status=PayrollRunStatus.DRAFT,
+                )
+            )
+            session.add(
+                CoreRoleModel(
+                    tenant_id=uuid.UUID(tenant_id),
+                    id=uuid.UUID(role_id),
+                    name="Payroll Admin",
+                    permissions=["erp.payroll.ai.read", "erp.payroll.ai.run", "erp.payroll.ai.notify"],
+                )
+            )
+            session.add(
+                CoreUserRoleModel(
+                    tenant_id=uuid.UUID(tenant_id),
+                    id=uuid.uuid4(),
+                    user_id=uuid.UUID(user_ids["admin"]),
+                    role_id=uuid.UUID(role_id),
+                    scope_id=None,
+                )
+            )
+            await session.commit()
+            await engine.dispose()
+        return {
+            "tenant_id": tenant_id,
+            "run_id": run_id,
+            "batch_id": batch_id,
+            "employee_ids": employee_ids,
+            "user_ids": user_ids,
+        }
+
+    commit3_data = asyncio.run(_setup())
+
+    yield commit3_data
+
+    async def _teardown() -> None:
+        tid = uuid.UUID(commit3_data["tenant_id"])
+        async with async_session_factory() as session:
+            for table in (
+                "ai_payroll_notifications",
+                "ai_payroll_notification_prefs",
+                "ai_payroll_schedules",
+                "ai_payroll_batch_items",
+                "ai_payroll_batch_runs",
+                "core_user_roles",
+                "core_roles",
+                "erp_payroll_entries",
+                "erp_payroll_runs",
+                "erp_payroll_settings",
+                "erp_employees",
+            ):
+                await session.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
+                    {"tid": tid},
+                )
+            await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tid})
+            await session.commit()
+            await engine.dispose()
+
+    asyncio.run(_teardown())
+
+
+async def _seed_terminal_batch(
+    session: Any,
+    *,
+    world: dict[str, str],
+    status: str,
+    errors: dict[str, str] | None = None,
+) -> uuid.UUID:
+    """Create a terminal batch row with done/failed items for the world's
+    employees (bypassing the compute engine — notifications only need committed
+    items + a terminal batch)."""
+    repo = PostgresPayrollAutomationRepository(session)
+    batch = await repo.create_batch(
+        tenant_id=uuid.UUID(world["tenant_id"]),
+        source="payroll.run",
+        source_ref=str(uuid.uuid4()),
+        dry_run=False,
+        totals={},
+    )
+    employee_ids = [uuid.UUID(eid) for eid in world["employee_ids"].values()]
+    await repo.add_items(
+        batch_id=batch.id,
+        tenant_id=batch.tenant_id,
+        employee_ids=employee_ids,
+    )
+    await session.flush()
+    item_rows = (
+        await session.execute(
+            text(
+                "SELECT id, employee_id FROM ai_payroll_batch_items "
+                "WHERE tenant_id = :tid AND batch_id = :bid ORDER BY employee_id"
+            ),
+            {"tid": batch.tenant_id, "bid": batch.id},
+        )
+    ).all()
+    for i, (item_id, _employee_id) in enumerate(item_rows):
+        if status == BATCH_COMPLETED or not errors or i >= len(errors):
+            await repo.mark_item_done(item_id, tenant_id=batch.tenant_id)
+        else:
+            await repo.mark_item_failed(
+                item_id,
+                tenant_id=batch.tenant_id,
+                retry_count=2,
+                error_text=next(iter(errors.values())),
+            )
+    await session.flush()
+    return batch.id
+
+
+class TestCommit3Notifications:
+    async def test_payslip_ready_routes_by_linked_user_with_defaults_and_dedupe(
+        self, commit3_world: dict[str, str]
+    ) -> None:
+        from core.features.payroll_automation.domain import PayrollBatchRun
+        from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+        from core.features.payroll_automation.notifications_repository import (
+            PostgresPayrollNotificationRepository,
+        )
+
+        async with async_session_factory() as session:
+            batch_id = await _seed_terminal_batch(
+                session, world=commit3_world, status=BATCH_COMPLETED
+            )
+            # emp_2 opts into email delivery.
+            prefs = PostgresPayrollNotificationRepository(session)
+            await prefs.upsert_pref(
+                tenant_id=uuid.UUID(commit3_world["tenant_id"]),
+                user_id=uuid.UUID(commit3_world["user_ids"]["user_2"]),
+                in_app_on=True,
+                email_on=True,
+            )
+            await session.commit()
+
+            orch = PayrollNotificationOrchestrator(
+                PostgresPayrollNotificationRepository(session),
+                audit=make_core_audit_service(session),
+            )
+            batch = PayrollBatchRun(
+                id=batch_id,
+                tenant_id=uuid.UUID(commit3_world["tenant_id"]),
+                source="payroll.run",
+                source_ref=world_run_ref(commit3_world),
+                status="processing",
+                dry_run=False,
+            )
+            inserted = await orch.record_batch_notifications(
+                tenant_id=batch.tenant_id,
+                batch=batch,
+                status=BATCH_COMPLETED,
+                run_id=uuid.UUID(commit3_world["run_id"]),
+                totals={"total": 3, "done": 3, "failed": 0, "skipped": 0},
+            )
+            await session.commit()
+
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT recipient_user_id, event_type, in_app, email_stub, dedupe_key "
+                        "FROM ai_payroll_notifications WHERE tenant_id = :tid "
+                        "ORDER BY recipient_user_id, dedupe_key"
+                    ),
+                    {"tid": batch.tenant_id},
+                )
+            ).all()
+            by_recipient = {(row.recipient_user_id, row.event_type): row for row in rows}
+            user_1 = uuid.UUID(commit3_world["user_ids"]["user_1"])
+            user_2 = uuid.UUID(commit3_world["user_ids"]["user_2"])
+            admin = uuid.UUID(commit3_world["user_ids"]["admin"])
+            assert inserted == 3  # 2 payslip-ready (emp_3 has no user) + 1 digest
+
+            payslip_1 = by_recipient[(user_1, "payslip_ready")]
+            assert payslip_1.in_app is True and payslip_1.email_stub is False
+            payslip_2 = by_recipient[(user_2, "payslip_ready")]
+            assert payslip_2.in_app is True and payslip_2.email_stub is True
+            digest = by_recipient[(admin, "payroll_batch_digest")]
+            assert digest.event_type == "payroll_batch_digest"
+
+            # Re-running the orchestrator inserts nothing (the dedupe criterion).
+            again = await orch.record_batch_notifications(
+                tenant_id=batch.tenant_id,
+                batch=batch,
+                status=BATCH_COMPLETED,
+                run_id=uuid.UUID(commit3_world["run_id"]),
+                totals={"total": 3, "done": 3, "failed": 0, "skipped": 0},
+            )
+            await session.commit()
+            assert again == 0
+            count = (
+                await session.execute(
+                    text(
+                        "SELECT count(*) FROM ai_payroll_notifications WHERE tenant_id = :tid"
+                    ),
+                    {"tid": batch.tenant_id},
+                )
+            ).scalar_one()
+            assert count == 3
+
+    async def test_failed_batch_digests_admin_with_failure_list(self, commit3_world: dict[str, str]) -> None:
+        from core.features.payroll_automation.constants import BATCH_FAILED
+        from core.features.payroll_automation.domain import PayrollBatchRun
+        from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+        from core.features.payroll_automation.notifications_repository import (
+            PostgresPayrollNotificationRepository,
+        )
+
+        async with async_session_factory() as session:
+            batch_id = await _seed_terminal_batch(
+                session, world=commit3_world, status=BATCH_FAILED,
+                errors={"dummy": "tax rate missing for payroll entry"},
+            )
+            await session.commit()
+            orch = PayrollNotificationOrchestrator(
+                PostgresPayrollNotificationRepository(session),
+                audit=make_core_audit_service(session),
+            )
+            batch = PayrollBatchRun(
+                id=batch_id,
+                tenant_id=uuid.UUID(commit3_world["tenant_id"]),
+                source="payroll.run",
+                source_ref=world_run_ref(commit3_world),
+                status="processing",
+                dry_run=False,
+            )
+            await orch.record_batch_notifications(
+                tenant_id=batch.tenant_id,
+                batch=batch,
+                status=BATCH_FAILED,
+                run_id=uuid.UUID(commit3_world["run_id"]),
+                totals={"total": 3, "done": 2, "failed": 1, "skipped": 0},
+            )
+            await session.commit()
+
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT event_type, body FROM ai_payroll_notifications "
+                        "WHERE tenant_id = :tid AND recipient_user_id = :admin "
+                        "AND batch_id = :bid"
+                    ),
+                    {
+                        "tid": batch.tenant_id,
+                        "admin": uuid.UUID(commit3_world["user_ids"]["admin"]),
+                        "bid": batch_id,
+                    },
+                )
+            ).all()
+            assert len(rows) == 1
+            assert rows[0].event_type == "payroll_batch_digest"
+            assert "tax rate missing for payroll entry" in rows[0].body
+            # No payslip-ready rows for a failed batch (this batch, tenant-wide).
+            payslip_count = (
+                await session.execute(
+                    text(
+                        "SELECT count(*) FROM ai_payroll_notifications "
+                        "WHERE tenant_id = :tid AND event_type = 'payslip_ready' "
+                        "AND batch_id = :bid"
+                    ),
+                    {"tid": batch.tenant_id, "bid": batch_id},
+                )
+            ).scalar_one()
+            assert payslip_count == 0
+
+    async def test_preference_get_and_upsert(self, commit3_world: dict[str, str]) -> None:
+        from core.features.payroll_automation.notifications_repository import (
+            PostgresPayrollNotificationRepository,
+        )
+
+        async with async_session_factory() as session:
+            repo = PostgresPayrollNotificationRepository(session)
+            user_1 = uuid.UUID(commit3_world["user_ids"]["user_1"])
+            default = await repo.get_pref(uuid.UUID(commit3_world["tenant_id"]), user_1)
+            assert default.in_app_on is True and default.email_on is False
+
+            updated = await repo.upsert_pref(
+                tenant_id=uuid.UUID(commit3_world["tenant_id"]),
+                user_id=user_1,
+                in_app_on=False,
+                email_on=True,
+            )
+            await session.commit()
+            assert updated.in_app_on is False and updated.email_on is True
+            refetched = await repo.get_pref(uuid.UUID(commit3_world["tenant_id"]), user_1)
+            assert refetched.in_app_on is False and refetched.email_on is True
+
+
+class TestCommit3Scheduler:
+    async def test_due_schedule_creates_previous_month_run_and_enqueues(
+        self, commit3_world: dict[str, str]
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from core.features.payroll_automation.repository import PostgresPayrollAutomationRepository
+        from core.features.payroll_automation.schedules import PayrollSchedulerService
+        from core.features.payroll_automation.schedules_repository import (
+            PostgresPayrollScheduleRepository,
+        )
+
+        async with async_session_factory() as session:
+            tenant_id = uuid.UUID(commit3_world["tenant_id"])
+            schedule_repo = PostgresPayrollScheduleRepository(session)
+            schedule = await schedule_repo.create_schedule(
+                tenant_id=tenant_id,
+                name="Monthly",
+                cron_expression="0 18 1 * *",
+                enabled=True,
+                next_run_at=datetime(2026, 8, 1, 18, 0, tzinfo=UTC),
+            )
+            await session.commit()
+
+            payroll = make_payroll_service(session)
+            automation = PayrollAutomationService(
+                repository=PostgresPayrollAutomationRepository(session),
+                payroll=payroll,
+                audit=make_core_audit_service(session),
+                worker_id="it-scheduler",
+            )
+            scheduler = PayrollSchedulerService(
+                repository=schedule_repo,
+                payroll=payroll,
+                batches=automation,
+                audit=make_core_audit_service(session),
+            )
+            fired = await scheduler.run_due_schedules(
+                now=datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
+            )
+            await session.commit()
+
+            assert fired == 1
+            run = (
+                await session.execute(
+                    text(
+                        "SELECT id, period_start, period_end FROM erp_payroll_runs "
+                        "WHERE tenant_id = :tid ORDER BY created_at DESC LIMIT 1"
+                    ),
+                    {"tid": tenant_id},
+                )
+            ).one()
+            assert (run.period_start, run.period_end) == (date(2026, 7, 1), date(2026, 7, 31))
+            batch = (
+                await session.execute(
+                    text(
+                        "SELECT status FROM ai_payroll_batch_runs "
+                        "WHERE tenant_id = :tid AND source_ref = :run_id"
+                    ),
+                    {"tid": tenant_id, "run_id": str(run.id)},
+                )
+            ).scalar_one_or_none()
+            assert batch == "queued"
+
+            advanced = (
+                await session.execute(
+                    text(
+                        "SELECT next_run_at FROM ai_payroll_schedules "
+                        "WHERE tenant_id = :tid AND id = :sid"
+                    ),
+                    {"tid": tenant_id, "sid": schedule.id},
+                )
+            ).scalar_one()
+            assert advanced is not None
+            assert advanced.date() == date(2026, 9, 1)
+
+
+def world_run_ref(world: dict[str, str]) -> str:
+    return world["run_id"]

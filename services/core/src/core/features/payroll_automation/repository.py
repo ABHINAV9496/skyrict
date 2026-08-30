@@ -48,6 +48,7 @@ def _to_run(row: PayrollBatchRunModel) -> PayrollBatchRun:
         totals=row.totals,
         started_at=row.started_at,
         finished_at=row.finished_at,
+        created_at=row.created_at,
     )
 
 
@@ -105,6 +106,21 @@ class PostgresPayrollAutomationRepository:
             )
         ).scalar_one_or_none()
         return _to_run(row) if row is not None else None
+
+    async def list_batches(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PayrollBatchRun]:
+        stmt = sa.select(RunModel).where(RunModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(RunModel.status == status)
+        stmt = stmt.order_by(RunModel.created_at.desc(), RunModel.id).limit(limit).offset(offset)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_to_run(row) for row in rows]
 
     async def create_batch(
         self,

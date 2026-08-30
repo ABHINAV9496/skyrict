@@ -31,6 +31,15 @@ class PayrollAutomationRepositoryPort(Protocol):
         self, batch_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> PayrollBatchRun | None: ...
 
+    async def list_batches(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PayrollBatchRun]: ...
+
     async def create_batch(
         self,
         *,

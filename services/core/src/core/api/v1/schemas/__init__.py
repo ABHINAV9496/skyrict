@@ -36,8 +36,14 @@ from core.api.v1.schemas.payroll import (
 )
 from core.api.v1.schemas.payroll_automation import (
     PayrollBatchEnqueueRequest,
+    PayrollBatchListItem,
     PayrollBatchOut,
     PayrollBatchTickOut,
+    PayrollNotificationOut,
+    PayrollPreferencesIn,
+    PayrollPreferencesOut,
+    PayrollScheduleIn,
+    PayrollScheduleOut,
 )
 
 __all__ = [
@@ -64,11 +70,17 @@ __all__ = [
     "LeaveRequestRejectBody",
     "MoneyOut",
     "PayrollBatchEnqueueRequest",
+    "PayrollBatchListItem",
     "PayrollBatchOut",
     "PayrollBatchTickOut",
     "PayrollEntryOut",
+    "PayrollNotificationOut",
+    "PayrollPreferencesIn",
+    "PayrollPreferencesOut",
     "PayrollRunCreate",
     "PayrollRunOut",
+    "PayrollScheduleIn",
+    "PayrollScheduleOut",
     "PayrollSettingsIn",
     "PayrollSettingsOut",
     "RunComputeOut",

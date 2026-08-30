@@ -8,6 +8,15 @@ constraints.
 
 from __future__ import annotations
 
+# --- Notification event types (Commit 3) ---
+EVENT_PAYSLIP_READY = "payslip_ready"
+EVENT_PAYROLL_BATCH_DIGEST = "payroll_batch_digest"
+
+# Default delivery preference when NO ``ai_payroll_notification_prefs`` row
+# exists: in-app ON, email OFF. Routing honors the row when present.
+DEFAULT_IN_APP_ON = True
+DEFAULT_EMAIL_ON = False
+
 # --- Batch run lifecycle ---
 BATCH_QUEUED = "queued"
 BATCH_PROCESSING = "processing"
@@ -31,6 +40,10 @@ __all__ = [
     "BATCH_FAILED",
     "BATCH_PROCESSING",
     "BATCH_QUEUED",
+    "DEFAULT_EMAIL_ON",
+    "DEFAULT_IN_APP_ON",
+    "EVENT_PAYROLL_BATCH_DIGEST",
+    "EVENT_PAYSLIP_READY",
     "ITEM_DONE",
     "ITEM_FAILED",
     "ITEM_PENDING",

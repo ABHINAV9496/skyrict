@@ -41,6 +41,7 @@ from core.features.payroll_automation.constants import (
     SOURCE_PAYROLL_RUN,
 )
 from core.features.payroll_automation.domain import PayrollBatchRun
+from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
 from core.features.payroll_automation.ports import PayrollAutomationRepositoryPort
 from core.features.payroll_automation.preflight import run_preflight
 
@@ -92,6 +93,28 @@ class PayrollComputePort(Protocol):
         skipped: list[dict[str, str]] | None = None,
     ) -> ent.PayrollRun: ...
 
+    async def find_overlapping_run(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        period_start: date,
+        period_end: date,
+    ) -> ent.PayrollRun | None:
+        """Rule 10 overlap probe (the scheduler reuses an exact-period run)."""
+        ...
+
+    async def create_run(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        period_start: date,
+        period_end: date,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.PayrollRun:
+        """Create a run for the next scheduled period (raises
+        :class:`PayrollPeriodConflictError` on any overlap)."""
+        ...
+
 
 @dataclass(frozen=True)
 class EnqueueResult:
@@ -131,6 +154,7 @@ class PayrollAutomationService:
         payroll: PayrollComputePort,
         audit: AuditService,
         *,
+        notifier: PayrollNotificationOrchestrator | None = None,
         worker_id: str | None = None,
         max_retries: int = 2,
         items_per_tick: int = 10,
@@ -138,6 +162,7 @@ class PayrollAutomationService:
         self._repo = repository
         self._payroll = payroll
         self._audit = audit
+        self._notifier = notifier
         self._worker_id = worker_id or f"worker-{uuid.uuid4().hex[:12]}"
         self._max_retries = max_retries
         self._items_per_tick = items_per_tick
@@ -355,7 +380,7 @@ class PayrollAutomationService:
                 max_retries=self._max_retries,
             )
             if claimable == 0:
-                await self._finalize_batch(
+                status = await self._finalize_batch(
                     tenant_id=tenant_id,
                     batch=batch,
                     run_id=run_id,
@@ -365,6 +390,13 @@ class PayrollAutomationService:
                 )
                 status_changed = True
                 await self.commit()
+                await self._notify_terminal_batch(
+                    tenant_id=tenant_id,
+                    batch=batch,
+                    status=status,
+                    run_id=run_id,
+                    totals=totals,
+                )
         finally:
             TenantContext.reset()
         return ProcessResult(
@@ -454,7 +486,7 @@ class PayrollAutomationService:
         totals: dict[str, object],
         skipped: list[dict[str, str]],
         actor_user_id: uuid.UUID | None,
-    ) -> None:
+    ) -> str:
         """Close a batch whose items are all terminal.
 
         For a real (non-dry-run) payroll batch the run itself is finalized via
@@ -462,6 +494,8 @@ class PayrollAutomationService:
         audit, event); a dry-run batch only closes (no run transition). If the
         run transition is refused the batch closes ``failed`` so the outcome is
         explicit.
+
+        Returns the final batch status (``completed`` / ``failed``).
         """
         try:
             if run_id is not None and not batch.dry_run:
@@ -483,6 +517,36 @@ class PayrollAutomationService:
             totals=dict(totals),
             finished_at=datetime.now(UTC),
         )
+        return status
+
+    async def _notify_terminal_batch(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        batch: PayrollBatchRun,
+        status: str,
+        run_id: uuid.UUID | None,
+        totals: dict[str, object],
+    ) -> None:
+        """Post-commit notification fan-out (payslip-ready + admin digest).
+
+        Runs after the finalize commit so the mail-out only happens once per
+        terminal batch; a failure here must never fail the processing tick.
+        """
+        if self._notifier is None:
+            return
+        try:
+            await self._notifier.record_batch_notifications(
+                tenant_id=tenant_id,
+                batch=batch,
+                status=status,
+                run_id=run_id,
+                totals=totals,
+            )
+            await self.commit()
+        except Exception as exc:
+            logger.warning("notification fan-out failed for batch %s: %s", batch.id, exc)
+            await self.rollback()
 
     async def batch_status(self, batch_id: uuid.UUID, *, tenant_id: uuid.UUID) -> dict[str, object]:
         """Public projection of a batch for the status endpoint."""
@@ -502,6 +566,37 @@ class PayrollAutomationService:
             "started_at": batch.started_at.isoformat() if batch.started_at else None,
             "finished_at": batch.finished_at.isoformat() if batch.finished_at else None,
         }
+
+    async def list_batches(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, object]]:
+        """Recent batches for the calendar/queue view."""
+        batches = await self._repo.list_batches(
+            tenant_id=tenant_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        return [
+            {
+                "batch_id": str(batch.id),
+                "tenant_id": str(batch.tenant_id),
+                "source": batch.source,
+                "source_ref": batch.source_ref,
+                "status": batch.status,
+                "dry_run": batch.dry_run,
+                "totals": batch.totals or {},
+                "created_at": batch.created_at.isoformat() if batch.created_at else None,
+                "started_at": batch.started_at.isoformat() if batch.started_at else None,
+                "finished_at": batch.finished_at.isoformat() if batch.finished_at else None,
+            }
+            for batch in batches
+        ]
 
     # ------------------------------------------------------------------
     # Session plumbing (aligned with AuditService.persist / PayrollService)

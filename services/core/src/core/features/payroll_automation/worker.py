@@ -104,8 +104,24 @@ class PayrollAutomationWorker:
 
     async def _tick(self) -> TickOutcome:
         async with self._session_factory() as session:
+            from core.api.deps import make_core_audit_service, make_payroll_service
+
             service = self._build_service(session)
             try:
+                # Recurring submissions (§5.8) are checked before batch work so
+                # a newly-fired schedule's batch is eligible on later ticks.
+                from core.features.payroll_automation.schedules import PayrollSchedulerService
+                from core.features.payroll_automation.schedules_repository import (
+                    PostgresPayrollScheduleRepository,
+                )
+
+                scheduler = PayrollSchedulerService(
+                    repository=PostgresPayrollScheduleRepository(session),
+                    payroll=make_payroll_service(session),
+                    batches=service,
+                    audit=make_core_audit_service(session),
+                )
+                await scheduler.run_due_schedules()
                 result = await service.process_once(worker_id=self._worker_id)
             except Exception:
                 await session.rollback()
@@ -118,11 +134,19 @@ class PayrollAutomationWorker:
 
     def _build_service(self, session: AsyncSession) -> PayrollAutomationService:
         from core.api.deps import make_core_audit_service, make_payroll_service
+        from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+        from core.features.payroll_automation.notifications_repository import (
+            PostgresPayrollNotificationRepository,
+        )
 
         return PayrollAutomationService(
             repository=PostgresPayrollAutomationRepository(session),
             payroll=make_payroll_service(session),
             audit=make_core_audit_service(session),
+            notifier=PayrollNotificationOrchestrator(
+                repository=PostgresPayrollNotificationRepository(session),
+                audit=make_core_audit_service(session),
+            ),
             worker_id=self._worker_id,
             max_retries=self._max_retries,
             items_per_tick=self._items_per_tick,

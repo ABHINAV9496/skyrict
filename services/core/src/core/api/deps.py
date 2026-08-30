@@ -332,6 +332,10 @@ def get_payroll_automation_service(
     atomically per item. Config drives the retry budget and tick size.
     """
     from core.core.config import settings
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
     from core.features.payroll_automation.repository import PostgresPayrollAutomationRepository
     from core.features.payroll_automation.service import PayrollAutomationService
 
@@ -339,6 +343,12 @@ def get_payroll_automation_service(
         repository=PostgresPayrollAutomationRepository(db),
         payroll=make_payroll_service(db, audit),
         audit=audit,
+        # Post-commit fan-out: payslip-ready + admin digest (Commit 3). Runs in
+        # the SAME request-scoped session as the finalize commit.
+        notifier=PayrollNotificationOrchestrator(
+            repository=PostgresPayrollNotificationRepository(db),
+            audit=audit,
+        ),
         # Stable id so sequential /tick calls act as ONE worker: the claim owners
         # a batch across ticks and only the same worker may resume it (the batch
         # stays processing until every item is terminal). A fresh id per request
@@ -346,6 +356,41 @@ def get_payroll_automation_service(
         worker_id="manual-tick",
         max_retries=settings.PAYROLL_AUTO_MAX_RETRIES,
         items_per_tick=settings.PAYROLL_AUTO_ITEMS_PER_TICK,
+    )
+
+
+def get_payroll_notification_orchestrator(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> object:
+    """Composition root for the notification orchestrator + inbox/pref reads."""
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
+
+    return PayrollNotificationOrchestrator(
+        repository=PostgresPayrollNotificationRepository(db),
+        audit=audit,
+    )
+
+
+def get_payroll_scheduler_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> object:
+    """Composition root for payroll schedules (HR-AUT-001 §5.8)."""
+    from core.features.payroll_automation.schedules import PayrollSchedulerService
+    from core.features.payroll_automation.schedules_repository import (
+        PostgresPayrollScheduleRepository,
+    )
+
+    batches = get_payroll_automation_service(db, audit)
+    return PayrollSchedulerService(
+        repository=PostgresPayrollScheduleRepository(db),
+        payroll=make_payroll_service(db, audit),
+        batches=batches,
+        audit=audit,
     )
 
 

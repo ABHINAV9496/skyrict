@@ -103,6 +103,10 @@ _HR_AI_TABLES = (
     # 0027: benefit plans + elections (HR-AUT-001, pre-flight finish-up).
     "erp_benefit_plans",
     "erp_benefit_elections",
+    # 0028: payroll notifications + schedules (HR-AUT-001, Commit 3).
+    "ai_payroll_notifications",
+    "ai_payroll_notification_prefs",
+    "ai_payroll_schedules",
 )
 
 
@@ -168,7 +172,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0027", f"head is {version}, expected 0027"
+            assert version == "0028", f"head is {version}, expected 0028"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -475,6 +479,95 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).scalar_one()
             assert election_status_check == 1, "0027 must add the election status check constraint"
+
+            # 0028: notifications + schedules — tables, dedupe constraint, checks.
+            notif_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_notifications' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "recipient_user_id",
+                "event_type",
+                "dedupe_key",
+                "in_app",
+                "email_stub",
+                "subject",
+                "body",
+                "batch_id",
+                "run_id",
+                "employee_id",
+                "created_at",
+            }.issubset(set(notif_cols)), notif_cols
+            notif_dedupe = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.ai_payroll_notifications'::regclass "
+                        "AND conname = 'uq_ai_payroll_notifications_dedupe'"
+                    )
+                )
+            ).scalar_one()
+            assert notif_dedupe == 1, "0028 must add the notification dedupe constraint"
+
+            pref_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_notification_prefs' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "user_id",
+                "in_app_on",
+                "email_on",
+                "updated_at",
+            }.issubset(set(pref_cols)), pref_cols
+
+            schedule_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_schedules' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "name",
+                "cron_expression",
+                "enabled",
+                "last_fired_at",
+                "next_run_at",
+                "created_at",
+                "updated_at",
+            }.issubset(set(schedule_cols)), schedule_cols
     finally:
         await engine.dispose()
 

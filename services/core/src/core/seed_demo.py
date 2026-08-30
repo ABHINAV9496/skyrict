@@ -2416,6 +2416,41 @@ async def seed_demo_data(
             )
         counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS) + len(opening_rows)
 
+        # ── PAYROLL AUTOMATION (HR-AUT-001) ───────────────────────────
+        # One monthly schedule (fires on the 1st at 18:00 UTC, submitting the
+        # previous fully-elapsed month) plus an email opt-in for the tenant
+        # owner so the demo exercises the notification-preference path.
+        from core.features.payroll_automation.cron import parse_cron as _parse_cron
+        from core.features.payroll_automation.models import (
+            PayrollNotificationPrefModel,
+            PayrollScheduleModel,
+        )
+
+        _demo_schedule_cron = "0 18 1 * *"
+        session.add(
+            PayrollScheduleModel(
+                tenant_id=tenant_id,
+                name="Monthly payroll",
+                cron_expression=_demo_schedule_cron,
+                enabled=True,
+                next_run_at=_parse_cron(_demo_schedule_cron).next_match_after(
+                    datetime.now(UTC)
+                ),
+            )
+        )
+        counts["payroll_schedules"] = 1
+        counts["notification_prefs"] = 0
+        if owner_id is not None:
+            session.add(
+                PayrollNotificationPrefModel(
+                    tenant_id=tenant_id,
+                    user_id=owner_id,
+                    in_app_on=True,
+                    email_on=True,
+                )
+            )
+            counts["notification_prefs"] = 1
+
         await session.commit()
         logger.info("seed.demo.complete", tenant_id=str(tenant_id), **counts)
         return counts

@@ -96,6 +96,9 @@ services:
       # is the service name, not localhost. These override the host-oriented
       # defaults in services/core/.env.
       CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
+      # Reach the ai-agent container on the compose network for the /api/v1/ai/*
+      # proxy and the post-commit embedding sync dispatch (SKY-70).
+      CORE_AI_AGENT_URL: http://skyrict-ai-agent:8000
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../services/core/alembic:/app/services/core/alembic

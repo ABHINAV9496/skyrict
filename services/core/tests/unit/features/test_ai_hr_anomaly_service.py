@@ -73,9 +73,18 @@ def test_team_size_gate_abstains_for_three_members() -> None:
 def test_team_size_gate_passes_for_four_members() -> None:
     from core.features.ai_hr.anomaly_repository import AiHrAnomalyRepository
 
-    requests = {E1: [_sig(30)], E2: [_sig(2)], E3: [_sig(2)], E4: [_sig(2)]}
+    # Pin a fixed reference day: E1's 30-day block runs today..today+29, and
+    # date.today() could put that span's end on a Monday/Friday, which would
+    # add a short_notice_monday_friday finding (2026-08-12 = Wed, +29 = Thu).
+    today = date(2026, 8, 12)
+    requests = {
+        E1: [_sig(30, today, filed_on=today)],
+        E2: [_sig(2, today - timedelta(days=1))],
+        E3: [_sig(2, today - timedelta(days=2))],
+        E4: [_sig(2, today - timedelta(days=3))],
+    }
     rows = AiHrAnomalyRepository._compute(  # type: ignore[arg-type]
-        _members([E1, E2, E3, E4]), requests, today=TODAY
+        _members([E1, E2, E3, E4]), requests, today=today
     )
     assert len(rows) == 1
     assert rows[0].anomaly_type == "leave_overuse"

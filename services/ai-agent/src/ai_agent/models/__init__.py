@@ -16,6 +16,7 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_episodic_memory import AiEpisodicMemoryModel
 from ai_agent.models.ai_eval_run import AiEvalRunModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
@@ -33,6 +34,7 @@ __all__ = [
     "AiAnomalyModel",
     "AiAnomalyRuleStatsModel",
     "AiAuditLogModel",
+    "AiDigestModel",
     "AiEpisodicMemoryModel",
     "AiEvalRunModel",
     "AiQueryCacheModel",

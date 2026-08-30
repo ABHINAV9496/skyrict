@@ -63,6 +63,8 @@ _AI_TABLES = (
     "ai_episodic_memory",
     "ai_query_cache",
     "ai_eval_runs",
+    # SKY-63 cached cross-module narrator digests (migration 0007)
+    "ai_digest_snapshots",
 )
 _TENANT_SCOPED_TABLES = (
     "ai_query_log",
@@ -88,6 +90,8 @@ _TENANT_FK_TABLES = (
     "ai_rag_chunks",
     "ai_episodic_memory",
     "ai_query_cache",
+    # SKY-63 narrator digest snapshots are tenant-scoped (migration 0007)
+    "ai_digest_snapshots",
 )
 
 _EXPECTED_CHECKS = {
@@ -348,7 +352,7 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0006"
+            assert artifacts["version"] == "0007"
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from core.domain.entities import (
+        ArAging,
         BalanceSheet,
         ChartOfAccount,
         FiscalPeriod,
@@ -212,6 +213,8 @@ class FinanceRepositoryPort(Protocol):
     ) -> ProfitAndLoss: ...
 
     async def balance_sheet(self, tenant_id: uuid.UUID, as_of: date) -> BalanceSheet: ...
+
+    async def ar_aging(self, tenant_id: uuid.UUID, as_of: date) -> ArAging: ...
 
 
 # ---------------------------------------------------------------------------

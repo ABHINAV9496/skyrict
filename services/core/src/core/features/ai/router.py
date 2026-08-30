@@ -23,12 +23,16 @@ import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from core.api.deps import require_permission
+from core.api.deps import require_all_permissions, require_permission
 from core.core.permissions import (
     ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
+    ERP_CRM_READ,
+    ERP_FINANCE_READ,
     ERP_INVENTORY_AI_APPROVE,
     ERP_INVENTORY_READ,
     ERP_INVENTORY_WRITE,
+    ERP_SALES_READ,
 )
 from core.core.tenant_resolver import derive_tenant_slug
 from core.features.ai.proxy import forward_to_ai_agent, relay_response
@@ -46,6 +50,24 @@ _InvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
 _ReadDep = Annotated[dict[str, Any], Depends(_require_inventory_read)]
 _WriteDep = Annotated[dict[str, Any], Depends(_require_inventory_write)]
 _AIApproveDep = Annotated[dict[str, Any], Depends(_require_inventory_ai_approve)]
+
+# --- Cross-module narrator (SKY-63) strict matrix ---------------------------
+# The digest spans all four ERP domains, so a caller must hold erp.ai.invoke
+# AND every module read. Force-refresh additionally needs erp.ai.narrator.refresh.
+_NARRATOR_READS = (
+    ERP_AI_INVOKE,
+    ERP_FINANCE_READ,
+    ERP_SALES_READ,
+    ERP_INVENTORY_READ,
+    ERP_CRM_READ,
+)
+
+
+_require_narrator_reads = require_all_permissions(*_NARRATOR_READS)
+_require_narrator_refresh = require_all_permissions(*_NARRATOR_READS, ERP_AI_NARRATOR_REFRESH)
+
+_NarratorDep = Annotated[dict[str, Any], Depends(_require_narrator_reads)]
+_NarratorRefreshDep = Annotated[dict[str, Any], Depends(_require_narrator_refresh)]
 
 
 def get_ai_client(request: Request) -> httpx.AsyncClient:
@@ -138,7 +160,7 @@ async def proxy_approve_suggestion(
     _approve: _AIApproveDep,
     client: _ClientDep,
 ) -> Response:
-    """Approve one pending suggestion (spec 3.4 human-in-the-loop)."""
+    """Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
     return await _proxy(request, client, f"/api/v1/ai/suggestions/{suggestion_id}/approve")
 
 
@@ -213,6 +235,33 @@ async def proxy_escalate_anomaly(
 ) -> Response:
     """Escalate an anomaly to admin attention."""
     return await _proxy(request, client, f"/api/v1/ai/anomalies/{anomaly_id}/escalate")
+
+
+# --- Cross-module intelligence narrator (SKY-63) -----------------------------
+
+# The narrator gate needs the request-scoped session (its own dependency),
+# so these routes use the client directly rather than the shared _InvokeDep
+# set — the combined narrator deps already enforce invoke + all module reads.
+
+
+@router.get("/narrator/digest")
+async def proxy_narrator_digest(
+    request: Request,
+    _narrator: _NarratorDep,
+    client: _ClientDep,
+) -> Response:
+    """Daily executive digest -> ai-agent /api/v1/ai/narrator/digest."""
+    return await _proxy(request, client, "/api/v1/ai/narrator/digest")
+
+
+@router.post("/narrator/digest/refresh")
+async def proxy_narrator_refresh(
+    request: Request,
+    _narrator_refresh: _NarratorRefreshDep,
+    client: _ClientDep,
+) -> Response:
+    """Force-recompute today's digest -> ai-agent /api/v1/ai/narrator/digest/refresh."""
+    return await _proxy(request, client, "/api/v1/ai/narrator/digest/refresh")
 
 
 # --- Demand forecasting (feature 4) ------------------------------------------

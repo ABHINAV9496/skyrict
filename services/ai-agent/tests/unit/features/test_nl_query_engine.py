@@ -232,5 +232,8 @@ class TestRecentMovements:
 
         assert result.data is not None
         assert result.data["movement_count"] == 1
+        # The 30-day-old movement is filtered; assert on its rendered date (a
+        # bare "-30" substring would false-positive on days "2026-XX-30").
+        assert (now - timedelta(days=30)).strftime("%Y-%m-%d") not in result.answer
         assert "receipt: 10" in result.answer
         assert "receipt: -30" not in result.answer

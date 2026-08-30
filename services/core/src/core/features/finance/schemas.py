@@ -237,3 +237,20 @@ class BalanceSheetResponse(BaseModel):
     total_assets: Decimal
     total_liabilities: Decimal
     total_equity: Decimal
+
+
+class ArAgingBucketResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    bucket: str
+    count: int
+    amount: Decimal
+    share: Decimal
+
+
+class ArAgingResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    as_of: date
+    total_ar: Decimal
+    buckets: list[ArAgingBucketResponse]

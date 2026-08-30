@@ -648,6 +648,32 @@ class BalanceSheet:
     total_equity: Decimal
 
 
+@dataclass(frozen=True)
+class ArAgingBucket:
+    """One aging window of outstanding accounts receivable.
+
+    ``bucket`` is one of ``current | 1_30 | 31_60 | 61_90 | over_90``; ``share``
+    is the bucket's proportion of ``total_ar`` (0..1). Outstanding is derived
+    from issued/approved (unpaid) invoices — fixed accounting columns do not
+    track recoverability, so aging is a read-side derivation like the other
+    reports.
+    """
+
+    bucket: str
+    count: int
+    amount: Decimal
+    share: Decimal
+
+
+@dataclass(frozen=True)
+class ArAging:
+    """Accounts-receivable aging read-model (derived from invoices, never stored)."""
+
+    as_of: date
+    total_ar: Decimal
+    buckets: tuple[ArAgingBucket, ...]
+
+
 # ---------------------------------------------------------------------------
 # CRM entities (leads, opportunities, customers) — CRM-DATA-001
 # ---------------------------------------------------------------------------

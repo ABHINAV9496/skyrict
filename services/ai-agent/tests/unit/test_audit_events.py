@@ -15,6 +15,8 @@ from ai_agent.core.audit_events import (
     AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
     AI_HR_COPILOT_EXCHANGE,
+    AI_NARRATOR_GENERATED,
+    AI_NARRATOR_REFRESHED,
     AI_QUERY_EXECUTED,
     AI_SUGGESTION_APPROVED,
     AI_SUGGESTION_CREATED,
@@ -37,6 +39,9 @@ class TestAppendixBVocabulary:
         assert AI_ANOMALY_ESCALATED == "ai.anomaly.escalated"
         # HR-AI-001 feature 5 (spec §9).
         assert AI_HR_COPILOT_EXCHANGE == "ai.hr.copilot.exchange"
+        # SKY-63 cross-module narrator events.
+        assert AI_NARRATOR_GENERATED == "ai.narrator.generated"
+        assert AI_NARRATOR_REFRESHED == "ai.narrator.refreshed"
 
     def test_all_events_covers_exactly_the_documented_constants(self) -> None:
         expected = {
@@ -49,6 +54,8 @@ class TestAppendixBVocabulary:
             audit_events.AI_ANOMALY_DISMISSED,
             audit_events.AI_ANOMALY_ESCALATED,
             audit_events.AI_HR_COPILOT_EXCHANGE,
+            audit_events.AI_NARRATOR_GENERATED,
+            audit_events.AI_NARRATOR_REFRESHED,
         }
         assert set(ALL_AI_AUDIT_EVENTS) == expected
 

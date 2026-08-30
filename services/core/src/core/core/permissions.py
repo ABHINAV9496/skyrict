@@ -66,6 +66,11 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # ai-agent microservice - permissionless calls never reach the AI service.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Cross-module intelligence narrator (SKY-63): force-refresh gate on the
+# /api/v1/ai/narrator/digest/refresh proxy. Only lets an operator recompute
+# the daily digest out of turn; plain reads need the strict narrator matrix.
+ERP_AI_NARRATOR_REFRESH = "erp.ai.narrator.refresh"
+
 # HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
 # Checked at the core edge for /api/v1/ai/hr/*. Same strings as identity's
 # catalog so role grants stay portable across the platform.
@@ -107,6 +112,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
     ERP_HR_AI_READ,
     ERP_HR_AI_INDIVIDUAL,
     ERP_HR_AI_ACKNOWLEDGE,
@@ -114,7 +120,6 @@ CATALOG: tuple[str, ...] = (
     ERP_HR_AI_EVAL,
     ERP_LEAVE_SELF,
 )
-
 # Permission module groupings.
 # Each entry: (module_key, module_label, (permission_keys, ...))
 PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -136,7 +141,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
-    ("ai", "AI assistant", (ERP_AI_INVOKE,)),
+    ("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     (
         "hr_ai",
         "HR & Payroll AI",
@@ -172,6 +177,7 @@ _assert_catalog_union()
 __all__ = [
     "CATALOG",
     "ERP_AI_INVOKE",
+    "ERP_AI_NARRATOR_REFRESH",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_APPROVE",

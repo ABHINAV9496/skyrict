@@ -2,7 +2,8 @@
 
 These pin the schema contract at the SQLAlchemy metadata level: table names,
 composite PK shape, money precision, CHECK constraints, the partial unique
-pending index, insert-only tables, and the global agent registry.
+pending index, insert-only tables, the global agent registry, and the
+INV-AI-002 predictive tables.
 """
 
 from __future__ import annotations
@@ -10,10 +11,13 @@ from __future__ import annotations
 import ai_agent.models  # noqa: F401  # registers every model on Base.metadata
 from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
+from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
 from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
+from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
+from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base
 
@@ -30,6 +34,10 @@ class TestRegistry:
             "ai_audit_log",
             "ai_digest_snapshots",
             "agent_registry",
+            # INV-AI-002 predictive tables
+            "ai_restock_settings",
+            "ai_restock_demand_stats",
+            "ai_anomaly_rule_stats",
             # RAG tables (SKY-58)
             "ai_rag_parents",
             "ai_rag_chunks",
@@ -182,3 +190,57 @@ class TestAgentRegistry:
     def test_enabled_defaults_to_true(self) -> None:
         default = AgentRegistryModel.__table__.c.enabled.server_default.arg
         assert str(default).lower() == "true"
+
+
+class TestAiRestockSettings:
+    def test_single_column_tenant_pk(self) -> None:
+        pk = list(AiRestockSettingsModel.__table__.primary_key.columns.keys())
+        assert pk == ["tenant_id"]
+
+    def test_defaults_are_conservative(self) -> None:
+        cols = AiRestockSettingsModel.__table__.c
+        assert str(cols.lead_time_days.server_default.arg) == "7"
+        assert str(cols.safety_factor.server_default.arg) == "1"
+        assert str(cols.v2_enabled.server_default.arg).lower() == "false"
+
+    def test_check_constraints_present(self) -> None:
+        names = {
+            constraint.name
+            for constraint in AiRestockSettingsModel.__table__.constraints
+            if constraint.name is not None and str(constraint.name).startswith("ck_")
+        }
+        assert {
+            "ck_ai_restock_settings_lead_time_positive",
+            "ck_ai_restock_settings_safety_factor_positive",
+            "ck_ai_restock_settings_sensitivity_range",
+            "ck_ai_restock_settings_fp_threshold_range",
+        } <= names
+
+
+class TestAiRestockDemandStats:
+    def test_composite_pk(self) -> None:
+        pk = list(AiRestockDemandStatsModel.__table__.primary_key.columns.keys())
+        assert pk == ["tenant_id", "product_id", "warehouse_id"]
+
+    def test_eligible_lookup_index_exists(self) -> None:
+        index = next(
+            index
+            for index in AiRestockDemandStatsModel.__table__.indexes
+            if index.name == "idx_ai_restock_demand_stats_eligible"
+        )
+        assert not index.unique
+        assert [str(c.name) for c in index.expressions] == ["tenant_id", "eligible"]
+
+
+class TestAiAnomalyRuleStats:
+    def test_composite_pk(self) -> None:
+        pk = list(AiAnomalyRuleStatsModel.__table__.primary_key.columns.keys())
+        assert pk == ["tenant_id", "anomaly_type"]
+
+    def test_counters_cannot_be_negative(self) -> None:
+        names = {
+            constraint.name
+            for constraint in AiAnomalyRuleStatsModel.__table__.constraints
+            if constraint.name is not None and str(constraint.name).startswith("ck_")
+        }
+        assert "ck_ai_anomaly_rule_stats_counts_non_negative" in names

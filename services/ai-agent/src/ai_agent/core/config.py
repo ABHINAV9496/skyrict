@@ -287,6 +287,59 @@ class Settings(BaseSettings):
     )
     NARRATOR_DAILY_MINUTE: int = Field(
         default=0, ge=0, le=59, description="minute of hour for the daily narrator digest"
+    # --- Email delivery (SMTP) for critical anomaly alerts (spec §4.3) ---
+    EMAIL_SMTP_HOST: str = Field(
+        default="",
+        description=(
+            "SMTP relay host for critical-anomaly alerts. Empty selects the "
+            "log-only transport (dev/test default). Dev: 'mailhog' or "
+            "'localhost' for the MailHog container. Mirrors identity's SMTP "
+            "block so compose can share one relay."
+        ),
+    )
+    EMAIL_SMTP_PORT: int = Field(default=1025, description="SMTP relay port")
+    EMAIL_SMTP_USERNAME: str = Field(
+        default="", description="SMTP auth username (optional, MailHog needs none)"
+    )
+    EMAIL_SMTP_PASSWORD: str = Field(
+        default="", description="SMTP auth password (optional, MailHog needs none)"
+    )
+    EMAIL_SMTP_USE_TLS: bool = Field(
+        default=False, description="enable STARTTLS when connecting to the relay"
+    )
+    EMAIL_FROM_ADDR: str = Field(
+        default="Skyrict <no-reply@skyrict.dev>",
+        description="From address for AI notification email",
+    )
+
+    # --- Critical-anomaly recipients ---
+    ANOMALY_NOTIFY_EMAILS: str = Field(
+        default="",
+        description=(
+            "admin recipients of critical-anomaly + escalation alerts, comma-"
+            "separated (spec §4.3 'Email to admin (critical only)'). Empty "
+            "disables dispatch even when SMTP is configured. Sent only for "
+            "tenants with ai_restock_settings.email_alerts_enabled = true. "
+            "Kept as a raw string: pydantic-settings tries to JSON-decode any "
+            "list-typed env var, which would break plain comma syntax."
+        ),
+    )
+    ANOMALY_REVIEW_BASE_URL: str = Field(
+        default="",
+        description=(
+            "optional base URL for the 'Review anomaly' button, e.g. "
+            "https://app.skyrict.io/anomalies. Empty omits the button."
+        ),
+    )
+    ANOMALY_SCAN_SERVICE_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token the scheduled anomaly scan (spec §4.3) presents to "
+            "core's inventory API. A background task has no user JWT, so it "
+            "authenticates with this service token + per-tenant X-Tenant-Slug "
+            "instead. Empty disables the scheduled pass (log-only), mirroring "
+            "the log-only SMTP default."
+        ),
     )
 
     # --- Rate limits (spec §5.4) ---
@@ -321,6 +374,11 @@ class Settings(BaseSettings):
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
+
+    @property
+    def anomaly_notify_emails(self) -> list[str]:
+        """Parsed non-empty critical-alert recipients from the env string."""
+        return [item.strip() for item in self.ANOMALY_NOTIFY_EMAILS.split(",") if item.strip()]
 
     # ------------------------------------------------------------------
     # Validators — run in definition order (pydantic v2)

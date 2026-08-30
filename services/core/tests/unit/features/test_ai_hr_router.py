@@ -10,15 +10,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from core.api.deps import get_ai_hr_service, get_hr_ai_individual
+from core.api.deps import (
+    get_ai_hr_service,
+    get_hr_ai_individual,
+    get_quality_service,
+)
 from core.features.ai.router import get_ai_client
 from core.features.ai_hr import router as ai_hr_router
 from core.features.ai_hr.attrition_repository import ScoredRisk
+from core.features.ai_hr.quality_repository import EmployeeQuality
 from core.features.ai_hr.repository import (
     DepartmentCount,
     HeadcountPoint,
@@ -26,6 +32,9 @@ from core.features.ai_hr.repository import (
     TenureBand,
     TenureSummary,
 )
+
+if TYPE_CHECKING:
+    from core.features.ai_hr.quality_service import QualityService
 
 TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 ACTOR_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
@@ -310,3 +319,134 @@ def test_copilot_requires_copilot_permission() -> None:
     )
 
     assert hit == ["invoke", "copilot"]
+
+
+# -- /quality/list (L2 admin drill-down, HR-AI-002 8.1.3) --------------------
+
+
+def _quality_row(score: float, grade: str) -> EmployeeQuality:
+    return EmployeeQuality(
+        employee_id=EMP_ID,
+        department_id=None,
+        score=score,
+        grade=grade,
+        mandatory_score=0.3,
+        contact_score=0.15,
+        document_score=0.05,
+        generated_at=datetime(2026, 1, 1, tzinfo=UTC),
+        employee_number="E-101",
+        first_name="Ada",
+        last_name="Lovelace",
+        department_name="Eng",
+    )
+
+
+class _FakeQualityService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, int]] = []
+        self.rows: list[EmployeeQuality] = [_quality_row(0.5, "D")]
+        self.refresh_calls: list[uuid.UUID] = []
+        self.last_refresh: datetime = datetime(2026, 1, 1, tzinfo=UTC)
+
+    async def list_scores(
+        self, tenant_id: uuid.UUID, *, limit: int = 100, offset: int = 0
+    ) -> list[EmployeeQuality]:
+        assert tenant_id == TENANT_ID
+        self.calls.append((limit, offset))
+        return self.rows
+
+    async def recalculate(self, tenant_id: uuid.UUID, *, force: bool = True) -> int:
+        assert force is True
+        self.refresh_calls.append(tenant_id)
+        return len(self.rows)
+
+    async def latest_generated_at(self, tenant_id: uuid.UUID) -> datetime | None:
+        return self.last_refresh
+
+
+def _build_quality_app(service: QualityService, *, individual: bool) -> TestClient:
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[ai_hr_router._require_hr_ai_read] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[get_quality_service] = lambda: service
+    app.dependency_overrides[get_hr_ai_individual] = lambda: individual
+    return TestClient(app)
+
+
+def test_quality_list_returns_per_employee_rows_when_individual_held() -> None:
+    service = _FakeQualityService()
+    client = _build_quality_app(service, individual=True)
+
+    resp = client.get(
+        "/api/v1/ai/hr/quality/list",
+        params={"limit": 20, "offset": 5},
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert service.calls == [(20, 5)]
+    row = resp.json()["data"][0]
+    assert row["employee_id"] == str(EMP_ID)
+    assert row["name"] == "Ada Lovelace"
+    assert row["grade"] == "D"
+    assert row["score"] == 0.5
+    assert set(row["issues"]) == {"mandatory", "contact", "document"}
+
+
+def test_quality_list_without_individual_returns_403() -> None:
+    service = _FakeQualityService()
+    client = _build_quality_app(service, individual=False)
+
+    resp = client.get(
+        "/api/v1/ai/hr/quality/list",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 403
+    assert "individual" in resp.json()["data"]["detail"]
+
+
+# -- /quality/refresh (weekly recalc maintenance, HR-AI-002 8.1.3) ------------
+
+
+def test_quality_refresh_forces_recompute_and_returns_l1_body() -> None:
+    service = _FakeQualityService()
+    client = _build_quality_app(service, individual=True)
+
+    resp = client.post("/api/v1/ai/hr/quality/refresh", headers={"authorization": "Bearer tok"})
+
+    assert resp.status_code == 200
+    assert service.refresh_calls == [TENANT_ID]
+    body = resp.json()["data"]
+    # L1 maintenance shape: aggregate count + run time, never employee rows.
+    assert set(body) == {"recount", "generated_at"}
+    assert body["recount"] == 1
+    parsed = datetime.fromisoformat(body["generated_at"].replace("Z", "+00:00"))
+    assert parsed == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_quality_refresh_exercises_invoke_and_read_guards() -> None:
+    service = _FakeQualityService()
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[get_quality_service] = lambda: service
+    hit: list[str] = []
+
+    def spy_invoke() -> dict[str, object]:
+        hit.append("invoke")
+        return {"tenant_id": TENANT_ID}
+
+    def spy_read() -> dict[str, object]:
+        hit.append("read")
+        return {"tenant_id": TENANT_ID}
+
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = spy_invoke
+    app.dependency_overrides[ai_hr_router._require_hr_ai_read] = spy_read
+    client = TestClient(app)
+
+    resp = client.post("/api/v1/ai/hr/quality/refresh", headers={"authorization": "Bearer tok"})
+
+    assert resp.status_code == 200
+    assert hit == ["invoke", "read"]
+    assert service.refresh_calls == [TENANT_ID]

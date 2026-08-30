@@ -17,40 +17,82 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from core.api.deps import (
     get_ai_hr_service,
+    get_anomaly_service,
     get_current_user,
+    get_eval_repository,
     get_hr_ai_individual,
+    get_pattern_data_repository,
+    get_quality_service,
+    get_suggestion_service,
+    get_utilization_service,
     require_permission,
 )
 from core.core.permissions import (
     ERP_AI_INVOKE,
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
+    ERP_HR_AI_EVAL,
     ERP_HR_AI_READ,
+    ERP_HR_READ,
+    ERP_HR_WRITE,
 )
 from core.core.tenant_resolver import derive_tenant_slug
 from core.features.ai.proxy import forward_to_ai_agent, relay_response
 from core.features.ai.router import get_ai_client
+from core.features.ai_hr.anomaly_service import AnomalyService
 from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
+from core.features.ai_hr.eval_repository import EvalRunRepository
+from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
+from core.features.ai_hr.quality_service import QualityService
 from core.features.ai_hr.schemas import (
+    AnomalyOrgOut,
     AttritionDetailOut,
     AttritionSummaryOut,
+    EmployeeQualityOut,
+    HrEvalRunWrite,
+    HrEvalWriteOut,
+    LeaveAnomalyOut,
+    LeaveBlackoutOut,
+    LeaveBlackoutWrite,
+    LeaveSuggestionOut,
     OverviewOut,
+    PublicHolidayOut,
+    PublicHolidayWrite,
+    QualityOrgOut,
+    QualityRefreshOut,
+    SuggestionOrgOut,
     TenureSummaryOut,
+    UtilizationAlertOut,
+    UtilizationOrgOut,
+    anomaly_org_to_out,
+    anomaly_to_out,
     attrition_l1_to_out,
     attrition_l2_to_out,
+    employee_quality_to_out,
+    leave_blackout_to_out,
     overview_to_out,
+    public_holiday_to_out,
+    quality_org_to_out,
+    suggestion_org_to_out,
+    suggestion_to_out,
     tenure_to_out,
+    utilization_alert_to_out,
+    utilization_org_to_out,
 )
 from core.features.ai_hr.service import AiHrService
+from core.features.ai_hr.suggestion_service import SuggestionService
+from core.features.ai_hr.utilization_service import UtilizationService
+from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/ai/hr", tags=["ai-hr"])
@@ -59,13 +101,27 @@ _require_ai_invoke = require_permission(ERP_AI_INVOKE)
 _require_hr_ai_read = require_permission(ERP_HR_AI_READ)
 _require_hr_ai_acknowledge = require_permission(ERP_HR_AI_ACKNOWLEDGE)
 _require_hr_ai_copilot = require_permission(ERP_HR_AI_COPILOT)
+_require_hr_ai_eval = require_permission(ERP_HR_AI_EVAL)
+_require_hr_read = require_permission(ERP_HR_READ)
+_require_hr_write = require_permission(ERP_HR_WRITE)
 
 _AiInvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
 _HrAiReadDep = Annotated[dict[str, Any], Depends(_require_hr_ai_read)]
 _HrAiAckDep = Annotated[dict[str, Any], Depends(_require_hr_ai_acknowledge)]
 _HrAiCopilotDep = Annotated[dict[str, Any], Depends(_require_hr_ai_copilot)]
+_HrAiEvalDep = Annotated[dict[str, Any], Depends(_require_hr_ai_eval)]
+_HrReadDep = Annotated[dict[str, Any], Depends(_require_hr_read)]
+_HrWriteDep = Annotated[dict[str, Any], Depends(_require_hr_write)]
 _CurrentUserDep = Annotated[dict[str, Any], Depends(get_current_user)]
 _ServiceDep = Annotated[AiHrService, Depends(get_ai_hr_service)]
+_QualityServiceDep = Annotated[QualityService, Depends(get_quality_service)]
+_UtilizationServiceDep = Annotated[UtilizationService, Depends(get_utilization_service)]
+_AnomalyServiceDep = Annotated[AnomalyService, Depends(get_anomaly_service)]
+_SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_service)]
+_EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
+_PatternDataRepositoryDep = Annotated[
+    AiHrPatternDataRepository, Depends(get_pattern_data_repository)
+]
 _ClientDep = Annotated[httpx.AsyncClient, Depends(get_ai_client)]
 _IndividualDep = Annotated[bool, Depends(get_hr_ai_individual)]
 
@@ -122,6 +178,307 @@ async def tenure(
     """L1 tenure-band summary with a deterministic narrative."""
     result = await service.tenure(_tenant_id(current_user))
     return ResponseEnvelope(data=tenure_to_out(result), message="HR AI tenure summary retrieved")
+
+
+@router.get("/quality", response_model=ResponseEnvelope[QualityOrgOut])
+async def quality_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    quality_service: _QualityServiceDep,
+) -> ResponseEnvelope[QualityOrgOut]:
+    """L1 org data-quality KPI (8.1.3). Never carries per-person values."""
+    kpi = await quality_service.org_kpi(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=quality_org_to_out(kpi), message="HR AI data-quality KPI retrieved"
+    )
+
+
+@router.get("/quality/list", response_model=ResponseEnvelope[list[EmployeeQualityOut]])
+async def quality_list(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    quality_service: _QualityServiceDep,
+    show_individual: _IndividualDep,
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> ResponseEnvelope[list[EmployeeQualityOut]] | JSONResponse:
+    """L2 pageable per-employee quality rows (worst first) for the admin panel."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    rows = await quality_service.list_scores(_tenant_id(current_user), limit=limit, offset=offset)
+    return ResponseEnvelope(
+        data=[employee_quality_to_out(row) for row in rows],
+        message="HR AI employee data-quality scores retrieved",
+    )
+
+
+@router.get("/quality/{employee_id}", response_model=ResponseEnvelope[EmployeeQualityOut])
+async def quality_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    quality_service: _QualityServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[EmployeeQualityOut] | JSONResponse:
+    """L2 per-employee quality for ``individual`` callers; 403 otherwise."""
+    row = await quality_service.employee_quality(_tenant_id(current_user), employee_id)
+    if row is None:
+        raise NotFoundError(f"no quality score for employee {employee_id}")
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    return ResponseEnvelope(
+        data=employee_quality_to_out(row), message="HR AI employee quality retrieved"
+    )
+
+
+@router.post("/quality/refresh", response_model=ResponseEnvelope[QualityRefreshOut])
+async def quality_refresh(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    quality_service: _QualityServiceDep,
+) -> ResponseEnvelope[QualityRefreshOut]:
+    """Force a data-quality recompute (L1 maintenance; the weekly recalc cron).
+
+    Re-scores and stores regardless of the 7-day TTL so a scheduled job always
+    produces a fresh run. The response carries only the aggregate row count and
+    run time — never per-person data, so ``erp.hr.ai.read`` suffices.
+    """
+    tenant_id = _tenant_id(current_user)
+    recount = await quality_service.recalculate(tenant_id, force=True)
+    generated_at = await quality_service.latest_generated_at(tenant_id)
+    if generated_at is None:
+        generated_at = datetime.now(UTC)
+    return ResponseEnvelope(
+        data=QualityRefreshOut(recount=recount, generated_at=generated_at),
+        message="HR AI data-quality scores recomputed",
+    )
+
+
+@router.get("/alerts/utilization", response_model=ResponseEnvelope[UtilizationOrgOut])
+async def utilization_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    utilization_service: _UtilizationServiceDep,
+) -> ResponseEnvelope[UtilizationOrgOut]:
+    """L1 usage-balance alert feed (8.1.4). Never carries per-person values."""
+    summary = await utilization_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=utilization_org_to_out(summary),
+        message="HR AI utilization alerts retrieved",
+    )
+
+
+@router.get(
+    "/alerts/utilization/{employee_id}",
+    response_model=ResponseEnvelope[list[UtilizationAlertOut]],
+)
+async def utilization_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    utilization_service: _UtilizationServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[UtilizationAlertOut]] | JSONResponse:
+    """L2 per-employee utilization alerts for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    alerts = await utilization_service.employee_alerts(_tenant_id(current_user), employee_id)
+    return ResponseEnvelope(
+        data=[utilization_alert_to_out(a) for a in alerts],
+        message="HR AI employee utilization alerts retrieved",
+    )
+
+
+@router.get("/alerts/anomalies", response_model=ResponseEnvelope[AnomalyOrgOut])
+async def anomaly_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    anomaly_service: _AnomalyServiceDep,
+) -> ResponseEnvelope[AnomalyOrgOut]:
+    """L1 leave-pattern anomaly feed (8.2.1). Never carries per-person values."""
+    summary = await anomaly_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=anomaly_org_to_out(summary),
+        message="HR AI leave anomaly feed retrieved",
+    )
+
+
+@router.get(
+    "/alerts/anomalies/{employee_id}",
+    response_model=ResponseEnvelope[list[LeaveAnomalyOut]],
+)
+async def anomaly_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    anomaly_service: _AnomalyServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[LeaveAnomalyOut]] | JSONResponse:
+    """L2 per-employee anomaly findings for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    anomalies = await anomaly_service.employee_anomalies(_tenant_id(current_user), employee_id)
+    return ResponseEnvelope(
+        data=[anomaly_to_out(a) for a in anomalies],
+        message="HR AI employee leave anomaly findings retrieved",
+    )
+
+
+@router.get("/suggestions", response_model=ResponseEnvelope[SuggestionOrgOut])
+async def suggestion_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    suggestion_service: _SuggestionServiceDep,
+) -> ResponseEnvelope[SuggestionOrgOut]:
+    """L1 smart leave-suggestion aggregate (8.2.4). No per-person data."""
+    summary = await suggestion_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=suggestion_org_to_out(summary),
+        message="HR AI leave suggestions retrieved",
+    )
+
+
+@router.get(
+    "/suggestions/{employee_id}",
+    response_model=ResponseEnvelope[list[LeaveSuggestionOut]],
+)
+async def suggestion_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    suggestion_service: _SuggestionServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[LeaveSuggestionOut]] | JSONResponse:
+    """L2 per-employee leave suggestions for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    suggestions = await suggestion_service.employee_suggestions(
+        _tenant_id(current_user), employee_id
+    )
+    return ResponseEnvelope(
+        data=[suggestion_to_out(s) for s in suggestions],
+        message="HR AI employee leave suggestions retrieved",
+    )
+
+
+# --- AI pattern-engine config (holidays + blackouts; migration 0024) ---------
+# Tenant lookup data consumed server-side by the anomaly detector (8.2.1) and
+# the suggestion engine (8.2.4). Writes are the existing HR config gate
+# (``erp.hr.write`` — the same key that governs leave types/balances); reads
+# need ``erp.hr.read``. No AI-specific key: these are config rows, not signals.
+
+
+@router.get("/pattern-data/holidays", response_model=ResponseEnvelope[list[PublicHolidayOut]])
+async def list_public_holidays(
+    current_user: _HrReadDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[list[PublicHolidayOut]]:
+    holidays = await pattern_data.list_holidays(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=[public_holiday_to_out(h) for h in holidays],
+        message="Public holidays retrieved",
+    )
+
+
+@router.post(
+    "/pattern-data/holidays",
+    response_model=ResponseEnvelope[PublicHolidayOut],
+    status_code=201,
+)
+async def create_public_holiday(
+    body: PublicHolidayWrite,
+    current_user: _HrWriteDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[PublicHolidayOut]:
+    try:
+        holiday = await pattern_data.create_holiday(
+            _tenant_id(current_user),
+            body.calendar_date,
+            body.name,
+            department_id=body.department_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return ResponseEnvelope(data=public_holiday_to_out(holiday), message="Public holiday created")
+
+
+@router.delete("/pattern-data/holidays/{holiday_id}")
+async def delete_public_holiday(
+    holiday_id: uuid.UUID,
+    current_user: _HrWriteDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[dict[str, bool]]:
+    deleted = await pattern_data.delete_holiday(_tenant_id(current_user), holiday_id)
+    if not deleted:
+        raise NotFoundError(f"no public holiday {holiday_id}")
+    return ResponseEnvelope(data={"deleted": True}, message="Public holiday deleted")
+
+
+@router.get("/pattern-data/blackouts", response_model=ResponseEnvelope[list[LeaveBlackoutOut]])
+async def list_leave_blackouts(
+    current_user: _HrReadDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[list[LeaveBlackoutOut]]:
+    blackouts = await pattern_data.list_blackouts(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=[leave_blackout_to_out(b) for b in blackouts],
+        message="Leave blackout periods retrieved",
+    )
+
+
+@router.post(
+    "/pattern-data/blackouts",
+    response_model=ResponseEnvelope[LeaveBlackoutOut],
+    status_code=201,
+)
+async def create_leave_blackout(
+    body: LeaveBlackoutWrite,
+    current_user: _HrWriteDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[LeaveBlackoutOut]:
+    try:
+        blackout = await pattern_data.create_blackout(
+            _tenant_id(current_user),
+            body.start_date,
+            body.end_date,
+            body.reason,
+            department_id=body.department_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return ResponseEnvelope(data=leave_blackout_to_out(blackout), message="Leave blackout created")
+
+
+@router.delete("/pattern-data/blackouts/{blackout_id}")
+async def delete_leave_blackout(
+    blackout_id: uuid.UUID,
+    current_user: _HrWriteDep,
+    pattern_data: _PatternDataRepositoryDep,
+) -> ResponseEnvelope[dict[str, bool]]:
+    deleted = await pattern_data.delete_blackout(_tenant_id(current_user), blackout_id)
+    if not deleted:
+        raise NotFoundError(f"no leave blackout {blackout_id}")
+    return ResponseEnvelope(data={"deleted": True}, message="Leave blackout deleted")
 
 
 @router.get("/attrition", response_model=ResponseEnvelope[AttritionDetailOut])
@@ -196,3 +553,27 @@ async def copilot_chat(
         body=body,
     )
     return relay_response(upstream)
+
+
+@router.post("/eval-runs", response_model=ResponseEnvelope[HrEvalWriteOut])
+async def record_eval_runs(
+    runs: list[HrEvalRunWrite],
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiEvalDep,
+    eval_repository: _EvalRepositoryDep,
+) -> ResponseEnvelope[HrEvalWriteOut]:
+    """Record ai-agent model-eval precision metrics (SKY-72, append-only).
+
+    One row per metric; gated by ``erp.hr.ai.eval`` (owner wildcard passes).
+    Each metric's ``precision``/``threshold`` are validated to [0, 1] here, so
+    the operator CLI can warn-not-fail without trusting its own input math.
+    """
+    rows = [run.model_dump() for run in runs]
+    recorded = await eval_repository.append_many(
+        tenant_id=_tenant_id(current_user),
+        rows=rows,
+    )
+    return ResponseEnvelope(
+        data=HrEvalWriteOut(recorded=recorded),
+        message="HR AI eval metrics recorded",
+    )

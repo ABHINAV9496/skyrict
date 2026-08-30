@@ -13,14 +13,27 @@ from core.features.ai_hr.models.employee_document import (
     DocumentType,
     EmployeeDocumentModel,
 )
+from core.features.ai_hr.models.hr_eval_run import HrEvalRunModel
+from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel, LeaveAnomalyStatus
+from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
+from core.features.ai_hr.models.leave_suggestion import LeaveSuggestionModel, LeaveSuggestionStatus
 from core.features.ai_hr.models.payroll_anomaly import (
     AnomalySeverity,
     AnomalyStatus,
     AnomalyType,
     PayrollAnomalyModel,
 )
+from core.features.ai_hr.models.public_holiday import AiHrPublicHolidayModel
+from core.features.ai_hr.models.quality_score import QualityGrade, QualityScoreModel
+from core.features.ai_hr.models.utilization_alert import (
+    UtilizationAlertModel,
+    UtilizationAlertStatus,
+    UtilizationAlertType,
+)
 
 __all__ = [
+    "AiHrLeaveBlackoutPeriodModel",
+    "AiHrPublicHolidayModel",
     "AnomalySeverity",
     "AnomalyStatus",
     "AnomalyType",
@@ -31,5 +44,15 @@ __all__ = [
     "ComplianceStatus",
     "DocumentType",
     "EmployeeDocumentModel",
+    "HrEvalRunModel",
+    "LeaveAnomalyModel",
+    "LeaveAnomalyStatus",
+    "LeaveSuggestionModel",
+    "LeaveSuggestionStatus",
     "PayrollAnomalyModel",
+    "QualityGrade",
+    "QualityScoreModel",
+    "UtilizationAlertModel",
+    "UtilizationAlertStatus",
+    "UtilizationAlertType",
 ]

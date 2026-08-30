@@ -72,7 +72,7 @@ def digest(
             service = NarratorService(
                 gateway=HttpCoreGateway(
                     base_url=str(settings.INVENTORY_SERVICE_URL),
-                    bearer_token="",
+                    bearer_token="",  # nosec B106 - CLI one-shot; token lands with tenant provider
                     tenant_slug=tenant_slug,
                 ),
                 llm_router=llm_router,

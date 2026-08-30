@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.db.digest_repository import DigestCacheRepository
     from ai_agent.features.narrator.gateway import CoreGatewayPort
+    from ai_agent.models.ai_digest import AiDigestModel
 
 logger = structlog.get_logger("ai_agent.narrator_service")
 
@@ -222,7 +223,7 @@ class NarratorService:
         )
 
 
-def _from_row(row: object, *, source: str) -> DigestResult:
+def _from_row(row: AiDigestModel, *, source: str) -> DigestResult:
     """Rebuild a DigestResult from a cached row (attribute-based, test-friendly)."""
     return DigestResult(
         status=row.status,

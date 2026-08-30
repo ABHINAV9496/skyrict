@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SuggestionItem(BaseModel):
@@ -45,3 +45,44 @@ class ScanResponse(BaseModel):
     created: int
     skipped_pending: int
     considered: int
+
+
+class RestockSettingsResponse(BaseModel):
+    """GET /ai/suggestions/settings — the tenant's full AI settings snapshot."""
+
+    tenant_id: uuid.UUID
+    lead_time_days: Decimal
+    safety_factor: Decimal
+    v2_enabled: bool
+    sensitivity: Decimal
+    fp_threshold: Decimal
+    email_alerts_enabled: bool
+
+
+class RestockSettingsUpdate(BaseModel):
+    """PATCH /ai/suggestions/settings body — every field optional.
+
+    Bounds mirror the ai_restock_settings CHECK constraints so invalid values
+    are rejected at the schema before they reach Postgres.
+    """
+
+    lead_time_days: Decimal | None = Field(default=None, gt=0)
+    safety_factor: Decimal | None = Field(default=None, gt=0)
+    v2_enabled: bool | None = None
+    sensitivity: Decimal | None = Field(default=None, ge=0, le=1)
+    fp_threshold: Decimal | None = Field(default=None, ge=0, le=1)
+    email_alerts_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _require_one_field(self) -> RestockSettingsUpdate:
+        fields = (
+            self.lead_time_days,
+            self.safety_factor,
+            self.v2_enabled,
+            self.sensitivity,
+            self.fp_threshold,
+            self.email_alerts_enabled,
+        )
+        if all(field is None for field in fields):
+            raise ValueError("at least one settings field must be provided")
+        return self

@@ -297,6 +297,12 @@ export const erpNavGroups: NavGroup[] = [
                         icon: SlidersHorizontal,
                         permission: "erp.payroll.read",
                     },
+                    {
+                        href: "/dashboard/erp/payroll/automation",
+                        label: "Automation",
+                        icon: CalendarClock,
+                        permission: "erp.payroll.ai.read",
+                    },
                 ],
             },
             {

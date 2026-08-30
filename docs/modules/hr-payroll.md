@@ -32,10 +32,11 @@ HR & Payroll lives in **`services/core`** as two feature packages — **`feature
 
 ```
 apps/web  ── same-origin /api/v1/* (BFF proxy) ──►  services/core
-                                                     ├── features/hr       (departments, employees, leave)
-                                                     └── features/payroll  (compensation, runs, entries, settings)
-                                                     │    ↓ tenant context + RLS
-                                                     └── Postgres (RLS)
+                                                      ├── features/hr       (departments, employees, leave)
+                                                      ├── features/payroll  (compensation, runs, entries, settings)
+                                                      └── features/payroll_automation  (batches, schedules, notifications — HR-AUT-001)
+                                                      │    ↓ tenant context + RLS
+                                                      └── Postgres (RLS)
 ```
 
 Key architectural facts this module depends on:
@@ -219,6 +220,10 @@ Applied to every tenant-to-tenant FK: `erp_leave_requests → erp_employees`, `e
 | `erp.payroll.read` | View compensation, payroll runs, entries, settings |
 | `erp.payroll.write` | Create runs, compute, edit draft entries, update settings, record compensation |
 | `erp.payroll.approve` | Approve, void, or mark-paid a payroll run |
+| `erp.payroll.ai.read` | View automation batches, schedules, notifications, digests (HR-AUT-001) |
+| `erp.payroll.ai.run` | Enqueue batches, manual tick, create/update/delete schedules (HR-AUT-001) |
+| `erp.payroll.ai.notify` | Read/update own notification delivery preferences (HR-AUT-001) |
+| `erp.payroll.ai.approve` | Reserved for automated run-approval actions (HR-AUT-001; not yet wired) |
 
 - **Where these keys are registered:** [ERP-FND-002] (SKY-39) extends `services/identity/src/identity/core/permissions.py` — constants + `CATALOG` + `PERMISSION_MODULES` (the module docstring: *"A permission must be added here AND via migration before it can be assigned to roles"*) — with the full Phase-1 ERP catalog via a new identity Alembic migration inserting the keys (`ON CONFLICT (key) DO NOTHING`) and updating `identity/core/constants.py` `SYSTEM_ROLE_DEFINITIONS`. This module consumes the catalog; it does not add its own identity migration (single ownership point, see finance-accounting.md:117):
 
@@ -229,6 +234,11 @@ Applied to every tenant-to-tenant FK: `erp_leave_requests → erp_employees`, `e
 | `department_manager` | `erp.hr.read`, `erp.hr.write`, `erp.payroll.read` |
 | `standard_user` | `erp.hr.read` |
 | `auditor` | `erp.hr.read`, `erp.payroll.read` |
+
+The **payroll automation** keys (`erp.payroll.ai.*`, HR-AUT-001) are
+registered in the same catalog plus a dedicated `payroll_ai` module
+(`services/core/src/core/core/permissions.py` → `PERMISSION_MODULES`),
+seeded to the identity side like the core six keys above.
 
 ### 2.5 Events
 
@@ -828,6 +838,28 @@ Base path `/api/v1`. Every endpoint: requires a valid identity access JWT + tena
 | GET | `/api/v1/payroll/settings` | `erp.payroll.read` | |
 | PUT | `/api/v1/payroll/settings` ✓ | `erp.payroll.write` | body: `pf_rate`, `tax_rate`, `default_currency`, `rounding` |
 
+### Payroll automation (HR-AUT-001)
+
+Routed at `/api/v1/ai/payroll` (`features/payroll_automation`). The background
+worker (started in the API lifespan) drains the batch queue and fires due
+schedules; `POST /tick` is the deterministic, testable way to advance both
+frozen against a fixed clock.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/v1/ai/payroll/batches` ✓ | `erp.payroll.ai.run` | body: `run_id`, `dry_run?`; idempotent per run |
+| GET | `/api/v1/ai/payroll/batches` | `erp.payroll.ai.read` | filters: `status`; offset/limit |
+| GET | `/api/v1/ai/payroll/batches/{id}` | `erp.payroll.ai.read` | includes preflight + totals |
+| POST | `/api/v1/ai/payroll/tick` ✓ | `erp.payroll.ai.run` | drain one item + fire due schedules; returns `items_processed`, `schedules_fired` |
+| GET | `/api/v1/ai/payroll/schedules` | `erp.payroll.ai.read` | |
+| POST | `/api/v1/ai/payroll/schedules` ✓ | `erp.payroll.ai.run` | body: `name?`, `cron_expression`, `enabled` |
+| GET | `/api/v1/ai/payroll/schedules/{id}` | `erp.payroll.ai.read` | |
+| PATCH | `/api/v1/ai/payroll/schedules/{id}` ✓ | `erp.payroll.ai.run` | same body as create |
+| DELETE | `/api/v1/ai/payroll/schedules/{id}` ✓ | `erp.payroll.ai.run` | |
+| GET | `/api/v1/ai/payroll/notifications` | `erp.payroll.ai.read` | filters: `event_type`, `after`/`before`, `limit` |
+| GET | `/api/v1/ai/payroll/notifications/preferences` | `erp.payroll.ai.notify` | per-user, self-scoped |
+| PUT | `/api/v1/ai/payroll/notifications/preferences` ✓ | `erp.payroll.ai.notify` | body: `in_app_on`, `email_on` |
+
 ### Error cases
 
 | Condition | Status | Problem type |
@@ -877,12 +909,13 @@ Routes under `apps/web/src/app/dashboard/erp/`:
 | `/dashboard/erp/payroll/runs` | Payroll runs | Run list, create, compute/approve/mark-paid/void actions, run detail with entries |
 | `/dashboard/erp/payroll/compensation` | Compensation | Salary history per employee, effective-dated changes |
 | `/dashboard/erp/payroll/settings` | Payroll settings | Statutory rates, currency, rounding |
+| `/dashboard/erp/payroll/automation` | Payroll automation (HR-AUT-001) | Schedule calendar + CRUD, run-now tick, notification inbox, delivery preferences — gated `erp.payroll.ai.read` (actions gated `erp.payroll.ai.run` / preferences `erp.payroll.ai.notify`) |
 
 Component conventions (follow the existing code): server components render the shell + `PageHeader` (`apps/web/src/components/dashboard/shared/page-header.tsx`); client components ("use client") do data fetching with `useSession()` + the feature API clients; mutations use optimistic UI + `ApiError` surfaced as inline/toast errors. **Permission gating note:** `useSession()` does NOT carry permissions — fetch them via `getMyRoles()` → `/api/v1/roles/me` (the `lib/access/modules.ts` pattern) and gate on `permissions`. **UI-kit gap (build once in this ticket):** `@/components/ui/*` has no empty states, skeletons, toasts, or status badges yet — add minimal reusable ones (or reuse what FND/sibling UI tickets land) instead of page-local one-offs. The real permission gate is backend `require_permission`; UI gating is cosmetic only.
 
 ### 8.4 Sidebar
 
-`apps/web/src/components/dashboard/workspace/sidebar-config.ts` (`erpNavGroups`): add an ERP *People* group — *Employees*, *Departments*, *Leave* → shown when `getMyRoles().permissions` contain `erp.hr.read`; *Payroll*, *Compensation*, *Settings* → shown when `erp.payroll.read`. (Sidebar gating today is `filterNavGroupsByPermissions` over `useModuleAccess()` permissions — the `erp.hr.read` item already exists; the `erp.payroll.read` item lands with HR-UI-003.)
+`apps/web/src/components/dashboard/workspace/sidebar-config.ts` (`erpNavGroups`): add an ERP *People* group — *Employees*, *Departments*, *Leave* → shown when `getMyRoles().permissions` contain `erp.hr.read`; *Payroll*, *Compensation*, *Settings* → shown when `erp.payroll.read`; *Automation* → shown when `erp.payroll.ai.read` (HR-AUT-001). (Sidebar gating today is `filterNavGroupsByPermissions` over `useModuleAccess()` permissions — the `erp.hr.read` item already exists; the `erp.payroll.read` item lands with HR-UI-003.)
 
 ### 8.5 Plan gating
 

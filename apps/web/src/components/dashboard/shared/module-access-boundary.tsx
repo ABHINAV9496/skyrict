@@ -69,6 +69,7 @@ export function ModuleAccessDenied({ module }: { module: ModuleKey }) {
 const PERMISSION_LABEL: Record<string, string> = {
   "erp.hr.read": "HR",
   "erp.payroll.read": "Payroll",
+  "erp.payroll.ai.read": "Payroll Automation",
 };
 
 /** Blocked state for a user who can reach a module but not a specific area. */

@@ -33,6 +33,7 @@ own.
 12. [Model eval harness (HR-AI-002 / SKY-72)](#12-model-eval-harness-hr-ai-002--sky-72)
 13. [HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
 14. [Test strategy](#14-test-strategy)
+15. [HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)](#15-hr-aut-001--payroll-automation-batches-schedules-notifications--digests)
 
 ---
 
@@ -577,3 +578,75 @@ computed or unit-pinned as marked.
 | Leave anomaly inbox (unit) | 12 tests over all four types incl. the two wave-2 patterns at high severity |
 | Suggestion planner (unit) | calendar-aware `_plan_best_block`: load/blackout/own-request windows, holiday ties, forfeit fallback; legacy `_plan_block` kept |
 | Pattern data (integration) | round-trip sentinels 0024 + endpoint read/write via `erp.hr.read`/`erp.hr.write` |
+
+---
+
+## 15. HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)
+
+Companion feature to the HR-AI slice, delivered by ticket **HR-AUT-001** in the
+same payroll-AI module family. It makes payroll run *processing* automatic:
+submissions queue into batches a background worker drains deterministically,
+recurring cron schedules feed the queue, and users get payslip-ready / batch
+digest notifications — all audited and all tenant-scoped.
+
+> **Status:** Implemented (HR-AUT-001). Backend + migration `0028` +
+> frontend automation page shipped; Finance payslip/JE bridge is the
+> follow-up commit (FIN-AI-001) and is **not** part of this section.
+
+### 15.1 Deliverables vs ticket scope (reconciliation)
+
+| Ticket scope | Delivered | Where |
+|--------------|-----------|-------|
+| Automated batch run processing (backend) | shipped | `features/payroll_automation/` (service, repository, ports, worker, cron), `api/deps.py`, lifespan worker drain |
+| Notifications & digests (payslip-ready, batch digest) | shipped | `features/payroll_automation/notifications*`, `ai_payroll_notifications` + prefs table |
+| Recurring submission scheduler | shipped | `features/payroll_automation/schedules*`, `ai_payroll_schedules`, due-schedule fire in worker + tick |
+| **Schedule calendar view (Scope — Frontend)** | shipped | `/dashboard/erp/payroll/automation` — month-at-a-glance calendar marking enabled schedules' next runs + schedules CRUD table |
+| Notifications/preferences frontend | shipped | same automation page — notification inbox with event-type filter + per-user delivery preferences |
+| Manual/CI run trigger | shipped | `POST /api/v1/ai/payroll/tick` + "Run now" button on the automation page |
+| Automated approve/payslip (Finance bridge) | **deferred to FIN-AI-001** | follow-up commit after Commit 3; `erp.payroll.ai.approve` key reserved, not wired |
+
+### 15.2 Permissions (`erp.payroll.ai.*`, registered in core `PERMISSION_MODULES` + identity)
+
+| Key | Meaning |
+|-----|---------|
+| `erp.payroll.ai.read` | View batches, schedules, notifications, digests |
+| `erp.payroll.ai.run` | Enqueue batches, manual tick, create/update/delete schedules |
+| `erp.payroll.ai.notify` | Read/update own notification delivery preferences |
+| `erp.payroll.ai.approve` | Reserved (FIN-AI-001 automated approve) — not yet wired |
+
+Role wiring mirrors the core payroll keys (`organization_admin` full; read for
+`auditor`). UI: sidebar *Automation* item and the page are gated by
+`erp.payroll.ai.read`; management/preference actions check `run` / `notify`
+client-side, with the backend as the real gate.
+
+### 15.3 Data model (migration `0028_payroll_notifications_schedules`)
+
+- **`ai_payroll_schedules`** — `name?`, `cron_expression`, `enabled`,
+  `last_fired_at`, `next_run_at`; index `(tenant_id, enabled, next_run_at)` for
+  the due scan.
+- **`ai_payroll_notifications`** — `recipient_user_id`, `event_type`
+  (`payslip_ready | payroll_batch_digest`, CHECK), **`dedupe_key` UNIQUE**
+  (idempotent composition — retries never duplicate an inbox row), `in_app`,
+  `email_stub`, `subject`, `body`, optional `batch_id`/`run_id`/`employee_id`;
+  inbox index `(tenant_id, recipient_user_id, created_at)`.
+- **`ai_payroll_notification_prefs`** — per-user `in_app_on` (default true),
+  `email_on` (default false); `user_id` PK, self-scoped.
+
+All are RLS tenant-scoped (`_enable_rls`) like every other `erp_*`/`ai_*`
+table; batch run/item tables (`ai_payroll_batch_runs`, `ai_payroll_batch_items`)
+predate `0028` from HR-AUT-001's earlier commits.
+
+### 15.4 API surface
+
+See the API table in `docs/modules/hr-payroll.md` §7 (Payroll automation). Key
+invariants: enqueue is idempotent per run; notification composition is
+deduplicated by `dedupe_key`; `POST /tick` returns `items_processed` +
+`status_changed` + `schedules_fired` so a manual/CI run is observable.
+
+### 15.5 Test strategy
+
+| Area | Coverage |
+|------|----------|
+| Notifications (unit) | routing by linked user, defaults, dedupe (`test_payroll_automation_notifications.py`) |
+| Schedules/batches (integration) | create/enable/toggle/delete schedule round-trip, enqueue→drain→completed, tick determinism, migration round-trip incl. `0028`, RLS isolation (`test_payroll_automation.py`, `test_migration_roundtrip.py`) |
+| Frontend client (unit) | `payroll-automation-api.test.ts` — snake_case→camelCase mapping, URL/filter behavior for schedules, notifications, preferences, tick |

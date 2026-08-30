@@ -99,3 +99,40 @@ def test_production_safety_requires_base_domain(monkeypatch, tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="AI_BASE_DOMAIN is required"):
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_anomaly_notify_emails_comma_list(monkeypatch, tmp_path) -> None:
+    key_file = tmp_path / "public.pem"
+    key_file.write_text("-----BEGIN PUBLIC KEY-----\nX\n-----END PUBLIC KEY-----")
+    for key, value in _base_env().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("AI_JWT_PUBLIC_KEY_PATH", str(key_file))
+    # Spec §4.3 "Email to admin (critical only)": comma-separated recipients
+    # arrive through a plain env string, whitespace tolerant.
+    monkeypatch.setenv("AI_ANOMALY_NOTIFY_EMAILS", "ops@skyrict.dev, admin@skyrict.dev ")
+    monkeypatch.setenv("AI_EMAIL_SMTP_HOST", "mailhog")
+    monkeypatch.setenv("AI_EMAIL_FROM_ADDR", "Skyrict <no-reply@skyrict.dev>")
+    monkeypatch.setenv("AI_ANOMALY_REVIEW_BASE_URL", "https://app.skyrict.io/anomalies")
+
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert s.anomaly_notify_emails == ["ops@skyrict.dev", "admin@skyrict.dev"]
+    assert s.EMAIL_SMTP_HOST == "mailhog"
+    assert s.EMAIL_FROM_ADDR == "Skyrict <no-reply@skyrict.dev>"
+    assert s.ANOMALY_REVIEW_BASE_URL == "https://app.skyrict.io/anomalies"
+
+
+def test_email_alerts_default_to_disabled(monkeypatch, tmp_path) -> None:
+    key_file = tmp_path / "public.pem"
+    key_file.write_text("-----BEGIN PUBLIC KEY-----\nX\n-----END PUBLIC KEY-----")
+    for key, value in _base_env().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("AI_JWT_PUBLIC_KEY_PATH", str(key_file))
+
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    # Conservative defaults: no relay, no recipients, no button → dispatch
+    # is fully off until an operator opts in.
+    assert s.anomaly_notify_emails == []
+    assert s.EMAIL_SMTP_HOST == ""
+    assert s.ANOMALY_REVIEW_BASE_URL == ""

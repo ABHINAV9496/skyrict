@@ -29,3 +29,17 @@ class TenantRepository:
         """Return the tenant with the given slug, or None."""
         result = await self.session.execute(select(TenantModel).where(TenantModel.slug == slug))
         return result.scalar_one_or_none()
+
+    async def list_active(self) -> list[TenantModel]:
+        """Return every active tenant, oldest first.
+
+        Used by the scheduled anomaly scan to iterate tenants without a request
+        context; ``tenants`` carries the permissive ``tenants_readable`` policy
+        so this enumeration succeeds before any GUC is set.
+        """
+        result = await self.session.execute(
+            select(TenantModel)
+            .where(TenantModel.is_active.is_(True))
+            .order_by(TenantModel.created_at)
+        )
+        return list(result.scalars().all())

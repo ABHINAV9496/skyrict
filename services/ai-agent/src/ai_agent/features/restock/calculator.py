@@ -62,20 +62,56 @@ class SuggestionDraft:
     confidence: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class DemandProfile:
+    """V2 (spec 3.2 enhanced) inputs for one product+warehouse.
+
+    *eligible* gates the enhanced formula: only pairs with enough observed
+    history (backfilled into ``ai_restock_demand_stats``) graduate from the
+    v1 ``reorder_point * 2`` heuristic. Lead time and safety factor come from
+    the tenant's ``ai_restock_settings``; the calculator stays pure.
+    """
+
+    avg_daily_demand: Decimal
+    eligible: bool
+    lead_time_days: Decimal
+    safety_factor: Decimal
+
+
 def compute_suggestion(
     *,
     product: ProductRef,
     warehouse_id: uuid.UUID,
     qty_on_hand: Decimal,
     movements: list[MovementRow] | None = None,
+    demand: DemandProfile | None = None,
 ) -> SuggestionDraft:
     """Apply the spec 3.2 formula to one product/warehouse pair.
 
     When *movements* are provided the full 4-factor confidence is computed;
     otherwise the v1 proximity-only heuristic is used as a fallback.
+
+    When *demand* is provided AND eligible, the suggestion quantity uses the
+    enhanced formula (avg daily demand * lead time * safety factor); otherwise
+    the v1 ``reorder_point * 2`` heuristic stands. The ``v2_enabled`` tenant
+    flag is an orchestration concern, applied by the service when it decides
+    whether to pass a :class:`DemandProfile`.
     """
-    suggested_qty = product.reorder_point * Decimal(2)
-    reason = f"Stock ({qty_on_hand}) below reorder point ({product.reorder_point})."
+    if demand is not None and demand.eligible:
+        suggested_qty = _v2_suggested_qty(
+            reorder_point=product.reorder_point,
+            qty_on_hand=qty_on_hand,
+            demand=demand,
+        )
+        reason = (
+            f"Stock ({qty_on_hand}) below reorder point ({product.reorder_point}). "
+            f"Avg daily demand: {demand.avg_daily_demand}. "
+            f"Lead time: {demand.lead_time_days} day(s)."
+        )
+    else:
+        suggested_qty = product.reorder_point * Decimal(2)
+        reason = f"Stock ({qty_on_hand}) below reorder point ({product.reorder_point})."
+
     # Cost prices are LOCAL-ONLY data (spec 5.5): used for the estimate
     # here and returned to the tenant - never sent to any LLM provider.
     estimated_cost = suggested_qty * product.cost_price if product.cost_price is not None else None
@@ -100,6 +136,27 @@ def compute_suggestion(
         reason=reason,
         confidence=confidence,
     )
+
+
+# ---------------------------------------------------------------------------
+# V2 enhanced formula (spec 3.2) - demand-history based
+# ---------------------------------------------------------------------------
+
+
+def _v2_suggested_qty(
+    *,
+    reorder_point: Decimal,
+    qty_on_hand: Decimal,
+    demand: DemandProfile,
+) -> Decimal:
+    """``reorder_point + avg_daily_demand * lead_time_days * safety_factor - qty_on_hand``.
+
+    Never negative: a pair already at/above the target restock level orders
+    nothing. Rounded to 2dp for durable, readable quantities.
+    """
+    target = reorder_point + demand.avg_daily_demand * demand.lead_time_days * demand.safety_factor
+    gross = target - qty_on_hand
+    return max(Decimal(0), gross.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 # ---------------------------------------------------------------------------

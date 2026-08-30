@@ -21,7 +21,7 @@ from ai_agent.core.audit_events import (
     AI_SUGGESTION_CREATED,
     AI_SUGGESTION_REJECTED,
 )
-from ai_agent.features.restock.calculator import compute_suggestion
+from ai_agent.features.restock.calculator import DemandProfile, compute_suggestion
 from skyrict_common.exceptions import ConflictError
 
 if TYPE_CHECKING:
@@ -29,8 +29,15 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from ai_agent.core.audit_service import AuditService
+    from ai_agent.db.restock_stats_repository import RestockStatsRepository
+    from ai_agent.db.settings_repository import SettingsRepository
     from ai_agent.db.suggestion_repository import SuggestionRepository
-    from ai_agent.features.nl_query.gateway import InventoryGatewayPort, ProductRef
+    from ai_agent.features.nl_query.gateway import (
+        InventoryGatewayPort,
+        MovementRow,
+        ProductRef,
+        StockLevelRow,
+    )
 
 logger = structlog.get_logger("ai_agent.restock_service")
 
@@ -53,10 +60,14 @@ class RestockService:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         suggestions: SuggestionRepository,
         audit: AuditService,
+        settings: SettingsRepository | None = None,
+        stats: RestockStatsRepository | None = None,
     ) -> None:
         self._gateway_factory = gateway_factory
         self._suggestions = suggestions
         self._audit = audit
+        self._settings = settings
+        self._stats = stats
 
     async def run_scan(self, *, tenant_id: uuid.UUID) -> ScanReport:
         """Compute and persist pending suggestions for below-reorder stock."""
@@ -72,6 +83,7 @@ class RestockService:
             qty_by_pair[key] = qty_by_pair.get(key, Decimal(0)) + row.qty_on_hand
 
         product_by_id: dict[uuid.UUID, ProductRef] = {p.id: p for p in products}
+        demand_by_pair = await self._load_demand_profiles(tenant_id, levels, movements)
         pending_rows, _total = await self._suggestions.list_by_status(
             tenant_id=tenant_id, status="pending"
         )
@@ -90,6 +102,7 @@ class RestockService:
                 warehouse_id=warehouse_id,
                 qty_on_hand=qty,
                 movements=movements,
+                demand=demand_by_pair.get((product_id, warehouse_id)),
             )
             try:
                 await self._suggestions.create_pending(
@@ -127,6 +140,39 @@ class RestockService:
             skipped_pending=skipped,
         )
         return ScanReport(created=created, skipped_pending=skipped, considered=len(qty_by_pair))
+
+    async def _load_demand_profiles(
+        self,
+        tenant_id: uuid.UUID,
+        levels: list[StockLevelRow],
+        movements: list[MovementRow],
+    ) -> dict[tuple[uuid.UUID, uuid.UUID], DemandProfile]:
+        """Backfill rolling demand stats and build v2 profiles when enabled.
+
+        v2 is feature-flag-gated per tenant (``ai_restock_settings.v2_enabled``).
+        Without settings/stats wiring (or with the flag off) this returns an
+        empty map and the scan falls back to the v1 heuristic.
+        """
+        if self._settings is None or self._stats is None:
+            return {}
+        cfg = await self._settings.get_or_create_default(tenant_id=tenant_id)
+        if not cfg.v2_enabled:
+            return {}
+
+        from ai_agent.features.restock.backfill import BackfillService
+
+        profile = await BackfillService(stats=self._stats).backfill_and_load(
+            tenant_id=tenant_id, levels=levels, movements=movements
+        )
+        return {
+            pair: DemandProfile(
+                avg_daily_demand=stats.avg_daily_demand,
+                eligible=stats.eligible,
+                lead_time_days=cfg.lead_time_days,
+                safety_factor=cfg.safety_factor,
+            )
+            for pair, stats in profile.items()
+        }
 
     async def review(
         self,

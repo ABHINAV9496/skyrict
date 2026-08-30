@@ -66,7 +66,7 @@ class TestProxyPathIdsAreUuids:
         assert response.status_code == 200
         assert len(seen) == 1
         # Uppercase input reaches ai-agent in canonical lowercase form.
-        assert seen[0].url.path == f"/ai/suggestions/{suggestion_id}/approve"
+        assert seen[0].url.path == f"/api/v1/ai/suggestions/{suggestion_id}/approve"
 
     def test_anomaly_escalate_forwards_uuid(self) -> None:
         seen: list[httpx.Request] = []
@@ -79,7 +79,7 @@ class TestProxyPathIdsAreUuids:
         )
 
         assert response.status_code == 200
-        assert seen[0].url.path == f"/ai/anomalies/{anomaly_id}/escalate"
+        assert seen[0].url.path == f"/api/v1/ai/anomalies/{anomaly_id}/escalate"
 
     @pytest.mark.parametrize(
         ("route_template", "bad_id"),
@@ -128,7 +128,7 @@ class TestNarratorForwarding:
         )
 
         assert response.status_code == 200
-        assert seen[0].url.path == "/ai/narrator/digest"
+        assert seen[0].url.path == "/api/v1/ai/narrator/digest"
         assert seen[0].url.query == b"as_of=2026-08-27"
 
     def test_refresh_post_forwards(self) -> None:
@@ -141,7 +141,7 @@ class TestNarratorForwarding:
         )
 
         assert response.status_code == 200
-        assert seen[0].url.path == "/ai/narrator/digest/refresh"
+        assert seen[0].url.path == "/api/v1/ai/narrator/digest/refresh"
 
 
 class TestNarratorPermissionGate:

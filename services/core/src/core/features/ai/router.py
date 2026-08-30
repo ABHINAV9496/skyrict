@@ -139,8 +139,8 @@ async def proxy_nl_query(
     _read: _ReadDep,
     client: _ClientDep,
 ) -> Response:
-    """Natural-language question about stock -> ai-agent /ai/query."""
-    return await _proxy(request, client, "/ai/query")
+    """Natural-language question about stock -> ai-agent /api/v1/ai/query."""
+    return await _proxy(request, client, "/api/v1/ai/query")
 
 
 @router.get("/inventory/query/history")
@@ -150,8 +150,8 @@ async def proxy_query_history(
     _read: _ReadDep,
     client: _ClientDep,
 ) -> Response:
-    """Recent queries for this tenant -> ai-agent /ai/query/history."""
-    return await _proxy(request, client, "/ai/query/history")
+    """Recent queries for this tenant -> ai-agent /api/v1/ai/query/history."""
+    return await _proxy(request, client, "/api/v1/ai/query/history")
 
 
 # --- Restock suggestions (feature 2) ---------------------------------------
@@ -164,8 +164,8 @@ async def proxy_list_suggestions(
     _read: _ReadDep,
     client: _ClientDep,
 ) -> Response:
-    """Pending suggestions feed -> ai-agent /ai/suggestions."""
-    return await _proxy(request, client, "/ai/suggestions")
+    """Pending suggestions feed -> ai-agent /api/v1/ai/suggestions."""
+    return await _proxy(request, client, "/api/v1/ai/suggestions")
 
 
 @router.post("/suggestions/scan")
@@ -175,8 +175,8 @@ async def proxy_suggestion_scan(
     _write: _WriteDep,
     client: _ClientDep,
 ) -> Response:
-    """Trigger the suggestion scan -> ai-agent /ai/suggestions/scan."""
-    return await _proxy(request, client, "/ai/suggestions/scan")
+    """Trigger the suggestion scan -> ai-agent /api/v1/ai/suggestions/scan."""
+    return await _proxy(request, client, "/api/v1/ai/suggestions/scan")
 
 
 @router.post("/suggestions/{suggestion_id}/approve")
@@ -188,7 +188,7 @@ async def proxy_approve_suggestion(
     client: _ClientDep,
 ) -> Response:
     """Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
-    return await _proxy(request, client, f"/ai/suggestions/{suggestion_id}/approve")
+    return await _proxy(request, client, f"/api/v1/ai/suggestions/{suggestion_id}/approve")
 
 
 @router.post("/suggestions/{suggestion_id}/reject")
@@ -200,7 +200,7 @@ async def proxy_reject_suggestion(
     client: _ClientDep,
 ) -> Response:
     """Reject one pending suggestion; note feeds the feedback loop."""
-    return await _proxy(request, client, f"/ai/suggestions/{suggestion_id}/reject")
+    return await _proxy(request, client, f"/api/v1/ai/suggestions/{suggestion_id}/reject")
 
 
 # --- Stock anomalies (feature 3) --------------------------------------------
@@ -213,8 +213,8 @@ async def proxy_list_anomalies(
     _read: _ReadDep,
     client: _ClientDep,
 ) -> Response:
-    """Anomaly feed -> ai-agent /ai/anomalies."""
-    return await _proxy(request, client, "/ai/anomalies")
+    """Anomaly feed -> ai-agent /api/v1/ai/anomalies."""
+    return await _proxy(request, client, "/api/v1/ai/anomalies")
 
 
 @router.post("/anomalies/scan")
@@ -224,8 +224,8 @@ async def proxy_anomaly_scan(
     _write: _WriteDep,
     client: _ClientDep,
 ) -> Response:
-    """Trigger anomaly detection -> ai-agent /ai/anomalies/scan."""
-    return await _proxy(request, client, "/ai/anomalies/scan")
+    """Trigger anomaly detection -> ai-agent /api/v1/ai/anomalies/scan."""
+    return await _proxy(request, client, "/api/v1/ai/anomalies/scan")
 
 
 @router.post("/anomalies/{anomaly_id}/resolve")
@@ -237,7 +237,7 @@ async def proxy_resolve_anomaly(
     client: _ClientDep,
 ) -> Response:
     """Mark an anomaly resolved (human investigated)."""
-    return await _proxy(request, client, f"/ai/anomalies/{anomaly_id}/resolve")
+    return await _proxy(request, client, f"/api/v1/ai/anomalies/{anomaly_id}/resolve")
 
 
 @router.post("/anomalies/{anomaly_id}/dismiss")
@@ -249,7 +249,7 @@ async def proxy_dismiss_anomaly(
     client: _ClientDep,
 ) -> Response:
     """Mark an anomaly as false positive (feeds tuning)."""
-    return await _proxy(request, client, f"/ai/anomalies/{anomaly_id}/dismiss")
+    return await _proxy(request, client, f"/api/v1/ai/anomalies/{anomaly_id}/dismiss")
 
 
 @router.post("/anomalies/{anomaly_id}/escalate")
@@ -261,7 +261,7 @@ async def proxy_escalate_anomaly(
     client: _ClientDep,
 ) -> Response:
     """Escalate an anomaly to admin attention."""
-    return await _proxy(request, client, f"/ai/anomalies/{anomaly_id}/escalate")
+    return await _proxy(request, client, f"/api/v1/ai/anomalies/{anomaly_id}/escalate")
 
 
 # --- Cross-module intelligence narrator (SKY-63) -----------------------------
@@ -277,8 +277,8 @@ async def proxy_narrator_digest(
     _narrator: _NarratorDep,
     client: _ClientDep,
 ) -> Response:
-    """Daily executive digest -> ai-agent /ai/narrator/digest."""
-    return await _proxy(request, client, "/ai/narrator/digest")
+    """Daily executive digest -> ai-agent /api/v1/ai/narrator/digest."""
+    return await _proxy(request, client, "/api/v1/ai/narrator/digest")
 
 
 @router.post("/narrator/digest/refresh")
@@ -287,5 +287,5 @@ async def proxy_narrator_refresh(
     _narrator_refresh: _NarratorRefreshDep,
     client: _ClientDep,
 ) -> Response:
-    """Force-recompute today's digest -> ai-agent /ai/narrator/digest/refresh."""
-    return await _proxy(request, client, "/ai/narrator/digest/refresh")
+    """Force-recompute today's digest -> ai-agent /api/v1/ai/narrator/digest/refresh."""
+    return await _proxy(request, client, "/api/v1/ai/narrator/digest/refresh")

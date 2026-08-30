@@ -90,12 +90,16 @@ class AgentDeps:
     ``session`` is the request session (RLS-tenanted): graph nodes that write
     business rows (suggestions, audit) share the request transaction. The
     checkpointer sessions are independent by design (see checkpointer.py).
+    ``tenant_id``/``user_id`` are the run identity — READ ONLY inside nodes;
+    authorization always flows through ``tool_context``, never state.
     """
 
     session: AsyncSession
     tool_context: ToolContext
     allowlist: frozenset[str]
     settings: Settings
+    tenant_id: uuid.UUID
+    user_id: uuid.UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +187,8 @@ class AgentRuntime:
                 tool_context=context,
                 allowlist=deployment.tools,
                 settings=settings,
+                tenant_id=tenant_id,
+                user_id=user_id,
             ),
             deployment.module,
         ).compile(checkpointer=self._checkpointer)
@@ -295,6 +301,8 @@ class AgentRuntime:
                 tool_context=context,
                 allowlist=deployment.tools,
                 settings=settings,
+                tenant_id=tenant_id,
+                user_id=user_id,
             ),
             deployment.module,
         ).compile(checkpointer=self._checkpointer)
@@ -402,4 +410,6 @@ def _sanitize_failure(exc: Exception) -> str:
     """Map an execution failure to a non-leaking error key."""
     if isinstance(exc, AiUnavailableError):
         return "ai_unavailable"
+    if isinstance(exc, PermissionDeniedError):
+        return "permission_denied"
     return "agent_execution_failed"

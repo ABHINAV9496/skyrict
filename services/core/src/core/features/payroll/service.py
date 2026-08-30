@@ -335,6 +335,12 @@ class PayrollService:
             period_end=run.period_end,
         )
 
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]:
+        """Elections the payroll pre-flight reads to warn on zero-electing employees."""
+        return await self._repo.enrolled_benefit_elections(tenant_id, period_end=period_end)
+
     async def compute_run(
         self,
         *,

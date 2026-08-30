@@ -23,21 +23,34 @@ The checks cover the pre-flight acceptance scrub:
   query itself is the existence/active check (filters employment status, hire
   and termination dates).
 
+Advisory checks (``warnings`` — never abort a batch, only reported):
+
+* ``banking`` — roster employees missing bank details (the payslip/notify
+  payload fields from Commit 1).
+* ``benefit_elections`` — roster employees holding no ``enrolled`` benefit
+  election for the period (reads the Commit 2.5 benefit elections).
+* ``termination`` — roster employees flagged active yet carrying a termination
+  date (data inconsistency). Employees *terminated during the period* are, by
+  payroll design, legitimately on the roster (Rule 9 prorates their pay) and
+  are NOT flagged.
+
 The module is intentionally free of IO and ORM imports beyond the domain
 entities, so it is unit-testable in isolation.
 """
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from core.domain.entities import Employee, PayrollRun, PayrollSettings
+from core.core.constants import EmploymentStatus
+from core.domain.entities import BenefitElection, Employee, PayrollRun, PayrollSettings
 from core.features.payroll.models.payroll_run import PayrollRunStatus
 
-PREFLIGHT_VERSION = 1
+PREFLIGHT_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -47,6 +60,7 @@ class PreflightResult:
     run_id: str
     checks: dict[str, dict[str, str]]
     blocks: list[str]
+    warnings: list[str]
     roster_count: int
 
     @property
@@ -62,11 +76,20 @@ class PreflightResult:
             "roster_count": self.roster_count,
             "checks": self.checks,
             "blocks": list(self.blocks),
+            "warnings": list(self.warnings),
         }
 
 
 def _check(*, ok: bool, detail: str) -> dict[str, str]:
     return {"status": "ok" if ok else "block", "detail": detail}
+
+
+def _warn(detail: str) -> dict[str, str]:
+    return {"status": "warn", "detail": detail}
+
+
+def _joiner(values: Sequence[str]) -> str:
+    return ", ".join(values)
 
 
 def run_preflight(
@@ -75,15 +98,19 @@ def run_preflight(
     settings: PayrollSettings | None,
     overlapping: PayrollRun | None,
     roster: Sequence[Employee],
+    elections: Sequence[BenefitElection] | None = None,
 ) -> PreflightResult:
     """Validate a run before batch processing; never performs IO.
 
     ``overlapping`` is the winner returned by the payroll feature's
     :meth:`PayrollService.find_overlapping_run` for the run's period, or
     ``None`` (the run's own period normally maps back to the run itself).
+    ``elections`` are the tenant's enrolled benefit elections effective by the
+    run's period end (pre-flight input, gathered by the caller).
     """
     checks: dict[str, dict[str, str]] = {}
     blocks: list[str] = []
+    warnings: list[str] = []
 
     # settings row present
     settings_ok = settings is not None
@@ -133,10 +160,60 @@ def run_preflight(
     if not roster_ok:
         blocks.append("roster")
 
+    # ---- advisory checks (warnings; never abort) ----
+
+    # banking: payslip payload fields missing on a roster employee
+    missing_bank = [
+        e.employee_number for e in roster if not (e.bank_account or "").strip()
+    ]
+    if missing_bank:
+        warnings.append("banking")
+        checks["banking"] = _warn(
+            f"{len(missing_bank)} employee(s) missing bank details: {_joiner(missing_bank)}"
+        )
+    else:
+        checks["banking"] = _check(ok=True, detail="all roster employees have bank details")
+
+    # benefit_elections: no enrolled election effective for the period
+    elected: dict[uuid.UUID, int] = {}
+    for election in elections or ():
+        elected[election.employee_id] = elected.get(election.employee_id, 0) + 1
+    no_election = [
+        e.employee_number for e in roster if e.id is not None and elected.get(e.id, 0) == 0
+    ]
+    if no_election:
+        warnings.append("benefit_elections")
+        checks["benefit_elections"] = _warn(
+            f"{len(no_election)} employee(s) with no enrolled benefit election: {_joiner(no_election)}"
+        )
+    else:
+        checks["benefit_elections"] = _check(
+            ok=True, detail="all roster employees hold an enrolled benefit election"
+        )
+
+    # termination: active flag vs termination date inconsistency. Deliberately
+    # NOT the terminated-during-period case — those employees are on the roster
+    # by payroll design (Rule 9) and are never flagged.
+    flagged = [
+        e.employee_number
+        for e in roster
+        if e.employment_status is EmploymentStatus.ACTIVE and e.termination_date is not None
+    ]
+    if flagged:
+        warnings.append("termination")
+        checks["termination"] = _warn(
+            f"{len(flagged)} active employee(s) flagged with a termination date: {_joiner(flagged)}"
+        )
+    else:
+        checks["termination"] = _check(
+            ok=True, detail="no active employee is flagged with a termination date"
+        )
+
     return PreflightResult(
         run_id=str(run.id),
         checks=checks,
         blocks=blocks,
+        warnings=warnings,
         roster_count=len(roster),
     )
 

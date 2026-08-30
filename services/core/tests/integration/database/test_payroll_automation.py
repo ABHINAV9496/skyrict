@@ -22,6 +22,7 @@ import dataclasses
 import time
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -30,6 +31,10 @@ from sqlalchemy import text
 from core.api.deps import make_core_audit_service, make_payroll_service
 from core.db.session import async_session_factory, engine
 from core.features.hr.models.employee import EmployeeModel
+from core.features.payroll.models.benefits import (
+    BenefitElectionModel,
+    BenefitPlanModel,
+)
 from core.features.payroll.models.compensation import CompensationModel
 from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
@@ -155,15 +160,19 @@ def payroll_batch_world(migrated_schema: None) -> dict[str, str]:
     asyncio.run(_teardown())
 
 
-def _build_service(session: Any) -> tuple[PayrollAutomationService, Any]:
+def _build_service(
+    session: Any, *, worker_id: str | None = None
+) -> tuple[PayrollAutomationService, Any]:
     """Build the engine on ``session``; return (service, payroll_service) so
-    tests can inject faults into the compute seam."""
+    tests can inject faults into the compute seam. ``worker_id`` pins the
+    worker so fault-injection tests can deterministically claim their batch
+    before the always-on dev worker polls it."""
     payroll = make_payroll_service(session)
     service = PayrollAutomationService(
         repository=PostgresPayrollAutomationRepository(session),
         payroll=payroll,
         audit=make_core_audit_service(session),
-        worker_id=f"it-{uuid.uuid4().hex[:8]}",
+        worker_id=worker_id or f"it-{uuid.uuid4().hex[:8]}",
         max_retries=2,
         items_per_tick=10,
     )
@@ -227,6 +236,22 @@ async def _drain_until_finished(
         await asyncio.sleep(0)
 
 
+FIXTURE_WORKER = "it-deterministic"
+
+
+async def _claim_batch_for_this_worker(
+    session: Any, *, expected_batch_id: uuid.UUID
+) -> None:
+    """Claim the just-created batch under THIS test worker before the always-on
+    dev worker's 0.25s poll can take it — pin-first, matching the concurrency
+    test's discipline. The claim is committed here; the service is built with
+    the same worker id so its ticks resume this batch."""
+    repo = PostgresPayrollAutomationRepository(session)
+    claimed = await repo.claim_next_batch(FIXTURE_WORKER)
+    await session.commit()
+    assert claimed is not None and claimed.id == expected_batch_id
+
+
 async def _batch_row(session: Any, batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
     row = (
         await session.execute(
@@ -273,7 +298,7 @@ async def test_full_50_employee_run_with_permanent_failure_finishes_under_60s(
     run_id = uuid.UUID(payroll_batch_world["run_id"])
 
     async with async_session_factory() as session:
-        service, payroll = _build_service(session)
+        service, payroll = _build_service(session, worker_id=FIXTURE_WORKER)
         await _fault_once_compute_single(
             payroll, target_number="EMP-0027", exc=PermanentBatchItemError("injected permanent failure")
         )
@@ -289,6 +314,10 @@ async def test_full_50_employee_run_with_permanent_failure_finishes_under_60s(
         # Idempotency: re-enqueueing the same run returns the same batch.
         again = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
         assert again.batch.id == batch_id
+
+        # Pin the batch to this worker so the injected fault actually fires here
+        # (the always-on dev worker would otherwise compute it cleanly).
+        await _claim_batch_for_this_worker(session, expected_batch_id=batch_id)
 
         ticks = await _drain_until_finished(service, session, batch_id=batch_id)
         elapsed = time.monotonic() - started
@@ -472,7 +501,7 @@ async def test_transient_failure_retries_then_succeeds(
     run_id = uuid.UUID(payroll_batch_world["transient_id"])
 
     async with async_session_factory() as session:
-        service, payroll = _build_service(session)
+        service, payroll = _build_service(session, worker_id=FIXTURE_WORKER)
         await _fault_once_compute_single(
             payroll,
             target_number="EMP-0010",
@@ -480,6 +509,7 @@ async def test_transient_failure_retries_then_succeeds(
         )
         result = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
         batch_id = result.batch.id
+        await _claim_batch_for_this_worker(session, expected_batch_id=batch_id)
         await _drain_until_finished(service, session, batch_id=batch_id)
 
         row = await _batch_row(session, batch_id, tenant_id)
@@ -620,6 +650,13 @@ async def test_preflight_block_aborts_and_reenqueue_rearms(
             assert row["status"] == BATCH_COMPLETED
             assert row["totals"]["done"] == 1
 
+            # The re-armed batch carries the advisory report: this tenant's
+            # employee has no bank details and no enrolled election, so the
+            # failure-fix only cleared the block — the warnings survive and the
+            # batch still completes.
+            assert "banking" in retried.batch.preflight["warnings"]
+            assert "benefit_elections" in retried.batch.preflight["warnings"]
+
             run_status = (
                 await session.execute(
                     text("SELECT status FROM erp_payroll_runs WHERE id = :rid AND tenant_id = :tid"),
@@ -627,6 +664,209 @@ async def test_preflight_block_aborts_and_reenqueue_rearms(
                 )
             ).scalar_one()
             assert run_status == PayrollRunStatus.COMPUTED.value
+    finally:
+        await _cleanup()
+
+
+async def test_enrolled_benefit_elections_seam_scopes_period() -> None:
+    """The pre-flight input seam reads ONLY enrolled elections effective by the
+    period end — waived rows and future-effective ones are excluded."""
+    tenant_id = uuid.uuid4()
+    emp_id = uuid.uuid4()
+
+    async def _seed() -> None:
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="Benefit Seam Tenant",
+                    slug=f"benefit-seam-{tenant_id.hex[:8]}",
+                    plan_tier="enterprise",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            employee = EmployeeModel(
+                tenant_id=tenant_id,
+                id=emp_id,
+                employee_number="EMP-BEN01",
+                first_name="Ben",
+                last_name="Fit",
+                job_title="Engineer",
+                hire_date=date(2024, 1, 1),
+            )
+            session.add(employee)
+            await session.flush()
+            plan = BenefitPlanModel(
+                tenant_id=tenant_id,
+                plan_code="MED-01",
+                name="Medical",
+                plan_type="medical",
+                monthly_cost_cents=Decimal("150000"),
+                effective_from=date(2025, 1, 1),
+            )
+            session.add(plan)
+            await session.flush()
+            session.add(
+                BenefitElectionModel(
+                    tenant_id=tenant_id,
+                    employee_id=employee.id,
+                    plan_id=plan.id,
+                    status="enrolled",
+                    effective_from=date(2025, 1, 1),
+                )
+            )
+            # Enrolled but NOT yet effective by the period end — excluded.
+            session.add(
+                BenefitElectionModel(
+                    tenant_id=tenant_id,
+                    employee_id=employee.id,
+                    plan_id=plan.id,
+                    status="enrolled",
+                    effective_from=date(2027, 1, 1),
+                )
+            )
+            # Waived — excluded from the enrolled contract.
+            session.add(
+                BenefitElectionModel(
+                    tenant_id=tenant_id,
+                    employee_id=employee.id,
+                    plan_id=plan.id,
+                    status="waived",
+                    effective_from=date(2025, 6, 1),
+                )
+            )
+            await session.commit()
+
+    async def _cleanup() -> None:
+        async with async_session_factory() as session:
+            for table in ("erp_benefit_elections", "erp_benefit_plans", "erp_employees"):
+                await session.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+            await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
+            await session.commit()
+
+    await _seed()
+    try:
+        async with async_session_factory() as session:
+            payroll = make_payroll_service(session)
+            elections = await payroll.enrolled_benefit_elections(
+                tenant_id, period_end=date(2026, 12, 31)
+            )
+            assert len(elections) == 1, elections
+            election = elections[0]
+            assert election.employee_id == emp_id
+            assert election.status == "enrolled"
+    finally:
+        await _cleanup()
+
+
+async def test_preflight_warnings_recorded_but_do_not_abort() -> None:
+    """All three advisory checks (banking / benefit_elections / termination) are
+    recorded in JSONB, but never abort: the batch still processes and
+    completes."""
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+
+    async def _seed() -> None:
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="Preflight Warnings Tenant",
+                    slug=f"preflight-warn-{tenant_id.hex[:8]}",
+                    plan_tier="enterprise",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            session.add(
+                PayrollSettingsModel(
+                    tenant_id=tenant_id,
+                    default_currency="USD",
+                    pf_rate=0,
+                    tax_rate=0,
+                )
+            )
+            # Both on the roster: one missing bank details, one also carrying the
+            # inconsistent active-terminated flag (future termination = flagged
+            # but still payable; a past one would zero out pay_days and skip).
+            for idx, (number, term_date) in enumerate(
+                (("EMP-WARN01", None), ("EMP-WARN02", date(2026, 12, 15))),
+                start=1,
+            ):
+                employee = EmployeeModel(
+                    tenant_id=tenant_id,
+                    employee_number=number,
+                    first_name=f"Warn{idx}",
+                    last_name="Seed",
+                    job_title="Engineer",
+                    hire_date=date(2025, 1, 1),
+                    termination_date=term_date,
+                )
+                session.add(employee)
+                await session.flush()
+                session.add(
+                    CompensationModel(
+                        tenant_id=tenant_id,
+                        employee_id=employee.id,
+                        monthly_salary=5000,
+                        currency="USD",
+                        effective_from=date(2025, 1, 1),
+                    )
+                )
+            session.add(
+                PayrollRunModel(
+                    tenant_id=tenant_id,
+                    id=run_id,
+                    run_code="PR-WARNINGS",
+                    period_start=date(2026, 11, 1),
+                    period_end=date(2026, 11, 30),
+                    status=PayrollRunStatus.DRAFT,
+                )
+            )
+            await session.commit()
+
+    async def _cleanup() -> None:
+        async with async_session_factory() as session:
+            for table in (
+                "erp_payroll_entries",
+                "erp_compensation",
+                "erp_payroll_runs",
+                "erp_payroll_settings",
+                "erp_employees",
+            ):
+                await session.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+            await session.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tenant_id})
+            await session.commit()
+
+    await _seed()
+    try:
+        async with async_session_factory() as session:
+            service, _payroll = _build_service(session)
+            result = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
+
+            assert result.batch.status == "queued", "warnings must never abort a batch"
+            assert result.employee_count == 2
+            preflight = result.batch.preflight
+            assert preflight is not None
+            assert preflight["version"] == 2
+            assert preflight["passed"] is True
+            assert set(preflight["warnings"]) == {"banking", "benefit_elections", "termination"}
+            assert "EMP-WARN01" in preflight["checks"]["banking"]["detail"]
+            assert "EMP-WARN02" in preflight["checks"]["benefit_elections"]["detail"]
+            assert "EMP-WARN02" in preflight["checks"]["termination"]["detail"]
+
+            await _drain_until_finished(service, session, batch_id=result.batch.id)
+            row = await _batch_row(session, result.batch.id, tenant_id)
+            assert row["status"] == BATCH_COMPLETED
+            assert row["totals"]["done"] == 2
+            assert row["totals"]["failed"] == 0
     finally:
         await _cleanup()
 

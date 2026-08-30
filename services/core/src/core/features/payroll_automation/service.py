@@ -27,7 +27,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Protocol
 
@@ -69,6 +69,10 @@ class PayrollComputePort(Protocol):
     async def active_employees(
         self, run_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> Sequence[ent.Employee]: ...
+
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]: ...
 
     async def compute_single(
         self,
@@ -186,11 +190,15 @@ class PayrollAutomationService:
             period_end=run.period_end,
         )
         roster = await self._payroll.active_employees(run_id, tenant_id=tenant_id)
+        elections = await self._payroll.enrolled_benefit_elections(
+            tenant_id, period_end=run.period_end
+        )
         preflight_result = run_preflight(
             run=run,
             settings=settings,
             overlapping=overlapping,
             roster=roster,
+            elections=elections,
         )
         preflight = preflight_result.to_json()
 

@@ -17,6 +17,7 @@ from decimal import Decimal
 
 import pytest
 
+from core.core.constants import EmploymentStatus
 from core.domain.value_objects import Money
 from core.features.payroll.models.payroll_run import PayrollRunStatus
 from core.features.payroll_automation.constants import SOURCE_PAYROLL_RUN
@@ -63,6 +64,16 @@ class _Settings:
 class _Emp:
     id: uuid.UUID
     employee_number: str = ""
+    bank_account: str | None = None
+    bank_name: str | None = None
+    employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
+    termination_date: date | None = None
+
+
+@dataclass
+class _Election:
+    employee_id: uuid.UUID
+    status: str = "enrolled"
 
 
 @dataclass
@@ -76,7 +87,11 @@ class FakePayroll:
 
     def __init__(self) -> None:
         self.runs: dict[uuid.UUID, _Run] = {RUN_ID: _Run(RUN_ID)}
-        self.roster: list[_Emp] = [_Emp(EMP_IDS[0], "EMP-0001"), _Emp(EMP_IDS[1], "EMP-0002")]
+        self.roster: list[_Emp] = [
+            _Emp(EMP_IDS[0], "EMP-0001", "US1234567890", "Bank"),
+            _Emp(EMP_IDS[1], "EMP-0002", "US0987654321", "Bank"),
+        ]
+        self.elections: list[_Election] = [_Election(EMP_IDS[0]), _Election(EMP_IDS[1])]
         self.failures: dict[uuid.UUID, list[Exception]] = {}
         self.skip_employee: uuid.UUID | None = None
         self.finalized: list[dict[str, object]] = []
@@ -99,6 +114,11 @@ class FakePayroll:
 
     async def active_employees(self, run_id: uuid.UUID, *, tenant_id: uuid.UUID) -> list[_Emp]:
         return list(self.roster)
+
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end
+    ) -> list[_Election]:
+        return list(self.elections)
 
     async def compute_single(
         self,
@@ -416,6 +436,70 @@ class TestEnqueue:
         assert retried.employee_count == 2
         assert len(repo.batches) == 1
         assert len([i for i in repo.items if i["batch_id"] == retried.batch.id]) == 2
+
+
+class TestPreflightWarnings:
+    """Advisory checks never abort a batch — they warn and still process."""
+
+    async def _enqueue(self, service, **kwargs):
+        return await service.enqueue(run_id=RUN_ID, tenant_id=TENANT_ID, **kwargs)
+
+    async def test_clean_roster_reports_zero_warnings(self):
+        service, _repo, _payroll = _make_engine()
+        result = await self._enqueue(service)
+        assert result.batch.status == "queued"
+        assert result.batch.preflight["version"] == 2
+        assert result.batch.preflight["passed"] is True
+        assert result.batch.preflight["warnings"] == []
+        assert result.batch.preflight["blocks"] == []
+        for key in ("banking", "benefit_elections", "termination"):
+            assert result.batch.preflight["checks"][key]["status"] == "ok"
+
+    async def test_missing_bank_details_warns_but_does_not_block(self):
+        service, repo, payroll = _make_engine()
+        payroll.roster[0].bank_account = None
+        payroll.roster[0].bank_name = None
+        result = await self._enqueue(service)
+        assert result.batch.status == "queued"
+        assert result.batch.preflight["passed"] is True
+        assert "banking" in result.batch.preflight["warnings"]
+        assert "EMP-0001" in result.batch.preflight["checks"]["banking"]["detail"]
+        assert result.employee_count == 2, "warnings must not drop items"
+        assert len([i for i in repo.items if i["batch_id"] == result.batch.id]) == 2
+
+    async def test_employee_without_enrolled_election_warns(self):
+        service, _repo, payroll = _make_engine()
+        payroll.elections = [_Election(EMP_IDS[0])]
+        result = await self._enqueue(service)
+        assert result.batch.preflight["passed"] is True
+        assert "benefit_elections" in result.batch.preflight["warnings"]
+        assert "EMP-0002" in result.batch.preflight["checks"]["benefit_elections"]["detail"]
+
+    async def test_active_employee_flagged_with_termination_date_warns(self):
+        service, _repo, payroll = _make_engine()
+        payroll.roster[0].termination_date = date(2026, 7, 20)
+        result = await self._enqueue(service)
+        assert result.batch.preflight["passed"] is True
+        assert "termination" in result.batch.preflight["warnings"]
+        assert "EMP-0001" in result.batch.preflight["checks"]["termination"]["detail"]
+
+    async def test_terminated_during_period_is_not_warned(self):
+        service, _repo, payroll = _make_engine()
+        payroll.roster[0].employment_status = EmploymentStatus.TERMINATED
+        payroll.roster[0].termination_date = date(2026, 7, 20)
+        result = await self._enqueue(service)
+        assert result.batch.preflight["passed"] is True
+        assert "termination" not in result.batch.preflight["warnings"]
+
+    async def test_warnings_do_not_abort_blocked_flow(self):
+        # A hard block still aborts, but the warnings report is still attached.
+        service, _repo, payroll = _make_engine()
+        payroll.settings = _Settings(ai_automation_enabled=False)
+        payroll.roster[0].bank_account = None
+        result = await self._enqueue(service)
+        assert result.batch.status == "aborted"
+        assert "automation_enabled" in result.batch.preflight["blocks"]
+        assert "banking" in result.batch.preflight["warnings"]
 
 
 class TestProcessOnce:

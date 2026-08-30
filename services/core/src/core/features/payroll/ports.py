@@ -159,5 +159,10 @@ class PayrollRepositoryPort(Protocol):
         period_end: date,
     ) -> Sequence[ent.Employee]: ...
 
+    # --- Benefits (read-only, pre-flight input) ---
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]: ...
+
 
 __all__ = ["LeaveLedgerPort", "PayrollRepositoryPort"]

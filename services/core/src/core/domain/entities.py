@@ -237,6 +237,27 @@ class Employee:
     user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     termination_date: date | None = None
+    bank_account: str | None = None
+    bank_name: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class BenefitElection:
+    """A tenant-scoped benefit plan election for one employee.
+
+    ``effective_from`` is the date the election takes effect. The payroll
+    pre-flight ``benefit_elections`` warning reads the enrolled elections for a
+    pay period to surface roster employees holding none before a run commits.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    plan_id: uuid.UUID
+    status: str
+    effective_from: date
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

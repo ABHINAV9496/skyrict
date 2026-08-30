@@ -100,6 +100,9 @@ _HR_AI_TABLES = (
     # 0026: payroll automation engine tables (HR-AUT-001, Commit 1).
     "ai_payroll_batch_runs",
     "ai_payroll_batch_items",
+    # 0027: benefit plans + elections (HR-AUT-001, pre-flight finish-up).
+    "erp_benefit_plans",
+    "erp_benefit_elections",
 )
 
 
@@ -165,7 +168,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0026", f"head is {version}, expected 0026"
+            assert version == "0027", f"head is {version}, expected 0027"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -401,6 +404,77 @@ async def _assert_upgraded_schema(url: str) -> None:
                 ).one_or_none()
                 assert bank_col is not None, f"0026 must add erp_employees.{col_name}"
                 assert bank_col[0] == "character varying"
+
+            # 0027: benefit catalogue — columns + status/type constraints.
+            plan_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_benefit_plans' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "plan_code",
+                "name",
+                "plan_type",
+                "monthly_cost_cents",
+                "is_active",
+                "effective_from",
+            }.issubset(set(plan_cols)), plan_cols
+
+            election_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_benefit_elections' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "employee_id",
+                "plan_id",
+                "status",
+                "effective_from",
+            }.issubset(set(election_cols)), election_cols
+
+            plan_type_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_benefit_plans'::regclass "
+                        "AND conname = 'ck_erp_benefit_plans_type'"
+                    )
+                )
+            ).scalar_one()
+            assert plan_type_check == 1, "0027 must add the plan_type check constraint"
+
+            election_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_benefit_elections'::regclass "
+                        "AND conname = 'ck_erp_benefit_elections_status'"
+                    )
+                )
+            ).scalar_one()
+            assert election_status_check == 1, "0027 must add the election status check constraint"
     finally:
         await engine.dispose()
 

@@ -277,6 +277,25 @@ EMPLOYEE_ROWS: tuple[dict[str, object], ...] = (
     },
 )
 
+# Benefit plans (pre-flight ``benefit_elections`` warning stays quiet when every
+# seeded employee is enrolled). ``monthly_cost_cents`` is integer cents.
+BENEFIT_PLANS: tuple[dict[str, object], ...] = (
+    {
+        "code": "MED-BRONZE",
+        "name": "Medical — Bronze",
+        "plan_type": "medical",
+        "monthly_cost_cents": 150000,
+        "effective_days_ago": 3650,
+    },
+    {
+        "code": "RET-401K",
+        "name": "Retirement — 401(k) Match",
+        "plan_type": "retirement",
+        "monthly_cost_cents": None,
+        "effective_days_ago": 3650,
+    },
+)
+
 LEAVE_REQUEST_ROWS: tuple[dict[str, object], ...] = (
     {
         "emp": 0,
@@ -1633,7 +1652,9 @@ async def seed_demo_data(
     ``EMPLOYEE_ROWS`` plus synthetic extras when larger. Compensation follows
     the same cut (base rows for indices 0-12 and 14, so employee index 13 is
     ALWAYS uncompensated — the demo's "skipped" employee), then synthetic rows
-    for indices >= 15. The payroll automation acceptance scrub seeds 50.
+    for indices >= 15. The payroll automation acceptance scrub seeds 50. Every
+    seeded employee also gets bank details and enrolled benefit elections so the
+    pre-flight ``banking``/``benefit_elections`` warnings stay quiet on demos.
     """
     from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
     from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
@@ -1659,6 +1680,10 @@ async def seed_demo_data(
     from core.features.inventory.models.stock_level import ErpStockLevelModel
     from core.features.inventory.models.stock_movement import ErpStockMovementModel
     from core.features.inventory.models.warehouse import ErpWarehouseModel
+    from core.features.payroll.models.benefits import (
+        BenefitElectionModel,
+        BenefitPlanModel,
+    )
     from core.features.payroll.models.compensation import CompensationModel
     from core.features.payroll.models.payroll_entry import PayrollEntryModel
     from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
@@ -1791,7 +1816,7 @@ async def seed_demo_data(
 
         # ── EMPLOYEES ────────────────────────────────────────────────
         emp_ids: list[uuid.UUID] = []
-        for row in employee_rows:
+        for idx, row in enumerate(employee_rows):
             dept_idx = int(str(row["dept"]))
             term_date = None
             if row["status"] == "terminated":
@@ -1808,11 +1833,50 @@ async def seed_demo_data(
                 employment_status=row["status"],
                 hire_date=_date_ago(int(str(row["hire_days_ago"]))),
                 termination_date=term_date,
+                bank_account=f"US{90000000000 + idx + 1}",
+                bank_name="SkyRict Demo Bank",
             )
             session.add(emp)
             await session.flush()
             emp_ids.append(emp.id)
         counts["employees"] = len(emp_ids)
+
+        # ── BENEFITS ───────────────────────────────────────────────────
+        # Every seeded employee is enrolled in both seeded plans so the payroll
+        # pre-flight ``benefit_elections`` warning stays quiet on demos; the
+        # ``banking`` warning stays quiet via the bank fields above and the
+        # ``termination`` warning never fires (seed sets termination_date only
+        # for status "terminated" rows, which pre-flight deliberately ignores).
+        _plan_ids: list[uuid.UUID] = []
+        for plan in BENEFIT_PLANS:
+            plan_cents = plan.get("monthly_cost_cents")
+            plan_model = BenefitPlanModel(
+                tenant_id=tenant_id,
+                plan_code=str(plan["code"]),
+                name=str(plan["name"]),
+                plan_type=str(plan["plan_type"]),
+                monthly_cost_cents=(
+                    Decimal(str(plan_cents)) if plan_cents is not None else None
+                ),
+                is_active=True,
+                effective_from=_date_ago(int(str(plan["effective_days_ago"]))),
+            )
+            session.add(plan_model)
+            await session.flush()
+            _plan_ids.append(plan_model.id)
+        for emp_id in emp_ids:
+            for plan_id in _plan_ids:
+                session.add(
+                    BenefitElectionModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_id,
+                        plan_id=plan_id,
+                        status="enrolled",
+                        effective_from=_date_ago(3650),
+                    )
+                )
+        counts["benefit_plans"] = len(_plan_ids)
+        counts["benefit_elections"] = len(emp_ids) * len(_plan_ids)
 
         # Update department managers
         depts_with_managers = [

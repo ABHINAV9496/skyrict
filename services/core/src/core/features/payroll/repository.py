@@ -39,6 +39,7 @@ from core.features.hr.models.employee import (
 from core.features.hr.models.employee import (
     EmploymentStatus as EmployeeEmploymentStatus,
 )
+from core.features.payroll.models.benefits import BenefitElectionModel
 from core.features.payroll.models.compensation import CompensationModel
 from core.features.payroll.models.payroll_entry import PayrollEntryModel
 from core.features.payroll.models.payroll_run import (
@@ -135,6 +136,21 @@ def _employee_from_orm(model: EmployeeModel) -> ent.Employee:
         employment_status=EmploymentStatus(model.employment_status.value),
         hire_date=model.hire_date,
         termination_date=model.termination_date,
+        bank_account=model.bank_account,
+        bank_name=model.bank_name,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _benefit_election_from_orm(model: BenefitElectionModel) -> ent.BenefitElection:
+    return ent.BenefitElection(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        plan_id=model.plan_id,
+        status=model.status,
+        effective_from=model.effective_from,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -639,3 +655,23 @@ class PayrollRepository:
         stmt = stmt.order_by(EmployeeModel.employee_number.asc())
         result = await self.session.execute(stmt)
         return [_employee_from_orm(model) for model in result.scalars().all()]
+
+    # ------------------------------------------------------------------
+    # Benefits (read-only, pre-flight input)
+    # ------------------------------------------------------------------
+
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]:
+        """Enrolled elections effective by ``period_end`` (pre-flight input)."""
+        stmt = (
+            select(BenefitElectionModel)
+            .where(
+                BenefitElectionModel.tenant_id == tenant_id,
+                BenefitElectionModel.status == "enrolled",
+                BenefitElectionModel.effective_from <= period_end,
+            )
+            .order_by(BenefitElectionModel.effective_from.desc())
+        )
+        result = await self.session.execute(stmt)
+        return [_benefit_election_from_orm(model) for model in result.scalars().all()]

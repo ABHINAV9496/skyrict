@@ -4,8 +4,8 @@ These run the REAL ``ai_agent.features.restock_agent.graph`` through the real
 runtime against an ``InMemorySaver`` — so the demo's read gate, the
 interrupt/pause, the approval persistence (SuggestionRepository +
 ai.suggestion.created audit) and the write-failure capture are all exercised
-with real LangGraph semantics. Only the session (ledger/suggestion/audit
-writes) and the runtime's injected audit repo are fakes.
+with real LangGraph semantics. Only the session (ledger/suggestion writes)
+and the runtime's injected audit repo are fakes.
 """
 
 from __future__ import annotations
@@ -13,22 +13,17 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-if TYPE_CHECKING:
-    import pytest
-
 from ai_agent.core.audit_events import AI_SUGGESTION_CREATED
 from ai_agent.core.audit_service import AuditService
-from ai_agent.features.restock_agent import graph as restock_graph
 from ai_agent.features.restock_agent.graph import build_graph as restock_build_graph
 from ai_agent.graphs.interrupts import InterruptRepository
 from ai_agent.graphs.runtime import AgentDeployment, AgentDeps, AgentRuntime
 from ai_agent.graphs.security import PERM_INVENTORY_AI_APPROVE, PERM_INVENTORY_READ
 from ai_agent.models.agent_interrupt import AgentInterruptModel
-from ai_agent.models.ai_audit_log import AiAuditLogModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 
 TENANT_ID = uuid.uuid4()
@@ -107,9 +102,18 @@ def build_restock_graph(deps: AgentDeps, module: str) -> Any:
     return restock_build_graph(deps)
 
 
+def _audit_action_payload(audit: _FakeAuditRepo, action: str) -> dict[str, object] | None:
+    """The input payload recorded for one audit action (or None)."""
+    for event_action, payload in audit.events:
+        if event_action == action:
+            return payload
+    return None
+
+
 def make_runtime(
     *,
     permissions: list[str] | None = None,
+    suggestions: Any = None,
 ) -> tuple[AgentRuntime, _LedgerSession, _FakeAuditRepo]:
     audit_repo = _FakeAuditRepo()
     ledger = _LedgerSession()
@@ -132,6 +136,7 @@ def make_runtime(
         build_graph=build_restock_graph,
         interrupts=InterruptRepository(ledger),  # type: ignore[arg-type]
         audit=AuditService(audit_repo),  # type: ignore[arg-type]
+        suggestions=suggestions,  # type: ignore[arg-type]
     )
     return runtime, ledger, audit_repo
 
@@ -189,12 +194,12 @@ async def test_approve_persists_suggestion_and_audits_created() -> None:
     assert suggestions[0].suggested_qty == Decimal("8")
     assert suggestions[0].product_id == uuid.UUID(PRODUCT_ID)
 
-    audit_logs = [row for row in ledger.added if isinstance(row, AiAuditLogModel)]
-    assert len(audit_logs) == 1
-    assert audit_logs[0].action == AI_SUGGESTION_CREATED
-    assert audit_logs[0].input["suggestion_id"] == str(suggestions[0].id)
+    # The runtime's injected audit port carries the suggestion-created event.
+    created = _audit_action_payload(audit, AI_SUGGESTION_CREATED)
+    assert created is not None
+    assert created["suggestion_id"] == str(suggestions[0].id)
 
-    # The runtime ALSO audits the interrupt decision through its injected repo.
+    # The runtime ALSO audits the interrupt decision through the same port.
     assert any(action == "ai.agent.interrupt.approved" for action, _ in audit.events)
 
 
@@ -220,9 +225,9 @@ async def test_deny_is_a_clean_noop() -> None:
     assert outcome.output["applied"] is False
     assert outcome.output["outcome"] == "denied"
     assert first.interrupt.status == "denied"
-    # Nothing was persisted: no suggestion row, no suggestion-created audit log.
+    # Nothing was persisted: no suggestion row, no suggestion-created audit.
     assert not any(isinstance(row, AiSuggestionModel) for row in ledger.added)
-    assert not any(isinstance(row, AiAuditLogModel) for row in ledger.added)
+    assert _audit_action_payload(audit, AI_SUGGESTION_CREATED) is None
     assert any(action == "ai.agent.interrupt.denied" for action, _ in audit.events)
 
 
@@ -243,9 +248,7 @@ async def test_invoke_without_read_permission_fails_with_permission_denied() -> 
     assert len(ledger.added) == 0  # no interrupt was ever opened
 
 
-async def test_approve_with_write_failure_is_captured_in_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_approve_with_write_failure_is_captured_in_state() -> None:
     """The decision commits (decision-first), but the apply write failure is
     captured into state — never raised into the checkpoint."""
 
@@ -256,13 +259,12 @@ async def test_approve_with_write_failure_is_captured_in_state(
         async def create_pending(self, **kwargs: Any) -> AiSuggestionModel:
             raise RuntimeError("database gone")
 
-    runtime, ledger, _ = make_runtime()
+    runtime, ledger, audit = make_runtime(suggestions=_FailingSuggestions(object()))
     first = await runtime.invoke(
         agent_name=AGENT_NAME, input_payload=INVOKE_PAYLOAD, user_id=USER_ID, tenant_id=TENANT_ID
     )
     assert first.interrupt is not None
 
-    monkeypatch.setattr(restock_graph, "SuggestionRepository", _FailingSuggestions)
     outcome = await runtime.resume(
         agent_name=AGENT_NAME,
         interrupt_id=first.interrupt.id,
@@ -279,6 +281,7 @@ async def test_approve_with_write_failure_is_captured_in_state(
     assert outcome.output["outcome"] == "write_failed"
     assert first.interrupt.status == "approved"
     assert not any(isinstance(row, AiSuggestionModel) for row in ledger.added)
+    assert _audit_action_payload(audit, AI_SUGGESTION_CREATED) is None
 
 
 async def test_lazy_expiry_still_denies_the_demo_interrupt() -> None:

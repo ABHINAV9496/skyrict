@@ -57,6 +57,7 @@ from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.db.agent_registry_repository import AgentRegistryRepository
 from ai_agent.db.audit_repository import AiAuditLogRepository
 from ai_agent.db.permission_repository import PermissionRepository
+from ai_agent.db.suggestion_repository import SuggestionRepository
 from ai_agent.graphs.checkpointer import config_for
 from ai_agent.graphs.interrupts import InterruptRepository
 from ai_agent.graphs.tools import ToolContext
@@ -87,19 +88,21 @@ class AgentDeployment:
 class AgentDeps:
     """What a graph builder receives to wire its nodes for ONE run.
 
-    ``session`` is the request session (RLS-tenanted): graph nodes that write
-    business rows (suggestions, audit) share the request transaction. The
-    checkpointer sessions are independent by design (see checkpointer.py).
+    ``suggestions``/``audit`` are the injected persistence ports the runtime
+    composes from the request session (RLS-tenanted) — feature slices must not
+    import ``ai_agent.db`` directly (import-linter contract). The checkpointer
+    sessions are independent by design (see checkpointer.py).
     ``tenant_id``/``user_id`` are the run identity — READ ONLY inside nodes;
     authorization always flows through ``tool_context``, never state.
     """
 
-    session: AsyncSession
     tool_context: ToolContext
     allowlist: frozenset[str]
     settings: Settings
     tenant_id: uuid.UUID
     user_id: uuid.UUID
+    suggestions: SuggestionRepository
+    audit: AuditService
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +162,7 @@ class AgentRuntime:
         build_graph: Callable[[AgentDeps, str], Any] | None = None,
         interrupts: InterruptRepository | None = None,
         audit: AuditService | None = None,
+        suggestions: SuggestionRepository | None = None,
     ) -> None:
         self._session = session
         self._checkpointer = checkpointer
@@ -167,6 +171,7 @@ class AgentRuntime:
         self._build_graph = build_graph or self._default_graph_builder
         self._interrupts = interrupts or InterruptRepository(session)
         self._audit = audit or AuditService(AiAuditLogRepository(session))
+        self._suggestions = suggestions or SuggestionRepository(session)
 
     # --- public API ---------------------------------------------------------
 
@@ -183,12 +188,13 @@ class AgentRuntime:
         context = await self._tool_context(user_id, tenant_id)
         graph = self._build_graph(
             AgentDeps(
-                session=self._session,
                 tool_context=context,
                 allowlist=deployment.tools,
                 settings=settings,
                 tenant_id=tenant_id,
                 user_id=user_id,
+                suggestions=self._suggestions,
+                audit=self._audit,
             ),
             deployment.module,
         ).compile(checkpointer=self._checkpointer)
@@ -297,12 +303,13 @@ class AgentRuntime:
 
         graph = self._build_graph(
             AgentDeps(
-                session=self._session,
                 tool_context=context,
                 allowlist=deployment.tools,
                 settings=settings,
                 tenant_id=tenant_id,
                 user_id=user_id,
+                suggestions=self._suggestions,
+                audit=self._audit,
             ),
             deployment.module,
         ).compile(checkpointer=self._checkpointer)

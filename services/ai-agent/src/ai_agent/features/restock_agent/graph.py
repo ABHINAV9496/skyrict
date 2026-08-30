@@ -16,9 +16,9 @@ The run input carries the stock snapshot (self-contained demo — the ERP read
 is simulated), but the READ GATE is real: ``query_stock`` refuses to run
 without ``erp.inventory.read`` on the caller's ToolContext. The WRITE gate is
 the runtime's: an approved interrupt requires ``erp.inventory.ai.approve`` at
-ledge-open AND resume, then the approved branch persists an ``ai_suggestions``
-row via the SKY-68 repo + audits ``ai.suggestion.created``; denied is a clean
-no-op.
+ledger-open AND resume, then the approved branch persists an ``ai_suggestions``
+row through the INJECTED suggestion repository (runtime-composed, RLS session)
+and audits ``ai.suggestion.created``; denied is a clean no-op.
 
 Consistency: the ledger decision commits FIRST (runtime), then this node
 runs once at resume. Write errors are captured into state — never raised —
@@ -36,9 +36,6 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from ai_agent.core.audit_events import AI_SUGGESTION_CREATED
-from ai_agent.core.audit_service import AuditService
-from ai_agent.db.audit_repository import AiAuditLogRepository
-from ai_agent.db.suggestion_repository import SuggestionRepository
 from ai_agent.graphs.security import PERM_INVENTORY_AI_APPROVE, PERM_INVENTORY_READ
 from skyrict_common.exceptions import PermissionDeniedError
 
@@ -135,9 +132,14 @@ async def _apply_suggestion_node(state: RestockState, deps: AgentDeps) -> dict[s
 
 
 async def _persist_suggestion(deps: AgentDeps, state: RestockState) -> None:
-    """Approve-side write: one ai_suggestions row + the created audit event."""
+    """Approve-side write: one ai_suggestions row + the created audit event.
+
+    Both ports are runtime-injected (AgentDeps) — the feature slice never
+    imports ``ai_agent.db`` (import-linter contract); the runtime's request
+    session (RLS-tenanted) backs them.
+    """
     tenant_id = deps.tenant_id
-    row = await SuggestionRepository(deps.session).create_pending(
+    row = await deps.suggestions.create_pending(
         tenant_id=tenant_id,
         product_id=uuid.UUID(state["product_id"]),
         warehouse_id=uuid.UUID(state["warehouse_id"]),
@@ -148,7 +150,7 @@ async def _persist_suggestion(deps: AgentDeps, state: RestockState) -> None:
         reason=state["reason"],
         confidence=None,
     )
-    await AuditService(AiAuditLogRepository(deps.session)).log(
+    await deps.audit.log(
         action=AI_SUGGESTION_CREATED,
         tenant_id=tenant_id,
         user_id=deps.user_id,

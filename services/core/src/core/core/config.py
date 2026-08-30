@@ -162,6 +162,15 @@ class Settings(BaseSettings):
             "the feature fed only by the `ai-agent inventory reindex` CLI."
         ),
     )
+    AI_INGEST_TOKEN: str = Field(
+        default="",
+        description=(
+            "shared secret the ai-agent reindex/ingest CLIs present as a bearer "
+            "on GET /inventory/products (SKY-70). Must match ai-agent's "
+            "AI_INGEST_TOKEN; empty disables the machine-to-machine branch so "
+            "only JWT + erp.inventory.read reads succeed. Never logged."
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""

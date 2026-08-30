@@ -17,15 +17,13 @@ reach the upstream request target).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.api.deps import get_current_user, require_permission
+from core.api.deps import require_all_permissions, require_permission
 from core.core.permissions import (
     ERP_AI_INVOKE,
     ERP_AI_NARRATOR_REFRESH,
@@ -37,10 +35,7 @@ from core.core.permissions import (
     ERP_SALES_READ,
 )
 from core.core.tenant_resolver import derive_tenant_slug
-from core.db.rbac import RbacRepository, grants_permission
-from core.db.session import get_db
 from core.features.ai.proxy import forward_to_ai_agent, relay_response
-from skyrict_common.exceptions import PermissionDeniedError
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -68,29 +63,8 @@ _NARRATOR_READS = (
 )
 
 
-def _require_all_permissions(
-    *permissions: str,
-) -> Callable[[], Awaitable[dict[str, Any]]]:
-    """Dependency factory requiring EVERY listed permission (AND semantics)."""
-
-    async def _check(
-        current_user: dict[str, Any] = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
-    ) -> dict[str, Any]:
-        granted = await RbacRepository(db).resolve_user_permissions(
-            user_id=current_user["user_id"],
-            tenant_id=current_user["tenant_id"],
-        )
-        for required in permissions:
-            if not grants_permission(granted, required):
-                raise PermissionDeniedError(f"Missing required permission: {required}")
-        return current_user
-
-    return _check
-
-
-_require_narrator_reads = _require_all_permissions(*_NARRATOR_READS)
-_require_narrator_refresh = _require_all_permissions(*_NARRATOR_READS, ERP_AI_NARRATOR_REFRESH)
+_require_narrator_reads = require_all_permissions(*_NARRATOR_READS)
+_require_narrator_refresh = require_all_permissions(*_NARRATOR_READS, ERP_AI_NARRATOR_REFRESH)
 
 _NarratorDep = Annotated[dict[str, Any], Depends(_require_narrator_reads)]
 _NarratorRefreshDep = Annotated[dict[str, Any], Depends(_require_narrator_refresh)]

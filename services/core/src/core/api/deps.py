@@ -159,6 +159,34 @@ def require_any_permission(*permissions: str) -> Callable[[], Awaitable[dict[str
     return _check
 
 
+def require_all_permissions(*permissions: str) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory — grants access only when EVERY listed permission is held.
+
+    AND-semantics counterpart to :func:`require_any_permission`, used by the
+    cross-module narrator (SKY-63) whose digest spans all four ERP domains: the
+    caller must hold ``erp.ai.invoke`` AND each module read key. Each key
+    resolves through the same DB-backed grant path and fails closed with
+    ``PermissionDeniedError`` on the first missing one.
+    """
+    if not permissions:
+        raise ValueError("require_all_permissions requires at least one permission")
+
+    async def _check(
+        current_user: dict[str, Any] = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        granted = await RbacRepository(db).resolve_user_permissions(
+            user_id=current_user["user_id"],
+            tenant_id=current_user["tenant_id"],
+        )
+        for remaining in permissions:
+            if not grants_permission(granted, remaining):
+                raise PermissionDeniedError(f"Missing required permission: {remaining}")
+        return current_user
+
+    return _check
+
+
 def get_tenant_id() -> uuid.UUID:
     """Return the current request's tenant id as a UUID (resolved by the middleware)."""
     return uuid.UUID(TenantContext.get())

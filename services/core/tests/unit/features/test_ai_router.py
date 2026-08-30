@@ -18,6 +18,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.api import deps as api_deps
 from core.api.deps import get_current_user, get_db
 from core.core.exceptions import SkyrictError, skyrict_error_handler
 from core.core.permissions import (
@@ -163,7 +164,7 @@ class TestNarratorPermissionGate:
             ) -> list[str]:
                 return grants
 
-        monkeypatch.setattr(ai_router, "RbacRepository", _FakeRbac)
+        monkeypatch.setattr(api_deps, "RbacRepository", _FakeRbac)
 
     def _app(self) -> TestClient:
         app = FastAPI()

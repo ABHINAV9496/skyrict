@@ -287,6 +287,8 @@ class Settings(BaseSettings):
     )
     NARRATOR_DAILY_MINUTE: int = Field(
         default=0, ge=0, le=59, description="minute of hour for the daily narrator digest"
+    )
+
     # --- Email delivery (SMTP) for critical anomaly alerts (spec §4.3) ---
     EMAIL_SMTP_HOST: str = Field(
         default="",

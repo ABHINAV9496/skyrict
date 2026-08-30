@@ -65,6 +65,33 @@ _ERP_PERMISSION_KEYS = (
     "erp.payroll.read",
     "erp.payroll.write",
     "erp.payroll.approve",
+    # 0021: HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
+    "erp.hr.ai.read",
+    "erp.hr.ai.individual",
+    "erp.hr.ai.acknowledge",
+    "erp.hr.ai.copilot",
+    # 0023: ai-agent eval-harness record permission (HR-AI-002, SKY-72).
+    "erp.hr.ai.eval",
+    # 0025: inventory AI approve permission (SKY-68, renumbered on HR-AI-002).
+    "erp.inventory.ai.approve",
+)
+
+# 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
+_HR_AI_TABLES = (
+    "ai_hr_attrition_scores",
+    "ai_payroll_anomaly_log",
+    "ai_compliance_checks",
+    "erp_employee_documents",
+    # 0022: HR-AI-002 wave-2 tables (data quality, utilization alerts,
+    # leave-pattern anomalies, leave suggestions, model eval harness).
+    "ai_hr_quality_scores",
+    "ai_hr_utilization_alerts",
+    "ai_hr_leave_anomalies",
+    "ai_hr_leave_suggestions",
+    "hr_eval_runs",
+    # 0024: HR-AI-002 pattern-engine input tables (holidays + blackouts).
+    "ai_hr_public_holidays",
+    "ai_hr_leave_blackout_periods",
 )
 
 
@@ -130,7 +157,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0020", f"head is {version}, expected 0020"
+            assert version == "0025", f"head is {version}, expected 0025"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -173,6 +200,17 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert expected_cols <= set(policy_cols), (
                 f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
             )
+
+            # 0025: erp.inventory.ai.approve is a first-class catalog permission.
+            ai_approve_row = (
+                await conn.execute(
+                    text(
+                        "SELECT description FROM core_permissions "
+                        "WHERE key = 'erp.inventory.ai.approve'"
+                    )
+                )
+            ).scalar_one_or_none()
+            assert ai_approve_row is not None, "0025 must register erp.inventory.ai.approve"
 
             row = (
                 await conn.execute(
@@ -300,6 +338,32 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).scalar_one()
             assert neg_fn_count == 1, "negative-guard function must be SECURITY DEFINER"
+
+            # 0021: HR & Payroll AI tables exist, are tenant-scoped with RLS,
+            # and the four erp.hr.ai.* permissions are registered.
+            for table in _HR_AI_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0021 must create {table}"
+
+            rls_tables = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = ANY(:names)"
+                        ),
+                        {"names": list(_HR_AI_TABLES)},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(rls_tables) == set(_HR_AI_TABLES), (
+                f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
+            )
     finally:
         await engine.dispose()
 
@@ -322,6 +386,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_sequences",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
+                assert regclass is None, f"{table} still exists after downgrade base"
+
+            for table in _HR_AI_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             func_count = (

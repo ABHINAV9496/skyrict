@@ -14,6 +14,7 @@ from ai_agent.core.audit_events import (
     AI_ANOMALY_DISMISSED,
     AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
+    AI_HR_COPILOT_EXCHANGE,
     AI_NARRATOR_GENERATED,
     AI_NARRATOR_REFRESHED,
     AI_QUERY_EXECUTED,
@@ -36,6 +37,8 @@ class TestAppendixBVocabulary:
         assert AI_ANOMALY_DISMISSED == "ai.anomaly.dismissed"
         # Documented spec-gap addition (see module docstring).
         assert AI_ANOMALY_ESCALATED == "ai.anomaly.escalated"
+        # HR-AI-001 feature 5 (spec §9).
+        assert AI_HR_COPILOT_EXCHANGE == "ai.hr.copilot.exchange"
         # SKY-63 cross-module narrator events.
         assert AI_NARRATOR_GENERATED == "ai.narrator.generated"
         assert AI_NARRATOR_REFRESHED == "ai.narrator.refreshed"
@@ -50,6 +53,7 @@ class TestAppendixBVocabulary:
             audit_events.AI_ANOMALY_RESOLVED,
             audit_events.AI_ANOMALY_DISMISSED,
             audit_events.AI_ANOMALY_ESCALATED,
+            audit_events.AI_HR_COPILOT_EXCHANGE,
             audit_events.AI_NARRATOR_GENERATED,
             audit_events.AI_NARRATOR_REFRESHED,
         }

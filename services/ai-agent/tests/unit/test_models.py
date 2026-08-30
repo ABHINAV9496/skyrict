@@ -12,6 +12,7 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
 from ai_agent.models.ai_digest import AiDigestModel
+from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base
@@ -22,13 +23,19 @@ class TestRegistry:
         expected = {
             # read-only projection of identity's shared table
             "tenants",
-            # AI-owned tables (this commit)
+            # AI-owned tables (SKY-57)
             "ai_query_log",
             "ai_suggestions",
             "ai_anomalies",
             "ai_audit_log",
             "ai_digest_snapshots",
             "agent_registry",
+            # RAG tables (SKY-58)
+            "ai_rag_parents",
+            "ai_rag_chunks",
+            "ai_episodic_memory",
+            "ai_query_cache",
+            "ai_eval_runs",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -39,6 +46,10 @@ class TestRegistry:
             "ai_anomalies",
             "ai_audit_log",
             "ai_digest_snapshots",
+            "ai_rag_parents",
+            "ai_rag_chunks",
+            "ai_episodic_memory",
+            "ai_query_cache",
         ):
             pk = list(Base.metadata.tables[table].primary_key.columns.keys())
             assert pk == ["tenant_id", "id"], table
@@ -142,6 +153,18 @@ class TestAiDigest:
         assert cols == ["tenant_id", "as_of"]
         desc = str(index.expressions[-1].compile()).lower()
         assert "generated_at desc" in desc
+
+
+class TestAiQueryCache:
+    def test_tenant_hash_unique_index_is_tenant_scoped(self) -> None:
+        """One cache entry per tenant+query — never a global query hash."""
+        index = next(
+            index
+            for index in AiQueryCacheModel.__table__.indexes
+            if index.name == "uq_ai_query_cache_tenant_hash"
+        )
+        assert index.unique
+        assert [c.name for c in index.columns] == ["tenant_id", "query_hash"]
 
 
 class TestAgentRegistry:

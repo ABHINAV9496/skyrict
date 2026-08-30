@@ -43,6 +43,7 @@ def _app_with_recorder(seen: list[httpx.Request]) -> TestClient:
     app.dependency_overrides[ai_router._require_ai_invoke] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_inventory_read] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_inventory_write] = lambda: {"sub": "u1"}
+    app.dependency_overrides[ai_router._require_inventory_ai_approve] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_narrator_reads] = lambda: {"sub": "u1"}
     app.dependency_overrides[ai_router._require_narrator_refresh] = lambda: {"sub": "u1"}
     client_factory = lambda: httpx.AsyncClient(  # noqa: E731

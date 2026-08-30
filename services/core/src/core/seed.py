@@ -33,6 +33,9 @@ from core.core.config import settings
 from core.core.permissions import (
     ERP_CRM_READ,
     ERP_CRM_WRITE,
+    ERP_HR_AI_ACKNOWLEDGE,
+    ERP_HR_AI_COPILOT,
+    ERP_HR_AI_READ,
     ERP_HR_APPROVE,
     ERP_HR_READ,
     ERP_HR_WRITE,
@@ -68,6 +71,7 @@ class LeaveTypeDefault:
 
 
 LEAVE_TYPE_DEFAULTS: tuple[LeaveTypeDefault, ...] = (
+    LeaveTypeDefault("annual", "Annual Leave", True, 20),
     LeaveTypeDefault("casual", "Casual Leave", True, 12),
     LeaveTypeDefault("sick", "Sick Leave", True, 8),
     LeaveTypeDefault("unpaid", "Unpaid Leave", False, None),
@@ -153,6 +157,9 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_SALES_READ,
             ERP_SALES_WRITE,
             ERP_SALES_APPROVE,
+            ERP_HR_AI_READ,
+            ERP_HR_AI_ACKNOWLEDGE,
+            ERP_HR_AI_COPILOT,
         ),
     ),
     (
@@ -165,10 +172,22 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_CRM_WRITE,
             ERP_SALES_READ,
             ERP_SALES_WRITE,
+            ERP_HR_AI_READ,
+            ERP_HR_AI_ACKNOWLEDGE,
+            ERP_HR_AI_COPILOT,
         ),
     ),
     ("standard_user", (ERP_HR_READ, ERP_CRM_READ, ERP_SALES_READ)),
-    ("auditor", (ERP_HR_READ, ERP_PAYROLL_READ, ERP_CRM_READ, ERP_SALES_READ)),
+    (
+        "auditor",
+        (
+            ERP_HR_READ,
+            ERP_PAYROLL_READ,
+            ERP_CRM_READ,
+            ERP_SALES_READ,
+            ERP_HR_AI_READ,
+        ),
+    ),
     # Employee self-service: portal-only role (own leave balances/requests).
     # Deliberately holds zero dashboard permissions; mirrors identity's
     # SYSTEM_ROLE_DEFINITIONS so invite grants stay portable.

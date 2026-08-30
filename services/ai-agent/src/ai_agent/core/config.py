@@ -162,6 +162,92 @@ class Settings(BaseSettings):
         description="per-provider total timeout for generation calls",
     )
 
+    # --- Embedding configuration (SKY-58) ---
+    EMBEDDING_PROVIDER: str | None = Field(
+        default=None,
+        description=(
+            "embedding provider name: 'openai' (text-embedding-3-small via API), "
+            "'ollama' (nomic-embed-text local), or None to disable embeddings"
+        ),
+    )
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="embedding model identifier (OpenAI or Ollama)",
+    )
+    EMBEDDING_DIMENSIONS: int = Field(
+        default=512,
+        gt=0,
+        description=(
+            "output dimensions for Matryoshka-reduced embeddings "
+            "(512 for text-embedding-3-small = 3x storage savings, ~2% quality drop)"
+        ),
+    )
+    EMBEDDING_BASE_URL: str | None = Field(
+        default=None,
+        description=(
+            "base URL for embedding API (Ollama: http://localhost:11434/v1, "
+            "OpenAI: None to use default)"
+        ),
+    )
+    EMBEDDING_API_KEY: str | None = Field(
+        default=None,
+        description="API key for embedding provider (not needed for local Ollama)",
+    )
+    EMBEDDING_BATCH_SIZE: int = Field(
+        default=100,
+        gt=0,
+        description="number of texts to embed per batch call",
+    )
+    EMBEDDING_TIMEOUT_SECONDS: float = Field(
+        default=30.0,
+        gt=0,
+        description="timeout for embedding API calls",
+    )
+    INGEST_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token used by the RAG ingestion CLI when pulling module "
+            "data from the core service — never logged"
+        ),
+    )
+
+    # --- RAG configuration (SKY-58) ---
+    RAG_CHUNK_CHILD_TOKENS: int = Field(
+        default=400,
+        gt=0,
+        description="target token count for child chunks (embedded, searched)",
+    )
+    RAG_CHUNK_PARENT_TOKENS: int = Field(
+        default=2000,
+        gt=0,
+        description="target token count for parent chunks (returned to LLM)",
+    )
+    RAG_CHUNK_OVERLAP_TOKENS: int = Field(
+        default=60,
+        ge=0,
+        description="overlap tokens between adjacent child chunks (15% of 400)",
+    )
+    RAG_TOP_K_RETRIEVE: int = Field(
+        default=20,
+        gt=0,
+        description="number of chunks to retrieve before reranking",
+    )
+    RAG_TOP_K_RETURN: int = Field(
+        default=5,
+        gt=0,
+        description="number of chunks to return after reranking",
+    )
+    RAG_CACHE_TTL_SECONDS: int = Field(
+        default=3600,
+        gt=0,
+        description="query cache TTL in seconds (1 hour)",
+    )
+    RAG_EPISODIC_TTL_DAYS: int = Field(
+        default=90,
+        gt=0,
+        description="episodic memory retention in days",
+    )
+
     # --- AI behaviour thresholds ---
     CONFIDENCE_THRESHOLD: float = Field(
         default=0.75,
@@ -207,11 +293,17 @@ class Settings(BaseSettings):
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
         default=30, ge=1, description="NL queries per minute per user"
     )
+    RATE_LIMIT_RAG_SEARCH_PER_MIN: int = Field(
+        default=30, ge=1, description="RAG semantic searches per minute per user"
+    )
     RATE_LIMIT_APPROVAL_PER_MIN: int = Field(
         default=10, ge=1, description="suggestion approvals/rejections per minute per user"
     )
     RATE_LIMIT_ANOMALY_REVIEW_PER_MIN: int = Field(
         default=10, ge=1, description="anomaly resolve/dismiss/escalate per minute per user"
+    )
+    RATE_LIMIT_HR_COPILOT_PER_MIN: int = Field(
+        default=20, ge=1, description="HR Copilot chat messages per minute per user"
     )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"

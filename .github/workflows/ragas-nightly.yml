@@ -1,0 +1,118 @@
+name: RAGAS — Nightly RAG Evaluation
+
+# RAG quality gate (SKY-58). Runs nightly against the real production
+# retrieval pipeline — same embedding provider, same vector search, same
+# parent fetch — over the curated eval cases (RAG_EVAL_CASES) and stores the
+# run in ai_eval_runs. The `ai-agent eval` CLI exits nonzero when any metric
+# drops below its threshold, which fails this workflow: a silently degraded
+# RAG system (stale ingestion, broken embedding provider, bad chunking) shows
+# up here before it reaches users.
+#
+# Also performs the TTL sweep of expired ai_query_cache rows (per-tenant,
+# respecting row-level security).
+#
+# Secrets required:
+#   OPENAI_API_KEY         — embedding + answer generation + RAGAS judge LLM
+# Repo variables (all optional):
+#   AI_EVAL_TENANT_SLUG    — tenant to evaluate (default 'acme')
+#   AI_EVAL_MODEL          — LLM for generated answers + judge (default gpt-4o-mini)
+#   AI_EVAL_MODULE         — restrict to one corpus module (default: all)
+
+on:
+  schedule:
+    - cron: "23 2 * * *" # 02:23 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ragas-nightly
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: RAGAS Evaluation Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: skyrict
+          POSTGRES_PASSWORD: skyrict
+          POSTGRES_DB: skyrict_identity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skyrict -d skyrict_identity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity
+      AI_REDIS_URL: redis://localhost:6379/0
+      AI_ENVIRONMENT: dev
+      AI_JWKS_ISSUER: https://auth.skyrict.io
+      AI_JWKS_AUDIENCE: api.skyrict.io
+      AI_EMBEDDING_PROVIDER: openai
+      AI_EMBEDDING_MODEL: text-embedding-3-small
+      AI_EMBEDDING_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_PROVIDER: openai
+      AI_MODEL: ${{ vars.AI_EVAL_MODEL || 'gpt-4o-mini' }}
+      AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # RAGAS judges with its own OpenAI default client.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_EVAL_TENANT_SLUG: ${{ vars.AI_EVAL_TENANT_SLUG || 'acme' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      # The service refuses to boot without a JWT public key; the eval CLI
+      # never verifies tokens (it talks to the DB directly), so a self-made
+      # dev key is enough to satisfy the settings validator.
+      - name: Generate boot JWT public key
+        run: |
+          mkdir -p /tmp/skyrict-jwt
+          openssl genrsa -out /tmp/skyrict-jwt/private.pem 2048 >/dev/null 2>&1
+          openssl rsa -in /tmp/skyrict-jwt/private.pem -pubout -out /tmp/skyrict-jwt/public.pem >/dev/null 2>&1
+          echo "AI_JWT_PUBLIC_KEY_PATH=/tmp/skyrict-jwt/public.pem" >> "$GITHUB_ENV"
+
+      - name: Migrate database
+        working-directory: services/ai-agent
+        run: uv run ai-agent migrate
+
+      - name: Run RAGAS evaluation gate
+        working-directory: services/ai-agent
+        env:
+          MODULE_FLAG: ${{ vars.AI_EVAL_MODULE && format('--module {0}', vars.AI_EVAL_MODULE) || '' }}
+        run: |
+          uv run --with "ragas>=0.2,<0.3" ai-agent eval \
+            --tenant "$AI_EVAL_TENANT_SLUG" \
+            $MODULE_FLAG \
+            --faithfulness "${AI_EVAL_FAITHFULNESS_THRESHOLD:-0.80}" \
+            --answer-relevancy "${AI_EVAL_ANSWER_RELEVANCY_THRESHOLD:-0.75}" \
+            --context-precision "${AI_EVAL_CONTEXT_PRECISION_THRESHOLD:-0.70}" \
+            --context-recall "${AI_EVAL_CONTEXT_RECALL_THRESHOLD:-0.70}"
+
+      - name: Sweep expired query cache
+        working-directory: services/ai-agent
+        run: uv run ai-agent sweep-caches

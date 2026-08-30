@@ -44,6 +44,9 @@ AI_NARRATOR_GENERATED = "ai.narrator.generated"
 AI_NARRATOR_REFRESHED = "ai.narrator.refreshed"
 """A human force-refreshed the cross-module digest (SKY-63)."""
 
+AI_HR_COPILOT_EXCHANGE = "ai.hr.copilot.exchange"
+"""An HR Copilot chat exchange was answered (spec §9: feature 5)."""
+
 ALL_AI_AUDIT_EVENTS = frozenset(
     {
         AI_QUERY_EXECUTED,
@@ -56,6 +59,7 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_ANOMALY_ESCALATED,
         AI_NARRATOR_GENERATED,
         AI_NARRATOR_REFRESHED,
+        AI_HR_COPILOT_EXCHANGE,
     }
 )
 """The complete, closed vocabulary accepted by the AuditService."""

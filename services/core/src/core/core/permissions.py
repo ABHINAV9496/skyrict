@@ -25,6 +25,7 @@ ERP_INVENTORY_READ = "erp.inventory.read"
 ERP_INVENTORY_WRITE = "erp.inventory.write"
 ERP_INVENTORY_ADJUST = "erp.inventory.adjust"
 ERP_INVENTORY_ADJUST_APPROVE = "erp.inventory.adjust.approve"
+ERP_INVENTORY_AI_APPROVE = "erp.inventory.ai.approve"
 
 # Purchasing
 ERP_PURCHASE_READ = "erp.purchase.read"
@@ -70,6 +71,15 @@ ERP_AI_INVOKE = "erp.ai.invoke"
 # the daily digest out of turn; plain reads need the strict narrator matrix.
 ERP_AI_NARRATOR_REFRESH = "erp.ai.narrator.refresh"
 
+# HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
+# Checked at the core edge for /api/v1/ai/hr/*. Same strings as identity's
+# catalog so role grants stay portable across the platform.
+ERP_HR_AI_READ = "erp.hr.ai.read"
+ERP_HR_AI_INDIVIDUAL = "erp.hr.ai.individual"
+ERP_HR_AI_ACKNOWLEDGE = "erp.hr.ai.acknowledge"
+ERP_HR_AI_COPILOT = "erp.hr.ai.copilot"
+ERP_HR_AI_EVAL = "erp.hr.ai.eval"
+
 # Employee self-service portal (own leave balances/requests only; mirrors
 # identity's catalog so the invite flow can grant it portably)
 ERP_LEAVE_SELF = "erp.leave.self"
@@ -80,6 +90,7 @@ CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_WRITE,
     ERP_INVENTORY_ADJUST,
     ERP_INVENTORY_ADJUST_APPROVE,
+    ERP_INVENTORY_AI_APPROVE,
     ERP_PURCHASE_READ,
     ERP_PURCHASE_WRITE,
     ERP_PURCHASE_APPROVE,
@@ -102,6 +113,11 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
     ERP_AI_NARRATOR_REFRESH,
+    ERP_HR_AI_READ,
+    ERP_HR_AI_INDIVIDUAL,
+    ERP_HR_AI_ACKNOWLEDGE,
+    ERP_HR_AI_COPILOT,
+    ERP_HR_AI_EVAL,
     ERP_LEAVE_SELF,
 )
 # Permission module groupings.
@@ -115,6 +131,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             ERP_INVENTORY_WRITE,
             ERP_INVENTORY_ADJUST,
             ERP_INVENTORY_ADJUST_APPROVE,
+            ERP_INVENTORY_AI_APPROVE,
         ),
     ),
     ("purchase", "Purchasing", (ERP_PURCHASE_READ, ERP_PURCHASE_WRITE, ERP_PURCHASE_APPROVE)),
@@ -124,7 +141,18 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
-    ("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
+("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
+    (
+        "hr_ai",
+        "HR & Payroll AI",
+        (
+            ERP_HR_AI_READ,
+            ERP_HR_AI_INDIVIDUAL,
+            ERP_HR_AI_ACKNOWLEDGE,
+            ERP_HR_AI_COPILOT,
+            ERP_HR_AI_EVAL,
+        ),
+    ),
     ("leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
 )
 
@@ -155,11 +183,17 @@ __all__ = [
     "ERP_FINANCE_APPROVE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
+    "ERP_HR_AI_ACKNOWLEDGE",
+    "ERP_HR_AI_COPILOT",
+    "ERP_HR_AI_EVAL",
+    "ERP_HR_AI_INDIVIDUAL",
+    "ERP_HR_AI_READ",
     "ERP_HR_APPROVE",
     "ERP_HR_READ",
     "ERP_HR_WRITE",
     "ERP_INVENTORY_ADJUST",
     "ERP_INVENTORY_ADJUST_APPROVE",
+    "ERP_INVENTORY_AI_APPROVE",
     "ERP_INVENTORY_READ",
     "ERP_INVENTORY_WRITE",
     "ERP_INVOICE_APPROVE",

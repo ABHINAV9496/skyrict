@@ -43,6 +43,45 @@ def _ago(days: float) -> datetime:
     return datetime.now(UTC) - timedelta(days=days)
 
 
+def _opening_balance_rows(
+    stock_levels: tuple[dict[str, object], ...],
+    stock_movements: tuple[dict[str, object], ...],
+) -> list[dict[str, object]]:
+    """Balancing ledger rows that back every seeded opening stock level.
+
+    Stock levels are seeded as opening balances; core recomputes
+    ``qty_on_hand`` as the sum of all non-reservation/release movements, so
+    each level must be reconciled with a balancing movement entry or the
+    AI-agent ledger-mismatch rule fires on demo data. Returns one row per
+    level whose movement sum differs from ``on_hand`` (receipt when the
+    balance is positive, issue when negative).
+    """
+    reservation_types = {"reservation", "release"}
+    ledger_sum: dict[tuple[int, int], Decimal] = {}
+    for mrow in stock_movements:
+        if getattr(mrow["type"], "value", mrow["type"]) in reservation_types:
+            continue
+        key = (int(str(mrow["prod"])), int(str(mrow["wh"])))
+        ledger_sum[key] = ledger_sum.get(key, Decimal(0)) + Decimal(str(mrow["qty"]))
+
+    balance: list[dict[str, object]] = []
+    for srow in stock_levels:
+        prod_idx = int(str(srow["prod"]))
+        wh_idx = int(str(srow["wh"]))
+        delta = Decimal(str(srow["on_hand"])) - ledger_sum.get((prod_idx, wh_idx), Decimal(0))
+        if delta == 0:
+            continue
+        balance.append(
+            {
+                "prod": prod_idx,
+                "wh": wh_idx,
+                "type": (StockMovementType.RECEIPT if delta > 0 else StockMovementType.ISSUE),
+                "qty": delta,
+            }
+        )
+    return balance
+
+
 def _today() -> date:
     return date.today()
 
@@ -267,15 +306,6 @@ LEAVE_REQUEST_ROWS: tuple[dict[str, object], ...] = (
         "reason": "Feeling unwell",
     },
     {
-        "emp": 6,
-        "type": "annual",
-        "start_days": -3,
-        "end_days": 12,
-        "days": 16,
-        "status": "approved",
-        "reason": "Summer holiday",
-    },
-    {
         "emp": 7,
         "type": "annual",
         "start_days": 5,
@@ -346,6 +376,31 @@ LEAVE_REQUEST_ROWS: tuple[dict[str, object], ...] = (
         "days": 3,
         "status": "approved",
         "reason": "Moving to new apartment",
+    },
+)
+
+# Malaysian public holidays for the demo tenant (org-wide; 8.2.1 input data).
+# Dates are illustrative — demo config, not an authoritative calendar.
+HOLIDAY_ROWS: tuple[dict[str, object], ...] = (
+    {"date": "2026-01-01", "name": "New Year's Day"},
+    {"date": "2026-02-17", "name": "Chinese New Year"},
+    {"date": "2026-03-20", "name": "Hari Raya Aidilfitri"},
+    {"date": "2026-05-01", "name": "Labour Day"},
+    {"date": "2026-05-31", "name": "Wesak Day"},
+    {"date": "2026-06-01", "name": "Yang di-Pertuan Agong's Birthday"},
+    {"date": "2026-08-31", "name": "National Day"},
+    {"date": "2026-09-16", "name": "Malaysia Day"},
+    {"date": "2026-12-25", "name": "Christmas Day"},
+)
+
+# Department-scoped blackout for the Finance team's year-end close (8.2.4).
+# Referenced by department index into DEPARTMENT_ROWS (3 = Finance).
+BLACKOUT_ROWS: tuple[dict[str, object], ...] = (
+    {
+        "dept_idx": 3,
+        "start": "2026-12-20",
+        "end": "2026-12-31",
+        "reason": "Year-end financial close",
     },
 )
 
@@ -1568,6 +1623,13 @@ async def _resolve_owner_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid
 
 async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[str, int]:
     """Seed demo data for all ERP modules. Idempotent unless force=True."""
+    from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
+    from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
+    from core.features.ai_hr.models.public_holiday import AiHrPublicHolidayModel
+    from core.features.ai_hr.models.utilization_alert import (
+        UtilizationAlertModel,
+        UtilizationAlertType,
+    )
     from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
     from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
     from core.features.finance.models.invoice import ErpInvoiceModel
@@ -1631,6 +1693,10 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 LeaveMovementModel,
                 LeaveRequestModel,
                 LeaveBalanceModel,
+                AiHrLeaveBlackoutPeriodModel,
+                AiHrPublicHolidayModel,
+                UtilizationAlertModel,
+                LeaveAnomalyModel,
                 EmployeeModel,
                 DepartmentModel,
             ):
@@ -1732,7 +1798,29 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 reason=row.get("reason"),
             )
             session.add(lr)
-        counts["leave_requests"] = len(LEAVE_REQUEST_ROWS)
+        # HR-AI-002 8.2.1 — LIVE short-notice fixture (demoted from a static
+        # row because the fringe check only inspects start/end weekday): a
+        # filed-today approved block that starts today (advance 0, still
+        # within the trailing window) and ends on the NEXT Friday, so the
+        # Monday/Friday fringe holds on ANY seed day. At 6-13 days it clears
+        # 3x the Engineering median (2.0) and the live scan emits
+        # short_notice_monday_friday (high) every time it rebuilds.
+        _fri_ahead = ((4 - _today().weekday()) % 7) + 1
+        if _fri_ahead < 6:
+            _fri_ahead += 7
+        session.add(
+            LeaveRequestModel(
+                tenant_id=tenant_id,
+                employee_id=emp_ids[6],
+                leave_type="annual",
+                start_date=_today(),
+                end_date=_date_ahead(_fri_ahead - 1),
+                days=_fri_ahead,
+                status="approved",
+                reason="Summer holiday",
+            )
+        )
+        counts["leave_requests"] = len(LEAVE_REQUEST_ROWS) + 1
 
         # ── LEAVE BALANCES ───────────────────────────────────────────
         for emp_idx in range(len(emp_ids)):
@@ -1748,6 +1836,64 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 )
                 session.add(bal)
         counts["leave_balances"] = len(emp_ids) * 2
+
+        # ── AI PATTERN DATA (holidays + blackouts; 0024) ────────────
+        for row in HOLIDAY_ROWS:
+            session.add(
+                AiHrPublicHolidayModel(
+                    tenant_id=tenant_id,
+                    calendar_date=date.fromisoformat(str(row["date"])),
+                    name=str(row["name"]),
+                )
+            )
+        for row in BLACKOUT_ROWS:
+            session.add(
+                AiHrLeaveBlackoutPeriodModel(
+                    tenant_id=tenant_id,
+                    start_date=date.fromisoformat(str(row["start"])),
+                    end_date=date.fromisoformat(str(row["end"])),
+                    department_id=dept_ids[int(str(row["dept_idx"]))],
+                    reason=str(row["reason"]),
+                )
+            )
+        counts["public_holidays"] = len(HOLIDAY_ROWS)
+        counts["leave_blackout_periods"] = len(BLACKOUT_ROWS)
+
+        # ── HR AI DEMO FINDINGS (8.1.4 forfeit alert) ────────────────
+        # ONE PRE-COMPUTED fixture so the demo reproduces the Gherkin numbers
+        # on ANY seed day: the real forfeit scan only fires within
+        # FORFEIT_WINDOW_DAYS=60 of year-end, so most seed days (mid-year)
+        # would otherwise show an empty alert inbox. It is written with
+        # created_at = now so the lazy-on-read utilization scan is "fresh" and
+        # serves the fixture instead of immediately rebuilding over it; the
+        # next stale scan (refreshed every 1d) replaces it like generated rows
+        # (and on year-end runs the real scan reproduces the same finding).
+        #
+        # The ANOMALY inbox is deliberately NOT pre-seeded: leaving the table
+        # empty makes latest_generated_at = None, so the FIRST portal/admin
+        # read runs the live leave-pattern scan. Engineering's filed-today
+        # block above (starts today => advance 0, ends next Friday => Mon/Fri
+        # fringe, 6-13 days => 3x the 2.0 median) makes short_notice and
+        # leave_overuse deterministic on any seed day, and the scan re-emits
+        # them on every rebuild — a genuine live computation path in the demo.
+        session.add(
+            UtilizationAlertModel(
+                tenant_id=tenant_id,
+                employee_id=emp_ids[1],
+                alert_type=UtilizationAlertType.FORFEIT_RISK,
+                severity="medium",
+                balance_days=18,
+                projected_forfeiture_days=18,
+                days_remaining_in_year=55,
+                evidence={
+                    "leave_type": "annual",
+                    "year": _today().year,
+                    "forfeit_window_days": 60,
+                },
+                created_at=_ago(0.5),
+            )
+        )
+        counts["ai_utilization_alerts"] = 1
 
         # ── ATTENDANCE (last 21 days; deterministic mix of statuses) ─
         # Cycle per employee/day: mostly on_time, some late, occasional
@@ -2131,6 +2277,30 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             )
             session.add(sm)
         counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS)
+
+        # ── OPENING-BALANCE RECONCILIATION ───────────────────────────
+        # Stock levels above are opening balances; in production core
+        # recomputes qty_on_hand as the sum of non-reservation/release
+        # movements, so the demo ledger must back every level or the
+        # ledger-mismatch anomaly rule fires on demo data. Add one
+        # balancing entry per (product, warehouse) pair so the
+        # non-reservation movement sum equals qty_on_hand. Entries are
+        # backdated outside the AI agent's recent-window rules.
+        opening_rows = _opening_balance_rows(STOCK_LEVEL_ROWS, STOCK_MOVEMENT_ROWS)
+        for orow in opening_rows:
+            session.add(
+                ErpStockMovementModel(
+                    tenant_id=tenant_id,
+                    product_id=product_ids[int(str(orow["prod"]))],
+                    warehouse_id=wh_ids[int(str(orow["wh"]))],
+                    movement_type=orow["type"],
+                    qty=orow["qty"],
+                    ref_type="opening_balance",
+                    ref_id=f"OPB-{orow['prod']:02d}-{orow['wh']}",
+                    created_at=_ago(180),
+                )
+            )
+        counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS) + len(opening_rows)
 
         await session.commit()
         logger.info("seed.demo.complete", tenant_id=str(tenant_id), **counts)

@@ -1,16 +1,12 @@
 """``/api/v1/ai/*`` proxy routes — permission checks BEFORE forwarding.
 
-Permission matrix (ticket [AI-INFRA-001], spec §6.3): every AI call needs
+Permission matrix (ticket SKY-68, spec 6.3): every AI call needs
 ``erp.ai.invoke`` AND the module key for the touched domain —
-``erp.inventory.read`` for reads, ``erp.inventory.write`` for mutations
-(scan, approve/reject, anomaly dispositions). The ticket also names an
-"ai.approve" module key; no such key exists in either service's catalog
-yet, so the existing write key guards review actions this phase and a
-dedicated approval key lands with the PO-integration ticket (documented,
-not silently dropped).
+``erp.inventory.read`` for reads, ``erp.inventory.write`` for anomaly
+dispositions, ``erp.inventory.ai.approve`` for suggestion scan/approve/reject.
 
 The JWT is forwarded verbatim; ai-agent re-verifies it against the
-relayed tenant slug (spec §1.4: AI is a proxy, not an auth bypass).
+relayed tenant slug (spec 1.4: AI is a proxy, not an auth bypass).
 
 Path ids are typed ``uuid.UUID`` so FastAPI rejects anything else with
 422 before the handler runs — the forwarded URL only ever embeds the
@@ -35,6 +31,7 @@ from core.core.permissions import (
     ERP_AI_NARRATOR_REFRESH,
     ERP_CRM_READ,
     ERP_FINANCE_READ,
+    ERP_INVENTORY_AI_APPROVE,
     ERP_INVENTORY_READ,
     ERP_INVENTORY_WRITE,
     ERP_SALES_READ,
@@ -52,10 +49,12 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 _require_ai_invoke = require_permission(ERP_AI_INVOKE)
 _require_inventory_read = require_permission(ERP_INVENTORY_READ)
 _require_inventory_write = require_permission(ERP_INVENTORY_WRITE)
+_require_inventory_ai_approve = require_permission(ERP_INVENTORY_AI_APPROVE)
 
 _InvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
 _ReadDep = Annotated[dict[str, Any], Depends(_require_inventory_read)]
 _WriteDep = Annotated[dict[str, Any], Depends(_require_inventory_write)]
+_AIApproveDep = Annotated[dict[str, Any], Depends(_require_inventory_ai_approve)]
 
 # --- Cross-module narrator (SKY-63) strict matrix ---------------------------
 # The digest spans all four ERP domains, so a caller must hold erp.ai.invoke
@@ -172,7 +171,7 @@ async def proxy_list_suggestions(
 async def proxy_suggestion_scan(
     request: Request,
     _invoke: _InvokeDep,
-    _write: _WriteDep,
+    _approve: _AIApproveDep,
     client: _ClientDep,
 ) -> Response:
     """Trigger the suggestion scan -> ai-agent /api/v1/ai/suggestions/scan."""
@@ -184,10 +183,10 @@ async def proxy_approve_suggestion(
     request: Request,
     suggestion_id: uuid.UUID,
     _invoke: _InvokeDep,
-    _write: _WriteDep,
+    _approve: _AIApproveDep,
     client: _ClientDep,
 ) -> Response:
-    """Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
+"""Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
     return await _proxy(request, client, f"/api/v1/ai/suggestions/{suggestion_id}/approve")
 
 
@@ -196,7 +195,7 @@ async def proxy_reject_suggestion(
     request: Request,
     suggestion_id: uuid.UUID,
     _invoke: _InvokeDep,
-    _write: _WriteDep,
+    _approve: _AIApproveDep,
     client: _ClientDep,
 ) -> Response:
     """Reject one pending suggestion; note feeds the feedback loop."""
@@ -289,3 +288,43 @@ async def proxy_narrator_refresh(
 ) -> Response:
     """Force-recompute today's digest -> ai-agent /api/v1/ai/narrator/digest/refresh."""
     return await _proxy(request, client, "/api/v1/ai/narrator/digest/refresh")
+
+
+# --- Demand forecasting (feature 4) ------------------------------------------
+
+
+@router.get("/forecast/{product_id}")
+async def proxy_get_forecast(
+    request: Request,
+    product_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _read: _ReadDep,
+    client: _ClientDep,
+) -> Response:
+    """Demand forecast for one product -> ai-agent /api/v1/ai/forecast/{id}."""
+    return await _proxy(request, client, f"/api/v1/ai/forecast/{product_id}")
+
+
+# --- ABC inventory classification (feature 5) --------------------------------
+
+
+@router.get("/abc")
+async def proxy_list_abc_classifications(
+    request: Request,
+    _invoke: _InvokeDep,
+    _read: _ReadDep,
+    client: _ClientDep,
+) -> Response:
+    """ABC banding for the tenant's products -> ai-agent /api/v1/ai/abc."""
+    return await _proxy(request, client, "/api/v1/ai/abc")
+
+
+@router.get("/abc/summary")
+async def proxy_get_abc_summary(
+    request: Request,
+    _invoke: _InvokeDep,
+    _read: _ReadDep,
+    client: _ClientDep,
+) -> Response:
+    """ABC band counts (A/B/C) -> ai-agent /api/v1/ai/abc/summary."""
+    return await _proxy(request, client, "/api/v1/ai/abc/summary")

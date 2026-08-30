@@ -13,10 +13,14 @@ AI providers are intentionally absent from this gate — see api/readiness.py.
 
 Shutdown: closes the gate so probes drain the pod, then disposes the DB
 engine and the Redis pool.
+
+Background jobs (SKY-68): suggestion expiry, anomaly auto-close, and anomaly
+scan run as asyncio tasks started after provider init and cancelled on shutdown.
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -60,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         providers_configured=llm_router.provider_count,
     )
 
-    # Cross-module narrator (SKY-63): optional daily cron + system agent row.
+# Cross-module narrator (SKY-63): optional daily cron + system agent row.
     # Disabled by default; only starts when explicitly enabled AND a provider is
     # configured (the digest requires the LLM).
     narrator_scheduler: object | None = None
@@ -117,6 +121,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception:
             logger.exception("narrator.agent_registration_failed")
 
+    # --- Background jobs (SKY-68) -----------------------------------------
+    bg_tasks: list[asyncio.Task[None]] = []
+    from ai_agent.core.jobs.anomaly_autoclose import run_anomaly_autoclose_job
+    from ai_agent.core.jobs.anomaly_scan import run_anomaly_scan_job
+    from ai_agent.core.jobs.suggestion_expiry import run_suggestion_expiry_job
+
+    bg_tasks.append(asyncio.create_task(run_suggestion_expiry_job()))
+    bg_tasks.append(asyncio.create_task(run_anomaly_autoclose_job()))
+    bg_tasks.append(asyncio.create_task(run_anomaly_scan_job()))
+    logger.info("background_jobs.started", count=len(bg_tasks))
+
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate and the
     # DB/Redis pools so in-flight work can drain cleanly.
@@ -124,6 +139,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if narrator_scheduler is not None:
         narrator_scheduler.stop()  # type: ignore[attr-defined]
+
+    # Cancel background jobs before disposing resources.
+    for task in bg_tasks:
+        task.cancel()
+    await asyncio.gather(*bg_tasks, return_exceptions=True)
+
     readiness.mark_stopping()
     logger.info("service.stopping", environment=settings.ENVIRONMENT.value)
 

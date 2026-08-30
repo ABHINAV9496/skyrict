@@ -117,6 +117,42 @@ class Settings(BaseSettings):
         gt=0,
         description="per-request timeout for proxied AI calls (LLMs are slow)",
     )
+    AI_HR_REFRESH_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL: when the HR attrition endpoint is read and the "
+            "latest stored score's generated_at is older than this many days, the "
+            "core re-scores by proxying anonymous feature vectors to ai-agent."
+        ),
+    )
+    AI_HR_UTILIZATION_SCAN_INTERVAL_DAYS: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the leave-balance utilization scanner (8.1.4): "
+            "the alert inbox is regenerated when it is read and the latest scan "
+            "is older than this many days."
+        ),
+    )
+    AI_HR_ANOMALY_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the leave-pattern anomaly detector (8.2.1): "
+            "the anomaly inbox is regenerated when it is read and the latest "
+            "scan is older than this many days."
+        ),
+    )
+    AI_HR_SUGGESTION_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the smart leave-window suggestions (8.2.4): "
+            "pending suggestions are regenerated when the surface is read and "
+            "the latest scan is older than this many days."
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""

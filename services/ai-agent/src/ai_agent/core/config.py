@@ -248,6 +248,24 @@ class Settings(BaseSettings):
         description="episodic memory retention in days",
     )
 
+    # --- Inventory semantic search (SKY-70) ---
+    INV_SEARCH_DEFAULT_LIMIT: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="max products returned by /ai/inventory/search",
+    )
+    INV_SEARCH_SEMANTIC_TOP_K: int = Field(
+        default=50,
+        gt=0,
+        description="top-k products pulled from the vector index before exact/semantic merge",
+    )
+    INV_SEARCH_CACHE_TTL_SECONDS: int = Field(
+        default=300,
+        gt=0,
+        description="hot-cache TTL for inventory search results (5 minutes)",
+    )
+
     # --- AI behaviour thresholds ---
     CONFIDENCE_THRESHOLD: float = Field(
         default=0.75,
@@ -330,6 +348,9 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_RAG_SEARCH_PER_MIN: int = Field(
         default=30, ge=1, description="RAG semantic searches per minute per user"
+    )
+    RATE_LIMIT_INV_SEARCH_PER_MIN: int = Field(
+        default=30, ge=1, description="inventory product searches per minute per user"
     )
     RATE_LIMIT_APPROVAL_PER_MIN: int = Field(
         default=10, ge=1, description="suggestion approvals/rejections per minute per user"

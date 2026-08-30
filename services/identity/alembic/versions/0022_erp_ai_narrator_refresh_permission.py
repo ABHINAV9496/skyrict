@@ -8,8 +8,8 @@ requires ``erp.ai.narrator.refresh``. Granted to organization_admin only —
 tenant owners already pass via the ``*`` wildcard — mirroring the 0018
 ``erp.ai.invoke`` precedent.
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-08-27
 """
 
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0020"
-down_revision = "0019"
+revision = "0022"
+down_revision = "0021"
 branch_labels = None
 depends_on = None
 

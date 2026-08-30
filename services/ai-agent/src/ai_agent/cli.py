@@ -122,6 +122,39 @@ def sweep_caches() -> None:
     typer.echo(f"Deleted {deleted} expired query cache row(s).")
 
 
+inventory_app = typer.Typer(
+    name="inventory",
+    help="Inventory semantic snapshot maintenance (SKY-70).",
+    no_args_is_help=True,
+)
+
+
+@inventory_app.command("reindex")
+def inventory_reindex(
+    tenant: str = typer.Option(..., help="tenant slug or UUID (required)"),
+    mode: str = typer.Option(
+        "full", help="'full' wipes then rebuilds; 'incremental' only upserts the fetched catalog"
+    ),
+) -> None:
+    """Rebuild one tenant's product embedding snapshot (SKY-70).
+
+    Pulls the current catalog from core and (re)embeds every product into
+    ai_inv_item_embeddings. ``full`` clears the tenant's snapshot first so
+    deactivated-or-removed products disappear from semantic search.
+
+    Requires an embedding provider (AI_EMBEDDING_PROVIDER + key) and
+    AI_INGEST_TOKEN for the core pull.
+    """
+    import asyncio
+
+    from ai_agent.inventory_reindex import run_inventory_reindex
+
+    asyncio.run(run_inventory_reindex(tenant=tenant, mode=mode))
+
+
+app.add_typer(inventory_app)
+
+
 @app.command()
 def attrition_train(
     dataset: str = typer.Option(

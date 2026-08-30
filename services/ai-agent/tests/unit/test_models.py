@@ -44,6 +44,10 @@ class TestRegistry:
             "ai_episodic_memory",
             "ai_query_cache",
             "ai_eval_runs",
+            # LangGraph orchestration (SKY-59)
+            "graph_checkpoints",
+            "graph_checkpoint_writes",
+            "agent_interrupts",
         }
         assert expected == set(Base.metadata.tables.keys())
 

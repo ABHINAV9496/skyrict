@@ -10,8 +10,11 @@ Alembic's ``target_metadata`` reflects the full schema.
 - ``agent_registry`` is global platform data (no tenant scoping).
 - RAG tables (ai_rag_parents, ai_rag_chunks) support pgvector semantic search.
 - Episodic memory, query cache, and eval runs support RAG infrastructure.
+- LangGraph runtime tables (graph_checkpoints, graph_checkpoint_writes,
+  agent_interrupts) support AGT-001 orchestration (SKY-59).
 """
 
+from ai_agent.models.agent_interrupt import AgentInterruptModel
 from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
@@ -27,9 +30,14 @@ from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
 from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from ai_agent.models.graph_checkpoint import (
+    GraphCheckpointModel,
+    GraphCheckpointWriteModel,
+)
 from ai_agent.models.tenant import TenantModel
 
 __all__ = [
+    "AgentInterruptModel",
     "AgentRegistryModel",
     "AiAnomalyModel",
     "AiAnomalyRuleStatsModel",
@@ -45,6 +53,8 @@ __all__ = [
     "AiRestockSettingsModel",
     "AiSuggestionModel",
     "Base",
+    "GraphCheckpointModel",
+    "GraphCheckpointWriteModel",
     "TenantModel",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",

@@ -477,6 +477,43 @@ class FakeEvents:
         )
 
 
+class FakeProductEvents:
+    """Captures product snapshot emit calls (patched onto the service module)."""
+
+    def __init__(self) -> None:
+        self.upserted: list[dict[str, object]] = []
+        self.removed: list[dict[str, object]] = []
+
+    async def upsert(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        product_id: str | uuid.UUID,
+        sku: str,
+        name: str,
+        category: str | None,
+        unit: str | None,
+    ) -> None:
+        self.upserted.append(
+            {
+                "tenant_id": str(tenant_id),
+                "product_id": str(product_id),
+                "sku": sku,
+                "name": name,
+                "category": category,
+                "unit": unit,
+            }
+        )
+
+    async def remove(
+        self,
+        *,
+        tenant_id: str | uuid.UUID,
+        product_id: str | uuid.UUID,
+    ) -> None:
+        self.removed.append({"tenant_id": str(tenant_id), "product_id": str(product_id)})
+
+
 @pytest.fixture()
 def repo() -> FakeRepo:
     return FakeRepo()
@@ -493,6 +530,11 @@ def events() -> FakeEvents:
 
 
 @pytest.fixture()
+def product_events() -> FakeProductEvents:
+    return FakeProductEvents()
+
+
+@pytest.fixture()
 def service(
     repo: FakeRepo, audit: FakeAuditService, monkeypatch: pytest.MonkeyPatch
 ) -> InventoryService:
@@ -505,6 +547,17 @@ def patched_events(
 ) -> FakeEvents:
     monkeypatch.setattr(service_module, "emit_stock_level_changed", events.emit)
     return events
+
+
+@pytest.fixture()
+def patched_product_events(
+    repo: FakeRepo,
+    product_events: FakeProductEvents,
+    monkeypatch: pytest.MonkeyPatch,
+) -> FakeProductEvents:
+    monkeypatch.setattr(service_module, "emit_inventory_product_upserted", product_events.upsert)
+    monkeypatch.setattr(service_module, "emit_inventory_product_removed", product_events.remove)
+    return product_events
 
 
 async def _seed_product(
@@ -543,6 +596,32 @@ class TestCreateProduct:
         assert product.id is not None
         assert repo.committed == 1
         assert audit.actions() == [PRODUCT_CREATED]
+
+    async def test_emits_upserted_event_with_catalog_fields(
+        self,
+        service: InventoryService,
+        repo: FakeRepo,
+        patched_product_events: FakeProductEvents,
+    ) -> None:
+        product = await service.create_product(
+            TENANT,
+            sku="CBL-CABLE",
+            name="Cat6 Patch Cable",
+            category="Networking",
+            unit="m",
+        )
+        assert product.id is not None
+        assert patched_product_events.removed == []
+        assert patched_product_events.upserted == [
+            {
+                "tenant_id": str(TENANT),
+                "product_id": str(product.id),
+                "sku": "CBL-CABLE",
+                "name": "Cat6 Patch Cable",
+                "category": "Networking",
+                "unit": "m",
+            }
+        ]
 
     async def test_duplicate_sku_raises_409(
         self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
@@ -588,6 +667,27 @@ class TestUpdateProduct:
         updated = await service.update_product(TENANT, product.id, sku="SKU-1", name="Keep")
         assert updated.sku == "SKU-1"
         assert audit.actions() == [PRODUCT_UPDATED]
+
+    async def test_emits_upserted_event_after_update(
+        self,
+        service: InventoryService,
+        repo: FakeRepo,
+        patched_product_events: FakeProductEvents,
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        updated = await service.update_product(TENANT, product.id, name="Renamed")
+        assert updated.id is not None
+        assert patched_product_events.upserted == [
+            {
+                "tenant_id": str(TENANT),
+                "product_id": str(product.id),
+                "sku": "SKU-1",
+                "name": "Renamed",
+                "category": None,
+                "unit": None,
+            }
+        ]
+        assert patched_product_events.removed == []
 
     async def test_duplicate_sku_of_other_product_raises_409(
         self, service: InventoryService, repo: FakeRepo, audit: FakeAuditService
@@ -671,6 +771,20 @@ class TestDeactivateProduct:
         remaining = await repo.get_product(product.id, TENANT)
         assert remaining is not None and remaining.is_active is True
 
+    async def test_emits_removed_event_after_deactivate(
+        self,
+        service: InventoryService,
+        repo: FakeRepo,
+        patched_product_events: FakeProductEvents,
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        deactivated = await service.deactivate_product(TENANT, product.id)
+        assert deactivated.is_active is False
+        assert patched_product_events.upserted == []
+        assert patched_product_events.removed == [
+            {"tenant_id": str(TENANT), "product_id": str(product.id)}
+        ]
+
     async def test_unknown_product_raises_404(
         self, service: InventoryService, repo: FakeRepo
     ) -> None:
@@ -735,6 +849,29 @@ class TestReactivateProduct:
         assert reactivated.is_active is True
         assert repo.committed == 1
         assert audit.actions() == [PRODUCT_REACTIVATED]
+
+    async def test_emits_upserted_event_after_reactivate(
+        self,
+        service: InventoryService,
+        repo: FakeRepo,
+        patched_product_events: FakeProductEvents,
+    ) -> None:
+        product = await _seed_product(repo, sku="SKU-1")
+        await repo.deactivate_product(product.id, TENANT)
+
+        reactivated = await service.reactivate_product(TENANT, product.id)
+        assert reactivated.is_active is True
+        assert patched_product_events.removed == []
+        assert patched_product_events.upserted == [
+            {
+                "tenant_id": str(TENANT),
+                "product_id": str(product.id),
+                "sku": "SKU-1",
+                "name": "Widget",
+                "category": None,
+                "unit": None,
+            }
+        ]
 
     async def test_unknown_product_raises_404(
         self, service: InventoryService, repo: FakeRepo

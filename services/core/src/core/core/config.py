@@ -153,6 +153,15 @@ class Settings(BaseSettings):
             "the latest scan is older than this many days."
         ),
     )
+    AI_SYNC_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token ai-agent requires on POST /ai/inventory/embeddings/sync "
+            "(SKY-70 product->embedding sync). Must match ai-agent's "
+            "AI_INVENTORY_SYNC_TOKEN; empty disables the HTTP dispatch and keeps "
+            "the feature fed only by the `ai-agent inventory reindex` CLI."
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""

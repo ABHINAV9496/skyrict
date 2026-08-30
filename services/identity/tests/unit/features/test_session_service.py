@@ -34,10 +34,13 @@ class FakeSessionRepo:
 
     def __init__(self, sessions: list[Session] | None = None) -> None:
         self.sessions: dict[uuid.UUID, Session] = {}
-        for session in sessions or []:
+        self.created_order: dict[uuid.UUID, int] = {}
+        for seq, session in enumerate(sessions or []):
             if session.id is None:
                 session.id = uuid.uuid4()
             self.sessions[session.id] = session
+            self.created_order[session.id] = seq
+        self._next_seq = len(self.created_order)
         self.revoked: list[uuid.UUID] = []
         self.revoked_for_users: list[uuid.UUID] = []
         self.revoked_families: list[uuid.UUID] = []
@@ -51,12 +54,17 @@ class FakeSessionRepo:
         if session.id is None:
             session.id = uuid.uuid4()
         self.sessions[session.id] = session
+        self.created_order[session.id] = self._next_seq
+        self._next_seq += 1
         return session
 
     async def get_active_by_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
     ) -> list[Session]:
         now = datetime.now(UTC)
+        # Ordered oldest-last. created_at desc comes from the real repo; the
+        # creation sequence breaks ties when a coarse clock gives sessions the
+        # same timestamp (else a stable reverse sort would evict the NEWEST).
         return sorted(
             (
                 session
@@ -66,7 +74,7 @@ class FakeSessionRepo:
                 and session.status is SessionStatus.ACTIVE
                 and session.expires_at > now
             ),
-            key=lambda s: s.created_at,
+            key=lambda s: (s.created_at, self.created_order.get(s.id, -1)),
             reverse=True,
         )
 

@@ -210,6 +210,15 @@ class Settings(BaseSettings):
             "data from the core service — never logged"
         ),
     )
+    INVENTORY_SYNC_TOKEN: str = Field(
+        default="",
+        description=(
+            "shared secret that core's post-commit product-change dispatch "
+            "presents to POST /ai/inventory/embeddings/sync — must match core's "
+            "CORE_AI_SYNC_TOKEN. Empty disables the sync endpoint (503). "
+            "Machine-to-machine only; never logged."
+        ),
+    )
 
     # --- RAG configuration (SKY-58) ---
     RAG_CHUNK_CHILD_TOKENS: int = Field(

@@ -8,11 +8,14 @@ INV-AI-002 predictive tables.
 
 from __future__ import annotations
 
+from pgvector.sqlalchemy import Vector
+
 import ai_agent.models  # noqa: F401  # registers every model on Base.metadata
 from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
@@ -42,6 +45,8 @@ class TestRegistry:
             "ai_episodic_memory",
             "ai_query_cache",
             "ai_eval_runs",
+            # SKY-70 product-embedding snapshot
+            "ai_inv_item_embeddings",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -150,6 +155,35 @@ class TestAiQueryCache:
         )
         assert index.unique
         assert [c.name for c in index.columns] == ["tenant_id", "query_hash"]
+
+
+class TestAiInvItemEmbeddings:
+    def test_composite_pk(self) -> None:
+        pk = list(AiInvItemEmbeddingModel.__table__.primary_key.columns.keys())
+        assert pk == ["tenant_id", "product_id"]
+
+    def test_snapshot_carries_searchable_raw_fields(self) -> None:
+        columns = AiInvItemEmbeddingModel.__table__.columns
+        assert "sku" in columns
+        assert "name" in columns
+        assert "category" in columns
+        assert "unit" in columns
+
+    def test_embedding_provenance_columns_present(self) -> None:
+        columns = AiInvItemEmbeddingModel.__table__.columns
+        assert "embedding_model" in columns
+        assert "embedding_dims" in columns
+        assert isinstance(columns["embedding"].type, Vector)
+        assert columns["embedding"].type.dim == 512
+
+    def test_composite_fk_into_erp_products(self) -> None:
+        fk = next(
+            constraint
+            for constraint in AiInvItemEmbeddingModel.__table__.constraints
+            if str(constraint.name) == "fk_ai_inv_item_embeddings_product_tenant"
+        )
+        assert [c.name for c in fk.columns] == ["tenant_id", "product_id"]
+        assert fk.elements[0].target_fullname.partition(".")[0] == "erp_products"
 
 
 class TestAgentRegistry:

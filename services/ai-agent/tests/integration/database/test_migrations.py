@@ -8,9 +8,8 @@ real migrations against real Postgres, never ``create_all``. Then unwinds all
 the way back to nothing and re-applies, proving the whole round-trip.
 
 Sentinel assertions probe one representative artefact per concern: table
-existence, version-table bookkeeping, RLS policies on exactly the seven
-tenant-scoped tables (``agent_registry`` is global and must have NONE), the
-partial unique pending index with its WHERE clause, named CHECK constraints,
+existence, version-table bookkeeping, RLS policies on exactly the tenant-scoped
+tables (``agent_registry`` is global and must have NONE), the partial unique pending index with its WHERE clause, named CHECK constraints,
 the ``tenants`` FKs, and the DESC ordering of the history index.
 
 The test owns a scratch database and never touches a shared test database -
@@ -63,6 +62,8 @@ _AI_TABLES = (
     "ai_episodic_memory",
     "ai_query_cache",
     "ai_eval_runs",
+    # SKY-70 product-embedding snapshot (migration 0007)
+    "ai_inv_item_embeddings",
 )
 _TENANT_SCOPED_TABLES = (
     "ai_query_log",
@@ -72,6 +73,7 @@ _TENANT_SCOPED_TABLES = (
     "ai_restock_demand_stats",
     "ai_restock_settings",
     "ai_anomaly_rule_stats",
+    "ai_inv_item_embeddings",
 )
 # Demand stats carries composite FKs into core-owned erp_products/erp_warehouses
 # and NO direct FK to tenants (cross-service idiom); only the tables below are
@@ -88,6 +90,8 @@ _TENANT_FK_TABLES = (
     "ai_rag_chunks",
     "ai_episodic_memory",
     "ai_query_cache",
+    # SKY-70 SKU/name/category/unit snapshot row — tenant FK on tenant_id.
+    "ai_inv_item_embeddings",
 )
 
 _EXPECTED_CHECKS = {
@@ -348,7 +352,7 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0006"
+            assert artifacts["version"] == "0007"
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}

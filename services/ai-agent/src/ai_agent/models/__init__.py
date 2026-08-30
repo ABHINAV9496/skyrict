@@ -18,6 +18,7 @@ from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
 from ai_agent.models.ai_episodic_memory import AiEpisodicMemoryModel
 from ai_agent.models.ai_eval_run import AiEvalRunModel
+from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_rag_chunk import AiRagChunkModel
@@ -35,6 +36,7 @@ __all__ = [
     "AiAuditLogModel",
     "AiEpisodicMemoryModel",
     "AiEvalRunModel",
+    "AiInvItemEmbeddingModel",
     "AiQueryCacheModel",
     "AiQueryLogModel",
     "AiRagChunkModel",

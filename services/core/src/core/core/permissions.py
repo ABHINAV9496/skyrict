@@ -141,7 +141,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
-("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
+    ("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     (
         "hr_ai",
         "HR & Payroll AI",

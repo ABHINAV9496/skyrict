@@ -186,7 +186,7 @@ async def proxy_approve_suggestion(
     _approve: _AIApproveDep,
     client: _ClientDep,
 ) -> Response:
-"""Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
+    """Approve one pending suggestion (spec §3.4 human-in-the-loop)."""
     return await _proxy(request, client, f"/api/v1/ai/suggestions/{suggestion_id}/approve")
 
 

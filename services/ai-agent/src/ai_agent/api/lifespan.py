@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         providers_configured=llm_router.provider_count,
     )
 
-# Cross-module narrator (SKY-63): optional daily cron + system agent row.
+    # Cross-module narrator (SKY-63): optional daily cron + system agent row.
     # Disabled by default; only starts when explicitly enabled AND a provider is
     # configured (the digest requires the LLM).
     narrator_scheduler: object | None = None

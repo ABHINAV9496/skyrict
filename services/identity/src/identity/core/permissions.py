@@ -170,7 +170,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "ERP Payroll",
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
-("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
+    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     (
         "erp_hr_ai",
         "ERP HR & Payroll AI",

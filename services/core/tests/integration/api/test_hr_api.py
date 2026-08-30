@@ -28,15 +28,34 @@ def _future(days_offset: int = 1) -> str:
 
 pytestmark = pytest.mark.integration
 
-ANNUAL_BALANCE_ON_HIRE = 20
+CASUAL_BALANCE_ON_HIRE = 20
 
 
-async def _annual_balance(client: AsyncClient, headers: dict[str, str], employee_id: str) -> int:
+async def _set_leave_policy(client: AsyncClient, headers: dict[str, str]) -> None:
+    """Seed the tenant's LeavePolicy (casual=20) so hire-time accrual kicks in.
+
+    Post-rework (ff822f8) accrual is policy-driven casual+sick: without a
+    policy row the hire accrual produces nothing. The test tenants are created
+    after the migration-time policy seed, so the lifecycle tests set their own.
+    """
+    response = await client.put(
+        "/api/v1/hr/leave/policy",
+        json={
+            "casual_days_per_year": 20,
+            "sick_days_per_year": 8,
+            "effective_from": "2026-01-01",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+async def _casual_balance(client: AsyncClient, headers: dict[str, str], employee_id: str) -> int:
     response = await client.get(
         "/api/v1/hr/leave/balances", params={"employee_id": employee_id}, headers=headers
     )
     assert response.status_code == 200, response.text
-    return int({b["leave_type"]: b["balance"] for b in response.json()["data"]}["annual"])
+    return int({b["leave_type"]: b["balance"] for b in response.json()["data"]}["casual"])
 
 
 class TestEmployeeLifecycle:
@@ -410,17 +429,20 @@ class TestLeaveLifecycle:
         seeded_hr_defaults: None,
     ) -> None:
         headers = tenant_headers("olympus")
+        await _set_leave_policy(client, headers)
         employee = await hire_employee(client, headers, hire_date="2026-01-05")
         employee_id = employee["id"]
 
-        # Rule 4: pro-rata accrual for the hire year (hired Jan 5 → 361/365 of 20).
-        assert await _annual_balance(client, headers, employee_id) == ANNUAL_BALANCE_ON_HIRE
+        # Rule 4: pro-rata casual accrual for the hire year (hired Jan 5 →
+        # 361/365 of 20). Post-rework (ff822f8) accrual is policy-driven
+        # casual+sick; "annual" no longer accrues.
+        assert await _casual_balance(client, headers, employee_id) == CASUAL_BALANCE_ON_HIRE
 
         created = await client.post(
             "/api/v1/hr/leave/requests",
             json={
                 "employee_id": employee_id,
-                "leave_type": "annual",
+                "leave_type": "casual",
                 "start_date": _future(1),
                 "end_date": _future(3),
                 "reason": "family",
@@ -437,7 +459,7 @@ class TestLeaveLifecycle:
         )
         assert approved.status_code == 200, approved.text
         assert approved.json()["data"]["status"] == "approved"
-        assert await _annual_balance(client, headers, employee_id) == ANNUAL_BALANCE_ON_HIRE - 3
+        assert await _casual_balance(client, headers, employee_id) == CASUAL_BALANCE_ON_HIRE - 3
 
     async def test_approve_beyond_balance_is_rejected(
         self,
@@ -446,13 +468,14 @@ class TestLeaveLifecycle:
         seeded_hr_defaults: None,
     ) -> None:
         headers = tenant_headers("olympus")
+        await _set_leave_policy(client, headers)
         employee = await hire_employee(client, headers, hire_date="2026-01-05")
 
         created = await client.post(
             "/api/v1/hr/leave/requests",
             json={
                 "employee_id": employee["id"],
-                "leave_type": "annual",
+                "leave_type": "casual",
                 "start_date": _future(1),
                 "end_date": _future(30),  # 30 days > 20 accrued
             },
@@ -466,7 +489,7 @@ class TestLeaveLifecycle:
         assert approved.status_code == 422, approved.text
         assert approved.json()["type"].endswith("/leave-balance-exceeded")
         # Nothing was written: still pending, balance untouched.
-        assert await _annual_balance(client, headers, employee["id"]) == ANNUAL_BALANCE_ON_HIRE
+        assert await _casual_balance(client, headers, employee["id"]) == CASUAL_BALANCE_ON_HIRE
 
     async def test_cancel_approved_request_refunds_balance(
         self,
@@ -475,6 +498,7 @@ class TestLeaveLifecycle:
         seeded_hr_defaults: None,
     ) -> None:
         headers = tenant_headers("olympus")
+        await _set_leave_policy(client, headers)
         employee = await hire_employee(client, headers, hire_date="2026-01-05")
         employee_id = employee["id"]
 
@@ -482,7 +506,7 @@ class TestLeaveLifecycle:
             "/api/v1/hr/leave/requests",
             json={
                 "employee_id": employee_id,
-                "leave_type": "annual",
+                "leave_type": "casual",
                 "start_date": _future(1),
                 "end_date": _future(3),
             },
@@ -490,14 +514,14 @@ class TestLeaveLifecycle:
         )
         request_id = created.json()["data"]["id"]
         await client.post(f"/api/v1/hr/leave/requests/{request_id}/approve", headers=headers)
-        assert await _annual_balance(client, headers, employee_id) == ANNUAL_BALANCE_ON_HIRE - 3
+        assert await _casual_balance(client, headers, employee_id) == CASUAL_BALANCE_ON_HIRE - 3
 
         cancelled = await client.post(
             f"/api/v1/hr/leave/requests/{request_id}/cancel", headers=headers
         )
         assert cancelled.status_code == 200, cancelled.text
         assert cancelled.json()["data"]["status"] == "cancelled"
-        assert await _annual_balance(client, headers, employee_id) == ANNUAL_BALANCE_ON_HIRE
+        assert await _casual_balance(client, headers, employee_id) == CASUAL_BALANCE_ON_HIRE
 
 
 class TestAttendanceLifecycle:
@@ -666,7 +690,7 @@ class TestTenantIsolation:
             "/api/v1/hr/leave/requests",
             json={
                 "employee_id": employee["id"],
-                "leave_type": "annual",
+                "leave_type": "casual",
                 "start_date": _future(1),
                 "end_date": _future(3),
             },

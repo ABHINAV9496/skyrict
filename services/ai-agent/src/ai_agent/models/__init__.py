@@ -20,10 +20,10 @@ from ai_agent.models.ai_episodic_memory import AiEpisodicMemoryModel
 from ai_agent.models.ai_eval_run import AiEvalRunModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
-from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
-from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_rag_chunk import AiRagChunkModel
 from ai_agent.models.ai_rag_parent import AiRagParentModel
+from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
+from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from ai_agent.models.tenant import TenantModel
@@ -37,10 +37,10 @@ __all__ = [
     "AiEvalRunModel",
     "AiQueryCacheModel",
     "AiQueryLogModel",
-    "AiRestockDemandStatsModel",
-    "AiRestockSettingsModel",
     "AiRagChunkModel",
     "AiRagParentModel",
+    "AiRestockDemandStatsModel",
+    "AiRestockSettingsModel",
     "AiSuggestionModel",
     "Base",
     "TenantModel",

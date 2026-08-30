@@ -232,4 +232,5 @@ class TestRecentMovements:
 
         assert result.data is not None
         assert result.data["movement_count"] == 1
-        assert "-30" not in result.answer
+        assert "receipt: 10" in result.answer
+        assert "receipt: -30" not in result.answer

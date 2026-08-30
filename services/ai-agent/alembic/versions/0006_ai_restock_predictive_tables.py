@@ -16,8 +16,14 @@ warehouse_id)`` and composite FKs into core-owned ``erp_products`` /
 ``erp_warehouses`` (cross-service idiom: tenant_id carries no direct FK to
 ``tenants`` here because RLS + the composite FKs keep integrity).
 
-Revision ID: 0004
-Revises: 0003
+Renumbered from 0004 to 0006 on 2026-08-30 after dev merged SKY-73
+(0004_pgvector_rag_tables) and SKY-58 (0005_fix_query_cache_unique) while
+this branch was in flight. Final ai-agent chain: 0001 (foundation) -> 0002
+(hr copilot) -> 0003 (forecast/abc/monitor) -> 0004 (RAG) -> 0005 (query-cache
+unique fix) -> 0006 (this restock work).
+
+Revision ID: 0006
+Revises: 0005
 Create Date: 2026-08-29
 """
 
@@ -27,8 +33,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "0004"
-down_revision = "0003"
+revision = "0006"
+down_revision = "0005"
 branch_labels = None
 depends_on = None
 
@@ -95,9 +101,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
-        sa.CheckConstraint(
-            "lead_time_days > 0", name="ck_ai_restock_settings_lead_time_positive"
-        ),
+        sa.CheckConstraint("lead_time_days > 0", name="ck_ai_restock_settings_lead_time_positive"),
         sa.CheckConstraint(
             "safety_factor > 0", name="ck_ai_restock_settings_safety_factor_positive"
         ),

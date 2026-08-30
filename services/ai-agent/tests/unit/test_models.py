@@ -27,6 +27,9 @@ class TestRegistry:
         expected = {
             # read-only projection of identity's shared table
             "tenants",
+            # read-only projections of core's RBAC tables (SKY-59)
+            "core_roles",
+            "core_user_roles",
             # AI-owned tables (SKY-57)
             "ai_query_log",
             "ai_suggestions",

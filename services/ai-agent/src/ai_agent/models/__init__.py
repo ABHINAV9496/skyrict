@@ -5,6 +5,8 @@ SQLAlchemy can configure cross-module relationships before the first query and
 Alembic's ``target_metadata`` reflects the full schema.
 
 - ``tenants`` is a read-only projection of identity's shared table.
+- ``core_roles``/``core_user_roles`` are read-only projections of the core
+  monolith's RBAC tables (SKY-59 tool permission resolution).
 - The AI tables (ai_query_log, ai_suggestions, ai_anomalies, ai_audit_log)
   are owned by this service and migrated under ``alembic_version_ai``.
 - ``agent_registry`` is global platform data (no tenant scoping).
@@ -30,6 +32,7 @@ from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
 from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from ai_agent.models.core_rbac import CoreRoleModel, CoreUserRoleModel
 from ai_agent.models.graph_checkpoint import (
     GraphCheckpointModel,
     GraphCheckpointWriteModel,
@@ -53,6 +56,8 @@ __all__ = [
     "AiRestockSettingsModel",
     "AiSuggestionModel",
     "Base",
+    "CoreRoleModel",
+    "CoreUserRoleModel",
     "GraphCheckpointModel",
     "GraphCheckpointWriteModel",
     "TenantModel",

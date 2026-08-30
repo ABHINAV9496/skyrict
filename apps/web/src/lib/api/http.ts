@@ -137,7 +137,11 @@ async function readPayload<T>(response: Response): Promise<Envelope<T>> {
   if (!response.ok) {
     throw new ApiError(response.status, extractErrorMessage(payload.detail));
   }
-  return { data: payload.data as T, meta: payload.meta ?? null };
+  const hasData = payload && "data" in payload;
+  return {
+    data: (hasData ? payload.data : (payload as unknown)) as T,
+    meta: payload.meta ?? null,
+  };
 }
 
 /**

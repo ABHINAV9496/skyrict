@@ -12,8 +12,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, String, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_agent.models.base import Base
@@ -38,6 +38,10 @@ class AgentRegistryModel(Base):
     module: Mapped[str] = mapped_column(String(200), nullable=False)
     # LangGraph graph id once the orchestration layer exists (SKY-59).
     graph_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Tool allowlist for this agent (SKY-59): the runtime refuses any tool not
+    # listed here BEFORE permission checks (defense in depth; registry rows are
+    # operator-managed platform data, never tenant-writable).
+    tools: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

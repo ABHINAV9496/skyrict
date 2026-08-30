@@ -27,6 +27,9 @@ class TestRegistry:
         expected = {
             # read-only projection of identity's shared table
             "tenants",
+            # read-only projections of core's RBAC tables (SKY-59)
+            "core_roles",
+            "core_user_roles",
             # AI-owned tables (SKY-57)
             "ai_query_log",
             "ai_suggestions",
@@ -44,6 +47,10 @@ class TestRegistry:
             "ai_episodic_memory",
             "ai_query_cache",
             "ai_eval_runs",
+            # LangGraph orchestration (SKY-59)
+            "graph_checkpoints",
+            "graph_checkpoint_writes",
+            "agent_interrupts",
         }
         assert expected == set(Base.metadata.tables.keys())
 

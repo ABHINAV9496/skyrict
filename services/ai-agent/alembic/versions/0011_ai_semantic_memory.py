@@ -122,11 +122,6 @@ def upgrade() -> None:
             WITH CHECK (tenant_id = public.current_tenant_id());
         """
     )
-    op.execute(
-        """
-        GRANT SELECT, INSERT, UPDATE, DELETE ON ai_semantic_memory TO app;
-        """
-    )
 
 
 def downgrade() -> None:

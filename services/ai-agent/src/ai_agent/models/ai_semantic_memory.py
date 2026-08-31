@@ -31,9 +31,7 @@ class AiSemanticMemoryModel(Base):
             "tenant_id",
             "entity_type",
             "entity_id",
-            postgresql_where=text(
-                "entity_type IS NOT NULL AND entity_id IS NOT NULL"
-            ),
+            postgresql_where=text("entity_type IS NOT NULL AND entity_id IS NOT NULL"),
         ),
         Index("idx_semantic_memory_expires", "expires_at"),
         Index("idx_semantic_memory_category", "tenant_id", "user_id", "category"),
@@ -56,13 +54,9 @@ class AiSemanticMemoryModel(Base):
     entity_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="lead | opportunity | customer | contact | null"
     )
-    entity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
-    source: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="conversation"
-    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="conversation")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -96,6 +96,9 @@ services:
       # is the service name, not localhost. These override the host-oriented
       # defaults in services/core/.env.
       CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
+      # Inside the compose network the ai-agent service listens on port 8000
+      # internally (host 8002 → container 8000).
+      CORE_AI_AGENT_URL: http://skyrict-ai-agent:8000
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../services/core/alembic:/app/services/core/alembic
@@ -140,6 +143,9 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
+      # The groq fallback model was renamed — llama-3.1-8b-instant no longer
+      # exists. qwen/qwen3.8-27b is a 131k-context model that supports tools.
+      AI_FALLBACK_MODEL: qwen/qwen3.8-27b
       # Core data plane for the inventory AI engines — the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001

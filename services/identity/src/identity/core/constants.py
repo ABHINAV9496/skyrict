@@ -190,6 +190,10 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.payroll.read",
             "erp.payroll.write",
             "erp.payroll.approve",
+            "erp.payroll.ai.read",
+            "erp.payroll.ai.run",
+            "erp.payroll.ai.notify",
+            "erp.payroll.ai.approve",
             "erp.ai.invoke",
             "erp.ai.narrator.refresh",
             "agents:read",
@@ -247,6 +251,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "erp.finance.read",
             "erp.hr.read",
             "erp.payroll.read",
+            "erp.payroll.ai.read",
         ),
     ),
     # Employee self-service: portal access to OWN leave balances/requests only.

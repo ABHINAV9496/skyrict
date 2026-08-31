@@ -15,6 +15,7 @@ from core.features.ai.proxy import (
     build_forward_headers,
     forward_to_ai_agent,
     relay_response,
+    relay_stream_response,
 )
 
 
@@ -158,3 +159,89 @@ class TestRelayResponse:
         upstream.headers.pop("content-type", None)
         reply = relay_response(upstream)
         assert reply.media_type == "application/json"
+
+
+class TestStreamingRelay:
+    """The SSE chat relay — chunks forwarded live, never buffered."""
+
+    _SSE = (
+        'event: token\ndata: {"agent": "inventory_monitor", "delta": "Hello"}\n\n'
+        'event: done\ndata: {"agents": ["inventory_monitor"]}\n\n'
+    )
+
+    async def test_forward_stream_true_sends_request_unbuffered(self) -> None:
+        seen: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["auth"] = request.headers.get("authorization")
+            seen["slug"] = request.headers.get("x-tenant-slug")
+            seen["path"] = request.url.path
+            seen["body"] = request.content
+            return httpx.Response(
+                200, text=self._SSE, headers={"content-type": "text/event-stream"}
+            )
+
+        response = await forward_to_ai_agent(
+            _client(handler),
+            method="POST",
+            upstream_path="/api/v1/ai/agents/chat/stream",
+            authorization="Bearer tok",
+            tenant_slug="acme",
+            body=b'{"message":"stock?"}',
+            stream=True,
+        )
+
+        assert response.status_code == 200
+        assert seen["auth"] == "Bearer tok"
+        assert seen["slug"] == "acme"
+        assert seen["path"] == "/api/v1/ai/agents/chat/stream"
+        assert seen["body"] == b'{"message":"stock?"}'
+        assert b"".join([chunk async for chunk in response.aiter_bytes()]) == self._SSE.encode()
+
+    async def test_stream_relay_chunks_are_forwarded_verbatim(self) -> None:
+        upstream = httpx.Response(
+            200,
+            content=self._SSE.encode(),
+            headers={"content-type": "text/event-stream"},
+        )
+        reply = relay_stream_response(upstream)
+
+        body = b"".join([chunk async for chunk in reply.body_iterator])
+        assert body == self._SSE.encode()
+        assert reply.status_code == 200
+        assert reply.media_type == "text/event-stream"
+        assert reply.headers["cache-control"] == "no-cache"
+        assert reply.headers["x-accel-buffering"] == "no"
+
+    async def test_stream_relay_carries_upstream_status(self) -> None:
+        upstream = httpx.Response(
+            401,
+            content=b'{"type": "about:blank/unauthorized"}',
+            headers={"content-type": "application/problem+json"},
+        )
+        reply = relay_stream_response(upstream)
+
+        assert reply.status_code == 401
+        assert b"unauthorized" in b"".join([chunk async for chunk in reply.body_iterator])
+        assert reply.media_type == "application/problem+json"
+
+    async def test_stream_relay_missing_content_type_defaults_to_sse(self) -> None:
+        upstream = httpx.Response(200, content=b"data: x\n\n")
+        upstream.headers.pop("content-type", None)
+        reply = relay_stream_response(upstream)
+        assert reply.media_type == "text/event-stream"
+
+    async def test_stream_transport_failure_raises_typed_503(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("refused")
+
+        with pytest.raises(AiServiceUnavailableError):
+            await forward_to_ai_agent(
+                _client(handler),
+                method="POST",
+                upstream_path="/api/v1/ai/agents/chat/stream",
+                authorization="Bearer tok",
+                tenant_slug="acme",
+                body=b"{}",
+                stream=True,
+            )

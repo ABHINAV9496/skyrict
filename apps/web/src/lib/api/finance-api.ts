@@ -400,6 +400,8 @@ export interface AccountCodeSuggestion {
   suggested_name: string;
   confidence: number;
   reasoning: string;
+  amount: number | null;
+  side: "debit" | "credit";
 }
 
 export interface WorkingCapitalAlert {

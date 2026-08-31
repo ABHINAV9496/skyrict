@@ -138,7 +138,7 @@ function AccountRow({
 interface CreateJournalEntryDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  initialValues?: { memo: string; accountCode: string };
+  initialValues?: { memo: string; accountCode: string; amount: number | null; side: "debit" | "credit" };
 }
 
 function CreateJournalEntryDialog({
@@ -161,6 +161,8 @@ function CreateJournalEntryDialog({
     confidence: number;
     reasoning: string;
     accountType?: string;
+    amount: number | null;
+    side: "debit" | "credit";
   }>(null);
   const [memoSuggestionLoading, setMemoSuggestionLoading] = useState(false);
 
@@ -209,6 +211,14 @@ function CreateJournalEntryDialog({
     }
     if (initialValues.accountCode && fields.length > 0) {
       setValue("lines.0.account_code", initialValues.accountCode);
+      if (initialValues.amount != null && initialValues.amount > 0) {
+        const amountStr = initialValues.amount.toFixed(2);
+        if (initialValues.side === "credit") {
+          setValue("lines.0.credit", amountStr);
+        } else {
+          setValue("lines.0.debit", amountStr);
+        }
+      }
       initialValuesAppliedRef.current = true;
     }
   }, [open, initialValues, setValue, fields.length]);
@@ -241,6 +251,8 @@ function CreateJournalEntryDialog({
         confidence: result.confidence,
         reasoning: result.reasoning,
         accountType: matched?.account_type,
+        amount: result.amount,
+        side: result.side,
       });
     } catch {
       setMemoSuggestion(null);
@@ -270,6 +282,14 @@ function CreateJournalEntryDialog({
     });
     const idx = targetIndex >= 0 ? targetIndex : 0;
     setValue(`lines.${idx}.account_code`, memoSuggestion.code);
+    if (memoSuggestion.amount != null && memoSuggestion.amount > 0) {
+      const amountStr = memoSuggestion.amount.toFixed(2);
+      if (memoSuggestion.side === "credit") {
+        setValue(`lines.${idx}.credit`, amountStr);
+      } else {
+        setValue(`lines.${idx}.debit`, amountStr);
+      }
+    }
     setMemoSuggestion(null);
   }
 
@@ -395,6 +415,12 @@ function CreateJournalEntryDialog({
                     )}
                   >
                     {ACCOUNT_TYPE_LABELS[memoSuggestion.accountType as keyof typeof ACCOUNT_TYPE_LABELS]}
+                  </span>
+                ) : null}
+                {memoSuggestion.amount != null && memoSuggestion.amount > 0 ? (
+                  <span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">
+                    {memoSuggestion.side === "credit" ? "Cr" : "Dr"}{" "}
+                    {formatMoney(memoSuggestion.amount)}
                   </span>
                 ) : null}
                 <span className="ml-2 text-xs text-muted-foreground">
@@ -594,7 +620,7 @@ function FinanceJournalEntries() {
 
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftInitialValues, setDraftInitialValues] = useState<
-    { memo: string; accountCode: string } | undefined
+    { memo: string; accountCode: string; amount: number | null; side: "debit" | "credit" } | undefined
   >(undefined);
   const paramsAppliedRef = useRef(false);
 
@@ -603,11 +629,21 @@ function FinanceJournalEntries() {
     const draftAccount = searchParams.get("draft_account");
     if (draftMemo && draftAccount && !paramsAppliedRef.current) {
       paramsAppliedRef.current = true;
-      setDraftInitialValues({ memo: draftMemo, accountCode: draftAccount });
+      const draftAmountStr = searchParams.get("draft_amount");
+      const draftAmount = draftAmountStr ? Number(draftAmountStr) : null;
+      const draftSide = searchParams.get("draft_side");
+      setDraftInitialValues({
+        memo: draftMemo,
+        accountCode: draftAccount,
+        amount: Number.isFinite(draftAmount) && (draftAmount as number) > 0 ? draftAmount : null,
+        side: draftSide === "credit" ? "credit" : "debit",
+      });
       setDraftOpen(true);
       const params = new URLSearchParams(searchParams.toString());
       params.delete("draft_memo");
       params.delete("draft_account");
+      params.delete("draft_amount");
+      params.delete("draft_side");
       const qs = params.toString();
       router.replace(`/dashboard/erp/finance/journal-entries${qs ? `?${qs}` : ""}`, { scroll: false });
     }

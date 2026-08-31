@@ -32,3 +32,5 @@ class AccountSuggestion:
     confidence: float
     reasoning: str
     model_used: str
+    amount: float | None = None
+    side: str = "debit"

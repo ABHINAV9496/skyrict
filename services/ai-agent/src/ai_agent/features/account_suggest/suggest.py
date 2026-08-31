@@ -30,11 +30,13 @@ _SYSTEM_PROMPT = (
     "chart of accounts (list of {code, name}), choose the SINGLE best account "
     "for the transaction. The suggested_code MUST be one of the codes provided "
     "in the chart — never invent a code. If no account fits, return "
-    "suggested_code as an empty string. Return ONLY strict JSON with the keys: "
+    "suggested_code as an empty string. Also extract the transaction amount if "
+    "mentioned (as a positive number, or null if not stated). Determine the "
+    "entry side: \"debit\" for expenses/assets, \"credit\" for "
+    "revenue/liabilities/equity. Return ONLY strict JSON with the keys: "
     '"suggested_code" (string), "suggested_name" (string), "confidence" '
-    "(a number 0 to 1 reflecting how confidently the account fits), and "
-    '"reasoning" (a short one-sentence, plain-English explanation of why this '
-    "account fits the transaction)."
+    "(a number 0 to 1), \"reasoning\" (a short one-sentence explanation), "
+    '"amount" (number or null), and "side" ("debit" or "credit").'
 )
 
 
@@ -77,6 +79,14 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
 
     reasoning = str(payload.get("reasoning") or "").strip()
 
+    raw_amount = payload.get("amount")
+    amount: float | None = None
+    if isinstance(raw_amount, (int, float)) and raw_amount > 0:
+        amount = float(raw_amount)
+
+    raw_side = str(payload.get("side") or "debit").strip().lower()
+    side = raw_side if raw_side in ("debit", "credit") else "debit"
+
     from ai_agent.features.account_suggest.schemas import AccountSuggestion
 
     return AccountSuggestion(
@@ -85,6 +95,8 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
         confidence=max(0.0, min(float(confidence), 1.0)),
         reasoning=reasoning,
         model_used=completion.model_used,
+        amount=amount,
+        side=side,
     )
 
 

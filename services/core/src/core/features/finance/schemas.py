@@ -303,6 +303,8 @@ class AccountCodeSuggestionResponse(BaseModel):
     suggested_name: str
     confidence: Decimal
     reasoning: str = ""
+    amount: Decimal | None = None
+    side: str = "debit"
 
 
 class WorkingCapitalAlertResponse(BaseModel):

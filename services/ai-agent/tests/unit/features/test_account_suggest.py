@@ -40,7 +40,8 @@ def _req() -> SuggestRequest:
 
 _GOOD = (
     '{"suggested_code": "1500", "suggested_name": "Equipment",'
-    ' "confidence": 0.9, "reasoning": "Furniture is a fixed asset."}'
+    ' "confidence": 0.9, "reasoning": "Furniture is a fixed asset.",'
+    ' "amount": 200, "side": "debit"}'
 )
 
 
@@ -51,6 +52,8 @@ async def test_suggest_success() -> None:
     assert result.suggested_name == "Equipment"
     assert result.confidence == pytest.approx(0.9)
     assert result.reasoning == "Furniture is a fixed asset."
+    assert result.amount == 200.0
+    assert result.side == "debit"
     assert result.model_used == "fake-model"
 
 
@@ -61,6 +64,18 @@ async def test_suggest_reasoning_defaults_empty_when_absent() -> None:
     result = await suggest(llm, _req())  # type: ignore[arg-type]
     assert result is not None
     assert result.reasoning == ""
+    assert result.amount is None
+    assert result.side == "debit"
+
+
+async def test_suggest_invalid_side_defaults_to_debit() -> None:
+    llm = FakeLlm(
+        text='{"suggested_code": "1500", "suggested_name": "Equipment",'
+        ' "confidence": 0.9, "side": "invalid"}'
+    )
+    result = await suggest(llm, _req())  # type: ignore[arg-type]
+    assert result is not None
+    assert result.side == "debit"
 
 
 async def test_suggest_llm_error_abstains() -> None:

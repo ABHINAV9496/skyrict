@@ -610,6 +610,10 @@ export function SuggestAccountCode({ accounts = [] }: { accounts?: Account[] }) 
       draft_memo: suggestion.description || description,
       draft_account: suggestion.suggested_code,
     });
+    if (suggestion.amount != null && suggestion.amount > 0) {
+      params.set("draft_amount", String(suggestion.amount));
+      params.set("draft_side", suggestion.side);
+    }
     router.push(`/dashboard/erp/finance/journal-entries?${params.toString()}`);
   }
 
@@ -686,6 +690,14 @@ export function SuggestAccountCode({ accounts = [] }: { accounts?: Account[] }) 
               {Math.round(toMoney(suggestion.confidence) * 100)}% confidence
             </span>
           </div>
+          {suggestion.amount != null && suggestion.amount > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {suggestion.side === "credit" ? "Credit" : "Debit"}:{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {formatMoney(suggestion.amount)}
+              </span>
+            </p>
+          ) : null}
           <p className="mt-2 text-xs text-muted-foreground">
             {suggestion.reasoning ||
               "No explanation available. The suggestion above is based on keyword matching."}

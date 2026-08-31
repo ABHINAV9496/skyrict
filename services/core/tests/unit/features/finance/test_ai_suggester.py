@@ -45,6 +45,8 @@ async def test_success_parses_suggestion() -> None:
                 "suggested_name": "Equipment",
                 "confidence": 0.9,
                 "reasoning": "Furniture is a fixed asset.",
+                "amount": 500,
+                "side": "debit",
             },
         )
 
@@ -53,13 +55,15 @@ async def test_success_parses_suggestion() -> None:
             client,
             authorization="Bearer tok",
             tenant_slug="acme-inc",
-            description="buy furniture",
+            description="buy furniture for 500",
             accounts=_accounts(),
         )
     assert result is not None
     assert result.suggested_code == "1500"
     assert result.confidence == Decimal("0.9")
     assert result.reasoning == "Furniture is a fixed asset."
+    assert result.amount == Decimal("500")
+    assert result.side == "debit"
 
 
 async def test_reasoning_defaults_empty_when_absent() -> None:
@@ -74,6 +78,8 @@ async def test_reasoning_defaults_empty_when_absent() -> None:
         )
     assert result is not None
     assert result.reasoning == ""
+    assert result.amount is None
+    assert result.side == "debit"
 
 
 async def test_no_match_returns_none() -> None:

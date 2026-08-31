@@ -733,6 +733,8 @@ class AccountCodeSuggestion:
     suggested_name: str
     confidence: Decimal
     reasoning: str = ""
+    amount: Decimal | None = None
+    side: str = "debit"
 
 
 @dataclass(frozen=True)

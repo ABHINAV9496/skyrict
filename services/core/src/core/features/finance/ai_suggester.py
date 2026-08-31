@@ -61,10 +61,20 @@ async def suggest_account_code_with_ai(
     if not code or not name or not isinstance(confidence, (int, float)):
         return None
 
+    raw_amount = data.get("amount")
+    amount: Decimal | None = None
+    if isinstance(raw_amount, (int, float)) and raw_amount > 0:
+        amount = Decimal(str(raw_amount))
+
+    raw_side = str(data.get("side") or "debit").strip().lower()
+    side = raw_side if raw_side in ("debit", "credit") else "debit"
+
     return AccountCodeSuggestion(
         description=description,
         suggested_code=code,
         suggested_name=name,
         confidence=Decimal(str(confidence)),
         reasoning=str(data.get("reasoning") or "").strip(),
+        amount=amount,
+        side=side,
     )

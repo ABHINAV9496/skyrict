@@ -4,6 +4,7 @@ import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/app/providers";
 import { site } from "@/config";
 import "@/styles/globals.css";
+import "flag-icons/css/flag-icons.min.css";
 
 const inter = Inter({
   subsets: ["latin"],

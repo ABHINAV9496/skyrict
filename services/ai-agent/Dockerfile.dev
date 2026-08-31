@@ -43,6 +43,10 @@ COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 # Install all deps (dev group included — pytest, mypy, ruff)
 RUN uv sync --frozen --directory services/ai-agent
 
+# Make venv entry points (alembic, uvicorn, ai-agent, etc.) available on PATH
+# so `docker exec` can find them without going through `uv run`.
+ENV PATH="/app/.venv/bin:$PATH"
+
 # Copy source code (skyrict-common is imported directly by ai-agent at runtime
 # - uv installs workspace members editable)
 COPY services/ai-agent/src services/ai-agent/src

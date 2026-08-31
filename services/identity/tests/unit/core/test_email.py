@@ -57,7 +57,7 @@ def _isolate_email_logger() -> None:
 
 def _service(**overrides) -> SmtpEmailService:
     kwargs: dict = {
-        "host": "mailhog",
+        "host": "mailpit",
         "port": 1025,
         "from_addr": "Skyrict <no-reply@skyrict.dev>",
     }
@@ -84,7 +84,7 @@ async def test_smtp_service_sends_otp_with_code(monkeypatch) -> None:
     assert message["From"] == "Skyrict <no-reply@skyrict.dev>"
     plain = message.get_body(preferencelist=("plain",))
     assert plain is not None
-    assert "123456" in plain.get_content()
+    assert "1 2 3 4 5 6" in plain.get_content()
     # Multipart alternative includes an HTML variant.
     assert message.get_body(preferencelist=("html",)) is not None
 

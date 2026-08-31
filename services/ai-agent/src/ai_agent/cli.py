@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import uuid
 from pathlib import Path
 
@@ -41,7 +40,7 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
     import subprocess
 
     subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", head],
+        ["alembic", "-c", str(_PACKAGE_ROOT / "alembic.ini"), "upgrade", head],
         cwd=_PACKAGE_ROOT,
         check=True,
     )

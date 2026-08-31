@@ -56,6 +56,21 @@ AI_AGENT_INTERRUPT_DENIED = "ai.agent.interrupt.denied"
 AI_AGENT_INTERRUPT_EXPIRED = "ai.agent.interrupt.expired"
 """A pending agent interrupt auto-denied on lazy expiry (SKY-59, 24h)."""
 
+AI_LEAD_SCORED = "ai.crm.lead.scored"
+"""The CRM AI service produced a deterministic lead score (SKY-61)."""
+
+AI_DEAL_HEALTH_ASSESSED = "ai.crm.deal.health"
+"""The CRM AI service assessed an opportunity's deal health (SKY-61)."""
+
+AI_FOLLOW_UP_GENERATED = "ai.crm.follow_up.generated"
+"""The hourly scan generated a CRM follow-up suggestion (SKY-61)."""
+
+AI_FOLLOW_UP_APPLIED = "ai.crm.follow_up.applied"
+"""A human one-click-applied a follow-up, creating a CRM activity (SKY-61)."""
+
+AI_FOLLOW_UP_DISMISSED = "ai.crm.follow_up.dismissed"
+"""A human dismissed a follow-up suggestion (SKY-61)."""
+
 ALL_AI_AUDIT_EVENTS = frozenset(
     {
         AI_QUERY_EXECUTED,
@@ -72,6 +87,11 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_AGENT_INTERRUPT_APPROVED,
         AI_AGENT_INTERRUPT_DENIED,
         AI_AGENT_INTERRUPT_EXPIRED,
+        AI_LEAD_SCORED,
+        AI_DEAL_HEALTH_ASSESSED,
+        AI_FOLLOW_UP_GENERATED,
+        AI_FOLLOW_UP_APPLIED,
+        AI_FOLLOW_UP_DISMISSED,
     }
 )
 """The complete, closed vocabulary accepted by the AuditService."""

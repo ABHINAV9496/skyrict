@@ -132,6 +132,7 @@
   html,
   body {
     height: 100%;
+    overflow: hidden;
   }
   body {
     @apply bg-background text-foreground antialiased;
@@ -549,6 +550,118 @@
   .chart-draw {
     stroke-dashoffset: 0;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Chat markdown rendering                                            */
+/* ------------------------------------------------------------------ */
+
+.chat-markdown p {
+  margin: 0.4em 0;
+}
+
+.chat-markdown p:first-child {
+  margin-top: 0;
+}
+
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+
+.chat-markdown li {
+  margin: 0.15em 0;
+}
+
+.chat-markdown strong {
+  font-weight: 600;
+}
+
+.chat-markdown code {
+  background: hsl(var(--muted));
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.chat-markdown pre {
+  background: hsl(var(--muted));
+  padding: 0.75em 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.chat-markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.chat-markdown blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+}
+
+.chat-markdown h1 {
+  font-size: 1.15em;
+}
+
+.chat-markdown h2 {
+  font-size: 1.05em;
+}
+
+.chat-markdown h3 {
+  font-size: 1em;
+}
+
+.chat-markdown a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-markdown a:hover {
+  opacity: 0.8;
+}
+
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 0.75em 0;
+}
+
+.chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.875em;
+}
+
+.chat-markdown th,
+.chat-markdown td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.35em 0.65em;
+  text-align: left;
+}
+
+.chat-markdown th {
+  background: hsl(var(--muted));
+  font-weight: 600;
 }
 
 

@@ -182,10 +182,29 @@ export async function streamAgentChat(input: StreamAgentChatInput): Promise<void
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let lastEventTime = Date.now();
+  const STREAM_TIMEOUT_MS = 60_000; // 60s without any SSE frame = stuck
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      // Race between reading the next chunk and a timeout.
+      const readPromise = reader.read();
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const id = setTimeout(
+          () => reject(new ApiError(504, "The agent stream timed out. Please try again.")),
+          STREAM_TIMEOUT_MS,
+        );
+        // Clean up timeout on abort.
+        input.signal?.addEventListener(
+          "abort",
+          () => clearTimeout(id),
+          { once: true },
+        );
+      });
+
+      const result = await Promise.race([readPromise, timeoutPromise]);
+      const { done, value } = result as { done: boolean; value: Uint8Array | undefined };
       if (done) break;
+      lastEventTime = Date.now();
       buffer += decoder.decode(value, { stream: true });
       const { frames, remainder } = splitSseFrames(buffer);
       buffer = remainder;

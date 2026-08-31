@@ -360,6 +360,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_HR_COPILOT_PER_MIN: int = Field(
         default=20, ge=1, description="HR Copilot chat messages per minute per user"
     )
+    RATE_LIMIT_CHAT_PER_MIN: int = Field(
+        default=20, ge=1, description="supervisor chat turns per minute per user"
+    )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"
     )

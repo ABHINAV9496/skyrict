@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useController, useFieldArray, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, CircleCheck, LoaderCircle, NotebookPen, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRight, CircleCheck, LoaderCircle, NotebookPen, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,15 +25,18 @@ import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   createJournalEntry,
+  getDuplicates,
   listAccounts,
   listFiscalPeriods,
   listJournalEntries,
+  suggestAccountCode,
   type Account,
+  type DuplicateGroup,
   type FiscalPeriod,
   type JournalEntry,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
-import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
+import { ACCOUNT_TYPE_LABELS, formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
 import {
   PeriodSelector,
@@ -43,6 +46,7 @@ import {
 } from "@/features/finance/components/period-selector";
 import { EntryStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
+import { DuplicatesWidget } from "@/features/finance/components/automation-widgets";
 import { cn } from "@/lib/utils";
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
@@ -131,12 +135,34 @@ function AccountRow({
   );
 }
 
-function CreateJournalEntryDialog() {
+interface CreateJournalEntryDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialValues?: { memo: string; accountCode: string };
+}
+
+function CreateJournalEntryDialog({
+  open: controlledOpen,
+  onOpenChange,
+  initialValues,
+}: CreateJournalEntryDialogProps = {}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const accountInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const initialValuesAppliedRef = useRef(false);
+
+  const [memoSuggestion, setMemoSuggestion] = useState<null | {
+    code: string;
+    name: string;
+    confidence: number;
+    reasoning: string;
+    accountType?: string;
+  }>(null);
+  const [memoSuggestionLoading, setMemoSuggestionLoading] = useState(false);
 
   const {
     register,
@@ -144,6 +170,7 @@ function CreateJournalEntryDialog() {
     control,
     watch,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<EntryValues>({
     resolver: zodResolver(entrySchema),
@@ -153,6 +180,8 @@ function CreateJournalEntryDialog() {
       lines: [{ account_code: "", debit: "", credit: "" }],
     },
   });
+
+  const memoValue = watch("memo");
 
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const lines = watch("lines");
@@ -172,6 +201,77 @@ function CreateJournalEntryDialog() {
       cancelled = true;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !initialValues || initialValuesAppliedRef.current) return;
+    initialValuesAppliedRef.current = true;
+    if (initialValues.memo) {
+      setValue("memo", initialValues.memo);
+    }
+    if (initialValues.accountCode && fields.length > 0) {
+      setValue("lines.0.account_code", initialValues.accountCode);
+    }
+  }, [open, initialValues, setValue, fields.length]);
+
+  useEffect(() => {
+    if (!open) {
+      initialValuesAppliedRef.current = false;
+      setMemoSuggestion(null);
+      setMemoSuggestionLoading(false);
+    }
+  }, [open]);
+
+  const fetchMemoSuggestion = useCallback(async () => {
+    const text = memoValue?.trim();
+    if (!text || text.length < 5) {
+      setMemoSuggestion(null);
+      return;
+    }
+    setMemoSuggestionLoading(true);
+    try {
+      const result = await suggestAccountCode(text);
+      if (!result.suggested_code) {
+        setMemoSuggestion(null);
+        return;
+      }
+      const matched = accounts.find((a) => a.code === result.suggested_code);
+      setMemoSuggestion({
+        code: result.suggested_code,
+        name: result.suggested_name,
+        confidence: result.confidence,
+        reasoning: result.reasoning,
+        accountType: matched?.account_type,
+      });
+    } catch {
+      setMemoSuggestion(null);
+    } finally {
+      setMemoSuggestionLoading(false);
+    }
+  }, [memoValue, accounts]);
+
+  useEffect(() => {
+    if (!open) return;
+    const text = memoValue?.trim() ?? "";
+    if (text.length < 5) {
+      setMemoSuggestion(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void fetchMemoSuggestion();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [memoValue, open, fetchMemoSuggestion]);
+
+  function applyMemoSuggestion() {
+    if (!memoSuggestion) return;
+    const targetIndex = fields.findIndex((f) => {
+      const val = f.account_code;
+      return !val || val.trim() === "";
+    });
+    const idx = targetIndex >= 0 ? targetIndex : 0;
+    setValue(`lines.${idx}.account_code`, memoSuggestion.code);
+    setMemoSuggestion(null);
+  }
 
   async function onSubmit(values: EntryValues) {
     if (!balanced) {
@@ -212,12 +312,14 @@ function CreateJournalEntryDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus aria-hidden="true" className="size-4" />
-          New entry
-        </Button>
-      </DialogTrigger>
+      {!controlledOpen && (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus aria-hidden="true" className="size-4" />
+            New entry
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-3xl">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -244,7 +346,23 @@ function CreateJournalEntryDialog() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="entry-memo">Memo</Label>
-              <Input id="entry-memo" placeholder="Optional description" aria-invalid={errors.memo ? true : undefined} {...register("memo")} />
+              <div className="flex gap-2">
+                <Input id="entry-memo" placeholder="Optional description" aria-invalid={errors.memo ? true : undefined} className="flex-1" {...register("memo")} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={memoSuggestionLoading || !memoValue?.trim() || (memoValue?.trim().length ?? 0) < 5}
+                  onClick={() => void fetchMemoSuggestion()}
+                >
+                  {memoSuggestionLoading ? (
+                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles aria-hidden="true" className="size-3.5" />
+                  )}
+                  Suggest
+                </Button>
+              </div>
               {errors.memo ? (
                 <p role="alert" className="text-xs font-medium text-destructive">
                   {errors.memo.message}
@@ -252,6 +370,48 @@ function CreateJournalEntryDialog() {
               ) : null}
             </div>
           </div>
+
+          {memoSuggestion ? (
+            <div className="flex items-center gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 text-sm">
+              <Sparkles aria-hidden="true" className="size-4 shrink-0 text-primary" />
+              <span>
+                Suggested:{" "}
+                <span className="font-mono font-semibold">{memoSuggestion.code}</span>{" "}
+                <span className="text-foreground">{memoSuggestion.name}</span>
+                {memoSuggestion.accountType ? (
+                  <span
+                    className={cn(
+                      "ml-2 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium",
+                      memoSuggestion.accountType === "expense" &&
+                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                      memoSuggestion.accountType === "revenue" &&
+                        "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+                      memoSuggestion.accountType === "asset" &&
+                        "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                      memoSuggestion.accountType === "liability" &&
+                        "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+                      memoSuggestion.accountType === "equity" &&
+                        "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+                    )}
+                  >
+                    {ACCOUNT_TYPE_LABELS[memoSuggestion.accountType as keyof typeof ACCOUNT_TYPE_LABELS]}
+                  </span>
+                ) : null}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({Math.round(memoSuggestion.confidence * 100)}%)
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto shrink-0"
+                onClick={applyMemoSuggestion}
+              >
+                Apply
+              </Button>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Lines</Label>
@@ -419,6 +579,8 @@ const columns: FinanceColumn<JournalEntry>[] = [
 ];
 
 function FinanceJournalEntries() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { permissions } = useModuleAccess();
   const canWrite = hasPermission(permissions, "erp.finance.write");
   const [status, setStatus] = useState<Status>({ state: "loading" });
@@ -426,6 +588,48 @@ function FinanceJournalEntries() {
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(true);
+  const [duplicatesError, setDuplicatesError] = useState<string | null>(null);
+
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftInitialValues, setDraftInitialValues] = useState<
+    { memo: string; accountCode: string } | undefined
+  >(undefined);
+  const paramsAppliedRef = useRef(false);
+
+  useEffect(() => {
+    const draftMemo = searchParams.get("draft_memo");
+    const draftAccount = searchParams.get("draft_account");
+    if (draftMemo && draftAccount && !paramsAppliedRef.current) {
+      paramsAppliedRef.current = true;
+      setDraftInitialValues({ memo: draftMemo, accountCode: draftAccount });
+      setDraftOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("draft_memo");
+      params.delete("draft_account");
+      const qs = params.toString();
+      router.replace(`/dashboard/erp/finance/journal-entries${qs ? `?${qs}` : ""}`, { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  const loadDuplicates = useCallback(async () => {
+    setDuplicatesLoading(true);
+    setDuplicatesError(null);
+    try {
+      setDuplicates(await getDuplicates());
+    } catch (error) {
+      setDuplicatesError(
+        error instanceof ApiError ? error.message : "Could not load duplicate suggestions.",
+      );
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDuplicates();
+  }, [loadDuplicates]);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -507,7 +711,16 @@ function FinanceJournalEntries() {
               label="Entry period"
             />
           }
-          actions={canWrite ? <CreateJournalEntryDialog /> : null}
+          actions={canWrite ? <CreateJournalEntryDialog open={draftOpen} onOpenChange={setDraftOpen} initialValues={draftInitialValues} /> : null}
+        />
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <DuplicatesWidget
+          groups={duplicates}
+          loading={duplicatesLoading}
+          error={duplicatesError}
+          onRetry={() => void loadDuplicates()}
         />
       </div>
 

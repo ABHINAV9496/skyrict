@@ -3,9 +3,9 @@
 name: skyrict
 
 services:
-  # ---------- PostgreSQL ----------
+  # ---------- PostgreSQL (with pgvector extension for AI embeddings) ----------
   postgres:
-    image: postgres:18-alpine
+    image: pgvector/pgvector:pg18
     container_name: skyrict-postgres
     ports:
       - "5432:5432"

@@ -210,11 +210,14 @@ async def _event_stream(
     user_id: Any,
 ) -> AsyncIterator[str]:
     """Map supervisor events to SSE frames; sanitized failure frames only."""
+    done_sent = False
     try:
         async for event in runtime.stream_answer(
             query=message, tenant_id=tenant_id, user_id=user_id
         ):
             name, payload = _to_sse(event)
+            if name == EVENT_DONE:
+                done_sent = True
             yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
     except AiUnavailableError as exc:
         logger.warning("chat.stream_unavailable", error=str(exc))
@@ -222,6 +225,11 @@ async def _event_stream(
     except Exception:
         logger.exception("chat.stream_failed")
         yield _error_frame("internal_error")
+    finally:
+        # Safety net: always send a done event so the client never stays
+        # stuck on loading dots if the generator exits without one.
+        if not done_sent:
+            yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
 
 
 def _to_sse(event: SupervisorEvent) -> tuple[str, dict[str, object]]:

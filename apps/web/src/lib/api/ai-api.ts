@@ -158,3 +158,33 @@ export async function listAbcClassifications(): Promise<{ data: AbcItem[] }> {
 export async function getAbcSummary(): Promise<{ data: Record<string, number> }> {
   return apiFetchBody("/api/v1/ai/abc/summary");
 }
+
+// ---------------------------------------------------------------------------
+// SKY-70 Semantic Search
+// ---------------------------------------------------------------------------
+
+export interface SearchItem {
+  item_id: string;
+  sku: string;
+  name: string;
+  category: string | null;
+  unit: string | null;
+  source: "exact" | "semantic";
+  score: number;
+  matched_fields: string[] | null;
+  cost_price: string | null;
+}
+
+export interface SearchResponse {
+  data: SearchItem[];
+  cached: boolean;
+  degraded: boolean;
+  model_used: string | null;
+  latency_ms: number;
+}
+
+export async function searchInventory(query: string): Promise<SearchResponse> {
+  return apiFetchBody<SearchResponse>(
+    `/api/v1/ai/inventory/search?q=${encodeURIComponent(query)}`,
+  );
+}

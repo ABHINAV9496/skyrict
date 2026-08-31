@@ -9,6 +9,7 @@ import {
     InventoryError,
     InventorySuccess,
 } from "@/components/dashboard/erp/inventory/inventory-banners";
+import { SemanticSearchBar } from "@/components/dashboard/erp/inventory/semantic-search-bar";
 import { Pagination } from "@/components/dashboard/erp/pagination";
 import { DataTableSkeleton } from "@/components/dashboard/shared/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -303,12 +304,15 @@ export function ProductsClient() {
                         </div>
                     )}
                 </div>
-                {canWrite ? (
-                    <Button onClick={openCreate}>
-                        <Plus aria-hidden="true" />
-                        New product
-                    </Button>
-                ) : null}
+                <div className="flex items-center gap-3">
+                    <SemanticSearchBar />
+                    {canWrite ? (
+                        <Button onClick={openCreate}>
+                            <Plus aria-hidden="true" />
+                            New product
+                        </Button>
+                    ) : null}
+                </div>
             </div>
 
             {visibleProducts.length === 0 ? (

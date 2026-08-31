@@ -27,7 +27,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from core.core.config import settings
 from core.core.permissions import (
@@ -233,3 +233,49 @@ async def seed_core_roles_for_tenant(tenant_id: uuid.UUID) -> None:
         if created:
             logger.info("seed.core_roles.created", tenant_id=str(tenant_id), count=created)
         await session.commit()
+
+
+async def sync_rbac_from_identity() -> None:
+    """Sync user→role grants from identity's tables into core's RBAC tables.
+
+    Both services share one database, so this reads identity's ``user_roles``
+    (user→role grants) and ``roles`` (role catalog) and upserts into core's
+    ``core_roles`` (role catalog) and ``core_user_roles`` (user→role grants).
+
+    This bridges the gap where identity's seed creates ``user_roles`` rows
+    (e.g. admin → tenant_owner) but core's ``seed_core_roles_for_tenant``
+    only creates ``core_roles`` rows (role catalog) — never the user→role
+    grants that ``require_permission`` resolves through.
+
+    Idempotent: safe to re-run on every startup. Existing rows are left
+    untouched; only missing grants are added.
+    """
+    async with async_session_factory() as session:
+        # Step 1: Upsert core_roles from identity's roles table.
+        # Maps identity role IDs to core role IDs by name within each tenant.
+        await session.execute(
+            text(
+                "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                "SELECT ir.tenant_id, ir.id, ir.name, ir.permissions, ir.is_system_role "
+                "FROM roles ir "
+                "ON CONFLICT (tenant_id, name) DO UPDATE SET "
+                "permissions = (SELECT array_agg(DISTINCT p) FROM unnest("
+                "core_roles.permissions || EXCLUDED.permissions) AS p), "
+                "is_system_role = EXCLUDED.is_system_role, updated_at = now()"
+            )
+        )
+
+        # Step 2: Upsert core_user_roles from identity's user_roles table.
+        # Links each user to their role in core's RBAC tables so
+        # require_permission can resolve grants.
+        await session.execute(
+            text(
+                "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
+                "SELECT ur.tenant_id, gen_random_uuid(), ur.user_id, ur.role_id, ur.scope_id "
+                "FROM user_roles ur "
+                "ON CONFLICT DO NOTHING"
+            )
+        )
+
+        await session.commit()
+        logger.info("seed.rbac_sync.completed")

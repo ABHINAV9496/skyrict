@@ -24,25 +24,26 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
  * not the sidebar.
  */
 function ConversationView({ conversation }: { conversation: Conversation }) {
-  const { user } = useSession();
+  const { user, status } = useSession();
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
     conversation.messages.map(toAgentMessage),
+    { initialMessagesComplete: true },
   );
   const autoStarted = useRef(false);
 
   useEffect(() => {
-    if (autoStarted.current || sending) return;
+    if (autoStarted.current || sending || status !== "authenticated") return;
     const last = conversation.messages[conversation.messages.length - 1];
     if (last && last.role === "user") {
       autoStarted.current = true;
       void send(last.content);
     }
-  }, [conversation.messages, send, sending]);
+  }, [conversation.messages, send, sending, status]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <AgentsHeader title={conversation.title} />
-      <MessageList messages={messages} userDisplay={user?.fullName ?? user?.email ?? ""} />
+      <MessageList messages={messages} userDisplay={user?.fullName ?? user?.email ?? ""} onResend={send} />
       <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
         <ChatComposer
           onSend={send}

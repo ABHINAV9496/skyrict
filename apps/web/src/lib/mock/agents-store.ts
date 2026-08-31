@@ -1,10 +1,11 @@
 /**
  * In-memory store for the AI Agents chat world.
  *
- * This is a frontend stub: conversations live in a module-level Map on the
- * server and reset when the process restarts. It exists so the chat UI can be
- * built against real route shapes (`GET /api/v1/agents/conversations`, etc.)
- * and later pointed at an agents service without changing the client.
+ * Conversations live on `globalThis` so they survive Next.js hot-module
+ * replacement during development.  The store is a stub: it lets the chat UI
+ * be built against real route shapes (`GET /api/v1/agents/conversations`,
+ * etc.) and can be swapped for a real agents service later with a one-line
+ * change per function.
  */
 
 export type ChatRole = "user" | "agent";
@@ -28,7 +29,17 @@ function newId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-const conversations = new Map<string, Conversation>();
+// Persist across HMR so conversations don't vanish on every code change.
+const g = globalThis as unknown as { __agentsConversations?: Map<string, Conversation> };
+if (!g.__agentsConversations) g.__agentsConversations = new Map();
+const conversations = g.__agentsConversations;
+
+/** Derive a short title from the first user message (max 60 chars). */
+function deriveTitle(prompt: string): string {
+  const cleaned = prompt.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "New chat";
+  return cleaned.length > 60 ? `${cleaned.slice(0, 57)}…` : cleaned;
+}
 
 export function listConversations(): Conversation[] {
   return [...conversations.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -42,7 +53,7 @@ export function createConversation(title: string, firstPrompt?: string): Convers
   const now = new Date().toISOString();
   const conversation: Conversation = {
     id: newId(),
-    title: title.trim() || "New chat",
+    title: firstPrompt?.trim() ? deriveTitle(firstPrompt) : title.trim() || "New chat",
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -69,8 +80,9 @@ export function appendMessage(
   };
   conversation.messages.push(message);
   conversation.updatedAt = message.createdAt;
+  // Auto-title from first user message (after the initial prompt).
   if (conversation.messages.length === 2 && role === "agent") {
-    conversation.title = conversation.messages[0].content.slice(0, 48) || conversation.title;
+    conversation.title = deriveTitle(conversation.messages[0].content);
   }
   return conversation;
 }

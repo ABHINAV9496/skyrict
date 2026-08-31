@@ -1,25 +1,72 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { BookOpen, Check, Copy } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, Check, Copy, Pencil, RefreshCw, RotateCw } from "lucide-react";
 
 import { AiGlyph } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/lib/chat/use-agent-chat";
 
+/* ------------------------------------------------------------------ */
+/*  Utility helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Format an ISO timestamp to a short time like "6:23 PM". */
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+/** Return a date-group label: "Today", "Yesterday", or "Aug 31, 2026". */
+function dateGroupLabel(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diff = now.setHours(0, 0, 0, 0) - date.setHours(0, 0, 0, 0);
+  const DAY = 86_400_000;
+  if (diff < DAY) return "Today";
+  if (diff < DAY * 2) return "Yesterday";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** True if two ISO timestamps fall on different calendar days. */
+function differentDay(a: string, b: string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() !== db.getFullYear() ||
+    da.getMonth() !== db.getMonth() ||
+    da.getDate() !== db.getDate()
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Action buttons                                                     */
+/* ------------------------------------------------------------------ */
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard?.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }, [text]);
   return (
     <button
       type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(text);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-      }}
+      onClick={handleCopy}
       aria-label="Copy message"
       title="Copy"
-      className="flex size-7 shrink-0 items-center justify-center self-center rounded-lg text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-muted hover:text-foreground"
+      className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       {copied ? (
         <Check aria-hidden="true" className="size-3.5 text-emerald-500" />
@@ -29,6 +76,52 @@ function CopyButton({ text }: { text: string }) {
     </button>
   );
 }
+
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Edit message"
+      title="Edit"
+      className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <Pencil aria-hidden="true" className="size-3.5" />
+    </button>
+  );
+}
+
+function ResendButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Resend message"
+      title="Resend"
+      className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <RotateCw aria-hidden="true" className="size-3.5" />
+    </button>
+  );
+}
+
+function RetryButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Try again"
+      title="Try again"
+      className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <RefreshCw aria-hidden="true" className="size-3.5" />
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Citations                                                          */
+/* ------------------------------------------------------------------ */
 
 function AgentCitations({ message }: { message: AgentChatMessage }) {
   const citations = message.citations ?? [];
@@ -60,9 +153,34 @@ function AgentCitations({ message }: { message: AgentChatMessage }) {
   );
 }
 
-export function MessageBubble({ message }: { message: AgentChatMessage }) {
+/* ------------------------------------------------------------------ */
+/*  Date separator                                                     */
+/* ------------------------------------------------------------------ */
+
+function DateSeparator({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <div className="h-px flex-1 bg-border/60" />
+      <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{label}</span>
+      <div className="h-px flex-1 bg-border/60" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Message bubble                                                     */
+/* ------------------------------------------------------------------ */
+
+export function MessageBubble({
+  message,
+  onResend,
+}: {
+  message: AgentChatMessage;
+  onResend?: (content: string) => void;
+}) {
   const isUser = message.role === "user";
   const streaming = !isUser && message.content === "" && message.failed !== true;
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className={cn("group flex gap-3", isUser ? "justify-end" : "justify-start")}>
@@ -71,42 +189,69 @@ export function MessageBubble({ message }: { message: AgentChatMessage }) {
           <AiGlyph aria-hidden="true" className="size-4" />
         </div>
       ) : null}
-      <div
-        className={cn(
-          "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:max-w-[75%]",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "border border-border bg-card text-foreground",
-          message.failed ? "text-muted-foreground italic" : null,
-        )}
-      >
-        {message.agentName && !isUser ? (
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {message.agentName}
-          </p>
+      <div className="flex max-w-[85%] flex-col gap-1 sm:max-w-[75%]">
+        <div
+          className={cn(
+            "whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "border border-border bg-card text-foreground",
+            message.failed ? "text-muted-foreground italic" : null,
+          )}
+        >
+          {message.agentName && !isUser ? (
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {message.agentName}
+            </p>
+          ) : null}
+          {streaming ? (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+              <span className="size-1.5 animate-pulse rounded-full bg-primary delay-100" />
+              <span className="size-1.5 animate-pulse rounded-full bg-primary delay-200" />
+            </span>
+          ) : (
+            message.content
+          )}
+          {!isUser && message.content ? <AgentCitations message={message} /> : null}
+        </div>
+
+        {/* Action bar — visible on hover */}
+        {!streaming && message.content ? (
+          <div
+            className={cn(
+              "flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
+              isUser ? "justify-end" : "justify-start",
+            )}
+          >
+            <CopyButton text={message.content} />
+            {isUser ? (
+              <>
+                <EditButton onClick={() => setEditing(!editing)} />
+                {onResend ? <ResendButton onClick={() => onResend(message.content)} /> : null}
+              </>
+            ) : message.failed ? (
+              onResend ? <RetryButton onClick={() => onResend(message.content)} /> : null
+            ) : null}
+          </div>
         ) : null}
-        {streaming ? (
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-            <span className="size-1.5 animate-pulse rounded-full bg-primary delay-100" />
-            <span className="size-1.5 animate-pulse rounded-full bg-primary delay-200" />
-          </span>
-        ) : (
-          message.content
-        )}
-        {!isUser && message.content ? <AgentCitations message={message} /> : null}
       </div>
-      {!isUser ? <CopyButton text={message.content} /> : null}
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Message list                                                       */
+/* ------------------------------------------------------------------ */
+
 export function MessageList({
   messages,
   userDisplay,
+  onResend,
 }: {
   messages: AgentChatMessage[];
   userDisplay: string;
+  onResend?: (content: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -128,9 +273,19 @@ export function MessageList({
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4">
       <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 py-4">
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
+        {messages.map((message, index) => {
+          const prev = index > 0 ? messages[index - 1] : null;
+          const showDateSep = !prev || differentDay(prev.createdAt, message.createdAt);
+
+          return (
+            <div key={message.id}>
+              {showDateSep ? (
+                <DateSeparator label={dateGroupLabel(message.createdAt)} />
+              ) : null}
+              <MessageBubble message={message} onResend={onResend} />
+            </div>
+          );
+        })}
       </div>
       <p className="sr-only">{`Chatting as ${userDisplay || "you"}`}</p>
     </div>

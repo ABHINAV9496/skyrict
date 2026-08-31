@@ -12,6 +12,7 @@
  * the BFF and stops the upstream LLM stream.
  */
 
+import { flushSync } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -60,12 +61,20 @@ function toMessage(citation: ChatCitation): AgentChatCitation {
   };
 }
 
-export function useAgentChat(initialMessages: AgentChatMessage[]): AgentChatState {
+export function useAgentChat(
+  initialMessages: AgentChatMessage[],
+  options?: { initialMessagesComplete?: boolean },
+): AgentChatState {
   const [messages, setMessages] = useState<AgentChatMessage[]>(initialMessages);
   const [sending, setSending] = useState(false);
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+
+  // Use a ref so the send callback always reads the latest value without
+  // needing to recreate the callback on prop changes.
+  const initialCompleteRef = useRef(options?.initialMessagesComplete ?? false);
+  const autoAppendedRef = useRef(false);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -98,7 +107,24 @@ export function useAgentChat(initialMessages: AgentChatMessage[]): AgentChatStat
       citations: [],
       failed: false,
     };
-    setMessages((previous) => [...previous, userMessage, agentMessage]);
+
+    // When initialMessagesComplete is true the server already stored the user
+    // message — skip appending it on the very first auto-send so the UI stays
+    // consistent; subsequent sends always append both bubbles.
+    const shouldAppendUser = !(initialCompleteRef.current && !autoAppendedRef.current);
+    autoAppendedRef.current = true;
+
+    // flushSync ensures the agent bubble is committed to the DOM *before* we
+    // open the SSE stream.  Without this, a fast 401 from the upstream would
+    // race the React batch and the error handler's setMessages would not find
+    // the agent bubble — leaving it stuck on the loading dots forever.
+    flushSync(() => {
+      setMessages((previous) =>
+        shouldAppendUser
+          ? [...previous, userMessage, agentMessage]
+          : [...previous, agentMessage],
+      );
+    });
 
     const appendDelta = (delta: string) => {
       setMessages((previous) =>

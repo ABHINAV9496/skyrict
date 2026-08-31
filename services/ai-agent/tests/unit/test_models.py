@@ -15,8 +15,8 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
-from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
 from ai_agent.models.ai_digest import AiDigestModel
+from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel

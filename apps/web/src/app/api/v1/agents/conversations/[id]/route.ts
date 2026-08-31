@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { appendMessage, getConversation, nextAgentReply } from "@/lib/mock/agents-store";
+import { appendMessage, getConversation } from "@/lib/mock/agents-store";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +27,10 @@ export async function POST(
     return NextResponse.json({ detail: "Message content is required." }, { status: 422 });
   }
 
-  const withUser = appendMessage(id, "user", prompt);
-  if (!withUser) {
+  const conversation = appendMessage(id, "user", prompt);
+  if (!conversation) {
     return NextResponse.json({ detail: "Conversation not found." }, { status: 404 });
   }
 
-  const reply = nextAgentReply(prompt);
-  const conversation = appendMessage(id, "agent", reply);
   return NextResponse.json({ data: conversation });
 }

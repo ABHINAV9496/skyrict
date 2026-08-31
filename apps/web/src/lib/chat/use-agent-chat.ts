@@ -14,8 +14,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { env } from "@/config/env";
-import { nextAgentReply } from "@/lib/mock/agents-store";
 import {
   streamAgentChat,
   type ChatCitation,
@@ -173,17 +171,11 @@ export function useAgentChat(initialMessages: AgentChatMessage[]): AgentChatStat
         setMessages((previous) =>
           previous.map((message) =>
             message.id === agentMessage.id
-              ? env.agentsSimulationEnabled
-                ? {
-                    ...message,
-                    content: nextAgentReply(trimmed),
-                    failed: false,
-                  }
-                : {
-                    ...message,
-                    content: "The agent could not be reached. Please try again.",
-                    failed: true,
-                  }
+              ? {
+                  ...message,
+                  content: "The agent could not be reached. Please try again.",
+                  failed: true,
+                }
               : message,
           ),
         );

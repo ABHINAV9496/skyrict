@@ -31,6 +31,7 @@ from sqlalchemy import select
 
 from core.core.config import settings
 from core.core.permissions import (
+    ERP_AI_INVOKE,
     ERP_CRM_READ,
     ERP_CRM_WRITE,
     ERP_HR_AI_ACKNOWLEDGE,
@@ -161,6 +162,7 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_SALES_READ,
             ERP_SALES_WRITE,
             ERP_SALES_APPROVE,
+            ERP_AI_INVOKE,
             ERP_HR_AI_READ,
             ERP_HR_AI_ACKNOWLEDGE,
             ERP_HR_AI_COPILOT,

@@ -40,12 +40,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # ---------- MailHog (dev SMTP sink — capture outbound email) ----------
-  # Web UI at http://localhost:8025, SMTP relay on 1025. Messages are held in
-  # memory and lost on container restart — fine for local auth testing.
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    container_name: skyrict-mailhog
+  # ---------- Mailpit (dev SMTP sink — capture outbound email) ----------
+  # Web UI at http://localhost:8025, SMTP relay on 1025. Drop-in replacement for
+  # the abandoned MailHog; actively maintained, faster, full-text search.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: skyrict-mailpit
     ports:
       - "1025:1025"
       - "8025:8025"

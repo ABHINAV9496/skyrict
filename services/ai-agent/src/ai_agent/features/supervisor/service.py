@@ -63,23 +63,30 @@ if TYPE_CHECKING:
 logger = structlog.get_logger("ai_agent.supervisor")
 
 _ABSTENTION = (
-    "I'm not sure I understood the question well enough to route it to a module "
-    "agent. Try rephrasing it — for example 'What stock is below reorder "
-    "point?' or 'Summarize our leave policy'."
+    "I can help with inventory, HR, CRM, or finance questions. "
+    "Try asking something like 'What stock is below reorder point?' "
+    "or 'Summarize our leave policy'."
 )
 
 _DEGRADED = "That agent hit a temporary snag — please try again shortly."
 
 _CLASSIFY_SYSTEM_PROMPT = (
-    "You are the routing classifier for the Skyrict agents shell. Decide which "
-    "module agent(s) should answer the user's question. Respond with ONE JSON "
-    'object, no prose: {"agents": ["<agent>", ...], "confidence": 0.0-1.0}\n'
-    'Allowed agents: "inventory_monitor" (stock, movements, reorder, '
-    'forecasts), "hr_copilot" (leave, policies, employee questions), '
-    '"crm_assistant" (customers, leads, opportunities), "finance_assistant" '
-    "(invoices, revenue, expenses, budget). Use MULTIPLE agents for a "
-    "question that spans modules, primary agent first. Set confidence low "
-    "when the mapping is unclear."
+    "You are the routing classifier for the Skyrict agents shell. "
+    "Decide which module agent(s) should answer the user's question.\n\n"
+    "Respond with ONE JSON object, no prose:\n"
+    '{"agents": ["<agent>", ...], "confidence": 0.0-1.0}\n\n'
+    "Allowed agents:\n"
+    '- "inventory_monitor": stock levels, movements, reorder, forecasts, warehouse, SKU\n'
+    '- "hr_copilot": leave, policies, employee questions, onboarding, payroll\n'
+    '- "crm_assistant": customers, leads, opportunities, pipeline, sales, deals\n'
+    '- "finance_assistant": invoices, revenue, expenses, budget, P&L\n\n'
+    "Rules:\n"
+    "- Use MULTIPLE agents for questions that span modules, primary first.\n"
+    "- Set confidence low when the mapping is unclear.\n"
+    "- For greetings (hi, hello, thanks, how are you) or general questions "
+    "that do not clearly match any module, return "
+    '{"agents": [], "confidence": 0.0}.\n'
+    "- Do NOT guess a module when the question is clearly off-topic or a greeting."
 )
 
 _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -209,10 +216,13 @@ class SupervisorService:
         )
 
         if decision.abstain or not decision.agents:
+            # Greetings and off-topic questions get a friendly redirect
+            # instead of the old "I didn't understand" error message.
+            greeting = _classify_as_greeting(query)
             yield AgentStartEvent(
                 agent="supervisor", display_name=AGENT_DISPLAY_NAMES["supervisor"]
             )
-            for event in _yield_text(agent="supervisor", text=_ABSTENTION):
+            for event in _yield_text(agent="supervisor", text=greeting):
                 yield event
             yield CitationsEvent(agent="supervisor", citations=())
             yield DoneEvent(agents=("supervisor",))
@@ -298,6 +308,25 @@ def _keyword_route(query: str) -> RouteDecision:
     return RouteDecision(
         agents=tuple(matched), confidence=0.65, abstain=False, reason="keyword_fallback"
     )
+
+
+_GREETING_WORDS = frozenset({
+    "hi", "hello", "hey", "hola", "howdy", "greetings",
+    "thanks", "thank", "thank you", "cheers", "bye", "goodbye",
+    "good morning", "good afternoon", "good evening",
+    "how are you", "what's up", "sup", "yo",
+})
+
+
+def _classify_as_greeting(query: str) -> str:
+    """Return a friendly response for greetings or the general abstention."""
+    lowered = query.casefold().strip().rstrip("!.?")
+    if lowered in _GREETING_WORDS or any(lowered.startswith(w) for w in _GREETING_WORDS):
+        return (
+            "Hey! I'm the Skyrict assistant. I can help with inventory, "
+            "HR, CRM, or finance questions. What would you like to know?"
+        )
+    return _ABSTENTION
 
 
 def _yield_text(*, agent: str, text: str) -> Iterator[TokenEvent]:

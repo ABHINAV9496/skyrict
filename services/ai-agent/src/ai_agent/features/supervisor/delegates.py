@@ -285,10 +285,14 @@ class CrmAssistantDelegator:
     display_name = "CRM Assistant"
 
     _CRM_SYSTEM_PROMPT = (
-        "You are the CRM Assistant for Skyrict. Answer concisely about "
-        "leads, opportunities, deals, pipeline, and sales activity. "
-        "If the context includes CRM data, use it. If not, say what "
-        "data you would need. Lead with the most relevant fact."
+        "You are the CRM Assistant for Skyrict. You have direct access to the "
+        "company's CRM database through the gateway — you can query customers, "
+        "leads, opportunities, deals, and pipeline data in real time.\n\n"
+        "When the user asks about CRM data (customers, leads, deals, pipeline, "
+        "sales activity), use the data provided in the context to answer. "
+        "The context includes live CRM records from the database.\n\n"
+        "Answer concisely. Lead with the most relevant fact or number. "
+        "Use bullet points or numbered lists for clarity when listing multiple items."
     )
 
     _ACTION_KEYWORDS: ClassVar[dict[str, tuple[str, str | None]]] = {

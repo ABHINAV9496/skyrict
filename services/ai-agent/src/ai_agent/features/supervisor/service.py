@@ -27,6 +27,7 @@ import structlog
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.supervisor.delegates import (
+    CrmAssistantDelegator,
     Delegator,
     ForecastPort,
     HrCopilotDelegator,
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 
     from ai_agent.core.llm_router import LlmRouter
+    from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
@@ -129,6 +131,7 @@ class SupervisorService:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagSearchPort | None = None,
         hr_copilot: HrCopilotPort | None = None,
+        crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
         forecast: ForecastPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
@@ -147,6 +150,11 @@ class SupervisorService:
         }
         if hr_copilot is not None:
             delegates[AGENT_HR] = HrCopilotDelegator(hr_copilot=hr_copilot)
+        if crm_gateway_factory is not None:
+            delegates[AGENT_CRM] = CrmAssistantDelegator(
+                llm_router=llm_router,
+                crm_gateway_factory=crm_gateway_factory,
+            )
         self._delegates = delegates
 
     async def classify(self, query: str) -> RouteDecision:

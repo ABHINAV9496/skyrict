@@ -16,19 +16,20 @@ Security notes:
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import structlog
 
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
-from ai_agent.features.supervisor.schemas import AGENT_HR, AGENT_INVENTORY, Citation
+from ai_agent.features.supervisor.schemas import AGENT_CRM, AGENT_HR, AGENT_INVENTORY, Citation
 
 if TYPE_CHECKING:
     import uuid
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 
     from ai_agent.core.llm_router import LlmRouter
+    from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.hr_copilot.engine import HrCopilotResult
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RetrievalResult
@@ -274,6 +275,131 @@ class HrCopilotDelegator:
                 "I couldn't find an answer to that in the HR knowledge base yet."
             ):
                 yield delta
+
+
+class CrmAssistantDelegator:
+    """CRM answers through deterministic NL actions + LLM fallback."""
+
+    key = AGENT_CRM
+    display_name = "CRM Assistant"
+
+    _CRM_SYSTEM_PROMPT = (
+        "You are the CRM Assistant for Skyrict. Answer concisely about "
+        "leads, opportunities, deals, pipeline, and sales activity. "
+        "If the context includes CRM data, use it. If not, say what "
+        "data you would need. Lead with the most relevant fact."
+    )
+
+    _ACTION_KEYWORDS: ClassVar[dict[str, tuple[str, str | None]]] = {
+        "count": ("count_deals", None),
+        "how many deals": ("count_deals", None),
+        "how many opportunities": ("count_deals", None),
+        "pipeline by stage": ("value_by_stage", None),
+        "value by stage": ("value_by_stage", None),
+        "deal value": ("value_by_stage", None),
+        "at risk": ("at_risk", None),
+        "stale": ("at_risk", None),
+        "no activity": ("no_activity", None),
+        "inactive": ("no_activity", None),
+        "hasn't been contacted": ("no_activity", "lead"),
+        "hasnt been contacted": ("no_activity", "lead"),
+    }
+
+    def __init__(
+        self,
+        *,
+        llm_router: LlmRouter,
+        crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]],
+    ) -> None:
+        self._llm_router = llm_router
+        self._crm_gateway_factory = crm_gateway_factory
+
+    async def stream(
+        self,
+        *,
+        query: str,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        citations: list[Citation],
+    ) -> AsyncIterator[str]:
+        # Try deterministic NL actions first.
+        action_result = await self._try_nl_action(query)
+        if action_result is not None:
+            for delta in _iter_text_deltas(action_result):
+                yield delta
+            return
+
+        # Fallback: LLM with CRM context.
+        try:
+            completion = await self._llm_router.complete(
+                LlmRequest(
+                    system_prompt=self._CRM_SYSTEM_PROMPT,
+                    user_prompt=query.strip(),
+                    max_tokens=512,
+                    temperature=0.0,
+                )
+            )
+            answer = (completion.text or "").strip()
+            if answer:
+                for delta in _iter_text_deltas(answer):
+                    yield delta
+            else:
+                for delta in _iter_text_deltas(
+                    "I couldn't find an answer to that CRM question yet. "
+                    "Try asking about deals, pipeline, or lead activity."
+                ):
+                    yield delta
+        except AiUnavailableError as exc:
+            logger.warning("supervisor.crm_assistant_failed", error=str(exc))
+            for delta in _iter_text_deltas(
+                "The CRM Assistant is temporarily unavailable — please try again shortly."
+            ):
+                yield delta
+
+    async def _try_nl_action(self, query: str) -> str | None:
+        """Match query keywords to a deterministic CRM NL action."""
+        lower = query.lower()
+        for keyword, (action, entity_type) in self._ACTION_KEYWORDS.items():
+            if keyword in lower:
+                return await self._execute_nl_action(action, entity_type, lower)
+        return None
+
+    async def _execute_nl_action(self, action: str, entity_type: str | None, query: str) -> str:
+        from ai_agent.features.crm import nl_actions
+
+        gateway = await self._crm_gateway_factory()
+        if action == "count_deals":
+            stage = self._extract_stage(query)
+            result = await nl_actions.count_deals(gateway=gateway, stage=stage)
+        elif action == "value_by_stage":
+            result = await nl_actions.value_by_stage(gateway=gateway)
+        elif action == "at_risk":
+            result = await nl_actions.at_risk(gateway=gateway)
+        elif action == "no_activity":
+            result = await nl_actions.no_activity(
+                gateway=gateway,
+                entity_type=entity_type,
+            )
+        else:
+            return "This CRM action is not yet implemented."
+        return result.answer
+
+    @staticmethod
+    def _extract_stage(query: str) -> str | None:
+        """Best-effort stage extraction from the query."""
+        stage_keywords = (
+            "lead",
+            "qualified",
+            "proposal",
+            "negotiation",
+            "closed won",
+            "closed lost",
+            "discovery",
+        )
+        for stage in stage_keywords:
+            if stage in query:
+                return stage
+        return None
 
 
 def _iter_text_deltas(text: str) -> Iterator[str]:

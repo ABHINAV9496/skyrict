@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from ai_agent.core.llm_router import LlmRouter
+    from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.hr_copilot.service import HrCopilotService
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RagRetrievalService
@@ -53,6 +54,7 @@ class SupervisorRuntime:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagRetrievalService | None = None,
         hr_copilot: HrCopilotService | None = None,
+        crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
         forecast: ForecastPort | None = None,
         confidence_threshold: float = 0.75,
     ) -> None:
@@ -61,6 +63,7 @@ class SupervisorRuntime:
         self._gateway_factory = gateway_factory
         self._rag = rag
         self._hr_copilot = hr_copilot
+        self._crm_gateway_factory = crm_gateway_factory
         self._forecast = forecast
         self._confidence_threshold = confidence_threshold
 
@@ -84,6 +87,7 @@ class SupervisorRuntime:
             gateway_factory=self._gateway_factory,
             rag=self._rag,
             hr_copilot=self._hr_copilot,
+            crm_gateway_factory=self._crm_gateway_factory,
             forecast=self._forecast,
             provisioned=provisioned,
             confidence_threshold=self._confidence_threshold,

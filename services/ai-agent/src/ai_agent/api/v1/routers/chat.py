@@ -39,6 +39,7 @@ from ai_agent.core.tenant_context import TenantContext
 from ai_agent.db.audit_repository import AiAuditLogRepository
 from ai_agent.db.query_cache_repository import QueryCacheRepository
 from ai_agent.db.rag_repository import RagRepository
+from ai_agent.features.crm.gateway import HttpCrmGateway
 from ai_agent.features.forecast.service import ForecastService
 from ai_agent.features.hr_copilot.engine import HrCopilotEngine
 from ai_agent.features.hr_copilot.gateway import HttpHrGateway
@@ -123,12 +124,22 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         tenant_limit_per_minute=settings.RATE_LIMIT_TENANT_PER_MIN,
     )
 
+    crm_gateway = HttpCrmGateway(
+        base_url=str(settings.INVENTORY_SERVICE_URL),
+        bearer_token=token,
+        tenant_slug=tenant_slug,
+    )
+
+    async def crm_gateway_factory() -> HttpCrmGateway:
+        return crm_gateway
+
     return SupervisorRuntime(
         session=session,
         llm_router=request.app.state.llm_router,
         gateway_factory=gateway_factory,
         rag=rag,
         hr_copilot=hr_copilot,
+        crm_gateway_factory=crm_gateway_factory,
         forecast=ForecastService(gateway_factory=gateway_factory),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,
     )

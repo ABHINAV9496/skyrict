@@ -10,6 +10,7 @@ from fastapi import APIRouter
 
 from ai_agent.api.v1.health import router as health_router
 from ai_agent.api.v1.routers.abc import router as abc_router
+from ai_agent.api.v1.routers.account_suggest import router as account_suggest_router
 from ai_agent.api.v1.routers.agents import router as agents_router
 from ai_agent.api.v1.routers.anomalies import router as anomalies_router
 from ai_agent.api.v1.routers.attrition import router as attrition_router
@@ -25,6 +26,7 @@ api_router = APIRouter()
 
 api_router.include_router(health_router)
 api_router.include_router(agents_router)
+api_router.include_router(account_suggest_router)
 api_router.include_router(chat_router)
 api_router.include_router(nl_query_router)
 api_router.include_router(restock_router)

@@ -5,6 +5,7 @@ ERP matrix (spec 6.3, same posture as features/ai/router.py):
 
   invoke / list queue    erp.ai.invoke
   approve / deny         erp.ai.invoke + erp.finance.write
+  chat stream            erp.ai.invoke
 
 The decision edge demands the finance-writer grant because it is a
 financial-class write (recorded Q&A decision) — defense in depth on top of
@@ -15,6 +16,10 @@ tenant slug (spec 1.4: AI is a proxy, not an auth bypass). Interrupt ids are
 typed ``uuid.UUID`` so FastAPI rejects anything else with 422 before the
 handler runs; ``agent_name`` is a single path segment (no traversal can be
 embedded), and the runtime looks it up exactly in the agent registry.
+
+The supervisor chat stream (SKY-60) relays the SSE body chunk-by-chunk so
+the shell renders tokens live; a client disconnect closes the upstream
+connection, cancelling the ai-agent LLM stream (see core/features/ai/proxy).
 """
 
 from __future__ import annotations
@@ -29,7 +34,11 @@ from fastapi.responses import Response
 from core.api.deps import require_all_permissions, require_permission
 from core.core.permissions import ERP_AI_INVOKE, ERP_FINANCE_WRITE
 from core.core.tenant_resolver import derive_tenant_slug
-from core.features.ai.proxy import forward_to_ai_agent, relay_response
+from core.features.ai.proxy import (
+    forward_to_ai_agent,
+    relay_response,
+    relay_stream_response,
+)
 
 router = APIRouter(prefix="/ai/agents", tags=["ai-agents"])
 
@@ -69,6 +78,32 @@ async def _proxy(
         params=httpx.QueryParams(request.url.query),
     )
     return relay_response(upstream)
+
+
+@router.post("/chat/stream")
+async def proxy_chat_stream(
+    request: Request,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Stream one supervisor chat turn (SSE) -> ai-agent /chat/stream.
+
+    The body is relayed chunk-by-chunk (never buffered) so the shell renders
+    tokens live; the caller's JWT travels upstream unchanged so ai-agent binds
+    every delegated read to the caller, not to service credentials.
+    """
+    authorization = request.headers.get("authorization")
+    body = await request.body()
+    upstream = await forward_to_ai_agent(
+        client,
+        method="POST",
+        upstream_path="/api/v1/ai/agents/chat/stream",
+        authorization=authorization,
+        tenant_slug=derive_tenant_slug(request),
+        body=body,
+        stream=True,
+    )
+    return relay_stream_response(upstream)
 
 
 @router.post("/{agent_name}/invoke")

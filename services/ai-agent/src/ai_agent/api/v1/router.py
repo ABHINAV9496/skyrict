@@ -13,6 +13,7 @@ from ai_agent.api.v1.routers.abc import router as abc_router
 from ai_agent.api.v1.routers.agents import router as agents_router
 from ai_agent.api.v1.routers.anomalies import router as anomalies_router
 from ai_agent.api.v1.routers.attrition import router as attrition_router
+from ai_agent.api.v1.routers.chat import router as chat_router
 from ai_agent.api.v1.routers.forecast import router as forecast_router
 from ai_agent.api.v1.routers.hr_copilot import router as hr_copilot_router
 from ai_agent.api.v1.routers.narrator import router as narrator_router
@@ -24,6 +25,7 @@ api_router = APIRouter()
 
 api_router.include_router(health_router)
 api_router.include_router(agents_router)
+api_router.include_router(chat_router)
 api_router.include_router(nl_query_router)
 api_router.include_router(restock_router)
 api_router.include_router(anomalies_router)

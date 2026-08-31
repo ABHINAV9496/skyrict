@@ -208,6 +208,7 @@ nohup.out
 
 # ---------- Private docs ----------
 docs/handbooks
+docs/modules/Skyrict-ai
 
 # ---------- HR-Payroll manual-test artifacts (HR-BE-002) ----------
 HR-Payroll-Manual-Test-Guide.md

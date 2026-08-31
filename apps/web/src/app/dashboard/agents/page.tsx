@@ -1,58 +1,66 @@
 "use client";
 
-import { useCallback, type ComponentType } from "react";
-import { useRouter } from "next/navigation";
-import { Boxes, FilePen, FileText, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
-import { AiGlyph, LogoMark } from "@/components/brand/logo";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
+import { MessageList } from "@/components/dashboard/agents/chat-message-list";
+import { LogoMark } from "@/components/brand/logo";
 import { createConversation } from "@/lib/api/agents-api";
-import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/auth/session";
+import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
+import type { ChatMessage, Conversation } from "@/lib/mock/agents-store";
 
-type SuggestionIcon = ComponentType<{
-  className?: string;
-  "aria-hidden"?: boolean | "true" | "false";
-}>;
+function toAgentMessage(message: ChatMessage): AgentChatMessage {
+  return { ...message, agentName: null, citations: [], failed: false };
+}
 
-const SUGGESTIONS: { icon: SuggestionIcon; title: string; prompt: string }[] = [
-  {
-    icon: Boxes,
-    title: "Analyze",
-    prompt: "Summarize what's happening in my business this week — sales, inventory, and cash flow.",
-  },
-  {
-    icon: Sparkles,
-    title: "Scan",
-    prompt: "Find the biggest emerging opportunity in my market right now.",
-  },
-  {
-    icon: AiGlyph,
-    title: "Draft",
-    prompt: "Draft an update for my team about this quarter's progress.",
-  },
-  {
-    icon: FilePen,
-    title: "Write",
-    prompt: "Write a concise summary of my business performance this month.",
-  },
-  {
-    icon: FileText,
-    title: "Report",
-    prompt: "Prepare a weekly operations report for my team.",
-  },
-];
+/** Live conversation view. Streams via SSE, no page navigation needed. */
+function ConversationView({ conversation }: { conversation: Conversation }) {
+  const { user } = useSession();
+  const { messages, sending, activeAgent, send, stop } = useAgentChat(
+    conversation.messages.map(toAgentMessage),
+  );
+  const autoStarted = useRef(false);
+
+  useEffect(() => {
+    if (autoStarted.current || sending) return;
+    const last = conversation.messages[conversation.messages.length - 1];
+    if (last && last.role === "user") {
+      autoStarted.current = true;
+      void send(last.content);
+    }
+  }, [conversation.messages, send, sending]);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <AgentsHeader title={conversation.title} />
+      <MessageList messages={messages} userDisplay={user?.fullName ?? user?.email ?? ""} />
+      <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
+        <ChatComposer
+          onSend={send}
+          onStop={sending ? stop : undefined}
+          placeholder="Continue the conversation…"
+        />
+      </div>
+      {activeAgent ? (
+        <p className="sr-only">{`Answering with ${activeAgent}`}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export default function AgentsHomePage() {
-  const router = useRouter();
+  const [conversation, setConversation] = useState<Conversation | null>(null);
 
-  const startChat = useCallback(
-    async (prompt: string) => {
-      const conversation = await createConversation({ prompt });
-      router.push(`/dashboard/agents/c/${conversation.id}`);
-    },
-    [router],
-  );
+  const startChat = useCallback(async (prompt: string) => {
+    const conv = await createConversation({ prompt });
+    setConversation(conv);
+  }, []);
+
+  if (conversation) {
+    return <ConversationView conversation={conversation} />;
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -63,30 +71,15 @@ export default function AgentsHomePage() {
           <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             How can I help you today?
           </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Ask about your business, market trends, or any task.
+          </p>
         </div>
 
         <ChatComposer
-          onSend={async (content) => {
-            await startChat(content);
-          }}
-          placeholder="Ask your agent to analyze, scan, or draft…"
+          onSend={startChat}
+          placeholder="Ask your agent anything…"
         />
-
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {SUGGESTIONS.map((suggestion) => (
-            <button
-              key={suggestion.title}
-              type="button"
-              onClick={() => void startChat(suggestion.prompt)}
-              className={cn(
-                "inline-flex h-auto items-center gap-1.5 rounded-full border border-border/60 px-3.5 py-1.5 text-sm font-normal text-foreground whitespace-nowrap transition-colors hover:bg-muted [&_svg]:size-4",
-              )}
-            >
-              <suggestion.icon aria-hidden="true" className="text-primary" />
-              {suggestion.title}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );

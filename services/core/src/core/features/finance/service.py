@@ -51,6 +51,7 @@ from core.core.constants import (
     SALARY_EXPENSE_ACCOUNT_CODE,
 )
 from core.domain.entities import (
+    ArAging,
     BalanceSheet,
     ChartOfAccount,
     FiscalPeriod,
@@ -948,6 +949,9 @@ class FinanceService:
 
     async def balance_sheet(self, tenant_id: uuid.UUID, as_of: date) -> BalanceSheet:
         return await self._repo.balance_sheet(tenant_id, as_of)
+
+    async def ar_aging(self, tenant_id: uuid.UUID, as_of: date) -> ArAging:
+        return await self._repo.ar_aging(tenant_id, as_of)
 
     # ------------------------------------------------------------------
     # Helpers

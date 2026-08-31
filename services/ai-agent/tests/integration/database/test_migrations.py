@@ -63,6 +63,12 @@ _AI_TABLES = (
     "ai_episodic_memory",
     "ai_query_cache",
     "ai_eval_runs",
+    # SKY-63 cached cross-module narrator digests (migration 0007)
+    "ai_digest_snapshots",
+    # SKY-59 LangGraph orchestration runtime (migration 0008)
+    "graph_checkpoints",
+    "graph_checkpoint_writes",
+    "agent_interrupts",
 )
 _TENANT_SCOPED_TABLES = (
     "ai_query_log",
@@ -72,6 +78,10 @@ _TENANT_SCOPED_TABLES = (
     "ai_restock_demand_stats",
     "ai_restock_settings",
     "ai_anomaly_rule_stats",
+    # SKY-59 orchestration tables carry RLS on current_tenant_id()
+    "graph_checkpoints",
+    "graph_checkpoint_writes",
+    "agent_interrupts",
 )
 # Demand stats carries composite FKs into core-owned erp_products/erp_warehouses
 # and NO direct FK to tenants (cross-service idiom); only the tables below are
@@ -88,6 +98,12 @@ _TENANT_FK_TABLES = (
     "ai_rag_chunks",
     "ai_episodic_memory",
     "ai_query_cache",
+    # SKY-63 narrator digest snapshots are tenant-scoped (migration 0007)
+    "ai_digest_snapshots",
+    # SKY-59 orchestration tables are direct children of ``tenants``
+    "graph_checkpoints",
+    "graph_checkpoint_writes",
+    "agent_interrupts",
 )
 
 _EXPECTED_CHECKS = {
@@ -101,6 +117,7 @@ _EXPECTED_CHECKS = {
     "ck_ai_restock_settings_sensitivity_range",
     "ck_ai_restock_settings_fp_threshold_range",
     "ck_ai_anomaly_rule_stats_counts_non_negative",
+    "ck_agent_interrupts_status",
 }
 
 
@@ -348,8 +365,9 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0006"
+            assert artifacts["version"] == "0008"
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
+            assert "restock_advisor" in artifacts["agent_names"], "restock_advisor not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
             assert artifacts["rls_tables"] == set(_TENANT_SCOPED_TABLES)

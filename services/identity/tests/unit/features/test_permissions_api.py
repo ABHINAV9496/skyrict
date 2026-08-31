@@ -236,10 +236,10 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-        # 44 unique keys (erp.ai.invoke + erp.leave.self + erp.hr.ai.*
-        # + erp.inventory.ai.approve since SKY-68)
-        assert len(all_keys) == 44
-        assert len(module_keys_set) == 44
+        # 45 unique keys (erp.ai.invoke + erp.ai.narrator.refresh + erp.leave.self
+        # + erp.hr.ai.* + erp.inventory.ai.approve)
+        assert len(all_keys) == 45
+        assert len(module_keys_set) == 45
 
         # Union equals CATALOG
         catalog_set = set(CATALOG)

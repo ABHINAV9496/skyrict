@@ -13,6 +13,7 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
@@ -26,11 +27,15 @@ class TestRegistry:
         expected = {
             # read-only projection of identity's shared table
             "tenants",
+            # read-only projections of core's RBAC tables (SKY-59)
+            "core_roles",
+            "core_user_roles",
             # AI-owned tables (SKY-57)
             "ai_query_log",
             "ai_suggestions",
             "ai_anomalies",
             "ai_audit_log",
+            "ai_digest_snapshots",
             "agent_registry",
             # INV-AI-002 predictive tables
             "ai_restock_settings",
@@ -42,6 +47,10 @@ class TestRegistry:
             "ai_episodic_memory",
             "ai_query_cache",
             "ai_eval_runs",
+            # LangGraph orchestration (SKY-59)
+            "graph_checkpoints",
+            "graph_checkpoint_writes",
+            "agent_interrupts",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -51,6 +60,7 @@ class TestRegistry:
             "ai_suggestions",
             "ai_anomalies",
             "ai_audit_log",
+            "ai_digest_snapshots",
             "ai_rag_parents",
             "ai_rag_chunks",
             "ai_episodic_memory",
@@ -138,6 +148,26 @@ class TestAiAuditLog:
     def test_input_output_are_jsonb(self) -> None:
         assert type(AiAuditLogModel.__table__.c.input.type).__name__ == "JSONB"
         assert type(AiAuditLogModel.__table__.c.output.type).__name__ == "JSONB"
+
+
+class TestAiDigest:
+    def test_insert_only_table_has_no_updated_at(self) -> None:
+        assert "updated_at" not in AiDigestModel.__table__.columns
+
+    def test_points_and_signals_are_jsonb(self) -> None:
+        assert type(AiDigestModel.__table__.c.points.type).__name__ == "JSONB"
+        assert type(AiDigestModel.__table__.c.signals.type).__name__ == "JSONB"
+
+    def test_as_of_index_applies_desc_order(self) -> None:
+        index = next(
+            index
+            for index in AiDigestModel.__table__.indexes
+            if index.name == "idx_ai_digest_snapshots_tenant_as_of"
+        )
+        cols = [column.name for column in index.columns]
+        assert cols == ["tenant_id", "as_of"]
+        desc = str(index.expressions[-1].compile()).lower()
+        assert "generated_at desc" in desc
 
 
 class TestAiQueryCache:

@@ -29,6 +29,7 @@ from core.api.v1.schemas import (
     PayrollRunOut,
     PayrollSettingsIn,
     PayrollSettingsOut,
+    PayslipOut,
     RunComputeOut,
     SkippedEmployeeOut,
 )
@@ -136,6 +137,23 @@ async def get_run(
     if run is None:
         raise NotFoundError(f"payroll run {run_id} not found")
     return ResponseEnvelope(data=PayrollRunOut.from_entity(run))
+
+
+@router.get("/runs/{run_id}/payslips", response_model=ResponseEnvelope[list[PayslipOut]])
+async def get_run_payslips(
+    run_id: uuid.UUID,
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[list[PayslipOut]]:
+    try:
+        payslips = await payroll_svc.list_run_payslips(run_id, tenant_id=tenant_id)
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(
+        data=[PayslipOut.from_entity(p) for p in payslips],
+        message="Run payslips",
+    )
 
 
 @router.post("/runs/{run_id}/compute", response_model=ResponseEnvelope[RunComputeOut])

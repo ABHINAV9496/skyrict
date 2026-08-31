@@ -29,7 +29,12 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 
-from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
+from core.core.constants import (
+    EmploymentStatus,
+    PayrollJeBridgeStatus,
+    PayrollRounding,
+    PayrollRunStatus,
+)
 from core.core.exceptions import PayrollEntryImmutableError
 from core.domain import entities as ent
 from core.domain.value_objects import Money
@@ -101,6 +106,7 @@ def _run_to_orm(run: ent.PayrollRun) -> PayrollRunModel:
         "paid_at": run.paid_at,
         "void_reason": run.void_reason,
         "skipped_employees": run.skipped_employees,
+        "je_bridge_status": run.je_bridge_status.value,
     }
     if run.id is not None:
         kwargs["id"] = run.id
@@ -116,6 +122,7 @@ def _settings_from_orm(model: PayrollSettingsModel) -> ent.PayrollSettings:
         tax_rate=model.tax_rate,
         rounding=PayrollRounding(model.rounding.value),
         ai_automation_enabled=model.ai_automation_enabled,
+        je_bridge_enabled=model.je_bridge_enabled,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -205,6 +212,7 @@ class PayrollRepository:
             created_at=model.created_at,
             updated_at=model.updated_at,
             skipped_employees=model.skipped_employees,
+            je_bridge_status=PayrollJeBridgeStatus(model.je_bridge_status),
         )
 
     # ------------------------------------------------------------------
@@ -227,6 +235,7 @@ class PayrollRepository:
                 tax_rate=settings.tax_rate,
                 rounding=PayrollRoundingModel(settings.rounding.value),
                 ai_automation_enabled=settings.ai_automation_enabled,
+                je_bridge_enabled=settings.je_bridge_enabled,
             )
             .on_conflict_do_update(
                 index_elements=[PayrollSettingsModel.tenant_id],
@@ -236,6 +245,7 @@ class PayrollRepository:
                     "tax_rate": settings.tax_rate,
                     "rounding": PayrollRoundingModel(settings.rounding.value),
                     "ai_automation_enabled": settings.ai_automation_enabled,
+                    "je_bridge_enabled": settings.je_bridge_enabled,
                     "updated_at": func.now(),
                 },
             )
@@ -371,6 +381,28 @@ class PayrollRepository:
 
     async def next_run_code(self, tenant_id: uuid.UUID) -> int:
         return await self._next_sequence(tenant_id, "payroll_run")
+
+    async def set_run_je_bridge_status(
+        self,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: PayrollJeBridgeStatus,
+    ) -> ent.PayrollRun | None:
+        """Record the payroll→Finance accrual bridge outcome on the run (Commit 4)."""
+        stmt = (
+            update(PayrollRunModel)
+            .where(
+                PayrollRunModel.tenant_id == tenant_id,
+                PayrollRunModel.id == run_id,
+            )
+            .values(je_bridge_status=status.value, updated_at=func.now())
+            .returning(PayrollRunModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        return self._run_from_orm(model, currency)
 
     # ------------------------------------------------------------------
     # Entries (Rule 8: immutable after approved — the repo only upserts)
@@ -655,6 +687,17 @@ class PayrollRepository:
         stmt = stmt.order_by(EmployeeModel.employee_number.asc())
         result = await self.session.execute(stmt)
         return [_employee_from_orm(model) for model in result.scalars().all()]
+
+    async def get_employee(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> ent.Employee | None:
+        """One roster employee for the payslip view (terminal employees included)."""
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _employee_from_orm(model) if model is not None else None
 
     # ------------------------------------------------------------------
     # Benefits (read-only, pre-flight input)

@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
+from core.core.constants import PayrollJeBridgeStatus
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 
@@ -116,6 +117,15 @@ class PayrollRepositoryPort(Protocol):
 
     async def next_run_code(self, tenant_id: uuid.UUID) -> int: ...
 
+    async def set_run_je_bridge_status(
+        self,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: PayrollJeBridgeStatus,
+    ) -> ent.PayrollRun | None:
+        """Record the payroll→Finance accrual bridge outcome (Commit 4)."""
+        ...
+
     # --- Entries ---
     async def upsert_entries(
         self, entries: Sequence[ent.PayrollEntry], *, tenant_id: uuid.UUID
@@ -158,6 +168,12 @@ class PayrollRepositoryPort(Protocol):
         period_start: date,
         period_end: date,
     ) -> Sequence[ent.Employee]: ...
+
+    async def get_employee(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> ent.Employee | None:
+        """One roster employee for the payslip view (terminal employees included)."""
+        ...
 
     # --- Benefits (read-only, pre-flight input) ---
     async def enrolled_benefit_elections(

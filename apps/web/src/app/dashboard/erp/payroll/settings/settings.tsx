@@ -9,6 +9,7 @@ import {
   type SearchableSelectOption,
 } from "@/components/dashboard/shared/searchable-select";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useModuleAccess } from "@/lib/access/modules";
@@ -43,6 +44,8 @@ export function PayrollSettingsClient() {
   const [pfRate, setPfRate] = useState("0");
   const [taxRate, setTaxRate] = useState("0");
   const [rounding, setRounding] = useState<PayrollRounding>("nearest");
+  const [aiAutomationEnabled, setAiAutomationEnabled] = useState(true);
+  const [jeBridgeEnabled, setJeBridgeEnabled] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -64,6 +67,8 @@ export function PayrollSettingsClient() {
         setPfRate(settings.pfRate);
         setTaxRate(settings.taxRate);
         setRounding(settings.rounding);
+        setAiAutomationEnabled(settings.aiAutomationEnabled);
+        setJeBridgeEnabled(settings.jeBridgeEnabled);
       }
       setStatus({ state: "ready" });
     } catch (error) {
@@ -96,6 +101,8 @@ export function PayrollSettingsClient() {
         pfRate: pfRate.trim(),
         taxRate: taxRate.trim(),
         rounding,
+        aiAutomationEnabled,
+        jeBridgeEnabled,
       });
       setNotice({ tone: "success", text: "Payroll settings saved." });
     } catch (error) {
@@ -211,6 +218,30 @@ export function PayrollSettingsClient() {
             />
             <p className="text-xs text-muted-foreground">
               How computed net pay is rounded before it&apos;s recorded.
+            </p>
+          </div>
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <Checkbox
+                checked={aiAutomationEnabled}
+                onCheckedChange={(value) => setAiAutomationEnabled(value === true)}
+              />
+              Auto-schedule runs for approval
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Lets the AI orchestration layer pick up approved schedules and
+              notify users when their payslips are ready.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <Checkbox
+                checked={jeBridgeEnabled}
+                onCheckedChange={(value) => setJeBridgeEnabled(value === true)}
+              />
+              Post accrual journal entries to Finance
+            </label>
+            <p className="text-xs text-muted-foreground">
+              When a run is marked paid, drafts the salary accrual journal
+              entry in Finance (accounts 5010 / 2010 / 2020).
             </p>
           </div>
           {canWrite ? (

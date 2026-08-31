@@ -9,6 +9,7 @@
 import { ApiError, apiFetch, apiList, apiPost, buildQueryString, type Paginated } from "@/lib/api/http";
 
 export type PayrollRunStatus = "draft" | "computed" | "approved" | "paid" | "void";
+export type PayrollJeBridgeStatus = "none" | "pending" | "draft";
 
 export type PayrollRounding = "nearest" | "up" | "down";
 
@@ -23,6 +24,8 @@ export interface PayrollSettings {
   pfRate: string;
   taxRate: string;
   rounding: PayrollRounding;
+  aiAutomationEnabled: boolean;
+  jeBridgeEnabled: boolean;
 }
 
 export interface PayrollRun {
@@ -41,6 +44,7 @@ export interface PayrollRun {
   paidAt: string | null;
   voidReason: string | null;
   skippedEmployees: SkippedEmployee[];
+  jeBridgeStatus: PayrollJeBridgeStatus;
   createdAt: string;
 }
 
@@ -76,6 +80,15 @@ export interface Compensation {
   createdAt: string;
 }
 
+export interface Payslip {
+  employeeId: string;
+  employeeNumber: string;
+  employeeName: string;
+  gross: Money;
+  deductions: Money;
+  net: Money;
+}
+
 interface MoneyPayload {
   amount?: unknown;
   currency?: unknown;
@@ -87,6 +100,8 @@ interface PayrollSettingsPayload {
   pf_rate?: unknown;
   tax_rate?: unknown;
   rounding?: unknown;
+  ai_automation_enabled?: unknown;
+  je_bridge_enabled?: unknown;
 }
 
 interface PayrollRunPayload {
@@ -105,6 +120,7 @@ interface PayrollRunPayload {
   paid_at?: unknown;
   void_reason?: unknown;
   skipped_employees?: unknown;
+  je_bridge_status?: unknown;
   created_at?: unknown;
 }
 
@@ -129,6 +145,15 @@ interface CompensationPayload {
   created_at?: unknown;
 }
 
+interface PayslipPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  employee_name?: unknown;
+  gross?: MoneyPayload | null;
+  deductions?: MoneyPayload | null;
+  net?: MoneyPayload | null;
+}
+
 function mapMoney(payload: MoneyPayload | null | undefined): Money | null {
   if (!payload) return null;
   return {
@@ -145,6 +170,8 @@ function mapPayrollSettings(payload: PayrollSettingsPayload | null): PayrollSett
     pfRate: String(payload.pf_rate ?? "0"),
     taxRate: String(payload.tax_rate ?? "0"),
     rounding: String(payload.rounding ?? "nearest") as PayrollRounding,
+    aiAutomationEnabled: payload.ai_automation_enabled !== false,
+    jeBridgeEnabled: payload.je_bridge_enabled !== false,
   };
 }
 
@@ -173,6 +200,7 @@ function mapPayrollRun(payload: PayrollRunPayload): PayrollRun {
     paidAt: typeof payload.paid_at === "string" ? payload.paid_at : null,
     voidReason: typeof payload.void_reason === "string" ? payload.void_reason : null,
     skippedEmployees: mapSkippedEmployees(payload.skipped_employees),
+    jeBridgeStatus: String(payload.je_bridge_status ?? "none") as PayrollJeBridgeStatus,
     createdAt: String(payload.created_at ?? ""),
   };
 }
@@ -205,6 +233,17 @@ function mapCompensation(payload: CompensationPayload): Compensation {
   };
 }
 
+function mapPayslip(payload: PayslipPayload): Payslip {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: String(payload.employee_number ?? ""),
+    employeeName: String(payload.employee_name ?? ""),
+    gross: mapMoney(payload.gross) ?? { amount: "0", currency: "USD" },
+    deductions: mapMoney(payload.deductions) ?? { amount: "0", currency: "USD" },
+    net: mapMoney(payload.net) ?? { amount: "0", currency: "USD" },
+  };
+}
+
 export async function getPayrollSettings(): Promise<PayrollSettings | null> {
   const raw = await apiFetch<PayrollSettingsPayload | null>("/api/v1/payroll/settings");
   return mapPayrollSettings(raw ?? null);
@@ -215,6 +254,8 @@ export async function updatePayrollSettings(input: {
   pfRate?: string;
   taxRate?: string;
   rounding?: PayrollRounding;
+  aiAutomationEnabled?: boolean;
+  jeBridgeEnabled?: boolean;
 }): Promise<PayrollSettings> {
   const raw = await apiFetch<PayrollSettingsPayload>("/api/v1/payroll/settings", {
     method: "PUT",
@@ -223,6 +264,8 @@ export async function updatePayrollSettings(input: {
       pf_rate: input.pfRate,
       tax_rate: input.taxRate,
       rounding: input.rounding,
+      ai_automation_enabled: input.aiAutomationEnabled,
+      je_bridge_enabled: input.jeBridgeEnabled,
     }),
   });
   const settings = mapPayrollSettings(raw ?? null);
@@ -298,6 +341,11 @@ export async function listRunEntries(
     `/api/v1/payroll/runs/${runId}/entries${buildQueryString({ employee_id: employeeId })}`,
   );
   return (items ?? []).map(mapPayrollEntry);
+}
+
+export async function getRunPayslips(runId: string): Promise<Payslip[]> {
+  const items = await apiFetch<PayslipPayload[]>(`/api/v1/payroll/runs/${runId}/payslips`);
+  return (items ?? []).map(mapPayslip);
 }
 
 export async function updateRunEntry(

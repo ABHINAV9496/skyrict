@@ -590,8 +590,13 @@ recurring cron schedules feed the queue, and users get payslip-ready / batch
 digest notifications — all audited and all tenant-scoped.
 
 > **Status:** Implemented (HR-AUT-001). Backend + migration `0028` +
-> frontend automation page shipped; Finance payslip/JE bridge is the
-> follow-up commit (FIN-AI-001) and is **not** part of this section.
+> frontend automation page shipped. The Finance **payslip surface + accrual
+> JE bridge** (the FIN-AI-001 seam) landed in Commit 4 of HR-AUT-001 — the
+> `payroll.run.paid` mark-paid path now drafts the salary-accrual journal
+> entry through `PayrollAccrualPort` (assets: DRAFT, status `draft`/`pending`
+> on the run), and payslips are served by `GET /payroll/runs/{id}/payslips`.
+> Only **automated approve** remains unwired (`erp.payroll.ai.approve` still
+> reserved — the bridge is a synchronous seam, not the automation path).
 
 ### 15.1 Deliverables vs ticket scope (reconciliation)
 
@@ -603,7 +608,7 @@ digest notifications — all audited and all tenant-scoped.
 | **Schedule calendar view (Scope — Frontend)** | shipped | `/dashboard/erp/payroll/automation` — month-at-a-glance calendar marking enabled schedules' next runs + schedules CRUD table |
 | Notifications/preferences frontend | shipped | same automation page — notification inbox with event-type filter + per-user delivery preferences |
 | Manual/CI run trigger | shipped | `POST /api/v1/ai/payroll/tick` + "Run now" button on the automation page |
-| Automated approve/payslip (Finance bridge) | **deferred to FIN-AI-001** | follow-up commit after Commit 3; `erp.payroll.ai.approve` key reserved, not wired |
+| Automated approve/payslip (Finance bridge) | **partially shipped (Commit 4)** | the accrual JE bridge (§15.6) is live behind `je_bridge_enabled`; payslips are served via `GET /payroll/runs/{id}/payslips` (API + run-detail); **automated approve is still deferred** — `erp.payroll.ai.approve` reserved, not wired |
 
 ### 15.2 Permissions (`erp.payroll.ai.*`, registered in core `PERMISSION_MODULES` + identity)
 
@@ -612,7 +617,7 @@ digest notifications — all audited and all tenant-scoped.
 | `erp.payroll.ai.read` | View batches, schedules, notifications, digests |
 | `erp.payroll.ai.run` | Enqueue batches, manual tick, create/update/delete schedules |
 | `erp.payroll.ai.notify` | Read/update own notification delivery preferences |
-| `erp.payroll.ai.approve` | Reserved (FIN-AI-001 automated approve) — not yet wired |
+| `erp.payroll.ai.approve` | Reserved (future automated approve) — the Commit-4 JE bridge (§15.6) is a **synchronous seam**, not the automation path; the key stays unwired |
 
 Role wiring mirrors the core payroll keys (`organization_admin` full; read for
 `auditor`). UI: sidebar *Automation* item and the page are gated by
@@ -650,3 +655,27 @@ deduplicated by `dedupe_key`; `POST /tick` returns `items_processed` +
 | Notifications (unit) | routing by linked user, defaults, dedupe (`test_payroll_automation_notifications.py`) |
 | Schedules/batches (integration) | create/enable/toggle/delete schedule round-trip, enqueue→drain→completed, tick determinism, migration round-trip incl. `0028`, RLS isolation (`test_payroll_automation.py`, `test_migration_roundtrip.py`) |
 | Frontend client (unit) | `payroll-automation-api.test.ts` — snake_case→camelCase mapping, URL/filter behavior for schedules, notifications, preferences, tick |
+
+### 15.6 FIN-AI-001 seam — accrual JE bridge (HR-AUT-001, Commit 4)
+
+The Finance integration ships as a **synchronous, DRAFT-only** seam on
+`mark_paid`, not an AI decision. Specification lives in `hr-payroll.md`
+§4.10 (Rule 10); this section pins the automation-relevant precision:
+
+- **Where it plugs in:** `PayrollService.mark_paid` →
+  `PayrollAccrualPort` (interface in `features/finance/ports.py`,
+  implemented in-process by `features/finance/service.py` ·
+  `create_payroll_accrual_draft`). Composition root
+  `services/core/src/core/api/deps.py:get_payroll_service` wires Finance;
+  worker/scheduler constructions pass `finance=None` and never pay.
+- **Trigger/mapping:** `je_bridge_enabled` AND `total_gross > 0` on
+  `approved → paid`. Account codes 5010 (salaries, DR gross) / 2010
+  (accrued, CR net) / 2020 (deductions, CR gross−net, **only when
+  deductions > 0**). `missing_accounts` → run `je_bridge_status=pending`
+  (tied to `docs/backlog/finance-chart-of-accounts-gap.md`);
+  created/already-booked → `draft`; else `none`. Idempotent via
+  `UNIQUE (tenant_id, source, source_ref)`.
+- **What stays for future FIN-AI-001 work:** automated **approve**,
+  payroll-sourced post/void of the DRAFT entry, and any AI-driven
+  decisioning — the existing Finance JE inbox (draft/post/void) is the
+  human path today. `erp.payroll.ai.approve` remains reserved.

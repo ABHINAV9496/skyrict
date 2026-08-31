@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
-    from core.features.finance.ports import AuditSink
+    from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
     from core.features.hr.service import (
@@ -283,12 +283,19 @@ def get_attendance_service(
     return AttendanceService(repository=repo, audit=audit)
 
 
-def make_payroll_service(db: AsyncSession, audit: CoreAuditService | None = None) -> PayrollService:
+def make_payroll_service(
+    db: AsyncSession,
+    audit: CoreAuditService | None = None,
+    finance: PayrollAccrualPort | None = None,
+) -> PayrollService:
     """Plain factory — build :class:`PayrollService` without FastAPI resolution.
 
     Used by the FastAPI dependency below and by the payroll automation worker
     (which constructs services on its own per-tick session). When ``audit`` is
-    omitted a core audit service on the same session is built.
+    omitted a core audit service on the same session is built. ``finance``
+    (the cross-feature accrual bridge used by ``mark_paid``) is injected only
+    where it is resolvable — the worker and scheduler paths never mark runs
+    paid, so they pass ``None``.
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.hr.repository import HrRepository
@@ -303,22 +310,8 @@ def make_payroll_service(db: AsyncSession, audit: CoreAuditService | None = None
             audit=audit or make_core_audit_service(db),
         ),
         audit=audit or make_core_audit_service(db),
+        finance=finance,
     )
-
-
-def get_payroll_service(
-    db: AsyncSession = Depends(get_db),
-    audit: CoreAuditService = Depends(get_core_audit_service),
-) -> PayrollService:
-    """Payroll service with ``LeaveService`` injected as the leave ledger.
-
-    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
-    leave days, accrual-type catalogue, idempotent annual accrual — Rule 4), so
-    the payroll feature never imports the HR feature directly. The HR repository
-    is shared (same ``db`` session), keeping payroll-driven accrual in the same
-    transaction as the compute.
-    """
-    return make_payroll_service(db, audit)
 
 
 def get_payroll_automation_service(
@@ -537,6 +530,24 @@ def get_finance_service(
         timeline=crm_repo,
         order_lookup=sales_repo,
     )
+
+
+def get_payroll_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+    finance: FinanceService = Depends(get_finance_service),
+) -> PayrollService:
+    """Payroll service with ``LeaveService`` injected as the leave ledger.
+
+    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
+    leave days, accrual-type catalogue, idempotent annual accrual — Rule 4), so
+    the payroll feature never imports the HR feature directly. The HR repository
+    is shared (same ``db`` session), keeping payroll-driven accrual in the same
+    transaction as the compute. The request-scoped ``FinanceService`` is passed
+    as the accrual bridge so ``mark_paid`` can draft the payroll JE in the same
+    transaction.
+    """
+    return make_payroll_service(db, audit, finance)
 
 
 async def get_adjustment_authority(

@@ -43,6 +43,32 @@ class PayrollRunStatus(enum.StrEnum):
     VOID = "void"
 
 
+class PayrollJeBridgeStatus(enum.StrEnum):
+    """Payroll→Finance accrual journal-entry bridge state (HR-AUT-001, Commit 4).
+
+    Mirrors ``erp_payroll_runs.je_bridge_status`` (a String column + CHECK, not
+    a native enum, so FIN-AI-001 can extend it without a migration).
+
+    ``none``
+        The bridge never ran or has nothing to book (bridge disabled on the
+        tenant, run not paid, zero-dollar run, or run voided).
+    ``pending``
+        The run is paid but no accrual JE was created — the tenant's chart of
+        accounts is missing one of the payroll account codes (5010/2010/2020),
+        i.e. the same per-tenant chart gap flagged in the finance backlog
+        (docs/backlog/finance-chart-of-accounts-gap.md). Queryable and
+        retryable: provision the chart, then re-run the bridge.
+    ``draft``
+        A DRAFT accrual journal entry (source='payroll', source_ref=run id) now
+        sits in the Finance inbox; it is posted/voided through the existing
+        finance endpoints (FIN-AI-001 consumes this seam later).
+    """
+
+    NONE = "none"
+    PENDING = "pending"
+    DRAFT = "draft"
+
+
 class PayrollRounding(enum.StrEnum):
     """Net rounding mode — mirrors ``erp_payroll_rounding``."""
 
@@ -118,6 +144,12 @@ AP_ACCOUNT_CODE = "2110"
 REVENUE_ACCOUNT_CODE = "4000"
 COGS_ACCOUNT_CODE = "5000"
 INVENTORY_ASSET_ACCOUNT_CODE = "1300"
+# Payroll accrual codes (HR-AUT-001, Commit 4) — reuse the demo chart's codes,
+# seeded per-tenant by the finance owner (see backlog gap doc). The bridge
+# books DR Salaries Expense / CR Accrued Salaries / CR Deductions Payable.
+SALARY_EXPENSE_ACCOUNT_CODE = "5010"
+ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE = "2010"
+DEDUCTIONS_PAYABLE_ACCOUNT_CODE = "2020"
 
 # ---------------------------------------------------------------------------
 # Finance — journal entry and invoice provenance (idempotency source keys).
@@ -126,6 +158,7 @@ JOURNAL_SOURCE_MANUAL = "manual"
 JOURNAL_SOURCE_INVOICE = "invoice"
 JOURNAL_SOURCE_PAYMENT = "payment"
 JOURNAL_SOURCE_COGS = "cogs"
+JOURNAL_SOURCE_PAYROLL = "payroll"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

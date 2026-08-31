@@ -14,10 +14,15 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from typing import TYPE_CHECKING
 
 from core.core import audit_events
 from core.core.audit_service import AuditService
-from core.core.constants import PayrollRounding, PayrollRunStatus
+from core.core.constants import (
+    PayrollJeBridgeStatus,
+    PayrollRounding,
+    PayrollRunStatus,
+)
 from core.core.exceptions import (
     IllegalStateTransitionError,
     PayrollEntryImmutableError,
@@ -37,6 +42,9 @@ from core.events.producers.payroll_events import (
     emit_settings_updated,
 )
 from core.features.payroll.ports import LeaveLedgerPort, PayrollRepositoryPort
+
+if TYPE_CHECKING:
+    from core.features.finance.ports import PayrollAccrualPort
 
 # Run lifecycle (docs §3.3 / §4.10): draft -> computed -> approved -> paid;
 # void allowed from draft/computed/approved, NEVER from paid. Recompute is
@@ -179,10 +187,12 @@ class PayrollService:
         repository: PayrollRepositoryPort,
         leave_ledger: LeaveLedgerPort,
         audit: AuditService,
+        finance: PayrollAccrualPort | None = None,
     ) -> None:
         self._repo = repository
         self._leave_ledger = leave_ledger
         self._audit = audit
+        self._finance = finance
 
     @property
     def repository(self) -> PayrollRepositoryPort:
@@ -763,6 +773,40 @@ class PayrollService:
                 paid_at=datetime.now(UTC).isoformat(),
                 tenant_id=tenant_id,
             )
+
+        je_status = PayrollJeBridgeStatus.NONE
+        if (
+            transitioned.id is not None
+            and self._finance is not None
+            and transitioned.total_gross is not None
+            and transitioned.total_gross.amount > 0
+        ):
+            settings = await self._repo.get_settings(tenant_id)
+            if settings is not None and settings.je_bridge_enabled:
+                outcome = await self._finance.create_payroll_accrual_draft(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    entry_date=(
+                        transitioned.paid_at.date()
+                        if transitioned.paid_at is not None
+                        else datetime.now(UTC).date()
+                    ),
+                    gross=transitioned.total_gross.amount,
+                    net=(
+                        transitioned.total_net.amount
+                        if transitioned.total_net is not None
+                        else Decimal("0")
+                    ),
+                )
+                je_status = (
+                    PayrollJeBridgeStatus.PENDING
+                    if outcome.missing_accounts
+                    else PayrollJeBridgeStatus.DRAFT
+                )
+            if je_status is not PayrollJeBridgeStatus.NONE:
+                refreshed = await self._repo.set_run_je_bridge_status(run_id, tenant_id, je_status)
+                if refreshed is not None:
+                    transitioned = refreshed
         return transitioned
 
     async def void_run(
@@ -888,6 +932,43 @@ class PayrollService:
         if employee_id is not None:
             entries = [entry for entry in entries if entry.employee_id == employee_id]
         return list(entries)
+
+    async def list_run_payslips(
+        self, run_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> list[ent.Payslip]:
+        """Per-employee payslip view of a run's frozen entries (Commit 4).
+
+        Raises ``ValueError`` when the run does not exist. Requires at least
+        one entry — an unpaid or empty run yields an empty list.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        if run.status not in (
+            PayrollRunStatus.COMPUTED,
+            PayrollRunStatus.APPROVED,
+            PayrollRunStatus.PAID,
+        ):
+            return []
+        renders: list[ent.Payslip] = []
+        for entry in await self._repo.list_entries(run_id, tenant_id=tenant_id):
+            employee = await self._repo.get_employee(tenant_id, entry.employee_id)
+            if employee is None or employee.id is None:
+                continue
+            renders.append(
+                ent.Payslip(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    employee_id=entry.employee_id,
+                    employee_number=employee.employee_number,
+                    employee_name=f"{employee.first_name} {employee.last_name}".strip(),
+                    gross=entry.gross,
+                    deductions=entry.deductions,
+                    net=entry.net,
+                )
+            )
+        renders.sort(key=lambda p: p.employee_number)
+        return renders
 
     # ------------------------------------------------------------------
     # Compensation (Rule 7: effective-date pick is repo-side; write here)

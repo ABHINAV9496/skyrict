@@ -20,6 +20,7 @@ from core.domain.entities import (
     PayrollEntry,
     PayrollRun,
     PayrollSettings,
+    Payslip,
 )
 from core.domain.value_objects import Money
 
@@ -57,6 +58,7 @@ class PayrollSettingsIn(BaseModel):
     tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     rounding: Literal["nearest", "up", "down"] | None = None
     ai_automation_enabled: bool | None = None
+    je_bridge_enabled: bool | None = None
 
 
 class PayrollSettingsOut(BaseModel):
@@ -66,6 +68,7 @@ class PayrollSettingsOut(BaseModel):
     tax_rate: Decimal
     rounding: str
     ai_automation_enabled: bool
+    je_bridge_enabled: bool
 
     @field_validator("pf_rate", "tax_rate", mode="after")
     @classmethod
@@ -84,6 +87,7 @@ class PayrollSettingsOut(BaseModel):
             tax_rate=settings.tax_rate,
             rounding=settings.rounding.value,
             ai_automation_enabled=settings.ai_automation_enabled,
+            je_bridge_enabled=settings.je_bridge_enabled,
         )
 
 
@@ -113,6 +117,7 @@ class PayrollRunOut(BaseModel):
     paid_at: datetime | None = None
     void_reason: str | None = None
     skipped_employees: list[SkippedEmployeeOut] | None = None
+    je_bridge_status: str = "none"
     created_at: datetime | None = None
 
     @classmethod
@@ -143,6 +148,7 @@ class PayrollRunOut(BaseModel):
                 if run.skipped_employees
                 else None
             ),
+            je_bridge_status=run.je_bridge_status.value,
             created_at=run.created_at,
         )
 
@@ -190,6 +196,30 @@ class EntryAdjustmentIn(BaseModel):
 class SkippedEmployeeOut(BaseModel):
     employee_id: uuid.UUID
     reason: str
+
+
+class PayslipOut(BaseModel):
+    """One employee's payslip in a run (HR-AUT-001, Commit 4)."""
+
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: MoneyOut
+    deductions: MoneyOut
+    net: MoneyOut
+
+    @classmethod
+    def from_entity(cls, payslip: Payslip) -> PayslipOut:
+        return cls(
+            employee_id=payslip.employee_id,
+            employee_number=payslip.employee_number,
+            employee_name=payslip.employee_name,
+            gross=MoneyOut(amount=payslip.gross.amount, currency=payslip.gross.currency),
+            deductions=MoneyOut(
+                amount=payslip.deductions.amount, currency=payslip.deductions.currency
+            ),
+            net=MoneyOut(amount=payslip.net.amount, currency=payslip.net.currency),
+        )
 
 
 class RunComputeOut(BaseModel):

@@ -172,7 +172,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0028", f"head is {version}, expected 0028"
+            assert version == "0029", f"head is {version}, expected 0029"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -391,7 +391,9 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).one_or_none()
-            assert settings_col is not None, "0026 must add erp_payroll_settings.ai_automation_enabled"
+            assert settings_col is not None, (
+                "0026 must add erp_payroll_settings.ai_automation_enabled"
+            )
             assert settings_col[0] == "boolean"
 
             for col_name in ("bank_account", "bank_name"):
@@ -568,6 +570,46 @@ async def _assert_upgraded_schema(url: str) -> None:
                 "created_at",
                 "updated_at",
             }.issubset(set(schedule_cols)), schedule_cols
+
+            # 0029: payroll accrual JE bridge (HR-AUT-001, Commit 4).
+            je_status_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type, character_maximum_length "
+                        "FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_runs' "
+                        "AND column_name = 'je_bridge_status'"
+                    )
+                )
+            ).one_or_none()
+            assert je_status_col is not None, "0029 must add erp_payroll_runs.je_bridge_status"
+            assert je_status_col[0] == "character varying", je_status_col
+            assert je_status_col[1] == 16, je_status_col
+
+            je_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_payroll_runs'::regclass "
+                        "AND conname = 'ck_erp_payroll_runs_je_bridge_status'"
+                    )
+                )
+            ).scalar_one()
+            assert je_status_check == 1, "0029 must add the je_bridge_status check constraint"
+
+            je_bridge_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_settings' "
+                        "AND column_name = 'je_bridge_enabled'"
+                    )
+                )
+            ).one_or_none()
+            assert je_bridge_col is not None, "0029 must add erp_payroll_settings.je_bridge_enabled"
+            assert je_bridge_col[0] == "boolean", je_bridge_col
     finally:
         await engine.dispose()
 

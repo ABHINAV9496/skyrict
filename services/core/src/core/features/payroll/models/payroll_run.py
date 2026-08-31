@@ -5,6 +5,11 @@ A run is NOT employee-scoped — it covers every active employee for a period.
 computed", which must stay distinct from a genuine zero-dollar run. The
 partial unique index ``uq_erp_payroll_runs_period_active`` (same tenant +
 overlapping period, WHERE status <> 'void') lives in migration 0005, not here.
+
+``je_bridge_status`` tracks the payroll→Finance accrual journal-entry bridge
+(HR-AUT-001, Commit 4): ``none`` / ``pending`` / ``draft``. It is a String
+column with a CHECK constraint (not a native enum) so FIN-AI-001 can extend
+it without a migration.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -55,6 +61,10 @@ class PayrollRunModel(Base):
     __tablename__ = "erp_payroll_runs"
     __table_args__ = (
         UniqueConstraint("tenant_id", "run_code", name="uq_erp_payroll_runs_tenant_code"),
+        CheckConstraint(
+            "je_bridge_status IN ('none', 'pending', 'draft')",
+            name="ck_erp_payroll_runs_je_bridge_status",
+        ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -91,6 +101,10 @@ class PayrollRunModel(Base):
     void_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Employees excluded at compute time, with the reason (gap #6).
     skipped_employees: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB, nullable=True)
+    # Payroll→Finance accrual JE bridge state — none/pending/draft (Commit 4).
+    je_bridge_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'none'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

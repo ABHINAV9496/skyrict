@@ -29,6 +29,7 @@ The payroll/HR module avoided this trap because its reference data and permissio
 
 - Sales → order → fulfil → inventory-bin update runs, but the COGS journal-entry step throws and the fulfilment fails/rolls back.
 - New tenants onboarding through the register/provision flow (not the demo seeder) get a broken sales pipeline out of the box.
+- **Payroll mark-paid also depends on the chart (HR-AUT-001, Commit 4):** the accrual JE bridge resolves accounts 5010 / 2010 / 2020 when a run is marked paid. If they are missing the run does **not** fail — the bridge is fail-safe by design — but it records `je_bridge_status = 'pending'`, which cascades to the payroll admin as a "pending accounts setup" indicator until the chart is provisioned. The `pending` state is the **same root cause** as the COGS failure, surfaced on the payroll run instead of a sales 404. Fixing the chart for a tenant (seeder/backfill) clears both symptoms: sales fulfilment resumes and future mark-paid runs land `draft` JEs.
 
 ## Suggested fix (Finance owner)
 
@@ -38,4 +39,4 @@ The payroll/HR module avoided this trap because its reference data and permissio
 
 ## Relay text (to Finance owner / Dennis)
 
-> Found a live gap while validating the HR-AUT-001 payroll automation branch: finance's chart of accounts (`4000` Revenue, `5000` COGS) is only created by the demo seeder. Tenant provisioning (`cli._seed_tenant`) seeds HR defaults + RBAC but no finance chart, and there is no migration backfill. Net effect: sales order fulfilment throws `NotFoundError: COGS account '5000' not found` for any tenant that isn't the demo-seeded one. Please schedule a per-tenant default-chart seeder (mirroring the HR provisioning pattern) plus a backfill for existing tenants; full detail + suggested fix in `docs/backlog/finance-chart-of-accounts-gap.md`. Not touched in our branch.
+> Found a live gap while validating the HR-AUT-001 payroll automation branch: finance's chart of accounts (`4000` Revenue, `5000` COGS) is only created by the demo seeder. Tenant provisioning (`cli._seed_tenant`) seeds HR defaults + RBAC but no finance chart, and there is no migration backfill. Net effect: sales order fulfilment throws `NotFoundError: COGS account '5000' not found` for any tenant that isn't the demo-seeded one. The same gap now also surfaces in payroll (HR-AUT-001 Commit 4): mark-paid drafts the accrual JE against accounts `5010`/`2010`/`2020`, and their absence sets the run's `je_bridge_status` to `pending` instead of crashing — same root cause, second symptom. Please schedule a per-tenant default-chart seeder (mirroring the HR provisioning pattern) plus a backfill for existing tenants; full detail + suggested fix in `docs/backlog/finance-chart-of-accounts-gap.md`. Not touched in our branch.

@@ -31,6 +31,7 @@ from core.api.v1.schemas.payroll import (
     PayrollRunOut,
     PayrollSettingsIn,
     PayrollSettingsOut,
+    PayslipOut,
     RunComputeOut,
     SkippedEmployeeOut,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "PayrollScheduleOut",
     "PayrollSettingsIn",
     "PayrollSettingsOut",
+    "PayslipOut",
     "RunComputeOut",
     "SkippedEmployeeOut",
     "TerminateRequest",

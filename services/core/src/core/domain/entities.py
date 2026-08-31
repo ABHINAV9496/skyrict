@@ -16,6 +16,7 @@ from core.core.constants import (
     EmploymentStatus,
     LeaveRequestStatus,
     PayImpact,
+    PayrollJeBridgeStatus,
     PayrollRounding,
     PayrollRunStatus,
 )
@@ -424,6 +425,28 @@ class PayrollRun:
     # {"employee_id": str, "reason": str}), set at compute time (gap #6).
     skipped_employees: list[dict[str, str]] | None = None
 
+    # Payroll→Finance accrual JE bridge state (Commit 4): none/pending/draft.
+    je_bridge_status: PayrollJeBridgeStatus = PayrollJeBridgeStatus.NONE
+
+
+@dataclass(frozen=True)
+class Payslip:
+    """One employee's payslip view inside a run (HR-AUT-001, Commit 4).
+
+    ``gross``/``deductions``/``net`` mirror the run's frozen entry; the
+    employee attributes denormalize the roster so the payslip endpoint needs no
+    separate employee lookup.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+
 
 @dataclass(frozen=True)
 class PayrollEntry:
@@ -459,6 +482,9 @@ class PayrollSettings:
     # HR-AUT-001 (0026): whether the tenant allows the payroll automation batch
     # engine to drive runs; pre-flight blocks a batch when this is off.
     ai_automation_enabled: bool = True
+    # HR-AUT-001 (0029): whether marking a run paid also books the accrual JE
+    # into the Finance inbox (off = fully manual flow).
+    je_bridge_enabled: bool = True
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

@@ -15,6 +15,7 @@ import {
 
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,12 +32,14 @@ import {
   approvePayrollRun,
   computePayrollRun,
   getPayrollRun,
+  getRunPayslips,
   listRunEntries,
   markPayrollRunPaid,
   updateRunEntry,
   voidPayrollRun,
   type PayrollEntry,
   type PayrollRun,
+  type Payslip,
   type SkippedEmployee,
 } from "@/lib/api/payroll-api";
 import { listEmployees, type Employee } from "@/lib/api/hr-api";
@@ -71,6 +74,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
 
   const [status, setStatus] = useState<PageStatus>({ state: "loading" });
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
@@ -83,12 +87,14 @@ export function RunDetailClient({ runId }: { runId: string }) {
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
-      const [run, entries, employeeList] = await Promise.all([
+      const [run, entries, employeeList, payslipList] = await Promise.all([
         getPayrollRun(runId),
         listRunEntries(runId),
         listEmployees({ pageSize: 100 }),
+        getRunPayslips(runId).catch(() => [] as Payslip[]),
       ]);
       setEmployees(employeeList.items);
+      setPayslips(payslipList);
       setStatus({ state: "ready", run, entries });
     } catch (error) {
       const message =
@@ -141,6 +147,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
     setNotice(null);
     try {
       const result = await computePayrollRun(runId);
+      setPayslips(await getRunPayslips(runId).catch(() => []));
       setStatus({
         state: "ready",
         run: result.run,
@@ -462,6 +469,24 @@ export function RunDetailClient({ runId }: { runId: string }) {
           {run.paidAt ? (
             <SummaryRow label="Paid" value={formatDateTime(run.paidAt)} />
           ) : null}
+          {run.paidAt ? (
+            <SummaryRow
+              label="Accrual JE"
+              value={
+                run.jeBridgeStatus === "draft" ? (
+                  <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                    Journal entry draft
+                  </Badge>
+                ) : run.jeBridgeStatus === "pending" ? (
+                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                    Pending accounts setup
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">Not created</span>
+                )
+              }
+            />
+          ) : null}
           {run.voidReason ? (
             <SummaryRow label="Void reason" value={run.voidReason} />
           ) : null}
@@ -490,6 +515,73 @@ export function RunDetailClient({ runId }: { runId: string }) {
           )}
         </div>
       </section>
+
+      {payslips.length > 0 ? (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+            <Receipt aria-hidden="true" className="size-4 text-primary" />
+            Payslips
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              Per-employee net pay after deduction
+            </span>
+          </h2>
+          <div className="mt-4">
+            <ErpDataTable
+              columns={[
+                {
+                  key: "employeeId",
+                  label: "Employee",
+                  render: (payslip) => (
+                    <span className="font-medium text-foreground">
+                      {payslip.employeeName}
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {payslip.employeeNumber}
+                      </span>
+                    </span>
+                  ),
+                },
+                {
+                  key: "gross",
+                  label: "Gross",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatMoney(payslip.gross.amount, payslip.gross.currency)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "deductions",
+                  label: "Deductions",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatMoney(payslip.deductions.amount, payslip.deductions.currency)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "net",
+                  label: "Net",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums font-medium text-foreground">
+                      {formatMoney(payslip.net.amount, payslip.net.currency)}
+                    </span>
+                  ),
+                },
+              ]}
+              rows={payslips.map((payslip) => ({ ...payslip, id: payslip.employeeId }))}
+              meta={{
+                total: payslips.length,
+                page: 1,
+                page_size: payslips.length,
+                total_pages: 1,
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {run.skippedEmployees.length > 0 ? (
         <section className="rounded-xl border border-border bg-card p-5">

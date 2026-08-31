@@ -261,7 +261,7 @@ Events this module emits:
 | `hr.leave.cancelled` | cancellation committed | request_id, employee_id, leave_type, days |
 | `payroll.run.computed` | compute committed | run_id, period_start, period_end, total_gross, total_net |
 | `payroll.run.approved` | approval committed | run_id, total_net, entry_count |
-| `payroll.run.paid` | mark-paid committed | run_id, total_net, paid_at |
+| `payroll.run.paid` | mark-paid committed | run_id, total_net, paid_at, je_bridge_status, je_bridge_entry_id |
 | `payroll.run.voided` | void committed | run_id, reason |
 
 Producer sketch:
@@ -404,6 +404,7 @@ erDiagram
         timestamptz approved_at
         timestamptz paid_at
         string void_reason "nullable"
+        string je_bridge_status "none|pending|draft"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -427,6 +428,8 @@ erDiagram
         decimal pf_rate "recorded statutory %"
         decimal tax_rate "recorded statutory %"
         string rounding "nearest|up|down"
+        boolean ai_automation_enabled "HR-AUT-001"
+        boolean je_bridge_enabled "Commit 4"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -493,6 +496,7 @@ All tables: `id UUID PRIMARY KEY`, `tenant_id UUID NOT NULL`, RLS enabled with a
 - `run_code` — `PR-{yyyy}-{mm}`, unique `(tenant_id, run_code)`
 - `status` — enum `draft | computed | approved | paid | void` (state machine in §3.3)
 - `total_gross` / `total_net` — cached projections, recomputed server-side on every compute; never written by clients
+- `je_bridge_status` — `String(16)` `none | pending | draft` (`CHECK ck_erp_payroll_runs_je_bridge_status_ok`), **not** a native pg enum so the FIN-AI-001 orchestrator can add states without a migration. Written only by the mark-paid JE bridge (§4.10). `pending` means the run was paid while the finance chart of accounts was incomplete — same root cause as `docs/backlog/finance-chart-of-accounts-gap.md`, surfaced on the run for the payroll admin (and on the JE entry in Finance once it exists).
 - **Period uniqueness:** partial unique index
 
 ```sql
@@ -519,6 +523,8 @@ CREATE UNIQUE INDEX uq_erp_payroll_runs_period_active
 - Enforce one row per tenant: `UNIQUE (tenant_id)` named `uq_erp_payroll_settings_tenant` (or a fixed `tenant_id` PK)
 - `pf_rate` / `tax_rate` — recorded statutory percentages applied at compute time (a **recorded** rate, not a tax engine)
 - `rounding` — enum `nearest | up | down` applied to `net`
+- `ai_automation_enabled BOOLEAN NOT NULL DEFAULT true` — per-tenant master switch for the HR-AUT-001 automation layer (`features/payroll_automation`). Env-var flag explicitly rejected (a single global env var cannot express per-tenant decisions).
+- `je_bridge_enabled BOOLEAN NOT NULL DEFAULT true` — per-tenant master switch for the payroll→Finance accrual JE bridge (§4.10). Default `true`; an org that wants to record salary accruals manually turns it off. Same shape as `ai_automation_enabled`.
 
 ### 3.3 State machines
 
@@ -557,6 +563,8 @@ Alembic under `services/core/alembic/`. Migration **`0005_hr_payroll`** (after `
 5. `ENABLE ROW LEVEL SECURITY` + create tenant-isolation policies on all 10 tables.
 6. Seed nothing tenant-specific here (leave types are seeded at tenant provisioning — see `core/seed.py`). Reference data (currencies via `0001`) is already global.
 7. Downgrade drops policies first, then tables (reverse order), then enums.
+
+Commits 1–3 picked up the base schema via `0025`→`0028` (payroll settings `ai_automation_enabled`, compensation/employee tweaks, payroll automation tables). Commit 4 — **`0029_payroll_accrual_je_bridge`** (revision `0029`, `down_revision 0028`) — takes the payroll settings `default true` columns/flags path: adds `erp_payroll_runs.je_bridge_status` (+ CHECK) and `erp_payroll_settings.je_bridge_enabled` server-defaults. One migration, same shape the older flag tickets used; validated by the integration suite running `alembic upgrade head`.
 
 Reference data (`src/core/seed.py`): leave-type defaults per tenant (`annual`/`sick`/`unpaid`), payroll settings default row (currency from `CORE_DEFAULT_CURRENCY`, zero rates), `EMP-`/`PR-` numbering seeds.
 
@@ -660,6 +668,18 @@ For each active (non-terminated, or terminated on/after period start) employee w
 - `deductions = (pf_rate + tax_rate) × gross` from `erp_payroll_settings` + any manual `adjustments.deductions`.
 - `net = gross − deductions` (rounded per settings).
 - Run totals recomputed from entries. Re-running `compute` on the same run overwrites its `draft`/`computed` entries (idempotent); employees without effective compensation are skipped and recorded on the run.
+
+### 4.10 Rule 10 — Payroll→Finance accrual JE bridge (FIN-AI-001 seam, Commit 4)
+
+When `mark_paid` transitions a run `approved → paid`, and `je_bridge_enabled` is true and `total_gross > 0`, the run drafts a **salary accrual journal entry** in Finance through the `PayrollAccrualPort` (implemented in-process by `features/finance`; a worker/scheduler construction passes `finance=None` and skips the bridge — the API always wires Finance):
+
+- **Entry shape** — source `payroll`, `source_ref = str(run_id)`, status `DRAFT`, dated at the `paid_at` moment:
+  - DR `5010` (Salaries Expense) = gross
+  - CR `2010` (Accrued Salaries) = net
+  - CR `2020` (Salary Deductions Payable) = `gross − net`, **only when `deductions > 0`** (`ck_erp_journal_lines_amount_nonzero` rejects a `0.00` line, so zero-deduction runs skip it)
+- **Outcome → run status:** `missing_accounts` → `je_bridge_status = pending` (finance chart incomplete — ties to `finance-chart-of-accounts-gap.md`); created **or** already-booked (idempotent `ConflictError` on `UNIQUE (tenant_id, source, source_ref)`) → `draft`; anything else → `none`. Always succeeds — mark-paid never fails on the bridge; the run records the truth instead.
+- **Guards:** only on `paid` (not on recompute/void); runs voided after payment leave the entry for the Finance owner to handle.
+- **Readable everywhere:** `GET /payroll/runs/{id}` returns `je_bridge_status`; `GET /payroll/runs/{id}/payslips` returns per-employee gross/deductions/net; the Finance owner sees the DRAFT entry in the journal-entries inbox. `erp.payroll.ai.approve` stays reserved for automated approvals; the bridge is a synchronous seam, not the automation path.
 
 ---
 
@@ -826,17 +846,18 @@ Base path `/api/v1`. Every endpoint: requires a valid identity access JWT + tena
 |---|---|---|---|
 | GET | `/api/v1/payroll/runs` | `erp.payroll.read` | filters: `status`, `period_from`/`period_to` |
 | POST | `/api/v1/payroll/runs` ✓ | `erp.payroll.write` | non-overlapping period (per §3.2 partial unique) |
-| GET | `/api/v1/payroll/runs/{id}` | `erp.payroll.read` | includes entries + totals |
+| GET | `/api/v1/payroll/runs/{id}` | `erp.payroll.read` | includes entries + totals + `je_bridge_status` |
 | POST | `/api/v1/payroll/runs/{id}/compute` ✓ | `erp.payroll.write` | idempotent; draft/computed only; accrue leave + upsert entries |
 | POST | `/api/v1/payroll/runs/{id}/approve` ✓ | `erp.payroll.approve` | computed only; locks entries |
-| POST | `/api/v1/payroll/runs/{id}/mark-paid` ✓ | `erp.payroll.approve` | approved only; emits `payroll.run.paid` |
+| POST | `/api/v1/payroll/runs/{id}/mark-paid` ✓ | `erp.payroll.approve` | approved only; emits `payroll.run.paid`; runs the JE bridge (§4.10) |
 | POST | `/api/v1/payroll/runs/{id}/void` ✓ | `erp.payroll.approve` | body: `reason`; draft/computed/approved only; frees period |
 | GET | `/api/v1/payroll/runs/{id}/entries` | `erp.payroll.read` | `?employee_id=` |
+| GET | `/api/v1/payroll/runs/{id}/payslips` | `erp.payroll.read` | per-employee `{employee_id, employee_number, employee_name, gross, deductions, net}`; `[]` on draft; sorted by employee number (Commit 4) |
 | PATCH | `/api/v1/payroll/runs/{id}/entries/{entry_id}` ✓ | `erp.payroll.write` | **draft/computed only**; adjusts `adjustments` JSONB |
 | GET | `/api/v1/payroll/compensation` | `erp.payroll.read` | `?employee_id=` (required) → history |
 | POST | `/api/v1/payroll/compensation` ✓ | `erp.payroll.write` | body: `employee_id`, `effective_from`, `monthly_salary`, `currency` |
 | GET | `/api/v1/payroll/settings` | `erp.payroll.read` | |
-| PUT | `/api/v1/payroll/settings` ✓ | `erp.payroll.write` | body: `pf_rate`, `tax_rate`, `default_currency`, `rounding` |
+| PUT | `/api/v1/payroll/settings` ✓ | `erp.payroll.write` | body: `pf_rate`, `tax_rate`, `default_currency`, `rounding`, `ai_automation_enabled`, `je_bridge_enabled` |
 
 ### Payroll automation (HR-AUT-001)
 
@@ -933,7 +954,7 @@ Visibility for a tenant = permissions ∩ billing-enabled modules. When billing 
 ### 9.1 Unit tests (`services/core/tests/unit/features/`)
 
 - `test_leave_service.py` — Rule 1 (movement written + balance recomputed + row seeded), Rule 2 (negative rejected in service), Rule 3 (approval atomic; balance breach rolls back), Rule 4 (accrual idempotent per `(employee, type, year)`; pro-rata math), Rule 5 (cancel writes reversal), Rule 6 (self-approval blocked)
-- `test_payroll_service.py` — Rule 7 (effective-date pick; retroactive row wins), Rule 8 (entry immutable after approve), Rule 9 (proration math: mid-period hire, termination mid-period, unpaid-leave overlap; `sick`/`annual` do not reduce pay; totals recomputed; compute idempotent)
+- `test_payroll_service.py` — Rule 7 (effective-date pick; retroactive row wins), Rule 8 (entry immutable after approve), Rule 9 (proration math: mid-period hire, termination mid-period, unpaid-leave overlap; `sick`/`annual` do not reduce pay; totals recomputed; compute idempotent), Rule 10 (`TestJeBridge`: drafts 5010/2010/2020 on paid, skips the 2020 line when deductions are zero, `pending` on missing chart, no entry when the flag is off or no Finance port; `TestPayslips`: per-employee gross/deductions/net)
 - `test_payroll_compute.py` — pure compute table-driven tests (gross/deductions/net/rounding)
 - `test_money.py` — Decimal arithmetic, currency validation (shared Money)
 - `test_state_machines.py` — leave + run transition guards (only valid transitions; terminal states)
@@ -970,7 +991,6 @@ Real Postgres + `alembic upgrade head`, provision two tenants via `X-Tenant-Slug
 - Loans / salary advances
 - Employee self-service portal (self-initiated leave, view payslips)
 - Multi-step approval workflows and approval thresholds
-- Finance integration on `payroll.run.paid` (journal entries)
 - Real team model (so `department_manager` scope is team-limited, not all-users)
 - Leave year customization (non-calendar leave years, carry-over, encashment)
 

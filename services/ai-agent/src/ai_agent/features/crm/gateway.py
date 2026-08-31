@@ -42,10 +42,14 @@ class LeadRef:
     status: str
     source: str | None
     created_at: datetime
+    owner_id: uuid.UUID | None
     # Contact-presence signals used by the ``fit`` sub-score (no PII beyond
     # booleans ever leaves the gateway; raw values stay in core).
     has_name: bool
     has_email: bool
+    # Human-facing label for the follow-up draft (scan path only — the
+    # scoring engine never reads PII).
+    display_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,10 +61,13 @@ class OpportunityRef:
     probability: int
     has_amount: bool
     created_at: datetime
+    owner_id: uuid.UUID | None
     # Core sets ``updated_at`` on every stage change, so it is a deterministic
     # proxy for when the deal last moved stage (no cross-service timeline parse).
     last_stage_change_at: datetime
     expected_close_date: date | None
+    # Human-facing label for the follow-up draft (scan path only).
+    display_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +88,8 @@ class CrmGatewayPort(Protocol):
     async def list_activities_for_entity(
         self, *, entity_type: str, entity_id: uuid.UUID
     ) -> list[ActivityRef]: ...
+    async def list_leads(self, *, page: int = 1) -> list[LeadRef]: ...
+    async def list_opportunities(self, *, page: int = 1) -> list[OpportunityRef]: ...
 
 
 class HttpCrmGateway:
@@ -116,6 +125,7 @@ class HttpCrmGateway:
             status=str(payload["status"]),
             source=None if payload.get("source") is None else str(payload["source"]),
             created_at=created_at,
+            owner_id=_parse_optional_uuid(payload.get("owner_id")),
             has_name=bool(first_name) or bool(last_name),
             has_email=bool(email),
         )
@@ -129,6 +139,7 @@ class HttpCrmGateway:
             probability=int(str(payload["probability"])),
             has_amount=payload.get("amount") is not None,
             created_at=_parse_datetime(payload["created_at"]),
+            owner_id=_parse_optional_uuid(payload.get("owner_id")),
             last_stage_change_at=_parse_datetime(payload["updated_at"]),
             expected_close_date=(
                 None if expected_raw is None else date.fromisoformat(str(expected_raw))
@@ -144,6 +155,26 @@ class HttpCrmGateway:
             page_items = await self._get_list("/activities", page=page, extra=params)
             items.extend(_parse_activity(item) for item in page_items.items)
             if page >= page_items.total_pages:
+                break
+        return items
+
+    async def list_leads(self, *, page: int = 1) -> list[LeadRef]:
+        """All leases for the current scope; owner_id lets the scan assign owners."""
+        items: list[LeadRef] = []
+        for page_no in range(page, _MAX_CATALOG_PAGES + 1):
+            payload = await self._get_list("/leads", page=page_no)
+            items.extend(_parse_lead(item) for item in payload.items)
+            if page_no >= payload.total_pages:
+                break
+        return items
+
+    async def list_opportunities(self, *, page: int = 1) -> list[OpportunityRef]:
+        """All opportunities for the current scope; owner_id lets the scan assign owners."""
+        items: list[OpportunityRef] = []
+        for page_no in range(page, _MAX_CATALOG_PAGES + 1):
+            payload = await self._get_list("/opportunities", page=page_no)
+            items.extend(_parse_opportunity(item) for item in payload.items)
+            if page_no >= payload.total_pages:
                 break
         return items
 
@@ -223,3 +254,53 @@ def _parse_activity(item: dict[str, object]) -> ActivityRef:
         completed_at=None if completed_raw is None else _parse_datetime(completed_raw),
         created_at=_parse_datetime(item["created_at"]),
     )
+
+
+def _parse_optional_uuid(raw: object) -> uuid.UUID | None:
+    if raw is None:
+        return None
+    return uuid.UUID(str(raw))
+
+
+def _parse_lead(item: dict[str, object]) -> LeadRef:
+    first_name = item.get("first_name")
+    last_name = item.get("last_name")
+    email = item.get("email")
+    company = item.get("company")
+    display = _build_lead_display(first_name, last_name, company)
+    return LeadRef(
+        id=uuid.UUID(str(item["id"])),
+        status=str(item["status"]),
+        source=None if item.get("source") is None else str(item["source"]),
+        created_at=_parse_datetime(item["created_at"]),
+        owner_id=_parse_optional_uuid(item.get("owner_id")),
+        has_name=bool(first_name) or bool(last_name),
+        has_email=bool(email),
+        display_name=display,
+    )
+
+
+def _parse_opportunity(item: dict[str, object]) -> OpportunityRef:
+    expected_raw = item.get("expected_close_date")
+    return OpportunityRef(
+        id=uuid.UUID(str(item["id"])),
+        stage=str(item["stage"]),
+        probability=int(str(item["probability"])),
+        has_amount=item.get("amount") is not None,
+        created_at=_parse_datetime(item["created_at"]),
+        owner_id=_parse_optional_uuid(item.get("owner_id")),
+        last_stage_change_at=_parse_datetime(item["updated_at"]),
+        expected_close_date=(
+            None if expected_raw is None else date.fromisoformat(str(expected_raw))
+        ),
+        display_name=None if item.get("name") is None else str(item["name"]),
+    )
+
+
+def _build_lead_display(first_name: object, last_name: object, company: object) -> str | None:
+    """Best-effort display label from the list payload (PII only in scan path)."""
+    parts = [part for part in (first_name, last_name) if part]
+    name = " ".join(str(p) for p in parts)
+    if company:
+        return f"{name} ({company})" if name else str(company)
+    return name or None

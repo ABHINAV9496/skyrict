@@ -126,12 +126,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- Background jobs (SKY-68) -----------------------------------------
     bg_tasks: list[asyncio.Task[None]] = []
     from ai_agent.api.scheduled.anomaly_scan import run_scheduled_anomaly_scan
+    from ai_agent.api.scheduled.crm_follow_up_scan import run_crm_follow_up_scan
     from ai_agent.core.jobs.anomaly_autoclose import run_anomaly_autoclose_job
     from ai_agent.core.jobs.suggestion_expiry import run_suggestion_expiry_job
 
     bg_tasks.append(asyncio.create_task(run_suggestion_expiry_job()))
     bg_tasks.append(asyncio.create_task(run_anomaly_autoclose_job()))
     bg_tasks.append(asyncio.create_task(run_scheduled_anomaly_scan()))
+    bg_tasks.append(asyncio.create_task(run_crm_follow_up_scan()))
     logger.info("background_jobs.started", count=len(bg_tasks))
 
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it

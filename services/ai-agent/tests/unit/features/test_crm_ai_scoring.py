@@ -31,6 +31,7 @@ def _lead(**overrides: object) -> LeadRef:
         "status": "new",
         "source": "website",
         "created_at": NOW - timedelta(days=2),
+        "owner_id": None,
         "has_name": True,
         "has_email": True,
     }

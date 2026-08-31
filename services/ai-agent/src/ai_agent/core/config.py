@@ -344,6 +344,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- CRM follow-up scan (SKY-61) ---
+    CRM_SCAN_SERVICE_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token the hourly CRM follow-up scan presents to core's "
+            "CRM API. A background task has no user JWT, so it authenticates "
+            "with this service token + per-tenant X-Tenant-Slug instead. Empty "
+            "disables the scheduled scan (log-only)."
+        ),
+    )
+    CRM_SCAN_STALE_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "number of days without activity before an entity is considered "
+            "stale and eligible for a follow-up suggestion."
+        ),
+    )
+
     # --- Rate limits (spec §5.4) ---
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
         default=30, ge=1, description="NL queries per minute per user"

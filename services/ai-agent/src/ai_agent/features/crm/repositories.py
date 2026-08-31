@@ -9,10 +9,10 @@ the expiry sweep the hourly check consumes.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 
 from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
@@ -139,3 +139,57 @@ class CrmAiRepository:
                 AiFollowUpSuggestionModel.entity_id == entity_id,
             )
         )
+
+    async def pending_count_for_entity(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: str,
+        entity_id: uuid.UUID,
+    ) -> int:
+        """Count pending suggestions for one entity (dedup guard for the scan)."""
+        stmt = (
+            select(func.count())
+            .select_from(AiFollowUpSuggestionModel)
+            .where(
+                AiFollowUpSuggestionModel.tenant_id == tenant_id,
+                AiFollowUpSuggestionModel.entity_type == entity_type,
+                AiFollowUpSuggestionModel.entity_id == entity_id,
+                AiFollowUpSuggestionModel.status == "pending",
+            )
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def create_follow_up_suggestion(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entity_type: str,
+        entity_id: uuid.UUID,
+        user_id: uuid.UUID,
+        suggestion_type: str,
+        draft_content: str,
+        reasoning: str,
+        confidence: float,
+        stale_days: int,
+    ) -> AiFollowUpSuggestionModel:
+        """Create and persist a new pending follow-up suggestion.
+
+        The ``stale_days`` value is used to set ``expires_at`` to 7 days from
+        now (the application-set expiry convention documented in the model).
+        """
+        row = AiFollowUpSuggestionModel(
+            tenant_id=tenant_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            user_id=user_id,
+            suggestion_type=suggestion_type,
+            draft_content=draft_content,
+            reasoning=reasoning,
+            confidence=confidence,
+            expires_at=datetime.now(UTC) + timedelta(days=7),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row

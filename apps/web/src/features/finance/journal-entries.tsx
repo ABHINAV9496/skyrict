@@ -36,7 +36,7 @@ import {
   type JournalEntry,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
-import { ACCOUNT_TYPE_LABELS, formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
+import { ACCOUNT_TYPE_LABELS, extractAmountFromText, formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
 import {
   PeriodSelector,
@@ -251,7 +251,7 @@ function CreateJournalEntryDialog({
         confidence: result.confidence,
         reasoning: result.reasoning,
         accountType: matched?.account_type,
-        amount: result.amount,
+        amount: result.amount ?? extractAmountFromText(text),
         side: result.side,
       });
     } catch {

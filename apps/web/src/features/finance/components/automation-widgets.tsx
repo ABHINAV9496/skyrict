@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/http";
-import { ACCOUNT_TYPE_LABELS, formatDate, formatMoney, toMoney } from "@/lib/finance/format";
+import { ACCOUNT_TYPE_LABELS, extractAmountFromText, formatDate, formatMoney, toMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 import {
   suggestAccountCode,
@@ -587,7 +587,12 @@ export function SuggestAccountCode({ accounts = [] }: { accounts?: Account[] }) 
     setLoading(true);
     setError(null);
     try {
-      setSuggestion(await suggestAccountCode(input));
+      const raw = await suggestAccountCode(input);
+      const resolved = {
+        ...raw,
+        amount: raw.amount ?? extractAmountFromText(input),
+      };
+      setSuggestion(resolved);
     } catch (err) {
       setError(message(err, "Could not generate an account-code suggestion."));
       setSuggestion(null);

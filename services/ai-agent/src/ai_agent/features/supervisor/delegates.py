@@ -22,6 +22,15 @@ import structlog
 
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
+from ai_agent.features.supervisor.prompts import (
+    CRM_NO_ANSWER,
+    CRM_SYSTEM_PROMPT,
+    CRM_UNAVAILABLE,
+    HR_NO_ANSWER,
+    HR_UNAVAILABLE,
+    INVENTORY_NO_DATA,
+    INVENTORY_SYSTEM_PROMPT,
+)
 from ai_agent.features.supervisor.schemas import AGENT_CRM, AGENT_HR, AGENT_INVENTORY, Citation
 
 if TYPE_CHECKING:
@@ -36,13 +45,6 @@ if TYPE_CHECKING:
     from ai_agent.features.rag.retrieval.service import RetrievalResult
 
 logger = structlog.get_logger("ai_agent.supervisor.delegates")
-
-_INVENTORY_SYSTEM_PROMPT = (
-    "You are the Inventory Monitor agent for Skyrict. Answer concisely using "
-    "the provided reference context: live stock counts from the ERP and any "
-    "knowledge-base excerpts. If the context does not answer the question, "
-    "say what data you would need. Lead with the most relevant number."
-)
 
 # Catalogue reads are capped the same way the nl_query gateway caps them.
 _FORECAST_CATALOG_LIMIT = 200
@@ -145,7 +147,7 @@ class InventoryMonitorDelegator:
         if len(context_text) > self._MAX_CONTEXT_CHARS:
             context_text = context_text[: self._MAX_CONTEXT_CHARS] + "…"
         request = LlmRequest(
-            system_prompt=_INVENTORY_SYSTEM_PROMPT,
+            system_prompt=INVENTORY_SYSTEM_PROMPT,
             user_prompt=(
                 "User question: "
                 + query.strip()
@@ -232,13 +234,10 @@ class InventoryMonitorDelegator:
         return parts
 
     def _deterministic_summary(self, context_parts: list[str]) -> str:
-        """Provider-free answer — live facts only, no LLM (dev/demo path)."""
+        """Provider-free answer - live facts only, no LLM (dev/demo path)."""
         if context_parts:
             return "Here is what Inventory Monitor finds right now: " + " ".join(context_parts[:4])
-        return (
-            "Inventory Monitor: I couldn't reach live inventory data right now — "
-            "try again in a moment."
-        )
+        return INVENTORY_NO_DATA
 
 
 class HrCopilotDelegator:
@@ -262,9 +261,7 @@ class HrCopilotDelegator:
             result = await self._hr_copilot.ask(message=query, tenant_id=tenant_id, user_id=user_id)
         except AiUnavailableError as exc:
             logger.warning("supervisor.hr_copilot_failed", error=str(exc))
-            for delta in _iter_text_deltas(
-                "The HR Copilot is temporarily unavailable — please try again shortly."
-            ):
+            for delta in _iter_text_deltas(HR_UNAVAILABLE):
                 yield delta
             return
         answer = (result.answer or "").strip()
@@ -272,9 +269,7 @@ class HrCopilotDelegator:
             for delta in _iter_text_deltas(answer):
                 yield delta
         else:
-            for delta in _iter_text_deltas(
-                "I couldn't find an answer to that in the HR knowledge base yet."
-            ):
+            for delta in _iter_text_deltas(HR_NO_ANSWER):
                 yield delta
 
 
@@ -283,17 +278,6 @@ class CrmAssistantDelegator:
 
     key = AGENT_CRM
     display_name = "CRM Assistant"
-
-    _CRM_SYSTEM_PROMPT = (
-        "You are the CRM Assistant for Skyrict. You have direct access to the "
-        "company's CRM database through the gateway — you can query customers, "
-        "leads, opportunities, deals, and pipeline data in real time.\n\n"
-        "When the user asks about CRM data (customers, leads, deals, pipeline, "
-        "sales activity), use the data provided in the context to answer. "
-        "The context includes live CRM records from the database.\n\n"
-        "Answer concisely. Lead with the most relevant fact or number. "
-        "Use bullet points or numbered lists for clarity when listing multiple items."
-    )
 
     _ACTION_KEYWORDS: ClassVar[dict[str, tuple[str, str | None]]] = {
         "count": ("count_deals", None),
@@ -343,7 +327,7 @@ class CrmAssistantDelegator:
 
         # Fallback: LLM with live CRM context + memory.
         try:
-            system_prompt = self._CRM_SYSTEM_PROMPT
+            system_prompt = CRM_SYSTEM_PROMPT
 
             # Gather live CRM data from the database so the LLM can see it.
             crm_context = await self._gather_crm_context(query)
@@ -382,16 +366,11 @@ class CrmAssistantDelegator:
                         module="crm_assistant",
                     )
             else:
-                for delta in _iter_text_deltas(
-                    "I couldn't find an answer to that CRM question yet. "
-                    "Try asking about deals, pipeline, or lead activity."
-                ):
+                for delta in _iter_text_deltas(CRM_NO_ANSWER):
                     yield delta
         except AiUnavailableError as exc:
             logger.warning("supervisor.crm_assistant_failed", error=str(exc))
-            for delta in _iter_text_deltas(
-                "The CRM Assistant is temporarily unavailable — please try again shortly."
-            ):
+            for delta in _iter_text_deltas(CRM_UNAVAILABLE):
                 yield delta
 
     async def _gather_crm_context(self, query: str) -> str:
@@ -448,8 +427,7 @@ class CrmAssistantDelegator:
                     for opp in opportunities[:20]:  # Cap at 20
                         name = opp.display_name or str(opp.id)
                         details.append(
-                            f"  - {name}: stage={opp.stage}, "
-                            f"probability={opp.probability}%"
+                            f"  - {name}: stage={opp.stage}, probability={opp.probability}%"
                         )
                     if details:
                         parts.append("\nDeal details:")
@@ -466,8 +444,7 @@ class CrmAssistantDelegator:
                     for lead in leads[:20]:  # Cap at 20
                         name = lead.display_name or str(lead.id)
                         details.append(
-                            f"  - {name}: status={lead.status}, "
-                            f"source={lead.source or 'unknown'}"
+                            f"  - {name}: status={lead.status}, source={lead.source or 'unknown'}"
                         )
                     if details:
                         parts.append("\nLead details:")

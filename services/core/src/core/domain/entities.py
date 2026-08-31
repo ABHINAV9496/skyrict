@@ -500,6 +500,7 @@ class JournalEntry:
     posted_at: datetime | None = None
     posted_by_user_id: uuid.UUID | None = None
     voided_at: datetime | None = None
+    reversal_entry_id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -635,6 +636,7 @@ class BalanceSheetLine:
     code: str
     name: str
     balance: Decimal
+    account_type: AccountType
 
 
 @dataclass(frozen=True)
@@ -672,6 +674,163 @@ class ArAging:
     as_of: date
     total_ar: Decimal
     buckets: tuple[ArAgingBucket, ...]
+
+
+# ---------------------------------------------------------------------------
+# Finance automation read-models (SKY-56/SKY-64) — derived, never stored.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CloseChecklistItem:
+    label: str
+    status: str  # "ok" | "warning" | "missing"
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
+class CloseChecklist:
+    period_id: uuid.UUID
+    period_name: str
+    items: tuple[CloseChecklistItem, ...]
+    ready: bool
+
+
+@dataclass(frozen=True)
+class DuplicateCandidate:
+    entry_id: uuid.UUID
+    entry_date: date
+    memo: str | None
+    source_ref: str | None
+
+
+@dataclass(frozen=True)
+class DuplicateGroup:
+    key: str
+    reason: str
+    entries: tuple[DuplicateCandidate, ...]
+
+
+@dataclass(frozen=True)
+class AnomalyItem:
+    entity_type: str
+    entity_id: uuid.UUID
+    anomaly_type: str
+    severity: str  # "low" | "medium" | "high"
+    description: str
+    detected_at: datetime
+
+
+@dataclass(frozen=True)
+class AnomalyReport:
+    items: tuple[AnomalyItem, ...]
+
+
+@dataclass(frozen=True)
+class AccountCodeSuggestion:
+    description: str
+    suggested_code: str
+    suggested_name: str
+    confidence: Decimal
+    reasoning: str = ""
+
+
+@dataclass(frozen=True)
+class WorkingCapitalAlert:
+    ratio: Decimal
+    threshold: Decimal
+    current_assets: Decimal
+    current_liabilities: Decimal
+    alert: bool  # ratio < threshold
+
+
+@dataclass(frozen=True)
+class HealthComponent:
+    name: str
+    score: Decimal
+    weight: Decimal
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
+class HealthScore:
+    overall: Decimal
+    components: tuple[HealthComponent, ...]
+
+
+@dataclass(frozen=True)
+class CashflowPosition:
+    month: str  # "YYYY-MM"
+    opening: Decimal
+    inflows: Decimal
+    outflows: Decimal
+    closing: Decimal
+
+
+@dataclass(frozen=True)
+class CashflowProjection:
+    positions: tuple[CashflowPosition, ...]
+
+
+@dataclass(frozen=True)
+class ComparativePnlRow:
+    account_code: str
+    account_name: str
+    current_amount: Decimal
+    prior_amount: Decimal
+    variance: Decimal
+    variance_pct: Decimal
+
+
+@dataclass(frozen=True)
+class ComparativePnl:
+    current_from: date
+    current_to: date
+    prior_from: date
+    prior_to: date
+    rows: tuple[ComparativePnlRow, ...]
+
+
+@dataclass(frozen=True)
+class TenantSetting:
+    """Generic tenant KV setting — row in erp_tenant_settings."""
+
+    tenant_id: uuid.UUID
+    key: str
+    value: str
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AiFinanceAnomaly:
+    """Persisted anomaly detected by automation — row in ai_finance_anomalies."""
+
+    tenant_id: uuid.UUID
+    entity_type: str
+    entity_id: uuid.UUID
+    anomaly_type: str
+    severity: str
+    description: str
+    status: str = "open"  # "open" | "reviewed" | "dismissed"
+    id: uuid.UUID | None = None
+    detected_at: datetime | None = None
+    reviewed_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AiFinanceSuggestion:
+    """Persisted account-code suggestion — row in ai_finance_suggestions."""
+
+    tenant_id: uuid.UUID
+    description: str
+    suggested_code: str
+    suggested_name: str
+    confidence: Decimal
+    status: str = "pending"  # "pending" | "accepted" | "dismissed"
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------

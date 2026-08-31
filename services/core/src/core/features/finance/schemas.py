@@ -254,3 +254,144 @@ class ArAgingResponse(BaseModel):
     as_of: date
     total_ar: Decimal
     buckets: list[ArAgingBucketResponse]
+
+
+# ---------------------------------------------------------------------------
+# Automation response models (SKY-56/SKY-64)
+# ---------------------------------------------------------------------------
+
+
+class CloseChecklistItemResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    label: str
+    status: str
+    detail: str | None = None
+
+
+class CloseChecklistResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    period_id: uuid.UUID
+    period_name: str
+    items: list[CloseChecklistItemResponse]
+    ready: bool
+
+
+class DuplicateCandidateResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    entry_id: uuid.UUID
+    entry_date: date
+    memo: str | None = None
+    source_ref: str | None = None
+
+
+class DuplicateGroupResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    key: str
+    reason: str
+    entries: list[DuplicateCandidateResponse]
+
+
+class AccountCodeSuggestionResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    description: str
+    suggested_code: str
+    suggested_name: str
+    confidence: Decimal
+    reasoning: str = ""
+
+
+class WorkingCapitalAlertResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    ratio: Decimal
+    threshold: Decimal
+    current_assets: Decimal
+    current_liabilities: Decimal
+    alert: bool
+
+
+class HealthComponentResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    name: str
+    score: Decimal
+    weight: Decimal
+    detail: str | None = None
+
+
+class HealthScoreResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    overall: Decimal
+    components: list[HealthComponentResponse]
+
+
+class CashflowPositionResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    month: str
+    opening: Decimal
+    inflows: Decimal
+    outflows: Decimal
+    closing: Decimal
+
+
+class CashflowProjectionResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    positions: list[CashflowPositionResponse]
+
+
+class ComparativePnlRowResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    account_code: str
+    account_name: str
+    current_amount: Decimal
+    prior_amount: Decimal
+    variance: Decimal
+    variance_pct: Decimal
+
+
+class ComparativePnlResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    current_from: date
+    current_to: date
+    prior_from: date
+    prior_to: date
+    rows: list[ComparativePnlRowResponse]
+
+
+class AnomalyResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    entity_type: str
+    entity_id: uuid.UUID
+    anomaly_type: str
+    severity: str
+    description: str
+    status: str
+    id: uuid.UUID
+    detected_at: datetime
+
+
+class SuggestionRequest(BaseModel):
+    description: str = Field(..., min_length=1, max_length=512)
+
+
+class WorkingCapitalSettingsRequest(BaseModel):
+    threshold: Decimal = Field(..., gt=0)
+
+
+class TenantSettingsResponse(BaseModel):
+    working_capital_threshold: Decimal
+
+
+class SuggestAccountCodeRequest(BaseModel):
+    description: str = Field(..., min_length=1, max_length=512)

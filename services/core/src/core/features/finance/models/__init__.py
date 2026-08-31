@@ -12,8 +12,13 @@ from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
 from core.features.finance.models.payment import ErpPaymentModel
+from core.features.finance.models.tenant_setting import ErpTenantSettingModel
+from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
+from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
 
 __all__ = [
+    "AiFinanceAnomalyModel",
+    "AiFinanceSuggestionModel",
     "ErpChartOfAccountModel",
     "ErpFiscalPeriodModel",
     "ErpInvoiceLineModel",
@@ -21,4 +26,5 @@ __all__ = [
     "ErpJournalEntryModel",
     "ErpJournalLineModel",
     "ErpPaymentModel",
+    "ErpTenantSettingModel",
 ]

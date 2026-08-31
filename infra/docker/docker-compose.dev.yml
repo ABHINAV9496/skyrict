@@ -96,6 +96,10 @@ services:
       # is the service name, not localhost. These override the host-oriented
       # defaults in services/core/.env.
       CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
+      # ai-agent serves on internal port 8000; the host port 8002 is just the
+      # published mapping. core must reach ai-agent via the compose network
+      # service name, not localhost (which is core itself).
+      CORE_AI_AGENT_URL: http://skyrict-ai-agent:8000
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../services/core/alembic:/app/services/core/alembic

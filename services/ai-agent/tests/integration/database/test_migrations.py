@@ -11,7 +11,9 @@ Sentinel assertions probe one representative artefact per concern: table
 existence, version-table bookkeeping, RLS policies on exactly the seven
 tenant-scoped tables (``agent_registry`` is global and must have NONE), the
 partial unique pending index with its WHERE clause, named CHECK constraints,
-the ``tenants`` FKs, and the DESC ordering of the history index.
+the ``tenants`` FKs, the DESC ordering of the history index, and the SKY-60
+supervisor seed (migration 0009). The version-table sentinel follows Alembic's
+own head resolution so it survives future migrations.
 
 The test owns a scratch database and never touches a shared test database -
 it destroys the schema it builds. Event-loop discipline follows the repo
@@ -35,6 +37,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 import pytest
+from alembic.script import ScriptDirectory
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -365,9 +368,16 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0008"
+            # Track the real head so the sentinel survives future migrations
+            # (same idiom as core's test_version_table_isolated).
+            ai_head = ScriptDirectory(str(_ROOT / "alembic")).get_current_head()
+            assert artifacts["version"] == ai_head
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
             assert "restock_advisor" in artifacts["agent_names"], "restock_advisor not seeded"
+            # SKY-60 migration 0009: supervisor + delegated registry seed.
+            assert "supervisor" in artifacts["agent_names"], "supervisor not seeded"
+            assert "crm_assistant" in artifacts["agent_names"], "crm_assistant not seeded"
+            assert "finance_assistant" in artifacts["agent_names"], "finance_assistant not seeded"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
             assert artifacts["rls_tables"] == set(_TENANT_SCOPED_TABLES)

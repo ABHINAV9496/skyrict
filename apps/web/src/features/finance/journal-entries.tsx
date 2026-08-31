@@ -625,6 +625,12 @@ function FinanceJournalEntries() {
   const paramsAppliedRef = useRef(false);
 
   useEffect(() => {
+    if (!draftOpen) {
+      setDraftInitialValues(undefined);
+    }
+  }, [draftOpen]);
+
+  useEffect(() => {
     const draftMemo = searchParams.get("draft_memo");
     const draftAccount = searchParams.get("draft_account");
     if (draftMemo && draftAccount && !paramsAppliedRef.current) {

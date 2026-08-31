@@ -27,6 +27,7 @@ inventory repository's contract.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
@@ -1208,18 +1209,25 @@ class FinanceRepository:
             if score > best_score:
                 best = account
                 best_score = score
+
+        amount, side = self._extract_amount_from_description(text_lower)
+
         if best is None:
             return AccountCodeSuggestion(
                 description=description,
                 suggested_code="",
                 suggested_name="",
                 confidence=Decimal("0"),
+                amount=amount,
+                side=side,
             )
         return AccountCodeSuggestion(
             description=description,
             suggested_code=best.code,
             suggested_name=best.name,
             confidence=Decimal(str(best_score)),
+            amount=amount,
+            side=side,
         )
 
     @staticmethod
@@ -1240,6 +1248,36 @@ class FinanceRepository:
             if word in haystack and word in account_name:
                 score += weight
         return score
+
+    _AMOUNT_RE = re.compile(
+        r"(?:(?:usd|eur|gbp|\$)\s*)?"
+        r"(\d{1,3}(?:[,\.]\d{3})*(?:\.\d{1,2})?)"
+        r"\s*(?:usd|eur|gbp)?(?!\w)",
+        re.IGNORECASE,
+    )
+    _DEBIT_HINTS = frozenset({"paid", "expense", "cost", "purchase", "rent", "salary", "wage", "utilities", "insurance", "travel", "supplies", "office", "electric", "debit"})
+    _CREDIT_HINTS = frozenset({"received", "revenue", "income", "credit", "refund", "interest earned"})
+
+    @staticmethod
+    def _extract_amount_from_description(text: str) -> tuple[Decimal | None, str]:
+        """Best-effort amount + side extraction from free-text description.
+
+        Returns ``(amount, side)`` where *side* is ``"debit"`` or ``"credit"``.
+        If no amount pattern is found, returns ``(None, "debit")``.
+        """
+        match = FinanceRepository._AMOUNT_RE.search(text)
+        if not match:
+            return None, "debit"
+        raw = match.group(1).replace(",", "")
+        try:
+            amount = Decimal(raw)
+        except Exception:  # noqa: BLE001
+            return None, "debit"
+        if amount <= 0:
+            return None, "debit"
+        words = set(text.split())
+        side = "credit" if words & FinanceRepository._CREDIT_HINTS else "debit"
+        return amount, side
 
     async def working_capital_alert(self, tenant_id: uuid.UUID, as_of: date) -> WorkingCapitalAlert:
         threshold = Decimal("1.5")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ArrowUp, LoaderCircle, Mic, Plus } from "lucide-react";
+import { ArrowUp, LoaderCircle, Mic, Plus, Square } from "lucide-react";
 
 import { AiGlyph } from "@/components/brand/logo";
 import {
@@ -14,9 +14,12 @@ import {
 
 export function ChatComposer({
   onSend,
+  onStop,
   placeholder = "Message Skyrict…",
 }: {
   onSend: (content: string) => Promise<void>;
+  /** When provided while a turn is streaming, the send button becomes Stop. */
+  onStop?: () => void;
   placeholder?: string;
 }) {
   const [value, setValue] = useState("");
@@ -37,6 +40,8 @@ export function ChatComposer({
     }
   }, [value, sending, onSend]);
 
+  const canStop = sending && onStop !== undefined;
+
   return (
     <div className="mx-auto w-full max-w-[44rem]">
       <div className="flex flex-col rounded-[1.5rem] border border-border/60 bg-muted/30 p-2 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20 dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30">
@@ -45,7 +50,7 @@ export function ChatComposer({
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (event.key === "Enter" && !event.shiftKey && !canStop) {
               event.preventDefault();
               void submit();
             }
@@ -91,12 +96,17 @@ export function ChatComposer({
             </button>
             <button
               type="button"
-              onClick={() => void submit()}
-              disabled={!value.trim() || sending}
-              aria-label="Send message"
+              onClick={() => {
+                if (canStop) onStop();
+                else void submit();
+              }}
+              disabled={canStop ? false : !value.trim() || sending}
+              aria-label={canStop ? "Stop generating" : "Send message"}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:bg-primary/80 disabled:opacity-40"
             >
-              {sending ? (
+              {canStop ? (
+                <Square aria-hidden="true" className="size-3.5 fill-current" />
+              ) : sending ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : (
                 <ArrowUp aria-hidden="true" className="size-4" />

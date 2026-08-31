@@ -23,6 +23,7 @@ services; repository-only jobs stay in core/jobs.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -55,7 +56,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     readiness.mark_ready()
 
     # Provider chain: built ONCE at startup; an unknown provider key raises
-    # StartupError and refuses boot. Zero providers is a VALID configuration —
+    # StartupError and refuses boot. Zero providers is a VALID configuration -
     # AI endpoints then degrade to typed 503s while health/readiness stay green.
     llm_router = LlmRouter(build_providers_from_settings(settings))
     app.state.llm_router = llm_router
@@ -65,7 +66,64 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         providers_configured=llm_router.provider_count,
     )
 
-    # --- Background jobs (SKY-68 / INV-AI-002) ------------------------------
+    # Cross-module narrator (SKY-63): optional daily cron + system agent row.
+    # Disabled by default; only starts when explicitly enabled AND a provider is
+    # configured (the digest requires the LLM).
+    narrator_scheduler: object | None = None
+    if settings.NARRATOR_SCHEDULER_ENABLED and llm_router.has_providers:
+        from ai_agent.db.agent_registry_repository import AgentRegistryRepository
+        from ai_agent.db.session import async_session_factory
+        from ai_agent.features.narrator.scheduler import NarratorScheduler
+
+        async def _enabled_tenants() -> list[tuple[uuid.UUID, str]]:
+            # Placeholder tenant enumeration. Production wiring lists enabled
+            # tenants from the platform directory; keeping it empty here means
+            # the cron runs but generates nothing until a tenant provider lands.
+            return []
+
+        async def _service_factory(tenant_id: uuid.UUID, slug: str) -> object:
+            from sqlalchemy.ext.asyncio import AsyncSession
+
+            from ai_agent.core.audit_service import AuditService
+            from ai_agent.db.audit_repository import AiAuditLogRepository
+            from ai_agent.db.digest_repository import DigestCacheRepository
+            from ai_agent.features.narrator.gateway import HttpCoreGateway
+            from ai_agent.features.narrator.service import NarratorService
+
+            session: AsyncSession = async_session_factory()
+            return NarratorService(
+                gateway=HttpCoreGateway(
+                    base_url=str(settings.INVENTORY_SERVICE_URL),
+                    bearer_token="",  # nosec B106 - system-agent wiring; token lands with tenant provider
+                    tenant_slug=slug,
+                ),
+                llm_router=llm_router,
+                cache=DigestCacheRepository(session),
+                audit=AuditService(AiAuditLogRepository(session)),
+                allow_llm=settings.NARRATOR_ALLOW_LLM,
+                allow_refresh=True,
+            )
+
+        scheduler = NarratorScheduler(
+            tenant_provider=_enabled_tenants,
+            service_factory=_service_factory,  # type: ignore[arg-type]
+            hour=settings.NARRATOR_DAILY_HOUR,
+            minute=settings.NARRATOR_DAILY_MINUTE,
+            timezone=settings.NARRATOR_SCHEDULER_TIMEZONE,
+        )
+        scheduler.start()
+        narrator_scheduler = scheduler
+        try:
+            async with async_session_factory() as session:
+                await AgentRegistryRepository(session).upsert_system_agent(
+                    name="narrator", module="ai_agent.features.narrator"
+                )
+                await session.commit()
+            logger.info("narrator.agent_registered")
+        except Exception:
+            logger.exception("narrator.agent_registration_failed")
+
+    # --- Background jobs (SKY-68) -----------------------------------------
     bg_tasks: list[asyncio.Task[None]] = []
     from ai_agent.api.scheduled.anomaly_scan import run_scheduled_anomaly_scan
     from ai_agent.core.jobs.anomaly_autoclose import run_anomaly_autoclose_job
@@ -80,6 +138,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # runs this context manager's exit, closing the readiness gate and the
     # DB/Redis pools so in-flight work can drain cleanly.
     yield
+
+    if narrator_scheduler is not None:
+        narrator_scheduler.stop()  # type: ignore[attr-defined]
 
     # Cancel background jobs before disposing resources.
     for task in bg_tasks:

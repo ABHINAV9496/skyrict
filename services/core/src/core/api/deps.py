@@ -161,45 +161,31 @@ def require_any_permission(*permissions: str) -> Callable[[], Awaitable[dict[str
     return _check
 
 
-def require_ingest_m2m_or_permission(
-    permission: str,
-) -> Callable[[], Awaitable[dict[str, Any]]]:
-    """Dependency factory — machine-to-machine shared-secret read OR JWT+permission.
+def require_all_permissions(*permissions: str) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory — grants access only when EVERY listed permission is held.
 
-    Lets the ai-agent ``inventory reindex`` / ``ingest --source module`` CLIs
-    pull core's product catalog with the ingest secret (``Authorization:
-    Bearer CORE_AI_INGEST_TOKEN`` + a routed ``X-Tenant-Slug``), mirroring the
-    sync direction where core presents ``CORE_AI_SYNC_TOKEN`` to ai-agent
-    (SKY-70). The m2m branch carries NO user identity and resolves no DB
-    grants — possession of the shared secret plus the routed tenant is enough
-    for a read-only catalog pull.
-
-    Fails closed: an empty/absent ``CORE_AI_INGEST_TOKEN`` makes the branch
-    unreachable (the secret can never match), and every other bearer falls
-    through to :func:`get_current_user` + the ``permission`` check exactly as
-    before. Comparison uses ``hmac.compare_digest`` for constant time.
+    AND-semantics counterpart to :func:`require_any_permission`, used by the
+    cross-module narrator (SKY-63) whose digest spans all four ERP domains: the
+    caller must hold ``erp.ai.invoke`` AND each module read key. Each key
+    resolves through the same DB-backed grant path and fails closed with
+    ``PermissionDeniedError`` on the first missing one.
     """
+    if not permissions:
+        raise ValueError("require_all_permissions requires at least one permission")
 
     async def _check(
-        credentials: HTTPAuthorizationCredentials | None = Depends(security),
+        current_user: dict[str, Any] = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> dict[str, Any]:
-        secret = settings.AI_INGEST_TOKEN
-        candidate = credentials.credentials if credentials else ""
-        if secret and candidate and hmac.compare_digest(candidate, secret):
-            return {
-                "user_id": None,
-                "tenant_id": TenantContext.get(),
-                "machine": True,
-            }
-
-        current_user = await get_current_user(credentials)
         granted = await RbacRepository(db).resolve_user_permissions(
             user_id=current_user["user_id"],
             tenant_id=current_user["tenant_id"],
         )
         if not grants_permission(granted, permission):
             raise PermissionDeniedError(f"Missing required permission: {permission}")
+        for remaining in permissions:
+            if not grants_permission(granted, remaining):
+                raise PermissionDeniedError(f"Missing required permission: {remaining}")
         return current_user
 
     return _check

@@ -70,6 +70,10 @@ ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 # portable across the platform.
 ERP_AI_INVOKE = "erp.ai.invoke"
 
+# Cross-module intelligence narrator (SKY-63): force-refresh gate on the
+# /api/v1/ai/narrator/digest/refresh proxy. Same string as core's catalog.
+ERP_AI_NARRATOR_REFRESH = "erp.ai.narrator.refresh"
+
 # HR & Payroll AI slice (docs/modules/skyrict-ai/hr-payroll-ai-features.md §3).
 # L1 keys gate aggregate panels; L2 keys gate individual-level data.
 ERP_HR_AI_READ = "erp.hr.ai.read"
@@ -129,6 +133,7 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
     ERP_AI_INVOKE,
+    ERP_AI_NARRATOR_REFRESH,
     ERP_HR_AI_READ,
     ERP_HR_AI_INDIVIDUAL,
     ERP_HR_AI_ACKNOWLEDGE,
@@ -165,7 +170,7 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "ERP Payroll",
         (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE),
     ),
-    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE,)),
+    ("erp_ai", "ERP AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
     (
         "erp_hr_ai",
         "ERP HR & Payroll AI",
@@ -202,6 +207,7 @@ __all__ = [
     "BILLING_MANAGE",
     "CATALOG",
     "ERP_AI_INVOKE",
+    "ERP_AI_NARRATOR_REFRESH",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_READ",

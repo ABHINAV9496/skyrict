@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { DigestCard } from "@/components/dashboard/erp/digest-card";
 import { ErpOverviewSummary } from "@/components/dashboard/erp/erp-overview-summary";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 
@@ -38,6 +39,10 @@ export default function ErpPage() {
         description="Operations management — inventory, sales, cash, and orders, all on one source of truth."
         icon={Blocks}
       />
+
+      <section className="space-y-4">
+        <DigestCard />
+      </section>
 
       <section className="space-y-4">
         <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">

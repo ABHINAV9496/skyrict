@@ -1,12 +1,47 @@
 /**
- * AI features API client (SKY-68).
+ * AI features API client.
  *
- * NL queries, restock suggestions, anomaly feed, forecasts, ABC classification.
- * All calls go through /api/v1/ai/* which the BFF proxies to core's AI router,
- * which then forwards to the ai-agent microservice.
+ * NL queries, restock suggestions, anomaly feed, forecasts, ABC classification,
+ * and the cross-module intelligence narrator digest (SKY-63). All calls go
+ * through /api/v1/ai/* which the BFF proxies to core's AI router, which then
+ * forwards to the ai-agent microservice.
  */
 
-import { apiFetchBody, apiPostBody } from "@/lib/api/http";
+import { apiFetch, apiFetchBody, apiPost, apiPostBody } from "@/lib/api/http";
+
+// ---------------------------------------------------------------------------
+// Cross-module narrator digest (SKY-63)
+// ---------------------------------------------------------------------------
+
+const NARRATOR = "/api/v1/ai/narrator";
+
+export type DigestStatus = "generated" | "abstained";
+export type DigestSource = "live" | "cache" | "abstention" | "llm_disabled" | "unparseable";
+
+export interface Digest {
+  status: DigestStatus;
+  source: DigestSource;
+  as_of: string;
+  title: string | null;
+  summary: string | null;
+  points: string[];
+  caveat: string | null;
+  generated_at: string | null;
+  model_used: string | null;
+  signals: Record<string, unknown> | null;
+}
+
+function queryString(asOf?: string): string {
+  return asOf ? `?as_of=${encodeURIComponent(asOf)}` : "";
+}
+
+export function getDigest(asOf?: string): Promise<Digest> {
+  return apiFetch<Digest>(`${NARRATOR}/digest${queryString(asOf)}`);
+}
+
+export function refreshDigest(asOf?: string): Promise<Digest> {
+  return apiPost<Digest>(`${NARRATOR}/digest/refresh${queryString(asOf)}`, {});
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,4 +222,5 @@ export async function searchInventory(query: string): Promise<SearchResponse> {
   return apiFetchBody<SearchResponse>(
     `/api/v1/ai/inventory/search?q=${encodeURIComponent(query)}`,
   );
+}
 }

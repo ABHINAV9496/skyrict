@@ -17,14 +17,18 @@ exception strings.
 
 from __future__ import annotations
 
+import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
 
 from ai_agent.core.exceptions import AiInvalidResponseError, AiUnavailableError
-from ai_agent.core.providers.base import LlmCompletion, LlmRequest
+from ai_agent.core.providers.base import LlmCompletion, LlmRequest, LlmStreamChunk
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = structlog.get_logger("ai_agent.providers")
 
@@ -100,6 +104,109 @@ class OpenAiCompatibleProvider:
 
         text, model_used = _parse_completion_payload(response)
         return LlmCompletion(text=text, model_used=model_used, latency_ms=latency_ms)
+
+    async def stream(
+        self,
+        request: LlmRequest,
+    ) -> AsyncIterator[LlmStreamChunk]:
+        """POST a streaming chat completion and yield token deltas (SKY-60).
+
+        Uses ``stream: true`` and parses ``data:`` SSE frames as they arrive
+        - the response is NEVER buffered whole. The http client lives for the
+        generator's lifetime: when the consumer stops iterating or closes the
+        iterator (client disconnect), the ``async with`` exits and the
+        upstream request is cancelled (disconnect propagation).
+
+        Error mapping matches :meth:`complete`:
+
+        - transport failure, timeout, or any HTTP error status ->
+          :class:`AiUnavailableError`;
+        - a frame whose schema fails validation ->
+          :class:`AiInvalidResponseError`.
+
+        Both are raised on iteration; a pre-yield failure lets the router
+        fail over, a post-yield failure surfaces mid-stream.
+        """
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": request.system_prompt},
+                {"role": "user", "content": request.user_prompt},
+            ],
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stream": True,
+        }
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+
+        try:
+            async with (
+                self._create_client() as client,
+                client.stream(
+                    "POST",
+                    f"{self._base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                ) as response,
+            ):
+                if response.status_code >= 400:
+                    logger.warning(
+                        "provider.stream_http_error",
+                        provider=self.name,
+                        status_code=response.status_code,
+                    )
+                    raise AiUnavailableError(f"Provider '{self.name}' could not serve the request")
+                model_used = ""
+                async for line in response.aiter_lines():
+                    text_frame = _parse_stream_frame(line)
+                    if text_frame is None:
+                        continue
+                    delta, frame_model = text_frame
+                    if delta or frame_model:
+                        model_used = frame_model or model_used
+                        if delta:
+                            yield LlmStreamChunk(
+                                token_delta=delta,
+                                model_used=model_used,
+                            )
+        except httpx.HTTPError as exc:
+            # Connect/timeout/etc. - the provider never served the request.
+            logger.warning("provider.stream_transport_error", provider=self.name)
+            raise AiUnavailableError(f"Provider '{self.name}' is unreachable") from exc
+
+
+def _parse_stream_frame(line: str) -> tuple[str, str] | None:
+    """Parse one SSE ``data:`` frame into (token_delta, model) or None.
+
+    Returns None for keep-alive/schema-less frames every streaming API sends;
+    raises :class:`AiInvalidResponseError` for a data frame whose schema is
+    unusable (the provider "answered but unusably" - 502 semantics).
+    """
+    if not line.startswith("data:"):
+        return None
+    payload = line[5:].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        frame = json.loads(payload)
+        choices = frame.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+        delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
+        content = delta.get("content") if isinstance(delta, dict) else None
+        if content is not None and not isinstance(content, str):
+            raise TypeError("delta content must be a string")
+        model = frame.get("model")
+        if model is not None and not isinstance(model, str):
+            raise TypeError("model must be a string")
+    except (ValueError, TypeError) as exc:
+        logger.warning("provider.invalid_stream_schema")
+        raise AiInvalidResponseError(
+            "Provider returned a stream frame that failed schema validation"
+        ) from exc
+    return (content or "", model or "")
 
 
 def _parse_completion_payload(response: httpx.Response) -> tuple[str, str]:

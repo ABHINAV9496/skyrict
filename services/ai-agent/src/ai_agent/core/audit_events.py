@@ -38,8 +38,23 @@ escalation but the appendix omits its event. Added here so escalations
 are never mis-audited as dismissals; flagged for the next ADR pass.
 """
 
+AI_NARRATOR_GENERATED = "ai.narrator.generated"
+"""The daily (or on-demand) cross-module digest was produced (SKY-63)."""
+
+AI_NARRATOR_REFRESHED = "ai.narrator.refreshed"
+"""A human force-refreshed the cross-module digest (SKY-63)."""
+
 AI_HR_COPILOT_EXCHANGE = "ai.hr.copilot.exchange"
 """An HR Copilot chat exchange was answered (spec §9: feature 5)."""
+
+AI_AGENT_INTERRUPT_APPROVED = "ai.agent.interrupt.approved"
+"""A human approved an agent's pending interrupt (SKY-59 HITL ledger)."""
+
+AI_AGENT_INTERRUPT_DENIED = "ai.agent.interrupt.denied"
+"""A human denied an agent's pending interrupt (SKY-59 HITL ledger)."""
+
+AI_AGENT_INTERRUPT_EXPIRED = "ai.agent.interrupt.expired"
+"""A pending agent interrupt auto-denied on lazy expiry (SKY-59, 24h)."""
 
 ALL_AI_AUDIT_EVENTS = frozenset(
     {
@@ -51,7 +66,12 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_ANOMALY_RESOLVED,
         AI_ANOMALY_DISMISSED,
         AI_ANOMALY_ESCALATED,
+        AI_NARRATOR_GENERATED,
+        AI_NARRATOR_REFRESHED,
         AI_HR_COPILOT_EXCHANGE,
+        AI_AGENT_INTERRUPT_APPROVED,
+        AI_AGENT_INTERRUPT_DENIED,
+        AI_AGENT_INTERRUPT_EXPIRED,
     }
 )
 """The complete, closed vocabulary accepted by the AuditService."""

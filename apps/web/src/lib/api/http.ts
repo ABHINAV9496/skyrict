@@ -137,7 +137,11 @@ async function readPayload<T>(response: Response): Promise<Envelope<T>> {
   if (!response.ok) {
     throw new ApiError(response.status, extractErrorMessage(payload.detail));
   }
-  return { data: payload.data as T, meta: payload.meta ?? null };
+  const hasData = payload && "data" in payload;
+  return {
+    data: (hasData ? payload.data : (payload as unknown)) as T,
+    meta: payload.meta ?? null,
+  };
 }
 
 /**
@@ -171,8 +175,14 @@ function extractErrorMessage(
   return "Request failed. Please try again.";
 }
 
-/** Fetch a `/api/v1` endpoint with session hydration/refresh, returning the full envelope. */
-async function fetchWithSession(path: string, options: RequestInit): Promise<Response> {
+/**
+ * Fetch a `/api/v1` endpoint with session hydration/refresh, returning the
+ * full (unparsed) `Response`.
+ *
+ * Exported so streaming consumers (SSE chat) reuse the exact same token
+ * hydration/refresh path as the JSON API client instead of duplicating it.
+ */
+export async function fetchWithSession(path: string, options: RequestInit): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("X-Tenant-Slug", getTenantSlug());
   const token = getAccessToken();

@@ -1,21 +1,65 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { notFound } from "next/navigation";
 
 import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { ChatSkeleton } from "@/components/ui/page-skeletons";
-import { getConversation, sendMessage } from "@/lib/api/agents-api";
+import { getConversation } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
-import type { Conversation } from "@/lib/mock/agents-store";
+import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
+import type { ChatMessage, Conversation } from "@/lib/mock/agents-store";
+
+function toAgentMessage(message: ChatMessage): AgentChatMessage {
+  return { ...message, agentName: null, citations: [], failed: false };
+}
+
+/**
+ * The live conversation view. The first prompt (arriving from the New Chat
+ * suggestion) is answered automatically by streaming one real supervisor turn;
+ * every subsequent send streams too. Conversations remain in the mock store
+ * for navigation/history — SKY-60 replaces SIMULATED ANSWERS with real ones,
+ * not the sidebar.
+ */
+function ConversationView({ conversation }: { conversation: Conversation }) {
+  const { user } = useSession();
+  const { messages, sending, activeAgent, send, stop } = useAgentChat(
+    conversation.messages.map(toAgentMessage),
+  );
+  const autoStarted = useRef(false);
+
+  useEffect(() => {
+    if (autoStarted.current || sending) return;
+    const last = conversation.messages[conversation.messages.length - 1];
+    if (last && last.role === "user") {
+      autoStarted.current = true;
+      void send(last.content);
+    }
+  }, [conversation.messages, send, sending]);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <AgentsHeader title={conversation.title} />
+      <MessageList messages={messages} userDisplay={user?.fullName ?? user?.email ?? ""} />
+      <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
+        <ChatComposer
+          onSend={send}
+          onStop={sending ? stop : undefined}
+          placeholder="Continue the conversation…"
+        />
+      </div>
+      {activeAgent ? (
+        <p className="sr-only">{`Answering with ${activeAgent}`}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
-  const { user } = useSession();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,20 +79,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     };
   }, [params]);
 
-  const handleSend = useCallback(
-    async (content: string) => {
-      if (sending) return;
-      setSending(true);
-      try {
-        const updated = await sendMessage(conversation!.id, content);
-        setConversation(updated);
-      } finally {
-        setSending(false);
-      }
-    },
-    [sending, conversation],
-  );
-
   if (loading) {
     return <ChatSkeleton />;
   }
@@ -58,16 +88,5 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     return null;
   }
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <AgentsHeader title={conversation.title} />
-      <MessageList messages={conversation.messages} userDisplay={user?.fullName ?? user?.email ?? ""} />
-      <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
-        <ChatComposer
-          onSend={handleSend}
-          placeholder="Continue the conversation…"
-        />
-      </div>
-    </div>
-  );
+  return <ConversationView conversation={conversation} />;
 }

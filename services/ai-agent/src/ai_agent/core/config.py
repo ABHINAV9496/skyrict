@@ -301,6 +301,26 @@ class Settings(BaseSettings):
         description="days before an open anomaly auto-closes (spec §4.4)",
     )
 
+    # --- Cross-module narrator (SKY-63) ---
+    NARRATOR_SCHEDULER_ENABLED: bool = Field(
+        default=False,
+        description="start the daily narrator cron at boot (SKY-63)",
+    )
+    NARRATOR_SCHEDULER_TIMEZONE: str = Field(
+        default="UTC",
+        description="timezone for the daily narrator cron (tenant time)",
+    )
+    NARRATOR_ALLOW_LLM: bool = Field(
+        default=True,
+        description="whether the narrator may call the LLM (False forces abstentions)",
+    )
+    NARRATOR_DAILY_HOUR: int = Field(
+        default=8, ge=0, le=23, description="hour of day for the daily narrator digest"
+    )
+    NARRATOR_DAILY_MINUTE: int = Field(
+        default=0, ge=0, le=59, description="minute of hour for the daily narrator digest"
+    )
+
     # --- Email delivery (SMTP) for critical anomaly alerts (spec §4.3) ---
     EMAIL_SMTP_HOST: str = Field(
         default="",
@@ -374,6 +394,9 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_HR_COPILOT_PER_MIN: int = Field(
         default=20, ge=1, description="HR Copilot chat messages per minute per user"
+    )
+    RATE_LIMIT_CHAT_PER_MIN: int = Field(
+        default=20, ge=1, description="supervisor chat turns per minute per user"
     )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"

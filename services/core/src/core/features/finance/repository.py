@@ -38,6 +38,8 @@ from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import INVOICE_PREFIX, PAYMENT_PREFIX
 from core.domain.entities import (
+    ArAging,
+    ArAgingBucket,
     BalanceSheet,
     BalanceSheetLine,
     ChartOfAccount,
@@ -918,4 +920,54 @@ class FinanceRepository:
             total_assets=sum((line.balance for line in assets), Decimal("0")),
             total_liabilities=sum((line.balance for line in liabilities), Decimal("0")),
             total_equity=sum((line.balance for line in equity), Decimal("0")),
+        )
+
+    async def ar_aging(self, tenant_id: uuid.UUID, as_of: date) -> ArAging:
+        """Aging of outstanding receivables on ``as_of``.
+
+        Outstanding AR is derived from issued/approved (unpaid) invoices; paid
+        and voided invoices are excluded. Buckets are computed from ``due_date``
+        relative to ``as_of``:
+        current (due on/after as_of), 1-30, 31-60, 61-90, over 90 days past due.
+        """
+        buckets: dict[str, tuple[int, Decimal]] = {}
+        bucket_order: list[str] = []
+        total_ar = Decimal("0")
+
+        stmt = select(ErpInvoiceModel).where(
+            ErpInvoiceModel.tenant_id == tenant_id,
+            ErpInvoiceModel.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]),
+        )
+        result = await self.session.execute(stmt)
+        for model in result.scalars().all():
+            age_days = (as_of - model.due_date).days
+            if age_days <= 0:
+                key = "current"
+            elif age_days <= 30:
+                key = "1_30"
+            elif age_days <= 60:
+                key = "31_60"
+            elif age_days <= 90:
+                key = "61_90"
+            else:
+                key = "over_90"
+            if key not in buckets:
+                buckets[key] = (0, Decimal("0"))
+                bucket_order.append(key)
+            count, amount = buckets[key]
+            buckets[key] = (count + 1, amount + Decimal(model.total))
+
+        total_ar = sum((amount for _, amount in buckets.values()), Decimal("0"))
+        quantum = Decimal("0.0001")
+        ar_buckets: list[ArAgingBucket] = []
+        for key in bucket_order:
+            count, amount = buckets[key]
+            share = amount / total_ar if total_ar else Decimal("0")
+            share = share.quantize(quantum)
+            ar_buckets.append(ArAgingBucket(bucket=key, count=count, amount=amount, share=share))
+
+        return ArAging(
+            as_of=as_of,
+            total_ar=total_ar,
+            buckets=tuple(ar_buckets),
         )

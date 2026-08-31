@@ -168,18 +168,6 @@ export function SemanticSearchBar() {
               ))}
             </ul>
           )}
-          {results && (
-            <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex justify-between">
-              <span>
-                {results.latency_ms}ms · {results.model_used ?? "—"}
-              </span>
-              {results.degraded ? (
-                <Badge variant="outline" className="text-[9px] px-1 py-0">
-                  degraded
-                </Badge>
-              ) : null}
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -204,12 +204,12 @@ function CreateJournalEntryDialog({
 
   useEffect(() => {
     if (!open || !initialValues || initialValuesAppliedRef.current) return;
-    initialValuesAppliedRef.current = true;
     if (initialValues.memo) {
       setValue("memo", initialValues.memo);
     }
     if (initialValues.accountCode && fields.length > 0) {
       setValue("lines.0.account_code", initialValues.accountCode);
+      initialValuesAppliedRef.current = true;
     }
   }, [open, initialValues, setValue, fields.length]);
 

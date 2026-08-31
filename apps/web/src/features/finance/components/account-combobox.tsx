@@ -49,6 +49,11 @@ function AccountCombobox({
     [accounts, value],
   );
 
+  useEffect(() => {
+    if (justSelectedRef.current) return;
+    setQuery(selected ? `${selected.code} \u00b7 ${selected.name}` : value);
+  }, [selected, value]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return accounts;

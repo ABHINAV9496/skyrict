@@ -23,8 +23,8 @@ Seeds (all ``ON CONFLICT (name) DO NOTHING`` — operator edits win):
   abstention until the CRM backend lands (migration flips ``enabled``).
 - ``finance_assistant``      disabled — same slot-based rollout.
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 0011
+Revises: 0010
 Create Date: 2026-08-31
 """
 
@@ -32,8 +32,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0009"
-down_revision = "0008"
+revision = "0011"
+down_revision = "0010"
 branch_labels = None
 depends_on = None
 

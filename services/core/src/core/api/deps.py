@@ -9,7 +9,6 @@ from the database at request time (never from JWT claims) through
 
 from __future__ import annotations
 
-import hmac
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
@@ -18,7 +17,6 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.core.config import settings
 from core.core.logging import get_logger
 from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
@@ -181,8 +179,6 @@ def require_all_permissions(*permissions: str) -> Callable[[], Awaitable[dict[st
             user_id=current_user["user_id"],
             tenant_id=current_user["tenant_id"],
         )
-        if not grants_permission(granted, permission):
-            raise PermissionDeniedError(f"Missing required permission: {permission}")
         for remaining in permissions:
             if not grants_permission(granted, remaining):
                 raise PermissionDeniedError(f"Missing required permission: {remaining}")

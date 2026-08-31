@@ -8,8 +8,8 @@ A digest row is written per generation; freshness/caching is derived by
 picking the newest row for a tenant + date. ``signals`` stores the compact
 cross-module gold signals the digest was computed from.
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0009
+Revises: 0008
 Create Date: 2026-08-27
 """
 
@@ -21,8 +21,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0007"
-down_revision = "0006"
+revision = "0009"
+down_revision = "0008"
 branch_labels = None
 depends_on = None
 

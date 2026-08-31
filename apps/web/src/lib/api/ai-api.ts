@@ -223,4 +223,3 @@ export async function searchInventory(query: string): Promise<SearchResponse> {
     `/api/v1/ai/inventory/search?q=${encodeURIComponent(query)}`,
   );
 }
-}

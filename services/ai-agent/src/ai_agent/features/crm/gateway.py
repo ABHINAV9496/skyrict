@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol, cast
 
 import httpx
@@ -49,6 +49,21 @@ class LeadRef:
 
 
 @dataclass(frozen=True, slots=True)
+class OpportunityRef:
+    """The deal fields the deal-health engine needs (verified in the router)."""
+
+    id: uuid.UUID
+    stage: str
+    probability: int
+    has_amount: bool
+    created_at: datetime
+    # Core sets ``updated_at`` on every stage change, so it is a deterministic
+    # proxy for when the deal last moved stage (no cross-service timeline parse).
+    last_stage_change_at: datetime
+    expected_close_date: date | None
+
+
+@dataclass(frozen=True, slots=True)
 class ActivityRef:
     """One CRM activity row - engagement/recency signals for scoring."""
 
@@ -62,6 +77,7 @@ class CrmGatewayPort(Protocol):
     """Read-only CRM queries, scoped by the forwarded caller's identity."""
 
     async def get_lead(self, *, lead_id: uuid.UUID) -> LeadRef: ...
+    async def get_opportunity(self, *, opportunity_id: uuid.UUID) -> OpportunityRef: ...
     async def list_activities_for_entity(
         self, *, entity_type: str, entity_id: uuid.UUID
     ) -> list[ActivityRef]: ...
@@ -102,6 +118,21 @@ class HttpCrmGateway:
             created_at=created_at,
             has_name=bool(first_name) or bool(last_name),
             has_email=bool(email),
+        )
+
+    async def get_opportunity(self, *, opportunity_id: uuid.UUID) -> OpportunityRef:
+        payload = await self._get_single(f"/opportunities/{opportunity_id}")
+        expected_raw = payload.get("expected_close_date")
+        return OpportunityRef(
+            id=opportunity_id,
+            stage=str(payload["stage"]),
+            probability=int(str(payload["probability"])),
+            has_amount=payload.get("amount") is not None,
+            created_at=_parse_datetime(payload["created_at"]),
+            last_stage_change_at=_parse_datetime(payload["updated_at"]),
+            expected_close_date=(
+                None if expected_raw is None else date.fromisoformat(str(expected_raw))
+            ),
         )
 
     async def list_activities_for_entity(

@@ -64,6 +64,20 @@ _ACTIVITY = {
     "created_at": "2026-08-29T09:30:00+00:00",
 }
 
+_OPPORTUNITY = {
+    "id": "00000000-0000-0000-0000-000000000004",
+    "name": "Enterprise renewal",
+    "stage": "negotiation",
+    "amount": "125000.0000",
+    "currency": "USD",
+    "probability": 80,
+    "expected_close_date": "2026-09-15",
+    "created_at": "2026-08-10T10:00:00+00:00",
+    "updated_at": "2026-08-26T10:00:00+00:00",
+}
+
+OPP_ID = _OPPORTUNITY["id"]
+
 
 class TestForwarding:
     async def test_forwards_caller_token_and_tenant_slug(self) -> None:
@@ -112,6 +126,34 @@ class TestGetLead:
         gateway, _ = _make_gateway(handler)
         with pytest.raises(AiUnavailableError):
             await gateway.get_lead(lead_id=uuid.UUID(LEAD_ID))
+
+
+class TestGetOpportunity:
+    async def test_parses_opportunity_fields_and_amount_flag(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == f"/api/v1/crm/opportunities/{OPP_ID}"
+            return httpx.Response(200, json=_envelope(_OPPORTUNITY))
+
+        gateway, _ = _make_gateway(handler)
+        opportunity = await gateway.get_opportunity(opportunity_id=uuid.UUID(OPP_ID))
+
+        assert opportunity.stage == "negotiation"
+        assert opportunity.probability == 80
+        assert opportunity.has_amount is True
+        assert opportunity.expected_close_date is not None
+        assert opportunity.expected_close_date.year == 2026
+
+    async def test_null_amount_and_close_date_drive_flags(self) -> None:
+        sparse = dict(_OPPORTUNITY, amount=None, currency=None, expected_close_date=None)
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=_envelope(sparse))
+
+        gateway, _ = _make_gateway(handler)
+        opportunity = await gateway.get_opportunity(opportunity_id=uuid.UUID(OPP_ID))
+
+        assert opportunity.has_amount is False
+        assert opportunity.expected_close_date is None
 
 
 class TestListActivities:

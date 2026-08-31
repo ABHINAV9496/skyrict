@@ -178,6 +178,33 @@ export async function callBackend(
   };
 }
 
+/**
+ * Proxy a call to an internal backend WITHOUT buffering the body.
+ *
+ * Used by streaming relays (SSE): the caller returns ``upstream.body`` to the
+ * browser and chunks flow through as they arrive. On network failure (or when
+ * the body is already consumed) returns ``null`` so the route can answer its
+ * own 502 — mirroring ``callBackend``'s ``status: 0`` contract.
+ */
+export async function callBackendStream(
+  path: string,
+  options: BackendCallOptions = {},
+): Promise<Response | null> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options.tenantSlug) headers["X-Tenant-Slug"] = options.tenantSlug;
+  if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  try {
+    return await fetch(`${apiBase(options.target)}/api/v1${path}`, {
+      method: options.method ?? "POST",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: "no-store",
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** Map the backend snake_case user object to the frontend AuthUser shape. */
 export function mapUser(raw: Record<string, unknown> | null | undefined) {
   if (!raw) return null;

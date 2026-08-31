@@ -7,7 +7,7 @@ import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { ChatSkeleton } from "@/components/ui/page-skeletons";
-import { getConversation } from "@/lib/api/agents-api";
+import { appendAgentMessage, getConversation, saveUserMessage } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
 import type { ChatMessage, Conversation } from "@/lib/mock/agents-store";
@@ -27,7 +27,15 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
   const { user, status } = useSession();
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
     conversation.messages.map(toAgentMessage),
-    { initialMessagesComplete: true },
+    {
+      initialMessagesComplete: true,
+      onUserMessage: (content) => {
+        void saveUserMessage(conversation.id, content);
+      },
+      onComplete: (content) => {
+        void appendAgentMessage(conversation.id, content);
+      },
+    },
   );
   const autoStarted = useRef(false);
 
@@ -36,7 +44,9 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
     const last = conversation.messages[conversation.messages.length - 1];
     if (last && last.role === "user") {
       autoStarted.current = true;
-      void send(last.content);
+      // Echo the already-persisted last user message: append the agent bubble
+      // and stream, but do not re-append or re-save the user message.
+      void send(last.content, true);
     }
   }, [conversation.messages, send, sending, status]);
 

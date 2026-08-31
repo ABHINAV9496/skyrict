@@ -43,7 +43,15 @@ export interface AgentChatState {
   messages: AgentChatMessage[];
   sending: boolean;
   activeAgent: string | null;
-  send: (content: string) => Promise<void>;
+  /**
+   * Send a user turn and stream the agent response.
+   *
+   * `echo` marks the auto-start resend of a message that is already held in
+   * `initialMessages` (and already persisted to the store). For an echo we do
+   * NOT re-append the user bubble nor re-persist it. Every other call (typed
+   * message or a resend) appends the user bubble and persists it.
+   */
+  send: (content: string, echo?: boolean) => Promise<void>;
   stop: () => void;
 }
 
@@ -75,7 +83,13 @@ function yieldToReact(): Promise<void> {
 
 export function useAgentChat(
   initialMessages: AgentChatMessage[],
-  options?: { initialMessagesComplete?: boolean },
+  options?: {
+    initialMessagesComplete?: boolean;
+    /** Called when a turn completes with the agent's full response text. */
+    onComplete?: (content: string) => void;
+    /** Called when a user message is appended, so callers can persist it. */
+    onUserMessage?: (content: string) => void;
+  },
 ): AgentChatState {
   const [messages, setMessages] = useState<AgentChatMessage[]>(initialMessages);
   const [sending, setSending] = useState(false);
@@ -83,16 +97,23 @@ export function useAgentChat(
   const abortRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
 
+  // Track the latest agent message content so onComplete can read it
+  // outside of setMessages updaters (which see stale state).
+  const lastAgentContentRef = useRef("");
+
   // Use a ref so the send callback always reads the latest value without
   // needing to recreate the callback on prop changes.
   const initialCompleteRef = useRef(options?.initialMessagesComplete ?? false);
-  const autoAppendedRef = useRef(false);
+  const onCompleteRef = useRef(options?.onComplete);
+  onCompleteRef.current = options?.onComplete;
+  const onUserMessageRef = useRef(options?.onUserMessage);
+  onUserMessageRef.current = options?.onUserMessage;
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  const send = useCallback(async (content: string) => {
+  const send = useCallback(async (content: string, echo?: boolean) => {
     const trimmed = content.trim();
     if (!trimmed || sendingRef.current) return;
 
@@ -102,6 +123,7 @@ export function useAgentChat(
     sendingRef.current = true;
     setSending(true);
     setActiveAgent(null);
+    lastAgentContentRef.current = "";
 
     const now = new Date().toISOString();
     const userMessage: AgentChatMessage = {
@@ -120,17 +142,22 @@ export function useAgentChat(
       failed: false,
     };
 
-    // When initialMessagesComplete is true the server already stored the user
-    // message — skip appending it on the very first auto-send so the UI stays
-    // consistent; subsequent sends always append both bubbles.
-    const shouldAppendUser = !(initialCompleteRef.current && !autoAppendedRef.current);
-    autoAppendedRef.current = true;
+    // The auto-start echoes a message that is already persisted and already
+    // present in initialMessages, so do not append (nor persist) it again.
+    // Every other send — a typed message or a resend — appends the user bubble
+    // and persists it. Using an explicit `echo` flag (rather than inferring
+    // from refs) is correct even when a conversation loads ending in an agent
+    // message and no auto-start ever runs.
+    const shouldAppendUser = !(echo && initialCompleteRef.current);
 
     setMessages((previous) =>
       shouldAppendUser
         ? [...previous, userMessage, agentMessage]
         : [...previous, agentMessage],
     );
+
+    // Persist the user message so it survives navigation away and back.
+    if (shouldAppendUser) onUserMessageRef.current?.(trimmed);
 
     // Yield to the microtask queue so React commits the agent bubble to state
     // *before* we open the SSE stream.  Without this, a fast error (401, 502)
@@ -139,6 +166,7 @@ export function useAgentChat(
     await yieldToReact();
 
     const appendDelta = (delta: string) => {
+      lastAgentContentRef.current += delta;
       setMessages((previous) =>
         previous.map((message) =>
           message.id === agentMessage.id
@@ -181,6 +209,12 @@ export function useAgentChat(
           break;
         case "done":
           setActiveAgent(null);
+          // Persist the agent response to the conversation store so it
+          // survives page navigation. Fire-and-forget — storage failure
+          // is non-fatal.
+          if (lastAgentContentRef.current) {
+            onCompleteRef.current?.(lastAgentContentRef.current);
+          }
           break;
         case "error":
           setMessages((previous) =>

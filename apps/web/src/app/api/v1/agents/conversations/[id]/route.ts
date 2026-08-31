@@ -21,13 +21,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { content?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    content?: string;
+    role?: "user" | "agent";
+  };
   const prompt = (body.content ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ detail: "Message content is required." }, { status: 422 });
   }
 
-  const conversation = appendMessage(id, "user", prompt);
+  const role = body.role === "agent" ? "agent" : "user";
+  const conversation = appendMessage(id, role, prompt);
   if (!conversation) {
     return NextResponse.json({ detail: "Conversation not found." }, { status: 404 });
   }

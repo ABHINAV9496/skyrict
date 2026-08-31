@@ -382,6 +382,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_CHAT_PER_MIN: int = Field(
         default=20, ge=1, description="supervisor chat turns per minute per user"
     )
+    RATE_LIMIT_CRM_PER_MIN: int = Field(
+        default=15, ge=1, description="CRM AI calls (score/health/list) per minute per user"
+    )
+    RATE_LIMIT_CRM_APPLY_PER_MIN: int = Field(
+        default=10, ge=1, description="follow-up apply/dismiss actions per minute per user"
+    )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"
     )

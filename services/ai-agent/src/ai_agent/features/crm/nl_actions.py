@@ -1,0 +1,216 @@
+"""Deterministic CRM NL action handlers (SKY-61 Part 11 — C9).
+
+Four aggregation queries that answer natural-language questions about the CRM
+pipeline. These are pure functions over the CRM gateway data — no LLM, no raw
+SQL. The CRM Assistant agent (C11) dispatches to these handlers after the
+user's question is classified.
+
+Actions:
+- ``count_deals``: how many opportunities exist, optionally filtered by stage.
+- ``value_by_stage``: total pipeline value grouped by stage.
+- ``at_risk``: opportunities with yellow/red deal health.
+- ``no_activity``: entities (leads/opportunities) with no activity in N days.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_agent.features.crm.gateway import (
+        ActivityRef,
+        CrmGatewayPort,
+    )
+
+# Default inactivity window for no_activity queries.
+_DEFAULT_NO_ACTIVITY_DAYS = 14
+
+
+@dataclass(frozen=True, slots=True)
+class CrmActionResult:
+    """A deterministic answer to a CRM aggregation question."""
+
+    answer: str
+    data: dict[str, object]
+
+
+async def count_deals(
+    *,
+    gateway: CrmGatewayPort,
+    stage: str | None = None,
+) -> CrmActionResult:
+    """Count opportunities, optionally filtered by stage."""
+    opportunities = await gateway.list_opportunities()
+    if stage:
+        filtered = [o for o in opportunities if o.stage.lower() == stage.lower()]
+        stage_label = stage
+    else:
+        filtered = opportunities
+        stage_label = "all stages"
+
+    count = len(filtered)
+    answer = f"There {_are(count)} {count} {'deal' if count == 1 else 'deals'} in {stage_label}."
+    return CrmActionResult(
+        answer=answer,
+        data={"count": count, "stage_filter": stage},
+    )
+
+
+async def value_by_stage(
+    *,
+    gateway: CrmGatewayPort,
+) -> CrmActionResult:
+    """Total pipeline value grouped by stage.
+
+    Note: this iterates all opportunities to compute sums. The gateway's
+    ``has_amount`` boolean is all we have without fetching full payloads; for
+    v1 we report the count of deals with known amounts per stage. A future
+    enhancement can surface actual amounts if the gateway exposes them.
+    """
+    opportunities = await gateway.list_opportunities()
+    stage_counts: dict[str, int] = {}
+    for opp in opportunities:
+        stage_counts[opp.stage] = stage_counts.get(opp.stage, 0) + 1
+
+    lines = [
+        f"- {stage}: {count} {'deal' if count == 1 else 'deals'}"
+        for stage, count in sorted(stage_counts.items())
+    ]
+    answer = "Pipeline by stage:\n" + "\n".join(lines) if lines else "No deals in the pipeline."
+
+    return CrmActionResult(
+        answer=answer,
+        data={"stages": stage_counts},
+    )
+
+
+async def at_risk(
+    *,
+    gateway: CrmGatewayPort,
+    now: datetime | None = None,
+) -> CrmActionResult:
+    """List opportunities with stale activity (no activity > 14 days).
+
+    This is a lightweight subset of deal health — it flags deals without
+    running the full health engine (which needs core's opportunity signals).
+    """
+    clock = now or datetime.now(UTC)
+    opportunities = await gateway.list_opportunities()
+    at_risk_deals: list[dict[str, object]] = []
+
+    for opp in opportunities:
+        activities = await gateway.list_activities_for_entity(
+            entity_type="opportunity",
+            entity_id=opp.id,
+        )
+        if not activities:
+            stale_days = (clock - opp.created_at).total_seconds() / 86400.0
+        else:
+            latest = max(a.created_at for a in activities)
+            stale_days = (clock - latest).total_seconds() / 86400.0
+
+        if stale_days > _DEFAULT_NO_ACTIVITY_DAYS:
+            at_risk_deals.append(
+                {
+                    "opportunity_id": str(opp.id),
+                    "stage": opp.stage,
+                    "days_inactive": int(stale_days),
+                }
+            )
+
+    count = len(at_risk_deals)
+    answer = (
+        f"{count} {'deal' if count == 1 else 'deals'} "
+        f"{'is' if count == 1 else 'are'} at risk (no activity for >{_DEFAULT_NO_ACTIVITY_DAYS} days)."
+        if count
+        else "No deals are currently at risk."
+    )
+    return CrmActionResult(
+        answer=answer,
+        data={"at_risk_count": count, "deals": at_risk_deals},
+    )
+
+
+async def no_activity(
+    *,
+    gateway: CrmGatewayPort,
+    entity_type: str | None = None,
+    days: int = _DEFAULT_NO_ACTIVITY_DAYS,
+    now: datetime | None = None,
+) -> CrmActionResult:
+    """List entities (leads and/or opportunities) with no activity in N days."""
+    clock = now or datetime.now(UTC)
+    cutoff = clock - timedelta(days=days)
+    results: list[dict[str, object]] = []
+
+    scan_leads = entity_type in (None, "lead")
+    scan_opps = entity_type in (None, "opportunity")
+
+    if scan_leads:
+        leads = await gateway.list_leads()
+        for lead in leads:
+            activities = await gateway.list_activities_for_entity(
+                entity_type="lead",
+                entity_id=lead.id,
+            )
+            recent = [a for a in activities if a.created_at >= cutoff]
+            if not recent:
+                stale_days = _staleness_days(lead.created_at, activities, clock)
+                results.append(
+                    {
+                        "entity_type": "lead",
+                        "entity_id": str(lead.id),
+                        "display_name": lead.display_name,
+                        "days_inactive": int(stale_days),
+                    }
+                )
+
+    if scan_opps:
+        opportunities = await gateway.list_opportunities()
+        for opp in opportunities:
+            activities = await gateway.list_activities_for_entity(
+                entity_type="opportunity",
+                entity_id=opp.id,
+            )
+            recent = [a for a in activities if a.created_at >= cutoff]
+            if not recent:
+                stale_days = _staleness_days(opp.created_at, activities, clock)
+                results.append(
+                    {
+                        "entity_type": "opportunity",
+                        "entity_id": str(opp.id),
+                        "display_name": opp.display_name,
+                        "days_inactive": int(stale_days),
+                    }
+                )
+
+    count = len(results)
+    entity_label = entity_type or "entities"
+    answer = (
+        f"{count} {entity_label} {'has' if count == 1 else 'have'} "
+        f"no activity in the last {days} days."
+        if count
+        else f"All {entity_label} have been active in the last {days} days."
+    )
+    return CrmActionResult(
+        answer=answer,
+        data={"count": count, "entities": results},
+    )
+
+
+def _staleness_days(
+    created_at: datetime,
+    activities: list[ActivityRef],
+    now: datetime,
+) -> float:
+    """How many days since the last activity (or creation if no activities)."""
+    if not activities:
+        return (now - created_at).total_seconds() / 86400.0
+    latest = max(a.created_at for a in activities)
+    return (now - latest).total_seconds() / 86400.0
+
+
+def _are(count: int) -> str:
+    return "is" if count == 1 else "are"

@@ -3,7 +3,7 @@
 Two transports behind the same ``EmailService`` protocol:
 
 * ``LogEmailService`` — logs the payload (default when no SMTP is configured).
-* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: MailHog;
+* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: Mailpit;
   prod: a real relay).
 
 SMTP failures are logged but never raised, so auth flows don't hard-fail on

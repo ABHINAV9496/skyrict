@@ -67,7 +67,7 @@ os.environ.setdefault("IDENTITY_JWKS_AUDIENCE", "api.test.skyrict.io")
 os.environ["IDENTITY_ENVIRONMENT"] = "test"
 os.environ["IDENTITY_DEBUG"] = "false"
 # Tests must use the log-only email transport regardless of the dev container's
-# SMTP config, so delivery side effects never depend on MailHog being up.
+# SMTP config, so delivery side effects never depend on Mailpit being up.
 os.environ["IDENTITY_EMAIL_SMTP_HOST"] = ""
 # Tests must bypass the real Turnstile gate regardless of the dev .env's secret:
 # with an empty secret the verifier always passes in the TEST environment, which

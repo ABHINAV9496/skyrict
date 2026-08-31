@@ -756,7 +756,7 @@ services:
 | `AI_ANOMALY_AUTO_CLOSE_DAYS` | No | `30` | Days before open anomaly auto-closes |
 | `AI_EMAIL_SMTP_HOST` | No | — | SMTP relay host for critical-anomaly alerts; empty = log-only transport |
 | `AI_EMAIL_SMTP_PORT` | No | `1025` | SMTP relay port |
-| `AI_EMAIL_SMTP_USERNAME` | No | — | SMTP auth username (MailHog needs none) |
+| `AI_EMAIL_SMTP_USERNAME` | No | — | SMTP auth username (Mailpit needs none) |
 | `AI_EMAIL_SMTP_PASSWORD` | No | — | SMTP auth password |
 | `AI_EMAIL_SMTP_USE_TLS` | No | `false` | Enable STARTTLS to the relay |
 | `AI_EMAIL_FROM_ADDR` | No | `Skyrict <no-reply@skyrict.dev>` | From address for alert email |

@@ -57,7 +57,7 @@ def _isolate_email_logger() -> None:
 
 def _service(**overrides) -> SmtpEmailService:
     kwargs: dict = {
-        "host": "mailhog",
+        "host": "mailpit",
         "port": 1025,
         "from_addr": "Skyrict <no-reply@skyrict.dev>",
     }

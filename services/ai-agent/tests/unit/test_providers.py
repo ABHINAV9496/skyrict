@@ -144,6 +144,76 @@ class TestOpenAiCompatibleProvider:
         assert "sk-secret-key" not in str(exc_info.value)
 
 
+def _sse_stream(content: str, *, model: str = "test-model-1") -> httpx.Response:
+    """Build an httpx response carrying one OpenAI-style SSE stream body."""
+    frames = [
+        f"data: {json.dumps({'choices': [{'delta': {'content': c}}], 'model': model})}"
+        for c in content
+    ]
+    body = "\n\n".join(frames) + "\n\ndata: [DONE]\n\n"
+    return httpx.Response(
+        200, content=body.encode("utf-8"), headers={"content-type": "text/event-stream"}
+    )
+
+
+class TestOpenAiCompatibleProviderStream:
+    async def test_stream_yields_token_deltas_in_order(self) -> None:
+        provider, _ = _make_provider(lambda request: _sse_stream("Hello world"))
+        chunks = [c async for c in provider.stream(_REQUEST)]
+        assert "".join(c.token_delta for c in chunks) == "Hello world"
+        assert all(c.model_used == "test-model-1" for c in chunks)
+
+    async def test_stream_sends_stream_true_and_chat_shape(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["auth"] = request.headers.get("Authorization")
+            captured["body"] = json.loads(request.content)
+            return _sse_stream("ok")
+
+        provider, _ = _make_provider(handler)
+        _ = [c async for c in provider.stream(_REQUEST)]
+
+        assert captured["auth"] == "Bearer sk-secret-key"
+        body = captured["body"]
+        assert body["stream"] is True
+        assert body["model"] == "test-model-1"
+        assert body["messages"][1]["content"] == "say hi"
+
+    async def test_stream_http_error_maps_to_unavailable(self) -> None:
+        provider, _ = _make_provider(
+            lambda request: httpx.Response(503, json={"error": "overloaded"})
+        )
+        with pytest.raises(AiUnavailableError):
+            _ = [c async for c in provider.stream(_REQUEST)]
+
+    async def test_stream_transport_error_maps_to_unavailable(self) -> None:
+        provider, _ = _make_provider(
+            lambda request: (_ for _ in ()).throw(httpx.ConnectError("refused"))
+        )
+        with pytest.raises(AiUnavailableError):
+            _ = [c async for c in provider.stream(_REQUEST)]
+
+    async def test_stream_invalid_frame_maps_to_invalid_response(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=b"data: not-json\n\n")
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiInvalidResponseError):
+            _ = [c async for c in provider.stream(_REQUEST)]
+
+    async def test_stream_close_stops_iteration_cleanly(self) -> None:
+        """Closing the iterator after first token cancels the rest quietly."""
+        provider, _ = _make_provider(lambda request: _sse_stream("Hello world"))
+        gen = provider.stream(_REQUEST)
+        first = await anext(gen)
+        assert first.token_delta == "H"
+        await gen.aclose()
+        # aclose must not raise; iterating again yields nothing.
+        with pytest.raises(StopAsyncIteration):
+            await anext(gen)
+
+
 class TestRegistryFactory:
     def test_preset_resolved_without_override(self) -> None:
         assert resolve_base_url("openrouter", "") == "https://openrouter.ai/api/v1"

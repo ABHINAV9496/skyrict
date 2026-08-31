@@ -10,7 +10,7 @@ from ai_agent.core.exceptions import (
     AiUnavailableError,
 )
 from ai_agent.core.llm_router import LlmRouter
-from ai_agent.core.providers.base import LlmCompletion, LlmRequest
+from ai_agent.core.providers.base import LlmCompletion, LlmRequest, LlmStreamChunk
 
 
 class FakeProvider:
@@ -141,3 +141,123 @@ class TestFlags:
 
     def test_provider_count(self) -> None:
         assert LlmRouter([FakeProvider("a", []), FakeProvider("b", [])]).provider_count == 2
+
+
+class FakeStreamProvider:
+    """Scripted streaming provider: yields strings / raises per script.
+
+    ``outcomes`` entries are either strings (yielded as one token each) or
+    exceptions (raised at iteration). Items drawn one per stream() call.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        outcomes: list[str | Exception],
+        *,
+        model: str = "fake-model",
+        local_only: bool = False,
+    ) -> None:
+        self.name = name
+        self.model = model
+        self.local_only = local_only
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    async def stream(
+        self,
+        request: LlmRequest,
+    ):
+        self.calls += 1
+        outcome = self.outcomes.pop(0) if self.outcomes else "unused-fallback-text"
+        if isinstance(outcome, Exception):
+            raise outcome
+        for char in outcome:
+            yield LlmStreamChunk(token_delta=char, model_used=self.model)
+
+
+class _MaskingRedactor:
+    """Fake redactor double with the Redactor surface LlmRouter touches."""
+
+    def redact(self, text: str):
+        class _Redacted:
+            def __init__(self) -> None:
+                self.text = "[REDACTED]"
+                self.mask_counts = {"email": 1}
+
+        return _Redacted()
+
+
+class TestStreamingRouter:
+    async def test_streams_from_primary_provider(self) -> None:
+        primary = FakeStreamProvider("primary", ["hello"])
+        router = LlmRouter([primary])
+
+        text = "".join([c.token_delta async for c in router.stream(_REQUEST)])
+
+        assert text == "hello"
+        assert primary.calls == 1
+
+    async def test_fails_over_before_first_token(self) -> None:
+        primary = FakeStreamProvider("primary", [AiUnavailableError("down")])
+        fallback = FakeStreamProvider("fallback", ["ok"])
+        router = LlmRouter([primary, fallback])
+
+        text = "".join([c.token_delta async for c in router.stream(_REQUEST)])
+
+        assert text == "ok"
+        assert primary.calls == 1
+        assert fallback.calls == 1
+
+    async def test_no_failover_after_first_token(self) -> None:
+        """A mid-stream failure must NOT replay tokens through the fallback."""
+
+        class MidStreamFailingProvider(FakeStreamProvider):
+            async def stream(self, request: LlmRequest):
+                self.calls += 1
+                yield LlmStreamChunk(token_delta="tok", model_used=self.model)
+                raise AiUnavailableError("boom")
+
+        primary = MidStreamFailingProvider("primary", [])
+        fallback = FakeStreamProvider("fallback", ["never"])
+        router = LlmRouter([primary, fallback])
+
+        collected: list[str] = []
+        with pytest.raises(AiUnavailableError):
+            async for chunk in router.stream(_REQUEST):
+                collected.append(chunk.token_delta)
+
+        assert "".join(collected) == "tok"  # client saw the token
+        assert fallback.calls == 0  # rewind impossible, no failover
+
+    async def test_no_providers_configured(self) -> None:
+        router = LlmRouter([])
+        with pytest.raises(AiUnavailableError):
+            _ = [c async for c in router.stream(_REQUEST)]
+
+    async def test_local_only_stream_routes_only_to_cleared_providers(self) -> None:
+        cloud = FakeStreamProvider("cloud", ["LEAK"], local_only=False)
+        local = FakeStreamProvider("local", ["safe"], local_only=True)
+        router = LlmRouter([cloud, local])
+
+        text = "".join(
+            [c.token_delta async for c in router.stream(_REQUEST, require_local_only=True)]
+        )
+
+        assert text == "safe"
+        assert cloud.calls == 0
+        assert local.calls == 1
+
+    async def test_redaction_gate_applies_before_streaming(self) -> None:
+        captured: list[str] = []
+
+        class RecordingProvider(FakeStreamProvider):
+            async def stream(self, request: LlmRequest):
+                captured.append(request.user_prompt)
+                yield LlmStreamChunk(token_delta="ok", model_used=self.model)
+
+        router = LlmRouter([RecordingProvider("rec", [])], redactor=_MaskingRedactor())
+        text = "".join([c.token_delta async for c in router.stream(_REQUEST)])
+
+        assert text == "ok"
+        assert captured == ["[REDACTED]"]  # prompt was masked before the provider

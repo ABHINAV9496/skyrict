@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Check, Copy, Pencil, RefreshCw, RotateCw } from "lucide-react";
+import Markdown from "react-markdown";
 
 import { AiGlyph } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
@@ -210,8 +211,12 @@ export function MessageBubble({
               <span className="size-1.5 animate-pulse rounded-full bg-primary delay-100" />
               <span className="size-1.5 animate-pulse rounded-full bg-primary delay-200" />
             </span>
-          ) : (
+          ) : isUser ? (
             message.content
+          ) : (
+            <div className="chat-markdown">
+              <Markdown>{message.content}</Markdown>
+            </div>
           )}
           {!isUser && message.content ? <AgentCitations message={message} /> : null}
         </div>

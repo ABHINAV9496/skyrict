@@ -133,6 +133,14 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
     async def crm_gateway_factory() -> HttpCrmGateway:
         return crm_gateway
 
+    from ai_agent.db.memory_repository import MemoryRepository
+    from ai_agent.features.crm.memory import MemoryService
+
+    memory_service = MemoryService(
+        llm_router=request.app.state.llm_router,
+        repo=MemoryRepository(session),
+    )
+
     return SupervisorRuntime(
         session=session,
         llm_router=request.app.state.llm_router,
@@ -140,6 +148,7 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         rag=rag,
         hr_copilot=hr_copilot,
         crm_gateway_factory=crm_gateway_factory,
+        memory_service=memory_service,
         forecast=ForecastService(gateway_factory=gateway_factory),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,
     )

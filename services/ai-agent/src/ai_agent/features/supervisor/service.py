@@ -57,6 +57,7 @@ if TYPE_CHECKING:
 
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
+    from ai_agent.features.crm.memory import MemoryService
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
@@ -132,6 +133,7 @@ class SupervisorService:
         rag: RagSearchPort | None = None,
         hr_copilot: HrCopilotPort | None = None,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
@@ -154,6 +156,7 @@ class SupervisorService:
             delegates[AGENT_CRM] = CrmAssistantDelegator(
                 llm_router=llm_router,
                 crm_gateway_factory=crm_gateway_factory,
+                memory_service=memory_service,
             )
         self._delegates = delegates
 

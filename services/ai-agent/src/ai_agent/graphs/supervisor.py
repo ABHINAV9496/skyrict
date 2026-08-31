@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
+    from ai_agent.features.crm.memory import MemoryService
     from ai_agent.features.hr_copilot.service import HrCopilotService
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RagRetrievalService
@@ -55,6 +56,7 @@ class SupervisorRuntime:
         rag: RagRetrievalService | None = None,
         hr_copilot: HrCopilotService | None = None,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
         confidence_threshold: float = 0.75,
     ) -> None:
@@ -64,6 +66,7 @@ class SupervisorRuntime:
         self._rag = rag
         self._hr_copilot = hr_copilot
         self._crm_gateway_factory = crm_gateway_factory
+        self._memory_service = memory_service
         self._forecast = forecast
         self._confidence_threshold = confidence_threshold
 
@@ -88,6 +91,7 @@ class SupervisorRuntime:
             rag=self._rag,
             hr_copilot=self._hr_copilot,
             crm_gateway_factory=self._crm_gateway_factory,
+            memory_service=self._memory_service,
             forecast=self._forecast,
             provisioned=provisioned,
             confidence_threshold=self._confidence_threshold,

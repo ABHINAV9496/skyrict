@@ -58,6 +58,8 @@ class TestRegistry:
             "ai_lead_scores",
             "ai_deal_health",
             "ai_follow_up_suggestions",
+            # SKY-61 memory persistence
+            "ai_semantic_memory",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -76,6 +78,8 @@ class TestRegistry:
             "ai_lead_scores",
             "ai_deal_health",
             "ai_follow_up_suggestions",
+            # SKY-61 memory persistence
+            "ai_semantic_memory",
         ):
             pk = list(Base.metadata.tables[table].primary_key.columns.keys())
             assert pk == ["tenant_id", "id"], table

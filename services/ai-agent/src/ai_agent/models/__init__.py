@@ -33,6 +33,7 @@ from ai_agent.models.ai_rag_chunk import AiRagChunkModel
 from ai_agent.models.ai_rag_parent import AiRagParentModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
 from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
+from ai_agent.models.ai_semantic_memory import AiSemanticMemoryModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from ai_agent.models.core_rbac import CoreRoleModel, CoreUserRoleModel
@@ -60,6 +61,7 @@ __all__ = [
     "AiRagParentModel",
     "AiRestockDemandStatsModel",
     "AiRestockSettingsModel",
+    "AiSemanticMemoryModel",
     "AiSuggestionModel",
     "Base",
     "CoreRoleModel",

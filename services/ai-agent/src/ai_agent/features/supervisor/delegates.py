@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
+    from ai_agent.features.crm.memory import MemoryService
     from ai_agent.features.hr_copilot.engine import HrCopilotResult
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RetrievalResult
@@ -310,9 +311,11 @@ class CrmAssistantDelegator:
         *,
         llm_router: LlmRouter,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]],
+        memory_service: MemoryService | None = None,
     ) -> None:
         self._llm_router = llm_router
         self._crm_gateway_factory = crm_gateway_factory
+        self._memory = memory_service
 
     async def stream(
         self,
@@ -329,11 +332,23 @@ class CrmAssistantDelegator:
                 yield delta
             return
 
-        # Fallback: LLM with CRM context.
+        # Fallback: LLM with CRM context + memory.
         try:
+            system_prompt = self._CRM_SYSTEM_PROMPT
+
+            # Inject relevant memories into context.
+            if self._memory is not None:
+                memory_ctx = await self._memory.recall_context(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    query=query,
+                )
+                if memory_ctx:
+                    system_prompt = f"{system_prompt}\n\n{memory_ctx}"
+
             completion = await self._llm_router.complete(
                 LlmRequest(
-                    system_prompt=self._CRM_SYSTEM_PROMPT,
+                    system_prompt=system_prompt,
                     user_prompt=query.strip(),
                     max_tokens=512,
                     temperature=0.0,
@@ -343,6 +358,15 @@ class CrmAssistantDelegator:
             if answer:
                 for delta in _iter_text_deltas(answer):
                     yield delta
+                # Store conversation in memory (fire-and-forget).
+                if self._memory is not None:
+                    await self._memory.store_after_chat(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        query=query,
+                        response=answer,
+                        module="crm_assistant",
+                    )
             else:
                 for delta in _iter_text_deltas(
                     "I couldn't find an answer to that CRM question yet. "

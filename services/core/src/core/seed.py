@@ -247,12 +247,16 @@ async def sync_rbac_from_identity() -> None:
     only creates ``core_roles`` rows (role catalog) — never the user→role
     grants that ``require_permission`` resolves through.
 
-    Idempotent: safe to re-run on every startup. Existing rows are left
-    untouched; only missing grants are added.
+    Idempotent: safe to re-run on every startup. Core's role IDs are never
+    overwritten (preserving FK references). Missing grants are added;
+    existing ones are left untouched.
     """
     async with async_session_factory() as session:
-        # Step 1: Upsert core_roles from identity's roles table.
-        # Maps identity role IDs to core role IDs by name within each tenant.
+        # Step 1: Sync role permissions from identity's roles into core_roles.
+        # On conflict (same tenant + name), merge permissions and update
+        # is_system_role. Core's own role `id` is NEVER overwritten — it is
+        # the PK that core_user_roles FKs reference, so replacing it would
+        # break existing grants.
         await session.execute(
             text(
                 "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
@@ -266,13 +270,16 @@ async def sync_rbac_from_identity() -> None:
         )
 
         # Step 2: Upsert core_user_roles from identity's user_roles table.
-        # Links each user to their role in core's RBAC tables so
-        # require_permission can resolve grants.
+        # Uses core's role_id (looked up by name) rather than identity's
+        # role_id, because core's PK may differ from identity's if the role
+        # was independently created. This keeps the FK valid.
         await session.execute(
             text(
                 "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
-                "SELECT ur.tenant_id, gen_random_uuid(), ur.user_id, ur.role_id, ur.scope_id "
+                "SELECT ur.tenant_id, gen_random_uuid(), ur.user_id, cr.id, ur.scope_id "
                 "FROM user_roles ur "
+                "JOIN core_roles cr ON cr.tenant_id = ur.tenant_id AND cr.name = "
+                "  (SELECT r.name FROM roles r WHERE r.id = ur.role_id) "
                 "ON CONFLICT DO NOTHING"
             )
         )

@@ -12,7 +12,6 @@
  * the BFF and stops the upstream LLM stream.
  */
 
-import { flushSync } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -59,6 +58,19 @@ function toMessage(citation: ChatCitation): AgentChatCitation {
     module: citation.module,
     url: citation.url,
   };
+}
+
+/**
+ * Yield to the browser's microtask queue so React can flush pending state
+ * updates.  This avoids a race where `streamAgentChat` throws (e.g. 401)
+ * before the agent bubble from the preceding `setMessages` is committed —
+ * the error handler's updater would then not find the bubble and leave it
+ * stuck on the loading dots forever.
+ */
+function yieldToReact(): Promise<void> {
+  return new Promise((resolve) => {
+    queueMicrotask(resolve);
+  });
 }
 
 export function useAgentChat(
@@ -114,17 +126,17 @@ export function useAgentChat(
     const shouldAppendUser = !(initialCompleteRef.current && !autoAppendedRef.current);
     autoAppendedRef.current = true;
 
-    // flushSync ensures the agent bubble is committed to the DOM *before* we
-    // open the SSE stream.  Without this, a fast 401 from the upstream would
-    // race the React batch and the error handler's setMessages would not find
-    // the agent bubble — leaving it stuck on the loading dots forever.
-    flushSync(() => {
-      setMessages((previous) =>
-        shouldAppendUser
-          ? [...previous, userMessage, agentMessage]
-          : [...previous, agentMessage],
-      );
-    });
+    setMessages((previous) =>
+      shouldAppendUser
+        ? [...previous, userMessage, agentMessage]
+        : [...previous, agentMessage],
+    );
+
+    // Yield to the microtask queue so React commits the agent bubble to state
+    // *before* we open the SSE stream.  Without this, a fast error (401, 502)
+    // races the batch: the catch-block updater sees stale state and cannot
+    // find the agent bubble — leaving it stuck on the loading dots forever.
+    await yieldToReact();
 
     const appendDelta = (delta: string) => {
       setMessages((previous) =>

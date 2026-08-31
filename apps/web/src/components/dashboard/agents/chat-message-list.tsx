@@ -189,10 +189,10 @@ export function MessageBubble({
           <AiGlyph aria-hidden="true" className="size-4" />
         </div>
       ) : null}
-      <div className="flex max-w-[85%] flex-col gap-1 sm:max-w-[75%]">
+      <div className={cn("relative flex max-w-[85%] flex-col sm:max-w-[75%]", isUser ? "items-end" : "items-start")}>
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+            "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
             isUser
               ? "bg-primary text-primary-foreground"
               : "border border-border bg-card text-foreground",
@@ -216,12 +216,12 @@ export function MessageBubble({
           {!isUser && message.content ? <AgentCitations message={message} /> : null}
         </div>
 
-        {/* Action bar — visible on hover */}
+        {/* Action bar — visible on hover, positioned below without taking layout space */}
         {!streaming && message.content ? (
           <div
             className={cn(
-              "flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
-              isUser ? "justify-end" : "justify-start",
+              "absolute -bottom-7 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
+              isUser ? "right-0" : "left-11",
             )}
           >
             <CopyButton text={message.content} />
@@ -272,7 +272,7 @@ export function MessageList({
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4">
-      <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 py-4">
+      <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 pb-8 pt-4">
         {messages.map((message, index) => {
           const prev = index > 0 ? messages[index - 1] : null;
           const showDateSep = !prev || differentDay(prev.createdAt, message.createdAt);

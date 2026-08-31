@@ -9,15 +9,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
-from ai_agent.features.crm.gateway import ActivityRef, LeadRef, OpportunityRef
 from ai_agent.features.crm.follow_up import (
-    NEAR_CLOSE_DAYS,
-    STALE_AFTER_DAYS,
     FollowUpDraft,
     generate_follow_up,
 )
+from ai_agent.features.crm.gateway import ActivityRef, LeadRef, OpportunityRef
 
 NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
 OWNER_ID = uuid.uuid4()

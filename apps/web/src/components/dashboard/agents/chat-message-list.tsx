@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { BookOpen, Check, Copy } from "lucide-react";
 
 import { AiGlyph } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/lib/mock/agents-store";
+import type { AgentChatMessage } from "@/lib/chat/use-agent-chat";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -30,8 +30,40 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+function AgentCitations({ message }: { message: AgentChatMessage }) {
+  const citations = message.citations ?? [];
+  if (citations.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-1.5 border-t border-border/70 pt-2.5">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <BookOpen aria-hidden="true" className="size-3" />
+        Sources
+      </p>
+      <ul className="space-y-1">
+        {citations.map((citation, index) => (
+          <li key={`${citation.sourceRef}-${index}`}>
+            <a
+              href={citation.url ?? citation.sourceRef}
+              target={citation.url ? "_blank" : undefined}
+              rel="noreferrer"
+              className="text-xs text-primary underline-offset-2 hover:underline"
+            >
+              {citation.title}
+              {citation.module ? (
+                <span className="ml-1.5 text-muted-foreground">· {citation.module}</span>
+              ) : null}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function MessageBubble({ message }: { message: AgentChatMessage }) {
   const isUser = message.role === "user";
+  const streaming = !isUser && message.content === "" && message.failed !== true;
+
   return (
     <div className={cn("group flex gap-3", isUser ? "justify-end" : "justify-start")}>
       {!isUser ? (
@@ -45,9 +77,24 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           isUser
             ? "bg-primary text-primary-foreground"
             : "border border-border bg-card text-foreground",
+          message.failed ? "text-muted-foreground italic" : null,
         )}
       >
-        {message.content}
+        {message.agentName && !isUser ? (
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {message.agentName}
+          </p>
+        ) : null}
+        {streaming ? (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+            <span className="size-1.5 animate-pulse rounded-full bg-primary delay-100" />
+            <span className="size-1.5 animate-pulse rounded-full bg-primary delay-200" />
+          </span>
+        ) : (
+          message.content
+        )}
+        {!isUser && message.content ? <AgentCitations message={message} /> : null}
       </div>
       {!isUser ? <CopyButton text={message.content} /> : null}
     </div>
@@ -58,7 +105,7 @@ export function MessageList({
   messages,
   userDisplay,
 }: {
-  messages: ChatMessage[];
+  messages: AgentChatMessage[];
   userDisplay: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,7 +113,7 @@ export function MessageList({
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages.length]);
+  }, [messages]);
 
   if (messages.length === 0) {
     return (

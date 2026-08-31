@@ -1,13 +1,15 @@
 """Deterministic CRM NL action handlers (SKY-61 Part 11 — C9).
 
-Four aggregation queries that answer natural-language questions about the CRM
+Aggregation queries that answer natural-language questions about the CRM
 pipeline. These are pure functions over the CRM gateway data — no LLM, no raw
 SQL. The CRM Assistant agent (C11) dispatches to these handlers after the
 user's question is classified.
 
 Actions:
 - ``count_deals``: how many opportunities exist, optionally filtered by stage.
+- ``count_leads``: how many leads exist, optionally filtered by status.
 - ``value_by_stage``: total pipeline value grouped by stage.
+- ``pipeline_summary``: full pipeline overview (leads + opportunities + stages).
 - ``at_risk``: opportunities with yellow/red deal health.
 - ``no_activity``: entities (leads/opportunities) with no activity in N days.
 """
@@ -55,6 +57,71 @@ async def count_deals(
     return CrmActionResult(
         answer=answer,
         data={"count": count, "stage_filter": stage},
+    )
+
+
+async def count_leads(
+    *,
+    gateway: CrmGatewayPort,
+    status: str | None = None,
+) -> CrmActionResult:
+    """Count leads, optionally filtered by status."""
+    leads = await gateway.list_leads()
+    if status:
+        filtered = [lead for lead in leads if lead.status.lower() == status.lower()]
+        status_label = status
+    else:
+        filtered = leads
+        status_label = "all statuses"
+
+    count = len(filtered)
+    answer = f"There {_are(count)} {count} {'lead' if count == 1 else 'leads'} in {status_label}."
+    return CrmActionResult(
+        answer=answer,
+        data={"count": count, "status_filter": status},
+    )
+
+
+async def pipeline_summary(
+    *,
+    gateway: CrmGatewayPort,
+) -> CrmActionResult:
+    """Full pipeline overview: lead count, opportunity count, and stage breakdown."""
+    leads = await gateway.list_leads()
+    opportunities = await gateway.list_opportunities()
+
+    lead_count = len(leads)
+    opp_count = len(opportunities)
+
+    # Lead status breakdown
+    lead_statuses: dict[str, int] = {}
+    for lead in leads:
+        lead_statuses[lead.status] = lead_statuses.get(lead.status, 0) + 1
+
+    # Opportunity stage breakdown
+    stage_counts: dict[str, int] = {}
+    for opp in opportunities:
+        stage_counts[opp.stage] = stage_counts.get(opp.stage, 0) + 1
+
+    lines = [
+        f"**Leads**: {lead_count} total",
+    ]
+    for status, count in sorted(lead_statuses.items()):
+        lines.append(f"  - {status}: {count}")
+
+    lines.append(f"\n**Opportunities**: {opp_count} total")
+    for stage, count in sorted(stage_counts.items()):
+        lines.append(f"  - {stage}: {count}")
+
+    answer = "\n".join(lines) if lines else "No CRM data available yet."
+    return CrmActionResult(
+        answer=answer,
+        data={
+            "lead_count": lead_count,
+            "opp_count": opp_count,
+            "lead_statuses": lead_statuses,
+            "stages": stage_counts,
+        },
     )
 
 

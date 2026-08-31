@@ -299,6 +299,7 @@ class CrmAssistantDelegator:
         "count": ("count_deals", None),
         "how many deals": ("count_deals", None),
         "how many opportunities": ("count_deals", None),
+        "how many leads": ("count_leads", None),
         "pipeline by stage": ("value_by_stage", None),
         "value by stage": ("value_by_stage", None),
         "deal value": ("value_by_stage", None),
@@ -308,6 +309,10 @@ class CrmAssistantDelegator:
         "inactive": ("no_activity", None),
         "hasn't been contacted": ("no_activity", "lead"),
         "hasnt been contacted": ("no_activity", "lead"),
+        "report": ("pipeline_summary", None),
+        "summary": ("pipeline_summary", None),
+        "overview": ("pipeline_summary", None),
+        "pipeline": ("pipeline_summary", None),
     }
 
     def __init__(
@@ -336,9 +341,14 @@ class CrmAssistantDelegator:
                 yield delta
             return
 
-        # Fallback: LLM with CRM context + memory.
+        # Fallback: LLM with live CRM context + memory.
         try:
             system_prompt = self._CRM_SYSTEM_PROMPT
+
+            # Gather live CRM data from the database so the LLM can see it.
+            crm_context = await self._gather_crm_context(query)
+            if crm_context:
+                system_prompt = f"{system_prompt}\n\nLive CRM data:\n{crm_context}"
 
             # Inject relevant memories into context.
             if self._memory is not None:
@@ -384,6 +394,89 @@ class CrmAssistantDelegator:
             ):
                 yield delta
 
+    async def _gather_crm_context(self, query: str) -> str:
+        """Fetch live CRM data from the gateway and format it as LLM context.
+
+        Always includes lead and opportunity summaries. For specific entity
+        queries, also fetches the relevant records. Capped to avoid
+        overwhelming the LLM with too much data.
+        """
+        try:
+            gateway = await self._crm_gateway_factory()
+        except AiUnavailableError:
+            return ""
+
+        parts: list[str] = []
+        lowered = query.casefold()
+
+        # Always include opportunity summary
+        try:
+            opportunities = await gateway.list_opportunities()
+            if opportunities:
+                stage_counts: dict[str, int] = {}
+                for opp in opportunities:
+                    stage_counts[opp.stage] = stage_counts.get(opp.stage, 0) + 1
+                parts.append(f"Total opportunities: {len(opportunities)}")
+                for stage, count in sorted(stage_counts.items()):
+                    parts.append(f"  - {stage}: {count}")
+            else:
+                parts.append("No opportunities in the pipeline yet.")
+        except AiUnavailableError:
+            pass
+
+        # Always include lead summary
+        try:
+            leads = await gateway.list_leads()
+            if leads:
+                status_counts: dict[str, int] = {}
+                for lead in leads:
+                    status_counts[lead.status] = status_counts.get(lead.status, 0) + 1
+                parts.append(f"\nTotal leads: {len(leads)}")
+                for status, count in sorted(status_counts.items()):
+                    parts.append(f"  - {status}: {count}")
+            else:
+                parts.append("\nNo leads in the system yet.")
+        except AiUnavailableError:
+            pass
+
+        # For opportunity-specific queries, include deal names
+        if any(w in lowered for w in ("deal", "opportunity", "pipeline", "stage")):
+            try:
+                opportunities = await gateway.list_opportunities()
+                if opportunities:
+                    details = []
+                    for opp in opportunities[:20]:  # Cap at 20
+                        name = opp.display_name or str(opp.id)
+                        details.append(
+                            f"  - {name}: stage={opp.stage}, "
+                            f"probability={opp.probability}%"
+                        )
+                    if details:
+                        parts.append("\nDeal details:")
+                        parts.extend(details)
+            except AiUnavailableError:
+                pass
+
+        # For lead-specific queries, include lead names
+        if any(w in lowered for w in ("lead", "prospect", "contact")):
+            try:
+                leads = await gateway.list_leads()
+                if leads:
+                    details = []
+                    for lead in leads[:20]:  # Cap at 20
+                        name = lead.display_name or str(lead.id)
+                        details.append(
+                            f"  - {name}: status={lead.status}, "
+                            f"source={lead.source or 'unknown'}"
+                        )
+                    if details:
+                        parts.append("\nLead details:")
+                        parts.extend(details)
+            except AiUnavailableError:
+                pass
+
+        return "\n".join(parts)
+
     async def _try_nl_action(self, query: str) -> str | None:
         """Match query keywords to a deterministic CRM NL action."""
         lower = query.lower()
@@ -399,8 +492,12 @@ class CrmAssistantDelegator:
         if action == "count_deals":
             stage = self._extract_stage(query)
             result = await nl_actions.count_deals(gateway=gateway, stage=stage)
+        elif action == "count_leads":
+            result = await nl_actions.count_leads(gateway=gateway)
         elif action == "value_by_stage":
             result = await nl_actions.value_by_stage(gateway=gateway)
+        elif action == "pipeline_summary":
+            result = await nl_actions.pipeline_summary(gateway=gateway)
         elif action == "at_risk":
             result = await nl_actions.at_risk(gateway=gateway)
         elif action == "no_activity":

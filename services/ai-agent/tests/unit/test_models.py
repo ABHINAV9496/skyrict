@@ -174,7 +174,7 @@ class TestAiInvItemEmbeddings:
         assert "embedding_model" in columns
         assert "embedding_dims" in columns
         assert isinstance(columns["embedding"].type, Vector)
-        assert columns["embedding"].type.dim == 512
+        assert columns["embedding"].type.dim == 768
 
     def test_composite_fk_into_erp_products(self) -> None:
         fk = next(

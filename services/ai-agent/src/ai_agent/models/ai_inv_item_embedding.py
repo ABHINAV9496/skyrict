@@ -1,6 +1,6 @@
 """ai_inv_item_embeddings - semantic product-search snapshot (SKY-70).
 
-One row per ``(tenant_id, product_id)``: a 512-dimension pgvector embedding
+One row per ``(tenant_id, product_id)``: a 768-dimension pgvector embedding
 of the product's existing catalog text (``"{sku} {name} {category} {unit}"``,
 concatenated) plus the raw columns needed for exact-field fallback and
 response payloads.
@@ -59,9 +59,9 @@ class AiInvItemEmbeddingModel(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    embedding = mapped_column(Vector(512), nullable=False)
+    embedding = mapped_column(Vector(768), nullable=False)
     embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
-    embedding_dims: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("512"))
+    embedding_dims: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("768"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

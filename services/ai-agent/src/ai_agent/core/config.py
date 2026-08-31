@@ -175,18 +175,23 @@ class Settings(BaseSettings):
         description="embedding model identifier (OpenAI or Ollama)",
     )
     EMBEDDING_DIMENSIONS: int = Field(
-        default=512,
+        default=768,
         gt=0,
         description=(
-            "output dimensions for Matryoshka-reduced embeddings "
-            "(512 for text-embedding-3-small = 3x storage savings, ~2% quality drop)"
+            "output dimensions — must match the vector columns (768) for every "
+            "supported provider: text-embedding-3-small via Matryoshka "
+            "(768/1536 of native, ~1.5x storage of 512 at slightly better "
+            "quality), gemini-embedding-2 via output_dimensionality, or "
+            "ollama nomic-embed-text natively"
         ),
     )
     EMBEDDING_BASE_URL: str | None = Field(
         default=None,
         description=(
-            "base URL for embedding API (Ollama: http://localhost:11434/v1, "
-            "OpenAI: None to use default)"
+            "base URL for embedding API — Ollama: http://localhost:11434/v1, "
+            "Gemini (free tier, OpenAI-compatible): "
+            "https://generativelanguage.googleapis.com/v1beta/openai, "
+            "OpenAI: None to use the default"
         ),
     )
     EMBEDDING_API_KEY: str | None = Field(

@@ -114,9 +114,9 @@ class TestUpsert:
                 name="x",
                 category=None,
                 unit=None,
-                embedding=[0.1],  # dim 1 != 512
+                embedding=[0.1],  # dim 1 != 768
                 embedding_model="m",
-                dims=512,
+                dims=768,
             )
 
 

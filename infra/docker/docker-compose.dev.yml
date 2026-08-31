@@ -3,6 +3,10 @@
 
 services:
   postgres:
+    # pgvector runtime so ai-agent migrations (SKY-58/70 embedding columns)
+    # can CREATE EXTENSION vector. Dev-only override — production compose
+    # keeps the stock image and loads the extension by other means.
+    image: pgvector/pgvector:pg18
     ports:
       - "5432:5432"
       # Second host publish so host-run tests / the E2E script can reach the
@@ -146,6 +150,10 @@ services:
       # Core data plane for the inventory AI engines — the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001
+      # Host-run .env uses ../../.dev/keys (host cwd = services/ai-agent); the
+      # container mounts the same keys at /app/services/ai-agent/.dev/keys so
+      # the path must be container-relative here.
+      AI_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
     volumes:
       - ../../services/ai-agent/src:/app/services/ai-agent/src
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
@@ -164,6 +172,25 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  # ---------- Ollama (local embedding provider — SKY-58 / SKY-70) ----------
+  # Free, local, keyless. Start alongside with `up -d ollama`; the ai-agent
+  # only talks to it when AI_EMBEDDING_PROVIDER=ollama (boot never pings it,
+  # so no depends_on is needed). One-time model pull:
+  #   docker exec skyrict-ollama ollama pull nomic-embed-text
+  ollama:
+    image: ollama/ollama:latest
+    container_name: skyrict-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
 
   # ---------- Nginx (local multi-tenant routing) ----------
   # Routes *.localhost subdomains (and a path-based fallback) to the identity
@@ -202,3 +229,7 @@ services:
       - postgres
     profiles:
       - debug
+
+volumes:
+  # Persist ollama model downloads across container restarts / rebuilds.
+  ollama-data:

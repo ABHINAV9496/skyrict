@@ -1,7 +1,7 @@
 """Persistence for the per-product semantic embedding snapshot (SKY-70).
 
 One row per ``(tenant_id, product_id)`` holds the concatenated catalog text
-(sku, name, category, unit) and its 512-dim embedding. ``upsert`` /
+(sku, name, category, unit) and its 768-dim embedding. ``upsert`` /
 ``delete`` are idempotent (post-commit HTTP sync and the ``inventory
 reindex`` CLI must both be safe to re-run), and index writes NEVER go down
 the 404 hot path — search reads via ``semantic_search`` while the write

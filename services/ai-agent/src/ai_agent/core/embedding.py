@@ -3,13 +3,17 @@
 One adapter class serves every OpenAI-compatible embedding endpoint, mirroring
 the LLM provider philosophy in ``core/providers``:
 
-- ``openai`` — ``text-embedding-3-small`` via the OpenAI API. Matryoshka
-  dimension reduction is requested in the payload (``"dimensions": 512``) so
-  512-dim vectors match the ``ai_rag_chunks.embedding Vector(512)`` column:
-  3x storage savings vs 1536d at ~2% quality drop (well within noise).
-- ``ollama`` — local ``nomic-embed-text`` via ``http://host:11434/v1``.
-  EXPERIMENTAL in SKY-58: it emits 768-dim vectors, so it can only be used
-  after the vector column is re-migrated to 768d (the factory logs this).
+- ``openai`` — ``text-embedding-3-small`` via the OpenAI API with Matryoshka
+  dimension reduction, or ANY OpenAI-compatible endpoint by overriding the
+  base URL (e.g. Gemini's ``gemini-embedding-2``). ``"dimensions"`` is sent
+  in the payload and these providers honor it.
+- ``ollama`` — local ``nomic-embed-text`` via ``http://host:11434/v1``. It
+  emits 768-dim vectors natively and does NOT accept the ``dimensions``
+  payload key, so ``send_dimensions`` is False and the key is omitted.
+
+All supported providers emit 768-dim vectors matching the ``Vector(768)``
+columns (``ai_rag_chunks.embedding`` / ``ai_inv_item_embeddings.embedding``),
+so switching provider is a one-variable config change (migration 0008).
 
 Security invariants mirror ``core/providers/base``: API keys travel in
 Authorization headers only and NEVER appear in logs, results, or exception
@@ -39,9 +43,10 @@ _MIN_TIMEOUT_SECONDS = 1.0
 EMBEDDING_KEYS = frozenset({"openai", "ollama"})
 EMBEDDING_PRESETS: dict[str, str] = {"openai": "https://api.openai.com/v1"}
 
-# Length of the vector column in ai_rag_chunks — the adapter enforces it so a
-# mismatched provider fails fast instead of corrupting the index.
-_INDEX_DIMENSIONS = 512
+# Length of the vector column in ai_rag_chunks / ai_inv_item_embeddings — the
+# adapter enforces it so a mismatched provider fails fast instead of
+# corrupting the index. Every supported provider emits this many dimensions.
+_INDEX_DIMENSIONS = 768
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +83,9 @@ class OpenAiCompatibleEmbeddingProvider:
         dims: Expected output dimension count (matches the vector column).
         batch_size: Max texts per HTTP request.
         timeout_seconds: Per-request timeout (floored at 1s).
+        send_dimensions: Whether the provider honors the OpenAI ``dimensions``
+            payload key (Matryoshka reduction). True for openai/Gemini, False
+            for ollama which rejects unknown fields.
     """
 
     def __init__(
@@ -90,6 +98,7 @@ class OpenAiCompatibleEmbeddingProvider:
         dims: int,
         batch_size: int,
         timeout_seconds: float,
+        send_dimensions: bool = False,
     ) -> None:
         if not model.strip():
             raise ValueError("model is required")
@@ -105,6 +114,7 @@ class OpenAiCompatibleEmbeddingProvider:
         self._base_url = base_url.rstrip("/")
         # Empty key allowed: some local endpoints need no auth. Never logged.
         self._api_key = api_key
+        self.send_dimensions = send_dimensions
         self._batch_size = batch_size
         self._timeout_seconds = max(timeout_seconds, _MIN_TIMEOUT_SECONDS)
 
@@ -131,7 +141,7 @@ class OpenAiCompatibleEmbeddingProvider:
 
     async def _embed_batch(self, texts: list[str]) -> tuple[list[list[float]], str]:
         payload: dict[str, object] = {"model": self.model, "input": texts}
-        if self.dims:
+        if self.send_dimensions:
             payload["dimensions"] = self.dims
         headers: dict[str, str] = {}
         if self._api_key:
@@ -181,8 +191,8 @@ class OpenAiCompatibleEmbeddingProvider:
             raw = data["data"]
             if not isinstance(raw, list):
                 raise TypeError("data must be a list")
-            ordered = sorted(raw, key=lambda item: int(item["index"]))
-            vectors = [item["embedding"] for item in ordered]
+            ordered = sorted(enumerate(raw), key=lambda pair: int(pair[1].get("index", pair[0])))
+            vectors = [item["embedding"] for _, item in ordered]
             model = data.get("model") or ""
             if not all(isinstance(v, list) for v in vectors):
                 raise TypeError("embedding must be a list")
@@ -225,24 +235,14 @@ def build_embedding_provider(config: Settings) -> EmbeddingProvider | None:
         raise StartupError(f"AI_EMBEDDING_BASE_URL is required for embedding provider '{key}'")
     if key == "openai" and not config.EMBEDDING_API_KEY:
         raise StartupError("AI_EMBEDDING_API_KEY is required for the 'openai' embedding provider")
-    if key == "ollama":
-        # nomic-embed-text emits 768-dim vectors; the chunk column is
-        # Vector(512). Log loudly instead of blocking boot so an operator
-        # experimenting with a re-migrated schema can proceed.
-        logger.warning(
-            "embedding.provider_experimental",
-            provider="ollama",
-            reason=(
-                "nomic-embed-text emits 768-dim vectors but "
-                "ai_rag_chunks.embedding is Vector(512) — re-migrate the "
-                "column before ingesting with this provider"
-            ),
+
+    # Every supported provider emits _INDEX_DIMENSIONS-dim vectors matching the
+    # Vector(_INDEX_DIMENSIONS) columns. Fail fast on mismatch so a misconfigured
+    # provider surfaces at boot instead of at the database layer.
+    if config.EMBEDDING_DIMENSIONS != _INDEX_DIMENSIONS:
+        raise StartupError(
+            f"AI_EMBEDDING_DIMENSIONS must match the vector columns dimension ({_INDEX_DIMENSIONS})"
         )
-        if config.EMBEDDING_DIMENSIONS != _INDEX_DIMENSIONS:
-            raise StartupError(
-                "AI_EMBEDDING_DIMENSIONS must match the ai_rag_chunks.embedding "
-                f"column dimension ({_INDEX_DIMENSIONS})"
-            )
 
     return OpenAiCompatibleEmbeddingProvider(
         name=key,
@@ -252,4 +252,8 @@ def build_embedding_provider(config: Settings) -> EmbeddingProvider | None:
         dims=config.EMBEDDING_DIMENSIONS,
         batch_size=config.EMBEDDING_BATCH_SIZE,
         timeout_seconds=config.EMBEDDING_TIMEOUT_SECONDS,
+        # Only providers honoring Matryoshka reduction (openai itself, and
+        # Gemini via the base-URL override) accept the dimensions key; ollama
+        # rejects unknown fields so it is omitted for key == "ollama".
+        send_dimensions=key == "openai",
     )

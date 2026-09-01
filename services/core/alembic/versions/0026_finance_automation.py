@@ -97,12 +97,20 @@ def upgrade() -> None:
         sa.Column("severity", sa.String(16), nullable=False, server_default=sa.text("'low'")),
         sa.Column("description", sa.String(1024), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default=sa.text("'open'")),
-        sa.Column("detected_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "detected_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
         _created_at(),
         _updated_at(),
         sa.UniqueConstraint(
-            "tenant_id", "entity_type", "entity_id", "anomaly_type",
+            "tenant_id",
+            "entity_type",
+            "entity_id",
+            "anomaly_type",
             name="uq_ai_finance_anomalies_tenant_entity_type",
         ),
     )
@@ -119,7 +127,8 @@ def upgrade() -> None:
         _created_at(),
         _updated_at(),
         sa.UniqueConstraint(
-            "tenant_id", "description",
+            "tenant_id",
+            "description",
             name="uq_ai_finance_suggestions_tenant_description",
         ),
     )

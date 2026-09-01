@@ -228,7 +228,9 @@ class FinanceRepositoryPort(Protocol):
 
     # --- Automation ports (SKY-56/SKY-64) ---
 
-    async def close_checklist(self, tenant_id: uuid.UUID, period_id: uuid.UUID) -> CloseChecklist: ...
+    async def close_checklist(
+        self, tenant_id: uuid.UUID, period_id: uuid.UUID
+    ) -> CloseChecklist: ...
 
     async def duplicates(self, tenant_id: uuid.UUID) -> Sequence[DuplicateGroup]: ...
 
@@ -242,7 +244,9 @@ class FinanceRepositoryPort(Protocol):
 
     async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> HealthScore: ...
 
-    async def cashflow_projection(self, tenant_id: uuid.UUID, as_of: date) -> CashflowProjection: ...
+    async def cashflow_projection(
+        self, tenant_id: uuid.UUID, as_of: date
+    ) -> CashflowProjection: ...
 
     async def anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
 
@@ -266,9 +270,7 @@ class FinanceRepositoryPort(Protocol):
 
     # --- Tenant settings (KV store) ---
 
-    async def get_tenant_setting(
-        self, tenant_id: uuid.UUID, key: str
-    ) -> TenantSetting | None: ...
+    async def get_tenant_setting(self, tenant_id: uuid.UUID, key: str) -> TenantSetting | None: ...
 
     async def upsert_tenant_setting(
         self, tenant_id: uuid.UUID, key: str, value: str
@@ -284,9 +286,7 @@ class FinanceRepositoryPort(Protocol):
         self, tenant_id: uuid.UUID, anomaly: AiFinanceAnomaly
     ) -> AiFinanceAnomaly: ...
 
-    async def list_open_ai_anomalies(
-        self, tenant_id: uuid.UUID
-    ) -> Sequence[AiFinanceAnomaly]: ...
+    async def list_open_ai_anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
 
 
 # ---------------------------------------------------------------------------

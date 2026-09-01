@@ -20,9 +20,7 @@ from core.models.base import Base
 class ErpTenantSettingModel(Base):
     __tablename__ = "erp_tenant_settings"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "key", name="uq_erp_tenant_settings_tenant_key"
-        ),
+        UniqueConstraint("tenant_id", "key", name="uq_erp_tenant_settings_tenant_key"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

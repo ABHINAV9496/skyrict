@@ -1255,8 +1255,27 @@ class FinanceRepository:
         r"\s*(?:usd|eur|gbp)?(?!\w)",
         re.IGNORECASE,
     )
-    _DEBIT_HINTS = frozenset({"paid", "expense", "cost", "purchase", "rent", "salary", "wage", "utilities", "insurance", "travel", "supplies", "office", "electric", "debit"})
-    _CREDIT_HINTS = frozenset({"received", "revenue", "income", "credit", "refund", "interest earned"})
+    _DEBIT_HINTS = frozenset(
+        {
+            "paid",
+            "expense",
+            "cost",
+            "purchase",
+            "rent",
+            "salary",
+            "wage",
+            "utilities",
+            "insurance",
+            "travel",
+            "supplies",
+            "office",
+            "electric",
+            "debit",
+        }
+    )
+    _CREDIT_HINTS = frozenset(
+        {"received", "revenue", "income", "credit", "refund", "interest earned"}
+    )
 
     @staticmethod
     def _extract_amount_from_description(text: str) -> tuple[Decimal | None, str]:

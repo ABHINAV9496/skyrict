@@ -158,7 +158,9 @@ async def test_close_checklist_returns_gates(automation_world: dict[str, str]) -
     assert checklist.period_name == "2026 Q1"
     labels = [item.label for item in checklist.items]
     assert "Trial balance balanced" in labels
-    assert any(item.label == "Previous period closed" and item.status == "ok" for item in checklist.items)
+    assert any(
+        item.label == "Previous period closed" and item.status == "ok" for item in checklist.items
+    )
 
 
 async def test_duplicates_groups_by_memo_and_date(automation_world: dict[str, str]) -> None:

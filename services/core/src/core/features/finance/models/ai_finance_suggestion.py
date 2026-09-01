@@ -36,7 +36,9 @@ class AiFinanceSuggestionModel(Base):
     suggested_code: Mapped[str] = mapped_column(String(32), nullable=False)
     suggested_name: Mapped[str] = mapped_column(String(255), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(3, 2), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'pending'"))
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'pending'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -798,7 +798,12 @@ INVOICE_ROWS: tuple[dict[str, object], ...] = (
         "status": InvoiceStatus.APPROVED,
         "total": Decimal("15800"),
         "lines": [
-            {"desc": "Legacy migration — overdue", "account_idx": 10, "qty": 1, "price": Decimal("15800")},
+            {
+                "desc": "Legacy migration — overdue",
+                "account_idx": 10,
+                "qty": 1,
+                "price": Decimal("15800"),
+            },
         ],
     },
 )

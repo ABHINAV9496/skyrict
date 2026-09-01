@@ -41,12 +41,24 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
   useEffect(() => {
     if (autoStarted.current || sending || status !== "authenticated") return;
     const last = conversation.messages[conversation.messages.length - 1];
-    if (last && last.role === "user") {
+    if (!last || last.role !== "user") return;
+    // Echo the already-persisted last user message: append the agent bubble
+    // and stream, but do not re-append or re-save the user message.
+    //
+    // Defer the actual send until after the current effect flush settles.
+    // With reactStrictMode enabled, React (dev) simulates mount → unmount →
+    // remount on the first commit; the synthetic unmount runs useAgentChat's
+    // cleanup, which aborts any in-flight stream. If we called send() here
+    // synchronously, that first auto-start stream would be cancelled before it
+    // could produce a response — leaving only the persisted user message with
+    // no assistant bubble. Deferring (and not setting autoStarted until the
+    // timer actually fires) lets the strict double-invoke complete first so the
+    // stream starts exactly once on the surviving mount and is never aborted.
+    const id = window.setTimeout(() => {
       autoStarted.current = true;
-      // Echo the already-persisted last user message: append the agent bubble
-      // and stream, but do not re-append or re-save the user message.
       void send(last.content, true);
-    }
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [conversation.messages, send, sending, status]);
 
   return (

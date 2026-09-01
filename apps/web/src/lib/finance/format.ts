@@ -24,6 +24,21 @@ export function sumMoney(values: ReadonlyArray<number | string | null | undefine
   return values.reduce<number>((sum, value) => sum + toMoney(value), 0);
 }
 
+/**
+ * Client-side fallback: extract a monetary amount from free text.
+ * Matches patterns like "$500", "500.00", "$1,234.56", "500 USD", etc.
+ * Returns null when no amount is found.
+ */
+export function extractAmountFromText(text: string): number | null {
+  const match = text.match(
+    /(?:(?:USD|EUR|GBP|\$)\s*)?(\d{1,3}(?:[,\.]\d{3})*(?:\.\d{1,2})?)\s*(?:USD|EUR|GBP)?(?!\w)/i,
+  );
+  if (!match) return null;
+  const raw = match[1].replace(/,/g, "");
+  const num = Number.parseFloat(raw);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",

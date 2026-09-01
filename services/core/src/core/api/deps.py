@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
+    from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -517,6 +518,60 @@ def get_finance_service(
         customers=crm_repo,
         timeline=crm_repo,
         order_lookup=sales_repo,
+    )
+
+
+def get_finance_automation_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceAutomationService:
+    """Composition root for the finance automation feature (SKY-56/SKY-64)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    return FinanceAutomationService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_automation_service_with_ai(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceAutomationService:
+    """Composition root for finance automation incl. AI account suggestions."""
+    from collections.abc import Sequence
+
+    from core.core.tenant_resolver import derive_tenant_slug
+    from core.domain.entities import AccountCodeSuggestion, ChartOfAccount
+    from core.features.ai.router import get_ai_client
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.ai_suggester import suggest_account_code_with_ai
+    from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.repository import FinanceRepository
+
+    client = get_ai_client(request)
+    authorization = request.headers.get("authorization")
+    tenant_slug = derive_tenant_slug(request)
+
+    async def ai_suggest(
+        description: str, accounts: Sequence[ChartOfAccount]
+    ) -> AccountCodeSuggestion | None:
+        return await suggest_account_code_with_ai(
+            client,
+            authorization=authorization,
+            tenant_slug=tenant_slug,
+            description=description,
+            accounts=accounts,
+        )
+
+    return FinanceAutomationService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+        ai_suggest=ai_suggest,
     )
 
 

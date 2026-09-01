@@ -21,16 +21,20 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_episodic_memory import AiEpisodicMemoryModel
 from ai_agent.models.ai_eval_run import AiEvalRunModel
+from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
 from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
+from ai_agent.models.ai_lead_score import AiLeadScoreModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_rag_chunk import AiRagChunkModel
 from ai_agent.models.ai_rag_parent import AiRagParentModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
 from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
+from ai_agent.models.ai_semantic_memory import AiSemanticMemoryModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from ai_agent.models.core_rbac import CoreRoleModel, CoreUserRoleModel
@@ -46,16 +50,20 @@ __all__ = [
     "AiAnomalyModel",
     "AiAnomalyRuleStatsModel",
     "AiAuditLogModel",
+    "AiDealHealthModel",
     "AiDigestModel",
     "AiEpisodicMemoryModel",
     "AiEvalRunModel",
+    "AiFollowUpSuggestionModel",
     "AiInvItemEmbeddingModel",
+    "AiLeadScoreModel",
     "AiQueryCacheModel",
     "AiQueryLogModel",
     "AiRagChunkModel",
     "AiRagParentModel",
     "AiRestockDemandStatsModel",
     "AiRestockSettingsModel",
+    "AiSemanticMemoryModel",
     "AiSuggestionModel",
     "Base",
     "CoreRoleModel",

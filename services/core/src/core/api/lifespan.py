@@ -49,6 +49,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup verification — fail-fast: any failure raises StartupError and
     # the process exits immediately (orchestrator restarts the pod).
     await readiness.verify_startup_dependencies()
+
+    # Sync user→role grants from identity's tables into core's RBAC tables.
+    # Bridges the gap where identity's seed creates user_roles rows but
+    # core's seed only creates the role catalog — never the user→role grants
+    # that require_permission resolves through.
+    from core.seed import sync_rbac_from_identity
+
+    try:
+        await sync_rbac_from_identity()
+    except Exception:
+        logger.warning("rbac_sync.failed", exc_info=True)
+
     readiness.mark_ready()
     logger.info("service.started", environment=settings.ENVIRONMENT.value)
 

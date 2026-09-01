@@ -15,8 +15,11 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_digest import AiDigestModel
+from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
 from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
+from ai_agent.models.ai_lead_score import AiLeadScoreModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
 from ai_agent.models.ai_restock_demand_stats import AiRestockDemandStatsModel
@@ -56,6 +59,12 @@ class TestRegistry:
             "graph_checkpoints",
             "graph_checkpoint_writes",
             "agent_interrupts",
+            # CRM AI tables (SKY-61)
+            "ai_lead_scores",
+            "ai_deal_health",
+            "ai_follow_up_suggestions",
+            # SKY-61 memory persistence
+            "ai_semantic_memory",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -70,6 +79,12 @@ class TestRegistry:
             "ai_rag_chunks",
             "ai_episodic_memory",
             "ai_query_cache",
+            # CRM AI tables (SKY-61) share the (tenant_id, id) composite PK
+            "ai_lead_scores",
+            "ai_deal_health",
+            "ai_follow_up_suggestions",
+            # SKY-61 memory persistence
+            "ai_semantic_memory",
         ):
             pk = list(Base.metadata.tables[table].primary_key.columns.keys())
             assert pk == ["tenant_id", "id"], table
@@ -285,3 +300,57 @@ class TestAiAnomalyRuleStats:
             if constraint.name is not None and str(constraint.name).startswith("ck_")
         }
         assert "ck_ai_anomaly_rule_stats_counts_non_negative" in names
+
+
+def _check_names(table: object) -> set[str]:
+    return {
+        constraint.name
+        for constraint in table.constraints  # type: ignore[attr-defined]
+        if constraint.name is not None and str(constraint.name).startswith("ck_")
+    }
+
+
+class TestAiLeadScore:
+    def test_score_and_confidence_checks_present(self) -> None:
+        assert {
+            "ck_ai_lead_scores_score_range",
+            "ck_ai_lead_scores_confidence_range",
+        } <= _check_names(AiLeadScoreModel.__table__)
+
+    def test_factors_is_jsonb_list(self) -> None:
+        assert type(AiLeadScoreModel.__table__.c.factors.type).__name__ == "JSONB"
+
+    def test_no_llm_columns(self) -> None:
+        cols = AiLeadScoreModel.__table__.columns
+        assert "model" not in cols  # scores are deterministic, no prompt/model
+
+
+class TestAiDealHealth:
+    def test_health_band_and_confidence_checks_present(self) -> None:
+        names = _check_names(AiDealHealthModel.__table__)
+        assert "ck_ai_deal_health_band" in names
+        assert "ck_ai_deal_health_confidence_range" in names
+
+    def test_risk_and_actions_are_jsonb_lists(self) -> None:
+        assert type(AiDealHealthModel.__table__.c.risk_factors.type).__name__ == "JSONB"
+        assert type(AiDealHealthModel.__table__.c.recommended_actions.type).__name__ == "JSONB"
+
+
+class TestAiFollowUpSuggestion:
+    def test_vocabulary_checks_present(self) -> None:
+        names = _check_names(AiFollowUpSuggestionModel.__table__)
+        assert "ck_ai_follow_up_entity_type" in names
+        assert "ck_ai_follow_up_type" in names
+        assert "ck_ai_follow_up_status" in names
+
+    def test_default_status_is_pending(self) -> None:
+        default = AiFollowUpSuggestionModel.__table__.c.status.server_default.arg
+        assert str(default) == "'pending'"
+
+    def test_soft_links_have_no_foreign_keys(self) -> None:
+        """entity/user/activity ids are plain soft-link UUIDs, not FKs."""
+        foreign_keys = {
+            column for column in AiFollowUpSuggestionModel.__table__.columns if column.foreign_keys
+        }
+        # Only the tenant_id surrogate FK points at tenants.
+        assert {column.name for column in foreign_keys} == {"tenant_id"}

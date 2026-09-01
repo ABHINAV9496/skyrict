@@ -39,6 +39,7 @@ from ai_agent.core.tenant_context import TenantContext
 from ai_agent.db.audit_repository import AiAuditLogRepository
 from ai_agent.db.query_cache_repository import QueryCacheRepository
 from ai_agent.db.rag_repository import RagRepository
+from ai_agent.features.crm.gateway import HttpCrmGateway
 from ai_agent.features.forecast.service import ForecastService
 from ai_agent.features.hr_copilot.engine import HrCopilotEngine
 from ai_agent.features.hr_copilot.gateway import HttpHrGateway
@@ -123,12 +124,31 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         tenant_limit_per_minute=settings.RATE_LIMIT_TENANT_PER_MIN,
     )
 
+    crm_gateway = HttpCrmGateway(
+        base_url=str(settings.INVENTORY_SERVICE_URL),
+        bearer_token=token,
+        tenant_slug=tenant_slug,
+    )
+
+    async def crm_gateway_factory() -> HttpCrmGateway:
+        return crm_gateway
+
+    from ai_agent.db.memory_repository import MemoryRepository
+    from ai_agent.features.crm.memory import MemoryService
+
+    memory_service = MemoryService(
+        llm_router=request.app.state.llm_router,
+        repo=MemoryRepository(session),
+    )
+
     return SupervisorRuntime(
         session=session,
         llm_router=request.app.state.llm_router,
         gateway_factory=gateway_factory,
         rag=rag,
         hr_copilot=hr_copilot,
+        crm_gateway_factory=crm_gateway_factory,
+        memory_service=memory_service,
         forecast=ForecastService(gateway_factory=gateway_factory),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,
     )
@@ -190,11 +210,14 @@ async def _event_stream(
     user_id: Any,
 ) -> AsyncIterator[str]:
     """Map supervisor events to SSE frames; sanitized failure frames only."""
+    done_sent = False
     try:
         async for event in runtime.stream_answer(
             query=message, tenant_id=tenant_id, user_id=user_id
         ):
             name, payload = _to_sse(event)
+            if name == EVENT_DONE:
+                done_sent = True
             yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
     except AiUnavailableError as exc:
         logger.warning("chat.stream_unavailable", error=str(exc))
@@ -202,6 +225,11 @@ async def _event_stream(
     except Exception:
         logger.exception("chat.stream_failed")
         yield _error_frame("internal_error")
+    finally:
+        # Safety net: always send a done event so the client never stays
+        # stuck on loading dots if the generator exits without one.
+        if not done_sent:
+            yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
 
 
 def _to_sse(event: SupervisorEvent) -> tuple[str, dict[str, object]]:

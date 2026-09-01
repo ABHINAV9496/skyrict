@@ -25,3 +25,17 @@ export async function createConversation(input: {
 export async function sendMessage(id: string, content: string): Promise<Conversation> {
   return apiPost<Conversation>(`/api/v1/agents/conversations/${id}`, { content });
 }
+
+export async function saveUserMessage(id: string, content: string): Promise<Conversation> {
+  return apiPost<Conversation>(`/api/v1/agents/conversations/${id}`, {
+    content,
+    role: "user",
+  });
+}
+
+export async function appendAgentMessage(id: string, content: string): Promise<Conversation> {
+  return apiPost<Conversation>(`/api/v1/agents/conversations/${id}`, {
+    content,
+    role: "agent",
+  });
+}

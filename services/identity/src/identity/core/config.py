@@ -157,16 +157,16 @@ class Settings(BaseSettings):
         default="",
         description=(
             "SMTP relay host for transactional email. Empty selects the "
-            "log-only transport (dev/test default). Dev: 'mailhog' or "
-            "'localhost' for the MailHog container."
+            "log-only transport (dev/test default). Dev: 'mailpit' or "
+            "'localhost' for the Mailpit container."
         ),
     )
     EMAIL_SMTP_PORT: int = Field(default=1025, description="SMTP relay port")
     EMAIL_SMTP_USERNAME: str = Field(
-        default="", description="SMTP auth username (optional, MailHog needs none)"
+        default="", description="SMTP auth username (optional, Mailpit needs none)"
     )
     EMAIL_SMTP_PASSWORD: str = Field(
-        default="", description="SMTP auth password (optional, MailHog needs none)"
+        default="", description="SMTP auth password (optional, Mailpit needs none)"
     )
     EMAIL_SMTP_USE_TLS: bool = Field(
         default=False, description="enable STARTTLS when connecting to the relay"

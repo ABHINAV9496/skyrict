@@ -27,12 +27,21 @@ import structlog
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.supervisor.delegates import (
+    CrmAssistantDelegator,
     Delegator,
     ForecastPort,
     HrCopilotDelegator,
     HrCopilotPort,
     InventoryMonitorDelegator,
     RagSearchPort,
+)
+from ai_agent.features.supervisor.prompts import (
+    ABSTENTION,
+    CLASSIFY_SYSTEM_PROMPT,
+    DEGRADED,
+    GREETING,
+    SUPERVISOR_SYSTEM_PROMPT,
+    not_provisioned_message,
 )
 from ai_agent.features.supervisor.schemas import (
     AGENT_CRM,
@@ -55,29 +64,11 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 
     from ai_agent.core.llm_router import LlmRouter
+    from ai_agent.features.crm.gateway import CrmGatewayPort
+    from ai_agent.features.crm.memory import MemoryService
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
-
-_ABSTENTION = (
-    "I'm not sure I understood the question well enough to route it to a module "
-    "agent. Try rephrasing it — for example 'What stock is below reorder "
-    "point?' or 'Summarize our leave policy'."
-)
-
-_DEGRADED = "That agent hit a temporary snag — please try again shortly."
-
-_CLASSIFY_SYSTEM_PROMPT = (
-    "You are the routing classifier for the Skyrict agents shell. Decide which "
-    "module agent(s) should answer the user's question. Respond with ONE JSON "
-    'object, no prose: {"agents": ["<agent>", ...], "confidence": 0.0-1.0}\n'
-    'Allowed agents: "inventory_monitor" (stock, movements, reorder, '
-    'forecasts), "hr_copilot" (leave, policies, employee questions), '
-    '"crm_assistant" (customers, leads, opportunities), "finance_assistant" '
-    "(invoices, revenue, expenses, budget). Use MULTIPLE agents for a "
-    "question that spans modules, primary agent first. Set confidence low "
-    "when the mapping is unclear."
-)
 
 _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -129,6 +120,8 @@ class SupervisorService:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagSearchPort | None = None,
         hr_copilot: HrCopilotPort | None = None,
+        crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
@@ -147,6 +140,12 @@ class SupervisorService:
         }
         if hr_copilot is not None:
             delegates[AGENT_HR] = HrCopilotDelegator(hr_copilot=hr_copilot)
+        if crm_gateway_factory is not None:
+            delegates[AGENT_CRM] = CrmAssistantDelegator(
+                llm_router=llm_router,
+                crm_gateway_factory=crm_gateway_factory,
+                memory_service=memory_service,
+            )
         self._delegates = delegates
 
     async def classify(self, query: str) -> RouteDecision:
@@ -156,7 +155,7 @@ class SupervisorService:
         try:
             completion = await self._llm_router.complete(
                 LlmRequest(
-                    system_prompt=_CLASSIFY_SYSTEM_PROMPT,
+                    system_prompt=CLASSIFY_SYSTEM_PROMPT,
                     user_prompt=query.strip(),
                     max_tokens=128,
                     temperature=0.0,
@@ -201,8 +200,16 @@ class SupervisorService:
             yield AgentStartEvent(
                 agent="supervisor", display_name=AGENT_DISPLAY_NAMES["supervisor"]
             )
-            for event in _yield_text(agent="supervisor", text=_ABSTENTION):
-                yield event
+            if _is_greeting(query):
+                # Genuine greeting - a short, friendly redirect.
+                for event in _yield_text(agent="supervisor", text=GREETING):
+                    yield event
+            else:
+                # A real question that did not route to a module: answer it as
+                # the supervisor instead of deflecting with canned text, so the
+                # response actually varies with what the user asked.
+                async for sup_event in self._supervisor_answer(query=query):
+                    yield sup_event
             yield CitationsEvent(agent="supervisor", citations=())
             yield DoneEvent(agents=("supervisor",))
             return
@@ -214,7 +221,7 @@ class SupervisorService:
             yield AgentStartEvent(agent=agent, display_name=display_name)
 
             if not self._provisioned.get(agent, False):
-                for event in _yield_text(agent=agent, text=_not_provisioned_message(display_name)):
+                for event in _yield_text(agent=agent, text=not_provisioned_message(display_name)):
                     yield event
                 yield CitationsEvent(agent=agent, citations=())
                 continue
@@ -239,11 +246,41 @@ class SupervisorService:
                     yield TokenEvent(agent=agent, delta=delta)
             except AiUnavailableError as exc:
                 logger.warning("supervisor.delegate_unavailable", agent=agent, error=str(exc))
-                for event in _yield_text(agent=agent, text=_DEGRADED):
+                for event in _yield_text(agent=agent, text=DEGRADED):
                     yield event
             yield CitationsEvent(agent=agent, citations=tuple(citations))
 
         yield DoneEvent(agents=tuple(handled))
+
+    async def _supervisor_answer(self, *, query: str) -> AsyncIterator[SupervisorEvent]:
+        """Answer as the general supervisor, varying with the actual question.
+
+        Used when a real request does not clearly route to a module agent. The
+        supervisor answers from its own knowledge so the reply differs with the
+        input, instead of returning one fixed canned string. Degrades to the
+        short abstention text only when no LLM provider can be reached.
+        """
+        if not self._llm_router.has_providers:
+            for event in _yield_text(agent="supervisor", text=ABSTENTION):
+                yield event
+            return
+        try:
+            completion = await self._llm_router.complete(
+                LlmRequest(
+                    system_prompt=SUPERVISOR_SYSTEM_PROMPT,
+                    user_prompt=query.strip(),
+                    max_tokens=512,
+                    temperature=0.3,
+                )
+            )
+        except AiUnavailableError as exc:
+            logger.warning("supervisor.answer_unavailable", error=str(exc))
+            for event in _yield_text(agent="supervisor", text=DEGRADED):
+                yield event
+            return
+        text = (completion.text or "").strip()
+        for event in _yield_text(agent="supervisor", text=text or ABSTENTION):
+            yield event
 
 
 def _parse_classification(text: str) -> tuple[tuple[str, ...], float]:
@@ -289,6 +326,74 @@ def _keyword_route(query: str) -> RouteDecision:
     )
 
 
+_GREETING_WORDS = frozenset(
+    {
+        "hi",
+        "hello",
+        "hey",
+        "hola",
+        "howdy",
+        "greetings",
+        "thanks",
+        "thank you",
+        "thank",
+        "cheers",
+        "bye",
+        "goodbye",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "how's it going",
+        "what's up",
+        "sup",
+        "yo",
+    }
+)
+
+# Words that may follow a greeting without turning it into a real question.
+_GREETING_FILLERS = frozenset(
+    {
+        "there",
+        "hello",
+        "hi",
+        "hey",
+        "u",
+        "you",
+        "ya",
+        "everyone",
+        "guys",
+        "all",
+        "mate",
+        "man",
+    }
+)
+
+
+def _is_greeting(query: str) -> bool:
+    """True when the message is essentially a bare greeting, not a question.
+
+    A message is only a greeting when it holds no real content. A question such
+    as "hi, what is our revenue?" is NOT a greeting, even though it starts with
+    one - it is a genuine request that must be routed or answered.
+    """
+    normalized = " ".join(query.strip().split())
+    lowered = normalized.casefold().strip("!.? \t")
+    if not lowered:
+        return False
+
+    tokens = lowered.split()
+    # Single greeting word, e.g. "hi", "hey", "thanks".
+    if lowered in _GREETING_WORDS:
+        return True
+    # Short greeting plus filler, e.g. "hi there", "hello everyone".
+    if len(tokens) <= 3 and tokens[0] in _GREETING_WORDS:
+        rest = tokens[1:]
+        if all(word in _GREETING_FILLERS for word in rest):
+            return True
+    return False
+
+
 def _yield_text(*, agent: str, text: str) -> Iterator[TokenEvent]:
     for delta in _iter_text_deltas(text):
         yield TokenEvent(agent=agent, delta=delta)
@@ -299,10 +404,3 @@ def _iter_text_deltas(text: str) -> Iterator[str]:
     words = text.split(" ")
     for index, word in enumerate(words):
         yield word + (" " if index < len(words) - 1 else "")
-
-
-def _not_provisioned_message(display_name: str) -> str:
-    return (
-        f"The {display_name} module is not provisioned for this workspace yet — "
-        "your question has been noted. Ask the supervisor again once it's enabled."
-    )

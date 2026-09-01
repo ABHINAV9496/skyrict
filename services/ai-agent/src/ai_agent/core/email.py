@@ -5,7 +5,7 @@ Two transports behind the same ``EmailService`` protocol:
 * ``LogEmailService`` — logs the alert payload (default when no SMTP is
   configured; dev/test default).
 * ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: shared
-  MailHog relay; prod: a real relay).
+  Mailpit relay; prod: a real relay).
 
 SMTP failures are logged but never raised, so anomaly scans don't hard-fail
 on delivery problems. The :func:`build_email_service` factory picks a

@@ -93,7 +93,7 @@ async def record_my_events(
     body: WidgetEventBatchCreate,
     current_user: dict[str, Any] = Depends(get_current_user),
     service: DashboardService = Depends(_get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Record widget interaction events for the current user."""
     count = await service.record_events(
         tenant_id=_tenant_id(current_user),

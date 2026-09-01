@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -38,20 +39,20 @@ class DashboardRepository:
         *,
         tenant_id: uuid.UUID,
         title: str,
-        layout: list[dict],
+        layout: list[dict[str, Any]],
     ) -> ErpDashboardModel:
         """Create or update the tenant's default dashboard."""
         existing = await self.get_tenant_default(tenant_id=tenant_id)
         if existing is not None:
             existing.title = title
-            existing.layout = layout  # type: ignore[assignment]
+            existing.layout = layout
             await self._session.flush()
             return existing
 
         dashboard = ErpDashboardModel(
             tenant_id=tenant_id,
             title=title,
-            layout=layout,  # type: ignore[assignment]
+            layout=layout,
             tenant_default=True,
         )
         self._session.add(dashboard)
@@ -80,19 +81,19 @@ class DashboardRepository:
         *,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
-        layout: list[dict],
+        layout: list[dict[str, Any]],
     ) -> UserDashboardLayoutModel:
         """Create or update the user's personal layout."""
         existing = await self.get_user_layout(tenant_id=tenant_id, user_id=user_id)
         if existing is not None:
-            existing.layout = layout  # type: ignore[assignment]
+            existing.layout = layout
             await self._session.flush()
             return existing
 
         user_layout = UserDashboardLayoutModel(
             tenant_id=tenant_id,
             user_id=user_id,
-            layout=layout,  # type: ignore[assignment]
+            layout=layout,
         )
         self._session.add(user_layout)
         await self._session.flush()
@@ -119,7 +120,7 @@ class DashboardRepository:
         *,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
-        events: list[dict],
+        events: list[dict[str, Any]],
     ) -> int:
         """Insert widget interaction events. Returns the count of inserted rows."""
         if not events:
@@ -161,7 +162,7 @@ class DashboardRepository:
         self,
         *,
         tenant_id: uuid.UUID,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Return per-widget event counts for the AI suggestion engine.
 
         Only returns widgets with >= 1 event.  The AI suggestion endpoint

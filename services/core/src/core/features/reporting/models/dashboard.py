@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSON, UUID
@@ -43,7 +44,9 @@ class ErpDashboardModel(Base):
     title: Mapped[str] = mapped_column(
         String(128), nullable=False, server_default=text("'Default'")
     )
-    layout: Mapped[dict] = mapped_column(JSON, nullable=False, server_default=text("'[]'::jsonb"))
+    layout: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, server_default=text("'[]'::jsonb")
+    )
     tenant_default: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )

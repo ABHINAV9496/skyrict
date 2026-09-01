@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSON, UUID
@@ -36,7 +37,9 @@ class UserDashboardLayoutModel(Base):
         primary_key=True,
         nullable=False,
     )
-    layout: Mapped[dict] = mapped_column(JSON, nullable=False, server_default=text("'[]'::jsonb"))
+    layout: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, server_default=text("'[]'::jsonb")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

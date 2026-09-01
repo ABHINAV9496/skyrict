@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import structlog
 
@@ -28,7 +29,7 @@ class DashboardService:
         *,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Return the effective layout for a user.
 
         Priority: user override > tenant default > empty layout.
@@ -58,8 +59,8 @@ class DashboardService:
         *,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
-        layout: list[dict],
-    ) -> dict:
+        layout: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Save the user's personal layout."""
         record = await self._repo.upsert_user_layout(
             tenant_id=tenant_id, user_id=user_id, layout=layout
@@ -98,7 +99,7 @@ class DashboardService:
         *,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
-        events: list[dict],
+        events: list[dict[str, Any]],
     ) -> int:
         """Record widget interaction events."""
         count = await self._repo.record_widget_events(
@@ -119,6 +120,6 @@ class DashboardService:
         summary = await self._repo.get_widget_event_summary(tenant_id=tenant_id)
         return any(item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in summary)
 
-    async def get_event_summary(self, *, tenant_id: uuid.UUID) -> list[dict]:
+    async def get_event_summary(self, *, tenant_id: uuid.UUID) -> list[dict[str, Any]]:
         """Return per-widget event counts."""
         return await self._repo.get_widget_event_summary(tenant_id=tenant_id)

@@ -8,6 +8,7 @@ resizing, or hiding widgets that the user rarely interacts with.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import structlog
 
@@ -53,9 +54,9 @@ class DashboardSuggestionService:
     async def suggest(
         self,
         *,
-        current_layout: list[dict],
-        event_summary: list[dict],
-    ) -> dict:
+        current_layout: list[dict[str, Any]],
+        event_summary: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Generate a layout suggestion based on telemetry.
 
         Args:
@@ -86,7 +87,9 @@ class DashboardSuggestionService:
 
         return self._parse_response(completion.text or "", current_layout)
 
-    def _build_prompt(self, current_layout: list[dict], event_summary: list[dict]) -> str:
+    def _build_prompt(
+        self, current_layout: list[dict[str, Any]], event_summary: list[dict[str, Any]]
+    ) -> str:
         """Build the user prompt with layout and telemetry data."""
         layout_str = json.dumps(current_layout, indent=2)
         events_str = (
@@ -99,7 +102,7 @@ class DashboardSuggestionService:
             "Suggest an improved layout based on this data."
         )
 
-    def _parse_response(self, text: str, current_layout: list[dict]) -> dict:
+    def _parse_response(self, text: str, current_layout: list[dict[str, Any]]) -> dict[str, Any]:
         """Parse the LLM response into a structured suggestion."""
         cleaned = text.strip()
         # Strip markdown fences if present
@@ -142,7 +145,7 @@ class DashboardSuggestionService:
             "confidence": 0.7,
         }
 
-    def _fallback_suggestion(self, current_layout: list[dict]) -> dict:
+    def _fallback_suggestion(self, current_layout: list[dict[str, Any]]) -> dict[str, Any]:
         """Return the current layout as-is when LLM is unavailable."""
         return {
             "suggested_layout": current_layout,

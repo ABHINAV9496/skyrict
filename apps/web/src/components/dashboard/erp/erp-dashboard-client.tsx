@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Blocks, Settings } from "lucide-react";
 
+import { AiSuggestionPreview, type SuggestionLayoutItem } from "./ai-suggestion-preview";
 import { CustomizeMode, type CustomizeLayoutItem } from "./customize-mode";
 import { WidgetGrid, type LayoutItem } from "./widget-grid";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
   resetLayout,
   fetchAiSuggestion,
 } from "@/lib/dashboard/layout-api";
-import { getDefaultLayout, filterWidgetsByPermissions } from "@/lib/dashboard/widget-registry";
+import { getDefaultLayout } from "@/lib/dashboard/widget-registry";
 
 /**
  * Client component for the ERP dashboard with layout customization.
@@ -27,6 +28,13 @@ export function ErpDashboardClient() {
   const [customizing, setCustomizing] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
+  // AI suggestion state
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    layout: SuggestionLayoutItem[];
+    reasoning: string;
+    confidence: number;
+  } | null>(null);
 
   // Load layout on mount
   useEffect(() => {
@@ -78,13 +86,36 @@ export function ErpDashboardClient() {
     setAiLoading(true);
     try {
       const result = await fetchAiSuggestion();
-      setLayout(result.suggested_layout);
-      setCustomizing(false);
+      setAiSuggestion({
+        layout: result.suggested_layout,
+        reasoning: result.reasoning,
+        confidence: result.confidence,
+      });
     } catch {
       // AI suggestion failed — stay in customize mode
     } finally {
       setAiLoading(false);
     }
+  }, []);
+
+  const handleApplySuggestion = useCallback(
+    async (suggestedLayout: SuggestionLayoutItem[]) => {
+      try {
+        await saveLayout(suggestedLayout);
+        setLayout(suggestedLayout);
+        setAiSuggestion(null);
+        setCustomizing(false);
+      } catch {
+        setLayout(suggestedLayout);
+        setAiSuggestion(null);
+        setCustomizing(false);
+      }
+    },
+    [],
+  );
+
+  const handleDismissSuggestion = useCallback(() => {
+    setAiSuggestion(null);
   }, []);
 
   const handleWidgetShow = useCallback((_widgetId: string) => {
@@ -128,6 +159,17 @@ export function ErpDashboardClient() {
           Customize
         </Button>
       </div>
+
+      {/* AI suggestion preview (shown above the grid when available) */}
+      {aiSuggestion && (
+        <AiSuggestionPreview
+          suggestedLayout={aiSuggestion.layout}
+          reasoning={aiSuggestion.reasoning}
+          confidence={aiSuggestion.confidence}
+          onApply={handleApplySuggestion}
+          onDismiss={handleDismissSuggestion}
+        />
+      )}
 
       <WidgetGrid layout={layout} onWidgetShow={handleWidgetShow} />
 

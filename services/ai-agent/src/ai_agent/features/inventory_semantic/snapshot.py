@@ -9,7 +9,7 @@ reads. Two write surfaces share this service:
 - ``inventory reindex`` CLI: an operator-driven full/partial rebuild pulled
   from core's catalog.
 
-``build_embedding_text`` reproduces exactly the string migration 0007 embeds
+``build_embedding_text`` reproduces exactly the string migration 0012 embeds
 (``"{sku} {name} {category} {unit}"``, no glue tokens) so sync and reindex
 produce identical vectors for the same product.
 
@@ -178,7 +178,7 @@ def build_embedding_text(
     category: str | None = None,
     unit: str | None = None,
 ) -> str:
-    """Concatenate the existing catalog text exactly as migration 0007 documents.
+    """Concatenate the existing catalog text exactly as migration 0012 documents.
 
     ``"{sku} {name} {category} {unit}"`` with empty/None parts dropped — the
     identical string embedded at every write so vectors stay reproducible.

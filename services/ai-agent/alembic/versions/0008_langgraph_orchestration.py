@@ -28,8 +28,8 @@ global platform data (no RLS).
 Seeds the ``restock_advisor`` demo agent (two tool calls + one approval
 interrupt, resumable after restart) into ``agent_registry``.
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0008
+Revises: 0007
 Create Date: 2026-08-31
 """
 
@@ -41,8 +41,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0010"
-down_revision = "0009"
+revision = "0008"
+down_revision = "0007"
 branch_labels = None
 depends_on = None
 

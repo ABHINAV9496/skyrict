@@ -1,7 +1,7 @@
 """Async SQLAlchemy checkpointer for LangGraph (SKY-59, AGT-001).
 
 Implements ``langgraph.checkpoint.base.BaseCheckpointSaver`` against
-``graph_checkpoints`` / ``graph_checkpoint_writes`` (migration 0010) so the
+``graph_checkpoints`` / ``graph_checkpoint_writes`` (migration 0008) so the
 ai-agent service needs no psycopg or msgpack sidecar — every payload travels
 as JSONB.
 

@@ -12,7 +12,7 @@ existence, version-table bookkeeping, RLS policies on exactly the seven
 tenant-scoped tables (``agent_registry`` is global and must have NONE), the
 partial unique pending index with its WHERE clause, named CHECK constraints,
 the ``tenants`` FKs, the DESC ordering of the history index, and the SKY-60
-supervisor seed (migration 0011). The version-table sentinel follows Alembic's
+supervisor seed (migration 0009). The version-table sentinel follows Alembic's
 own head resolution so it survives future migrations.
 
 The test owns a scratch database and never touches a shared test database -
@@ -66,9 +66,9 @@ _AI_TABLES = (
     "ai_episodic_memory",
     "ai_query_cache",
     "ai_eval_runs",
-    # SKY-63 cached cross-module narrator digests (migration 0009)
+    # SKY-63 cached cross-module narrator digests (migration 0007)
     "ai_digest_snapshots",
-    # SKY-59 LangGraph orchestration runtime (migration 0010)
+    # SKY-59 LangGraph orchestration runtime (migration 0008)
     "graph_checkpoints",
     "graph_checkpoint_writes",
     "agent_interrupts",
@@ -101,7 +101,7 @@ _TENANT_FK_TABLES = (
     "ai_rag_chunks",
     "ai_episodic_memory",
     "ai_query_cache",
-    # SKY-63 narrator digest snapshots are tenant-scoped (migration 0009)
+    # SKY-63 narrator digest snapshots are tenant-scoped (migration 0007)
     "ai_digest_snapshots",
     # SKY-59 orchestration tables are direct children of ``tenants``
     "graph_checkpoints",
@@ -374,7 +374,7 @@ class TestAiMigrationRoundTrip:
             assert artifacts["version"] == ai_head
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
             assert "restock_advisor" in artifacts["agent_names"], "restock_advisor not seeded"
-            # SKY-60 migration 0011: supervisor + delegated registry seed.
+            # SKY-60 migration 0009: supervisor + delegated registry seed.
             assert "supervisor" in artifacts["agent_names"], "supervisor not seeded"
             assert "crm_assistant" in artifacts["agent_names"], "crm_assistant not seeded"
             assert "finance_assistant" in artifacts["agent_names"], "finance_assistant not seeded"

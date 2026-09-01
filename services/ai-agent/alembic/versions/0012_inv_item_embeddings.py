@@ -18,8 +18,8 @@ the session tenant via ``current_tenant_id()``.
 ``embedding_model``/``embedding_dims`` record which model produced the vector
 so future model/dimension upgrades know what must be re-embedded.
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0012
+Revises: 0011
 Create Date: 2026-08-30
 """
 
@@ -30,8 +30,8 @@ from alembic import op
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "0007"
-down_revision = "0006"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 

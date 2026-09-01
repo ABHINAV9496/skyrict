@@ -1,6 +1,6 @@
 """graph_checkpoints + graph_checkpoint_writes — LangGraph persistence (SKY-59).
 
-ORM views over the orchestration runtime's storage (migration 0010):
+ORM views over the orchestration runtime's storage (migration 0008):
 
 - ``graph_checkpoints`` — one row per LangGraph checkpoint, per tenant and
   graph run. ``state`` holds the typed serialization envelope

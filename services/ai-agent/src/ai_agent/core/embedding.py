@@ -13,7 +13,7 @@ the LLM provider philosophy in ``core/providers``:
 
 All supported providers emit 768-dim vectors matching the ``Vector(768)``
 columns (``ai_rag_chunks.embedding`` / ``ai_inv_item_embeddings.embedding``),
-so switching provider is a one-variable config change (migration 0008).
+so switching provider is a one-variable config change (migration 0013).
 
 Security invariants mirror ``core/providers/base``: API keys travel in
 Authorization headers only and NEVER appear in logs, results, or exception

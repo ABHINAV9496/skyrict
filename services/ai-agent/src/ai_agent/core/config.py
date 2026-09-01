@@ -175,18 +175,23 @@ class Settings(BaseSettings):
         description="embedding model identifier (OpenAI or Ollama)",
     )
     EMBEDDING_DIMENSIONS: int = Field(
-        default=512,
+        default=768,
         gt=0,
         description=(
-            "output dimensions for Matryoshka-reduced embeddings "
-            "(512 for text-embedding-3-small = 3x storage savings, ~2% quality drop)"
+            "output dimensions — must match the vector columns (768) for every "
+            "supported provider: text-embedding-3-small via Matryoshka "
+            "(768/1536 of native, ~1.5x storage of 512 at slightly better "
+            "quality), gemini-embedding-2 via output_dimensionality, or "
+            "ollama nomic-embed-text natively"
         ),
     )
     EMBEDDING_BASE_URL: str | None = Field(
         default=None,
         description=(
-            "base URL for embedding API (Ollama: http://localhost:11434/v1, "
-            "OpenAI: None to use default)"
+            "base URL for embedding API — Ollama: http://localhost:11434/v1, "
+            "Gemini (free tier, OpenAI-compatible): "
+            "https://generativelanguage.googleapis.com/v1beta/openai, "
+            "OpenAI: None to use the default"
         ),
     )
     EMBEDDING_API_KEY: str | None = Field(
@@ -208,6 +213,15 @@ class Settings(BaseSettings):
         description=(
             "bearer token used by the RAG ingestion CLI when pulling module "
             "data from the core service — never logged"
+        ),
+    )
+    INVENTORY_SYNC_TOKEN: str = Field(
+        default="",
+        description=(
+            "shared secret that core's post-commit product-change dispatch "
+            "presents to POST /ai/inventory/embeddings/sync — must match core's "
+            "CORE_AI_SYNC_TOKEN. Empty disables the sync endpoint (503). "
+            "Machine-to-machine only; never logged."
         ),
     )
 
@@ -246,6 +260,24 @@ class Settings(BaseSettings):
         default=90,
         gt=0,
         description="episodic memory retention in days",
+    )
+
+    # --- Inventory semantic search (SKY-70) ---
+    INV_SEARCH_DEFAULT_LIMIT: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="max products returned by /ai/inventory/search",
+    )
+    INV_SEARCH_SEMANTIC_TOP_K: int = Field(
+        default=50,
+        gt=0,
+        description="top-k products pulled from the vector index before exact/semantic merge",
+    )
+    INV_SEARCH_CACHE_TTL_SECONDS: int = Field(
+        default=300,
+        gt=0,
+        description="hot-cache TTL for inventory search results (5 minutes)",
     )
 
     # --- AI behaviour thresholds ---
@@ -369,6 +401,9 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_RAG_SEARCH_PER_MIN: int = Field(
         default=30, ge=1, description="RAG semantic searches per minute per user"
+    )
+    RATE_LIMIT_INV_SEARCH_PER_MIN: int = Field(
+        default=30, ge=1, description="inventory product searches per minute per user"
     )
     RATE_LIMIT_APPROVAL_PER_MIN: int = Field(
         default=10, ge=1, description="suggestion approvals/rejections per minute per user"

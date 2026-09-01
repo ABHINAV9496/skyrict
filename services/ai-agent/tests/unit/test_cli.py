@@ -39,3 +39,14 @@ def test_eval_command_accepts_threshold_flags() -> None:
     names = set(inspect.signature(_registered()["evaluate"]).parameters)
     for flag in ("faithfulness", "answer_relevancy", "context_precision", "context_recall"):
         assert flag in names, f"missing threshold flag: --{flag}"
+
+
+def test_inventory_reindex_subcommand_registered() -> None:
+    """The SKY-70 snapshot rebuild is dispatched as `ai-agent inventory reindex`."""
+    from ai_agent.cli import inventory_app
+
+    names = {cmd.name for cmd in inventory_app.registered_commands}
+    assert "reindex" in names
+    reindex_cmd = next(cmd for cmd in inventory_app.registered_commands if cmd.name == "reindex")
+    assert reindex_cmd.callback is not None
+    assert reindex_cmd.callback.__name__ == "inventory_reindex"

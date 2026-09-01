@@ -22,6 +22,7 @@ from core.api.deps import (
     get_adjustment_authority,
     get_inventory_service,
     get_tenant_context,
+    require_ingest_m2m_or_permission,
     require_permission,
 )
 from core.core.permissions import (
@@ -59,6 +60,9 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 _require_inventory_read = require_permission(ERP_INVENTORY_READ)
 _require_inventory_write = require_permission(ERP_INVENTORY_WRITE)
 _require_inventory_adjust = require_permission(ERP_INVENTORY_ADJUST)
+# The catalog list (reindex/ingest target) additionally accepts ai-agent's m2m
+# ingest secret (CORE_AI_INGEST_TOKEN); every other route stays JWT-only.
+_require_catalog_read = require_ingest_m2m_or_permission(ERP_INVENTORY_READ)
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +76,7 @@ async def list_products(
     page_size: int = Query(default=20, ge=1, le=100),
     category: str | None = Query(default=None),
     include_inactive: bool = Query(default=False),
-    _: dict[str, object] = Depends(_require_inventory_read),
+    _: dict[str, object] = Depends(_require_catalog_read),
     tenant_id: str = Depends(get_tenant_context),
     service: InventoryService = Depends(get_inventory_service),
 ) -> ListResponse[ProductResponse]:

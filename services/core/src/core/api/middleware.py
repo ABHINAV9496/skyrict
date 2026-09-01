@@ -130,6 +130,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         # --- 5. Populate the request-scoped context ---
         TenantContext.set(routed_tenant_id)
+        TenantContext.set_tenant_slug(slug)
         TenantContext.set_user_id(user_id)
         structlog.contextvars.bind_contextvars(tenant_id=routed_tenant_id, user_id=user_id)
 

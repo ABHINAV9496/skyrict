@@ -1125,6 +1125,54 @@ class TestPermissionEnforcement:
         assert created.json()["type"].endswith("/permission-denied")
 
 
+class TestIngestM2MCatalog:
+    """SKY-70 catalog reads via the ai-agent ingest secret (no JWT/user).
+
+    The m2m branch (CORE_AI_INGEST_TOKEN) must serve the reindex/ingest CLIs
+    without identity while never weakening the JWT+permission path: a
+    mismatched bearer still 401s, and an empty secret disables the branch.
+    """
+
+    async def test_catalog_lists_with_matching_ingest_secret(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "AI_INGEST_TOKEN", "ingest-secret")
+        response = await client.get(
+            "/api/v1/inventory/products",
+            headers={"X-Tenant-Slug": "olympus", "Authorization": "Bearer ingest-secret"},
+        )
+        assert response.status_code == 200, response.text
+        assert isinstance(response.json()["data"], list)
+
+    async def test_catalog_mismatched_secret_returns_401(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "AI_INGEST_TOKEN", "ingest-secret")
+        response = await client.get(
+            "/api/v1/inventory/products",
+            headers={"X-Tenant-Slug": "olympus", "Authorization": "Bearer wrong"},
+        )
+        assert response.status_code == 401
+        assert response.json()["type"].endswith("/token-invalid")
+
+    async def test_catalog_m2m_disabled_when_token_empty(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "AI_INGEST_TOKEN", "")
+        response = await client.get(
+            "/api/v1/inventory/products",
+            headers={"X-Tenant-Slug": "olympus", "Authorization": "Bearer nope"},
+        )
+        assert response.status_code == 401
+        assert response.json()["type"].endswith("/token-invalid")
+
+
 class TestTenantIsolation:
     async def test_globex_does_not_see_acme_products(
         self,

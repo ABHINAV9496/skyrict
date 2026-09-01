@@ -88,7 +88,7 @@ export function getWidget(id: string): WidgetDefinition | undefined {
 }
 
 /** Return the default layout (all widgets, default order and sizes). */
-export function getDefaultLayout(): { id: string; order: number; cols: number; visible: boolean }[] {
+export function getDefaultLayout(): { id: string; order: number; cols: 1 | 2 | 3 | 4; visible: boolean }[] {
   return WIDGET_REGISTRY.map((w, i) => ({
     id: w.id,
     order: i,
@@ -99,9 +99,9 @@ export function getDefaultLayout(): { id: string; order: number; cols: number; v
 
 /** Filter widgets by a set of permission keys. */
 export function filterWidgetsByPermissions(
-  layout: { id: string; order: number; cols: number; visible: boolean }[],
+  layout: { id: string; order: number; cols: 1 | 2 | 3 | 4; visible: boolean }[],
   grantedPermissions: string[],
-): { id: string; order: number; cols: number; visible: boolean }[] {
+): { id: string; order: number; cols: 1 | 2 | 3 | 4; visible: boolean }[] {
   return layout.filter((item) => {
     const widget = getWidget(item.id);
     if (!widget) return false;

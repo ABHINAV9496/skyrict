@@ -294,17 +294,17 @@ class Settings(BaseSettings):
         default="",
         description=(
             "SMTP relay host for critical-anomaly alerts. Empty selects the "
-            "log-only transport (dev/test default). Dev: 'mailhog' or "
-            "'localhost' for the MailHog container. Mirrors identity's SMTP "
+            "log-only transport (dev/test default). Dev: 'mailpit' or "
+            "'localhost' for the Mailpit container. Mirrors identity's SMTP "
             "block so compose can share one relay."
         ),
     )
     EMAIL_SMTP_PORT: int = Field(default=1025, description="SMTP relay port")
     EMAIL_SMTP_USERNAME: str = Field(
-        default="", description="SMTP auth username (optional, MailHog needs none)"
+        default="", description="SMTP auth username (optional, Mailpit needs none)"
     )
     EMAIL_SMTP_PASSWORD: str = Field(
-        default="", description="SMTP auth password (optional, MailHog needs none)"
+        default="", description="SMTP auth password (optional, Mailpit needs none)"
     )
     EMAIL_SMTP_USE_TLS: bool = Field(
         default=False, description="enable STARTTLS when connecting to the relay"
@@ -344,6 +344,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- CRM follow-up scan (SKY-61) ---
+    CRM_SCAN_SERVICE_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token the hourly CRM follow-up scan presents to core's "
+            "CRM API. A background task has no user JWT, so it authenticates "
+            "with this service token + per-tenant X-Tenant-Slug instead. Empty "
+            "disables the scheduled scan (log-only)."
+        ),
+    )
+    CRM_SCAN_STALE_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "number of days without activity before an entity is considered "
+            "stale and eligible for a follow-up suggestion."
+        ),
+    )
+
     # --- Rate limits (spec §5.4) ---
     RATE_LIMIT_NL_QUERY_PER_MIN: int = Field(
         default=30, ge=1, description="NL queries per minute per user"
@@ -362,6 +381,12 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_CHAT_PER_MIN: int = Field(
         default=20, ge=1, description="supervisor chat turns per minute per user"
+    )
+    RATE_LIMIT_CRM_PER_MIN: int = Field(
+        default=15, ge=1, description="CRM AI calls (score/health/list) per minute per user"
+    )
+    RATE_LIMIT_CRM_APPLY_PER_MIN: int = Field(
+        default=10, ge=1, description="follow-up apply/dismiss actions per minute per user"
     )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"

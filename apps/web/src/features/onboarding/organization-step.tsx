@@ -60,6 +60,95 @@ function slugify(value: string): string {
     .slice(0, 32);
 }
 
+/** Detect country from the browser's timezone (no permission prompt). */
+function detectCountry(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const map: Record<string, string> = {
+      "America/New_York": "US",
+      "America/Chicago": "US",
+      "America/Denver": "US",
+      "America/Los_Angeles": "US",
+      "America/Anchorage": "US",
+      "America/Phoenix": "US",
+      "America/Indiana/Indianapolis": "US",
+      "America/Detroit": "US",
+      "America/Toronto": "CA",
+      "America/Vancouver": "CA",
+      "America/Edmonton": "CA",
+      "America/Winnipeg": "CA",
+      "America/Halifax": "CA",
+      "America/St_Johns": "CA",
+      "Europe/London": "GB",
+      "Europe/Paris": "FR",
+      "Europe/Berlin": "DE",
+      "Europe/Madrid": "ES",
+      "Europe/Rome": "IT",
+      "Europe/Lisbon": "PT",
+      "Europe/Amsterdam": "NL",
+      "Europe/Brussels": "BE",
+      "Europe/Zurich": "CH",
+      "Europe/Vienna": "AT",
+      "Europe/Stockholm": "SE",
+      "Europe/Oslo": "NO",
+      "Europe/Copenhagen": "DK",
+      "Europe/Helsinki": "FI",
+      "Europe/Dublin": "IE",
+      "Europe/Warsaw": "PL",
+      "Europe/Prague": "CZ",
+      "Europe/Bucharest": "RO",
+      "Europe/Athens": "GR",
+      "Europe/Istanbul": "TR",
+      "Europe/Kiev": "UA",
+      "Europe/Belgrade": "RS",
+      "Europe/Luxembourg": "LU",
+      "Europe/Zagreb": "HR",
+      "Europe/Ljubljana": "SI",
+      "Europe/Sofia": "BG",
+      "Europe/Reykjavik": "IS",
+      "Asia/Kolkata": "IN",
+      "Asia/Calcutta": "IN",
+      "Asia/Singapore": "SG",
+      "Asia/Tokyo": "JP",
+      "Asia/Seoul": "KR",
+      "Asia/Shanghai": "CN",
+      "Asia/Hong_Kong": "HK",
+      "Asia/Taipei": "TW",
+      "Asia/Kuala_Lumpur": "MY",
+      "Asia/Manila": "PH",
+      "Asia/Jakarta": "ID",
+      "Asia/Bangkok": "TH",
+      "Asia/Ho_Chi_Minh": "VN",
+      "Asia/Dubai": "AE",
+      "Asia/Riyadh": "SA",
+      "Asia/Jerusalem": "IL",
+      "Asia/Karachi": "PK",
+      "Asia/Dhaka": "BD",
+      "Asia/Colombo": "LK",
+      "Australia/Sydney": "AU",
+      "Australia/Melbourne": "AU",
+      "Australia/Brisbane": "AU",
+      "Australia/Perth": "AU",
+      "Australia/Adelaide": "AU",
+      "Pacific/Auckland": "NZ",
+      "America/Sao_Paulo": "BR",
+      "America/Mexico_City": "MX",
+      "America/Argentina/Buenos_Aires": "AR",
+      "America/Santiago": "CL",
+      "America/Bogota": "CO",
+      "America/Lima": "PE",
+      "Africa/Cairo": "EG",
+      "Africa/Casablanca": "MA",
+      "Africa/Lagos": "NG",
+      "Africa/Nairobi": "KE",
+      "Africa/Johannesburg": "ZA",
+    };
+    return map[tz] || "US";
+  } catch {
+    return "US";
+  }
+}
+
 function OrganizationStep({
   email,
   vt,
@@ -90,9 +179,9 @@ function OrganizationStep({
       industry: "",
       workspaceSlug: "",
       ownerFullName: "",
-      phoneCountry: "US",
+      phoneCountry: detectCountry(),
       phoneNumber: "",
-      addressCountry: "US",
+      addressCountry: detectCountry(),
       addressLine1: "",
       addressLine2: "",
       city: "",
@@ -222,7 +311,7 @@ function OrganizationStep({
         id="companyName"
         type="text"
         autoComplete="organization"
-        placeholder="Acme Inc."
+        placeholder="e.g. Acme Corp"
         error={errors.companyName?.message}
         {...register("companyName")}
       />
@@ -269,7 +358,9 @@ function OrganizationStep({
             ? "Checking availability\n"
             : slugAvailability === "available"
               ? "This URL is available."
-              : "Your workspace will live at skyrict.ai/<slug>"
+              : workspaceSlug
+                ? `Your workspace will live at ${workspaceSlug}.signin.${typeof window !== "undefined" ? (window.location.hostname.split(".").slice(1).join(".") || "skyrict.com") : "skyrict.com"}`
+                : "Your workspace will live at your-slug.signin.skyrict.com"
         }
         error={
           errors.workspaceSlug?.message ??
@@ -297,7 +388,7 @@ function OrganizationStep({
         id="ownerFullName"
         type="text"
         autoComplete="name"
-        placeholder="Ada Lovelace"
+        placeholder="First and last name"
         error={errors.ownerFullName?.message}
         {...register("ownerFullName")}
       />
@@ -317,17 +408,25 @@ function OrganizationStep({
               setValue("addressCountry", value, { shouldValidate: true });
             }}
           >
-            <SelectTrigger id="phoneCountry" className="h-10 font-mono">
-              <span>
-                {selectedPhoneCountry?.dialCode
-                  ? `+${selectedPhoneCountry.dialCode}`
-                  : "Code"}
+            <SelectTrigger id="phoneCountry" className="h-10">
+              <span className="flex items-center gap-1.5">
+                {selectedPhoneCountry ? (
+                  <span className={`fi fi-${selectedPhoneCountry.code.toLowerCase()}`} />
+                ) : null}
+                <span>
+                  {selectedPhoneCountry
+                    ? `+${selectedPhoneCountry.dialCode}`
+                    : "Code"}
+                </span>
               </span>
             </SelectTrigger>
             <SelectContent position="popper" className="max-h-72 min-w-64">
               {phoneCountries.map((country) => (
                 <SelectItem key={country.code} value={country.code}>
-                  +{country.dialCode} · {country.name}
+                  <span className="flex items-center gap-1.5">
+                    <span className={`fi fi-${country.code.toLowerCase()}`} />
+                    <span>+{country.dialCode} · {country.name}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -338,7 +437,7 @@ function OrganizationStep({
             hideLabel
             type="tel"
             autoComplete="tel"
-            placeholder="555-0134"
+            placeholder="10-digit phone number"
             error={errors.phoneNumber?.message}
             {...register("phoneNumber")}
           />
@@ -350,7 +449,7 @@ function OrganizationStep({
           htmlFor="addressCountry"
           className="text-sm font-medium text-foreground"
         >
-          Business address
+          Business location
         </label>
         <Select
           value={addressCountryValue}
@@ -358,13 +457,21 @@ function OrganizationStep({
             setValue("addressCountry", value, { shouldValidate: true })
           }
         >
-          <SelectTrigger id="addressCountry" className="h-10 font-mono">
-            <span>{addressCountryValue || "Select a country"}</span>
+          <SelectTrigger id="addressCountry" className="h-10">
+            <span className="flex items-center gap-1.5">
+              {addressCountryValue ? (
+                <span className={`fi fi-${addressCountryValue.toLowerCase()}`} />
+              ) : null}
+              <span>{addressCountries.find((c) => c.code === addressCountryValue)?.name || "Select a country"}</span>
+            </span>
           </SelectTrigger>
           <SelectContent position="popper" className="max-h-72 min-w-64">
             {addressCountries.map((country) => (
               <SelectItem key={country.code} value={country.code}>
-                {country.code} · {country.name}
+                <span className="flex items-center gap-1.5">
+                  <span className={`fi fi-${country.code.toLowerCase()}`} />
+                  <span>{country.name}</span>
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -381,7 +488,7 @@ function OrganizationStep({
         id="addressLine1"
         type="text"
         autoComplete="address-line1"
-        placeholder="100 Market Street"
+        placeholder="Street name and number"
         error={errors.addressLine1?.message}
         {...register("addressLine1")}
       />
@@ -391,7 +498,7 @@ function OrganizationStep({
         id="addressLine2"
         type="text"
         autoComplete="address-line2"
-        placeholder="Suite 400"
+        placeholder="e.g. Apt 4B, Floor 2, or Suite 100"
         error={errors.addressLine2?.message}
         {...register("addressLine2")}
       />
@@ -402,7 +509,7 @@ function OrganizationStep({
           id="city"
           type="text"
           autoComplete="address-level2"
-          placeholder="San Francisco"
+          placeholder="City name"
           error={errors.city?.message}
           {...register("city")}
         />
@@ -411,7 +518,7 @@ function OrganizationStep({
           id="state"
           type="text"
           autoComplete="address-level1"
-          placeholder="CA"
+          placeholder="State or Province"
           error={errors.state?.message}
           {...register("state")}
         />
@@ -422,7 +529,7 @@ function OrganizationStep({
         id="postalCode"
         type="text"
         autoComplete="postal-code"
-        placeholder="94103"
+        placeholder="Zip or postal code"
         error={errors.postalCode?.message}
         {...register("postalCode")}
       />

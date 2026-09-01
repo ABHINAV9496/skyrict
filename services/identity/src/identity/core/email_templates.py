@@ -330,6 +330,217 @@ def render_security_alert_html(alert: SecurityAlert) -> str:
     return _TEMPLATE.safe_substitute(mapping)
 
 
+# --------------------------------------------------------------------------- #
+# OTP / Verification-code email templates
+# --------------------------------------------------------------------------- #
+
+_OTP_TEMPLATE = Template(
+    """<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Your ${app_name} verification code</title>
+<style>
+  body,table,td,a,p { -webkit-text-size-adjust:100%; }
+  body { margin:0; padding:0; background:#f4f7f9; }
+  /* Dark theme: activated by OS preference OR .dark class on <html> */
+  @media only screen and (prefers-color-scheme:dark) {
+    body { background:#0b1a22 !important; }
+    .email-bg { background:#0b1a22 !important; }
+    .card { background:#132b36 !important; border-color:#1e3d4a !important; box-shadow:0 6px 24px rgba(0,0,0,0.3) !important; }
+    .heading { color:#e8f0f3 !important; }
+    .body-text { color:#9fb6c6 !important; }
+    .code-box { background:#0a1f28 !important; border-color:#1e3d4a !important; }
+    .code-digit { background:#0f222c !important; border-color:#1e3d4a !important; color:#e8f0f3 !important; }
+    .label-badge { background:#0e2a34 !important; border-color:#1a4a5c !important; }
+    .label-text { color:#4cb6e1 !important; }
+    .shield-icon { color:#4cb6e1 !important; }
+    .expiry-text { color:#7a99aa !important; }
+    .expiry-strong { color:#e8f0f3 !important; }
+    .card-footer { border-color:#1e3d4a !important; }
+    .card-footer-text { color:#7a99aa !important; }
+    .footer-text { color:#5b7a8a !important; }
+  }
+  .dark body, .dark .email-bg { background:#0b1a22 !important; }
+  .dark .card { background:#132b36 !important; border-color:#1e3d4a !important; box-shadow:0 6px 24px rgba(0,0,0,0.3) !important; }
+  .dark .heading { color:#e8f0f3 !important; }
+  .dark .body-text { color:#9fb6c6 !important; }
+  .dark .code-box { background:#0a1f28 !important; border-color:#1e3d4a !important; }
+  .dark .code-digit { background:#0f222c !important; border-color:#1e3d4a !important; color:#e8f0f3 !important; }
+  .dark .label-badge { background:#0e2a34 !important; border-color:#1a4a5c !important; }
+  .dark .label-text { color:#4cb6e1 !important; }
+  .dark .shield-icon { color:#4cb6e1 !important; }
+  .dark .expiry-text { color:#7a99aa !important; }
+  .dark .expiry-strong { color:#e8f0f3 !important; }
+  .dark .card-footer { border-color:#1e3d4a !important; }
+  .dark .card-footer-text { color:#7a99aa !important; }
+  .dark .footer-text { color:#5b7a8a !important; }
+  @media only screen and (max-width:480px) {
+    .container { width:100% !important; padding:0 !important; }
+    .card { padding:20px 16px !important; }
+    .mobile-pad { padding-left:20px !important; padding-right:20px !important; }
+    .mobile-pad-top { padding-left:20px !important; padding-right:20px !important; }
+    .heading { font-size:20px !important; line-height:26px !important; }
+    .code-digit { width:38px !important; height:46px !important; font-size:19px !important; }
+    .code-digit-spacer { width:6px !important; }
+    .footer-text { padding:16px 20px 32px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f7f9;">
+  <center role="article" aria-roledescription="email" aria-label="Verification code" class="email-bg" style="width:100%;table-layout:fixed;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;background:#f4f7f9;">
+    <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" align="center" style="width:600px;max-width:600px;margin:0 auto;">
+
+      <!-- Logo -->
+      <tr><td style="padding:36px 24px 8px;">${header_logo}</td></tr>
+
+      <!-- Card -->
+      <tr>
+        <td style="padding:12px 24px 8px;">
+          <table role="presentation" class="card" width="100%" cellpadding="0" cellspacing="0" border="0"
+                 style="background:#ffffff;border:1px solid #e6edf2;border-radius:16px;box-shadow:0 6px 24px rgba(15,47,63,0.06);">
+
+            <!-- Label badge -->
+            <tr>
+              <td class="mobile-pad" style="padding:28px 32px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td class="label-badge" style="padding:5px 14px;border-radius:999px;background:#eaf6fc;border:1px solid #cfeafa;">
+                      <span class="label-text" style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;color:#14708f;">Verification code</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Heading -->
+            <tr>
+              <td class="mobile-pad" style="padding:16px 32px 0;">
+                <h1 class="heading" style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:24px;line-height:30px;font-weight:700;color:#0a2f3e;letter-spacing:-0.2px;">Enter this code to continue</h1>
+              </td>
+            </tr>
+
+            <!-- Body text -->
+            <tr>
+              <td class="mobile-pad" style="padding:12px 32px 0;">
+                <p class="body-text" style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:22px;color:#5b6b77;">Use the verification code below to complete your ${app_name} signup. This code is valid for 10 minutes.</p>
+              </td>
+            </tr>
+
+            <!-- Code box -->
+            <tr>
+              <td class="mobile-pad" style="padding:24px 32px 0;">
+                <table role="presentation" class="code-box" width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="background:#f4f9fb;border:1px solid #dce9ef;border-radius:12px;">
+                  <tr>
+                    <td align="center" valign="middle" style="padding:20px 16px;">
+                      ${code_digits}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Expiry -->
+            <tr>
+              <td class="mobile-pad" style="padding:16px 32px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td class="shield-icon" style="padding-right:8px;vertical-align:middle;color:#14708f;">
+                      <svg width="16" height="16" viewBox="0 0 18 18" fill="none" role="presentation" aria-hidden="true" style="display:block">
+                        <g stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 2.6l5.5 2v4.1c0 3.6-2.3 6.4-5.5 7.7-3.2-1.3-5.5-4.1-5.5-7.7V4.6l5.5-2Z"/>
+                          <path d="M6.4 9.2l1.8 1.8 3.4-3.5"/>
+                        </g>
+                      </svg>
+                    </td>
+                    <td class="expiry-text" style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:18px;color:#8798a5;">This code expires in <strong class="expiry-strong" style="color:#0a2f3e;">10 minutes</strong>. If you didn't request this, you can safely ignore this email.</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer inside card -->
+            <tr>
+              <td class="mobile-pad" style="padding:24px 32px 24px;">
+                <div class="card-footer" style="border-top:1px solid #eef3f6;padding-top:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;">
+                  <span class="card-footer-text" style="color:#8798a5;">Do not share this code with anyone. ${app_name} will never ask for it via phone or email.</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Outer footer -->
+      <tr>
+        <td style="padding:20px 24px 40px;">
+          <div class="footer-text" style="text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:11px;line-height:17px;color:#9aacb8;">
+            Sent by ${app_name}<br>
+            &copy; ${year} Skyrict Technologies. All rights reserved.
+          </div>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>
+"""
+)
+
+
+def _otp_code_digits(code: str) -> str:
+    """Render the 6-digit OTP code as spaced monospace characters in a styled row."""
+    digits = list(code)
+    return (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto">'
+        "<tr>"
+        + "".join(
+            f'<td class="code-digit" align="center" valign="middle" '
+            f'style="width:44px;height:52px;border-radius:8px;background:#ffffff;border:1px solid #dce9ef;'
+            f"font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;"
+            f'font-size:22px;font-weight:700;color:#0a2f3e;letter-spacing:0;">{_esc(d)}</td>'
+            + (
+                '<td class="code-digit-spacer" width="10" style="width:10px;" aria-hidden="true"></td>'
+                if i < len(digits) - 1
+                else ""
+            )
+            for i, d in enumerate(digits)
+        )
+        + "</tr></table>"
+    )
+
+
+def render_otp_html(code: str, *, app_name: str = APP_NAME) -> str:
+    """Render the full HTML email body for a verification-code OTP."""
+    mapping = {
+        "app_name": _esc(app_name),
+        "year": str(datetime.now(UTC).year),
+        "header_logo": _logo_block(),
+        "code_digits": _otp_code_digits(code),
+    }
+    return _OTP_TEMPLATE.safe_substitute(mapping)
+
+
+def render_otp_text(code: str, *, app_name: str = APP_NAME) -> str:
+    """Render a clean plaintext fallback for a verification-code OTP."""
+    spaced = " ".join(code)
+    return (
+        f"Your {app_name} verification code\n"
+        f"\n"
+        f"  {spaced}\n"
+        f"\n"
+        f"This code expires in 10 minutes.\n"
+        f"If you didn't request this, you can safely ignore this email.\n"
+        f"\n"
+        f"Do not share this code with anyone. {app_name} will never ask for it via phone or email."
+    )
+
+
 def render_security_alert_text(alert: SecurityAlert) -> str:
     """Render a clean plaintext fallback for the same alert."""
     lines = [

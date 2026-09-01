@@ -99,7 +99,7 @@ export function AgentsChatSidebar({
   collapsed: boolean;
 }) {
   const pathname = usePathname();
-  const { user, logout } = useSession();
+  const { user, logout, status } = useSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   const load = useCallback(() => {
@@ -108,10 +108,11 @@ export function AgentsChatSidebar({
       .catch(() => setConversations([]));
   }, []);
 
-  // Refresh when a conversation is created or the active one changes.
+  // Refresh when a conversation is created, the active one changes,
+  // or the session hydrates (first load needs the token to exist).
   useEffect(() => {
-    load();
-  }, [pathname, load]);
+    if (status === "authenticated") load();
+  }, [pathname, load, status]);
 
   return (
     <>
@@ -170,11 +171,7 @@ export function AgentsChatSidebar({
                   onSelect={onCloseMobile}
                 />
               ))
-            ) : (
-              <p className="px-2.5 py-1.5 text-xs text-muted-foreground/70">
-                No recent conversations yet.
-              </p>
-            )}
+            ) : null}
           </section>
         </div>
 

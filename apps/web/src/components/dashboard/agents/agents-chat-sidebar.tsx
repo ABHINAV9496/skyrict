@@ -297,7 +297,7 @@ export function AgentsChatSidebar({
           </Link>
           {!collapsed ? (
             <span className="font-display text-sm font-semibold tracking-tight text-sidebar-foreground">
-              SKYAgent
+              SkyAgent
             </span>
           ) : null}
         </header>

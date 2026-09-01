@@ -50,7 +50,7 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
       <MessageList messages={messages} userDisplay={user?.fullName ?? user?.email ?? ""} onResend={send} />
       <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
         <ChatComposer
-          onSend={send}
+          onSend={(content, attachments) => send(content, false, attachments)}
           onStop={sending ? stop : undefined}
           placeholder="Continue the conversation…"
         />
@@ -64,7 +64,7 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
 
 export default function AgentsHomePage() {
   const router = useRouter();
-  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [conversation] = useState<Conversation | null>(null);
 
   const startChat = useCallback(async (prompt: string) => {
     const conv = await createConversation({ prompt });

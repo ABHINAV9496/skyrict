@@ -22,6 +22,7 @@ from core.features.crm.router import router as crm_router
 from core.features.crm.workspace_router import router as crm_workspace_router
 from core.features.finance.router import router as finance_router
 from core.features.inventory.router import router as inventory_router
+from core.features.reporting.router import router as reporting_router
 from core.features.sales.router import router as sales_router
 
 api_router = APIRouter()
@@ -33,6 +34,7 @@ api_router.include_router(payroll_router)
 api_router.include_router(portal_router)
 api_router.include_router(finance_router)
 api_router.include_router(inventory_router)
+api_router.include_router(reporting_router)
 api_router.include_router(crm_router)
 api_router.include_router(crm_workspace_router)
 api_router.include_router(sales_router)

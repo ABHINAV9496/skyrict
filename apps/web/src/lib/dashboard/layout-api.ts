@@ -29,6 +29,7 @@ export async function fetchLayout(): Promise<DashboardLayoutResponse> {
     headers: { "Content-Type": "application/json" },
   });
   if (!response.ok) {
+    console.warn(`Layout API returned ${response.status}: ${response.statusText}`);
     throw new Error(`Failed to fetch layout: ${response.status}`);
   }
   return response.json();

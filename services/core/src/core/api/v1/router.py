@@ -20,8 +20,8 @@ from core.features.ai_agents.router import router as ai_agents_router
 from core.features.ai_hr.router import router as ai_hr_router
 from core.features.crm.router import router as crm_router
 from core.features.crm.workspace_router import router as crm_workspace_router
-from core.features.finance.router import router as finance_router
 from core.features.finance.automation import router as finance_automation_router
+from core.features.finance.router import router as finance_router
 from core.features.inventory.router import router as inventory_router
 from core.features.sales.router import router as sales_router
 

@@ -16,7 +16,10 @@ Security invariants every implementation MUST keep:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +45,18 @@ class LlmCompletion:
     latency_ms: int
 
 
+@dataclass(frozen=True, slots=True)
+class LlmStreamChunk:
+    """One token delta from a streaming generation (SKY-60).
+
+    ``token_delta`` is the exact text the provider emitted for this chunk
+    (never a whole-response buffer); consumers concatenate deltas in order.
+    """
+
+    token_delta: str
+    model_used: str
+
+
 @runtime_checkable
 class LlmProvider(Protocol):
     """Structural contract satisfied by every provider adapter."""
@@ -52,4 +67,24 @@ class LlmProvider(Protocol):
 
     async def complete(self, request: LlmRequest) -> LlmCompletion:
         """Return one completion or raise a typed AI error."""
+        ...
+
+    def stream(
+        self,
+        request: LlmRequest,
+    ) -> AsyncIterator[LlmStreamChunk]:
+        """Yield token deltas in order, or raise a typed AI error.
+
+        Contract for stream-aware consumers (SKY-60):
+
+        - Errors raised BEFORE the first yielded chunk mean "this provider
+          could not serve the request" - the caller may fail over to the next
+          provider.
+        - Errors raised AFTER the first chunk mean the stream is broken
+          mid-flight; the caller must surface them to the client (tokens are
+          already visible, rewinding is impossible).
+        - Closing the returned async iterator MUST cancel the upstream
+          request (client disconnect propagation), and the implementation
+          must not buffer the full response before yielding.
+        """
         ...

@@ -41,6 +41,10 @@ COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 # Install all deps (dev group included — pytest, mypy, ruff)
 RUN uv sync --frozen --directory services/core
 
+# Make venv entry points (alembic, uvicorn, etc.) available on PATH
+# so `docker exec` can find them without going through `uv run`.
+ENV PATH="/app/.venv/bin:$PATH"
+
 # Copy source code (skyrict-common and skyrict-events are imported directly
 # by core at runtime — uv installs workspace members editable)
 COPY services/core/src services/core/src

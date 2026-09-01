@@ -41,6 +41,10 @@ COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 # Install all deps (dev group included — pytest, mypy, ruff, testcontainers)
 RUN uv sync --frozen --directory services/identity
 
+# Make venv entry points (alembic, uvicorn, etc.) available on PATH
+# so `docker exec` can find them without going through `uv run`.
+ENV PATH="/app/.venv/bin:$PATH"
+
 # Copy source code (skyrict-common is imported directly by identity at runtime)
 COPY services/identity/src services/identity/src
 COPY libs/skyrict-common/src libs/skyrict-common/src

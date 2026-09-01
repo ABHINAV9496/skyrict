@@ -37,9 +37,13 @@ from ai_agent.core.providers.base import LlmRequest
 from ai_agent.redaction import Redactor
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import AsyncIterator, Sequence
 
-    from ai_agent.core.providers.base import LlmCompletion, LlmProvider
+    from ai_agent.core.providers.base import (
+        LlmCompletion,
+        LlmProvider,
+        LlmStreamChunk,
+    )
 
 logger = structlog.get_logger("ai_agent.llm_router")
 
@@ -151,4 +155,92 @@ class LlmRouter:
             # not complete the request, which outranks "answers were garbage".
             raise AiUnavailableError()
         # Every eligible provider answered, but none produced usable output.
+        raise AiInvalidResponseError()
+
+    async def stream(
+        self,
+        request: LlmRequest,
+        *,
+        require_local_only: bool = False,
+    ) -> AsyncIterator[LlmStreamChunk]:
+        """Stream ``request`` through the provider chain (SKY-60).
+
+        Shares ``complete``'s contracts — data residency gate, PII redaction
+        gate, ordered provider chain — with one streaming-specific nuance:
+        failover is ONLY possible until the first yielded token. Once a
+        provider has begun answering, tokens are visible to the client and a
+        mid-stream failure cannot be replayed; it is raised to the consumer
+        as-is (mapped to an ``error`` SSE event by the caller).
+
+        Raises (on iteration, before any yield unless noted):
+            AiDataResidencyError: Local-only data but no cleared provider.
+            AiUnavailableError: No eligible provider served the request.
+            AiInvalidResponseError: Every eligible provider answered unusably.
+        """
+        if require_local_only and not self.has_local_only_clearance():
+            raise AiDataResidencyError()
+
+        eligible = (
+            [provider for provider in self._providers if provider.local_only]
+            if require_local_only
+            else self._providers
+        )
+        if not eligible:
+            raise AiUnavailableError("No AI provider is configured")
+
+        # REDACTION GATE (HR-AI-001): identical to complete() - mask PII from
+        # the prompt BEFORE any provider serializes a streaming payload.
+        redacted = self._redactor.redact(request.user_prompt)
+        if redacted.text != request.user_prompt:
+            logger.info(
+                "llm_router.redacted",
+                mask_counts=redacted.mask_counts,
+            )
+            request = LlmRequest(
+                system_prompt=request.system_prompt,
+                user_prompt=redacted.text,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            )
+
+        saw_unavailable = False
+        for provider in eligible:
+            started = False
+            try:
+                async for chunk in provider.stream(request):
+                    if not started:
+                        started = True
+                        logger.info(
+                            "llm_router.stream_started",
+                            provider=provider.name,
+                            model_used=chunk.model_used,
+                        )
+                    yield chunk
+            except AiInvalidResponseError:
+                logger.warning(
+                    "llm_router.provider_invalid_stream",
+                    provider=provider.name,
+                    model=provider.model,
+                )
+                if started:
+                    raise
+            except AiUnavailableError:
+                saw_unavailable = True
+                logger.warning(
+                    "llm_router.provider_unavailable_stream",
+                    provider=provider.name,
+                    model=provider.model,
+                )
+                if started:
+                    raise
+            else:
+                logger.info(
+                    "llm_router.stream_completed",
+                    provider=provider.name,
+                    model=provider.model,
+                )
+                return
+
+        if saw_unavailable:
+            raise AiUnavailableError()
         raise AiInvalidResponseError()

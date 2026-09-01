@@ -69,7 +69,7 @@ class TestBuildEmailService:
         assert isinstance(svc, LogEmailService)
 
     def test_host_returns_smtp_transport(self) -> None:
-        svc = build_email_service(host="mailhog", port=1025)
+        svc = build_email_service(host="mailpit", port=1025)
 
         assert isinstance(svc, SmtpEmailService)
 
@@ -83,11 +83,11 @@ class TestLogEmailService:
 
 class TestSmtpEmailService:
     async def test_delivers_message_with_all_parts(self, monkeypatch) -> None:
-        fake = FakeSMTP("mailhog", 1025)
+        fake = FakeSMTP("mailpit", 1025)
         monkeypatch.setattr(email_mod.smtplib, "SMTP", lambda host, port, timeout: fake)
 
         await SmtpEmailService(
-            host="mailhog", port=1025, from_addr="Skyrict <no-reply@skyrict.dev>"
+            host="mailpit", port=1025, from_addr="Skyrict <no-reply@skyrict.dev>"
         ).send_critical_anomaly_alert(alert=_alert())
 
         assert len(fake.sent) == 1
@@ -108,11 +108,11 @@ class TestSmtpEmailService:
         ).send_critical_anomaly_alert(alert=_alert())
 
     async def test_uses_tls_login_when_configured(self, monkeypatch) -> None:
-        fake = FakeSMTP("mailhog", 1025)
+        fake = FakeSMTP("mailpit", 1025)
         monkeypatch.setattr(email_mod.smtplib, "SMTP", lambda host, port, timeout: fake)
 
         await SmtpEmailService(
-            host="mailhog",
+            host="mailpit",
             port=1025,
             from_addr="Skyrict <no-reply@skyrict.dev>",
             username="user",

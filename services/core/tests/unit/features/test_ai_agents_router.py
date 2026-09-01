@@ -125,3 +125,43 @@ class TestAgentProxyPathShape:
         )
 
         assert seen[0].content == b'{"input":{"product_id":"P1"}}'
+
+    def test_chat_stream_forwards_to_supervisor_endpoint(self) -> None:
+        """The SSE chat route streams to ai-agent (SKY-60)."""
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(
+                200,
+                text=(
+                    'event: token\ndata: {"delta": "Hello"}\n\n'
+                    'event: done\ndata: {"agents": ["inventory_monitor"]}\n\n'
+                ),
+                headers={"content-type": "text/event-stream"},
+            )
+
+        app = FastAPI()
+        app.include_router(ai_agents_router.router, prefix="/api/v1")
+        app.dependency_overrides[ai_agents_router._require_ai_invoke] = lambda: {"sub": "u1"}
+        client_factory = lambda: httpx.AsyncClient(  # noqa: E731
+            transport=httpx.MockTransport(handler), base_url="http://ai.test"
+        )
+        app.dependency_overrides[ai_agents_router.get_ai_client] = client_factory
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/ai/agents/chat/stream",
+            headers={"authorization": "Bearer tok"},
+            json={"message": "stock levels?"},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["cache-control"] == "no-cache"
+        assert len(seen) == 1
+        assert seen[0].url.path == "/api/v1/ai/agents/chat/stream"
+        assert seen[0].content == b'{"message":"stock levels?"}'
+        # The SSE frames arrived verbatim, in order.
+        assert "event: token" in response.text
+        assert response.text.index("event: token") < response.text.index("event: done")

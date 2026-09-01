@@ -1002,6 +1002,55 @@ PRODUCT_ROWS: tuple[dict[str, object], ...] = (
         "sell": Decimal("4500"),
         "reorder": Decimal("5"),
     },
+    # SKY-70 semantic-search acceptance targets: deliberately new, semantically
+    # distinct hardware so hybrid queries ("noise cancelling headphones",
+    # "office chair", "monitor") resolve through the embedding index rather
+    # than the exact-text fallback. Add-only — existing SKUs are never renamed.
+    {
+        "sku": "HPH-100",
+        "name": "Wireless Noise-Cancelling Headphones",
+        "category": "Electronics",
+        "unit": "unit",
+        "cost": Decimal("45"),
+        "sell": Decimal("129"),
+        "reorder": Decimal("10"),
+    },
+    {
+        "sku": "KBD-200",
+        "name": "Ergonomic Mechanical Keyboard",
+        "category": "Electronics",
+        "unit": "unit",
+        "cost": Decimal("38"),
+        "sell": Decimal("99"),
+        "reorder": Decimal("10"),
+    },
+    {
+        "sku": "MON-300",
+        "name": "27-inch 4K Monitor",
+        "category": "Electronics",
+        "unit": "unit",
+        "cost": Decimal("210"),
+        "sell": Decimal("429"),
+        "reorder": Decimal("8"),
+    },
+    {
+        "sku": "DKL-400",
+        "name": "Standing Desk",
+        "category": "Furniture",
+        "unit": "unit",
+        "cost": Decimal("180"),
+        "sell": Decimal("399"),
+        "reorder": Decimal("5"),
+    },
+    {
+        "sku": "CHA-500",
+        "name": "Ergonomic Office Chair",
+        "category": "Furniture",
+        "unit": "unit",
+        "cost": Decimal("150"),
+        "sell": Decimal("349"),
+        "reorder": Decimal("5"),
+    },
 )
 
 # Sales orders: (order_number, status, subtotal, discount, tax, total, days_ago, lines)
@@ -1430,6 +1479,13 @@ STOCK_LEVEL_ROWS: tuple[dict[str, object], ...] = (
     # Warehouse 4: Overflow Storage (sparse)
     {"prod": 2, "wh": 4, "on_hand": Decimal("2"), "reserved": Decimal("0")},
     {"prod": 10, "wh": 4, "on_hand": Decimal("5"), "reserved": Decimal("0")},
+    # SKY-70 semantic acceptance hardware (Main DC) — comfortably above
+    # reorder so none of them opens the low-stock alert inbox.
+    {"prod": 12, "wh": 0, "on_hand": Decimal("30"), "reserved": Decimal("2")},
+    {"prod": 13, "wh": 0, "on_hand": Decimal("25"), "reserved": Decimal("1")},
+    {"prod": 14, "wh": 0, "on_hand": Decimal("12"), "reserved": Decimal("1")},
+    {"prod": 15, "wh": 0, "on_hand": Decimal("8"), "reserved": Decimal("1")},
+    {"prod": 16, "wh": 0, "on_hand": Decimal("10"), "reserved": Decimal("2")},
 )
 
 # Stock movements: immutable ledger entries

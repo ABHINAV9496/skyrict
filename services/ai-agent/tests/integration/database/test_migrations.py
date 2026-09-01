@@ -11,7 +11,9 @@ Sentinel assertions probe one representative artefact per concern: table
 existence, version-table bookkeeping, RLS policies on exactly the seven
 tenant-scoped tables (``agent_registry`` is global and must have NONE), the
 partial unique pending index with its WHERE clause, named CHECK constraints,
-the ``tenants`` FKs, and the DESC ordering of the history index.
+the ``tenants`` FKs, the DESC ordering of the history index, and the SKY-60
+supervisor seed (migration 0009). The version-table sentinel follows Alembic's
+own head resolution so it survives future migrations.
 
 The test owns a scratch database and never touches a shared test database -
 it destroys the schema it builds. Event-loop discipline follows the repo
@@ -35,6 +37,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 import pytest
+from alembic.script import ScriptDirectory
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -69,6 +72,10 @@ _AI_TABLES = (
     "graph_checkpoints",
     "graph_checkpoint_writes",
     "agent_interrupts",
+    # SKY-61 CRM AI tables (migration 0010)
+    "ai_lead_scores",
+    "ai_deal_health",
+    "ai_follow_up_suggestions",
 )
 _TENANT_SCOPED_TABLES = (
     "ai_query_log",
@@ -82,6 +89,10 @@ _TENANT_SCOPED_TABLES = (
     "graph_checkpoints",
     "graph_checkpoint_writes",
     "agent_interrupts",
+    # SKY-61 CRM AI tables carry RLS on current_tenant_id()
+    "ai_lead_scores",
+    "ai_deal_health",
+    "ai_follow_up_suggestions",
 )
 # Demand stats carries composite FKs into core-owned erp_products/erp_warehouses
 # and NO direct FK to tenants (cross-service idiom); only the tables below are
@@ -104,6 +115,10 @@ _TENANT_FK_TABLES = (
     "graph_checkpoints",
     "graph_checkpoint_writes",
     "agent_interrupts",
+    # SKY-61 CRM AI tables are direct children of ``tenants``
+    "ai_lead_scores",
+    "ai_deal_health",
+    "ai_follow_up_suggestions",
 )
 
 _EXPECTED_CHECKS = {
@@ -118,6 +133,15 @@ _EXPECTED_CHECKS = {
     "ck_ai_restock_settings_fp_threshold_range",
     "ck_ai_anomaly_rule_stats_counts_non_negative",
     "ck_agent_interrupts_status",
+    # SKY-61 CRM AI constraints
+    "ck_ai_lead_scores_score_range",
+    "ck_ai_lead_scores_confidence_range",
+    "ck_ai_deal_health_band",
+    "ck_ai_deal_health_confidence_range",
+    "ck_ai_follow_up_entity_type",
+    "ck_ai_follow_up_type",
+    "ck_ai_follow_up_status",
+    "ck_ai_follow_up_confidence_range",
 }
 
 
@@ -178,6 +202,10 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
         artifacts["agent_names"] = {
             row["name"] for row in await conn.fetch("SELECT name FROM agent_registry")
         }
+
+        artifacts["crm_assistant_enabled"] = await conn.fetchval(
+            "SELECT enabled FROM agent_registry WHERE name = 'crm_assistant'"
+        )
 
         artifacts["rls_tables"] = {
             row["tablename"]
@@ -365,9 +393,18 @@ class TestAiMigrationRoundTrip:
 
             artifacts = asyncio.run(_fetch_upgraded_artifacts(scratch_dsn))
             assert artifacts["tables"] == set(_AI_TABLES), "missing AI tables"
-            assert artifacts["version"] == "0008"
+            # Track the real head so the sentinel survives future migrations
+            # (same idiom as core's test_version_table_isolated).
+            ai_head = ScriptDirectory(str(_ROOT / "alembic")).get_current_head()
+            assert artifacts["version"] == ai_head
             assert "hr_copilot" in artifacts["agent_names"], "hr_copilot not seeded"
             assert "restock_advisor" in artifacts["agent_names"], "restock_advisor not seeded"
+            # SKY-60 migration 0009: supervisor + delegated registry seed.
+            assert "supervisor" in artifacts["agent_names"], "supervisor not seeded"
+            assert "crm_assistant" in artifacts["agent_names"], "crm_assistant not seeded"
+            assert "finance_assistant" in artifacts["agent_names"], "finance_assistant not seeded"
+            # SKY-61 migration 0010: crm_assistant enabled (was disabled in 0009).
+            assert artifacts["crm_assistant_enabled"] is True, "crm_assistant not enabled"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
             assert artifacts["rls_tables"] == set(_TENANT_SCOPED_TABLES)

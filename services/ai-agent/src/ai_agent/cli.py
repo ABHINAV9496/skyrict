@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import uuid
 from pathlib import Path
 
@@ -41,7 +40,7 @@ def migrate(head: str = typer.Option("head", help="Alembic target revision")) ->
     import subprocess
 
     subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", head],
+        ["alembic", "-c", str(_PACKAGE_ROOT / "alembic.ini"), "upgrade", head],
         cwd=_PACKAGE_ROOT,
         check=True,
     )
@@ -176,6 +175,39 @@ def sweep_caches() -> None:
 
     deleted = asyncio.run(sweep_expired_query_cache())
     typer.echo(f"Deleted {deleted} expired query cache row(s).")
+
+
+inventory_app = typer.Typer(
+    name="inventory",
+    help="Inventory semantic snapshot maintenance (SKY-70).",
+    no_args_is_help=True,
+)
+
+
+@inventory_app.command("reindex")
+def inventory_reindex(
+    tenant: str = typer.Option(..., help="tenant slug or UUID (required)"),
+    mode: str = typer.Option(
+        "full", help="'full' wipes then rebuilds; 'incremental' only upserts the fetched catalog"
+    ),
+) -> None:
+    """Rebuild one tenant's product embedding snapshot (SKY-70).
+
+    Pulls the current catalog from core and (re)embeds every product into
+    ai_inv_item_embeddings. ``full`` clears the tenant's snapshot first so
+    deactivated-or-removed products disappear from semantic search.
+
+    Requires an embedding provider (AI_EMBEDDING_PROVIDER + key) and
+    AI_INGEST_TOKEN for the core pull.
+    """
+    import asyncio
+
+    from ai_agent.inventory_reindex import run_inventory_reindex
+
+    asyncio.run(run_inventory_reindex(tenant=tenant, mode=mode))
+
+
+app.add_typer(inventory_app)
 
 
 @app.command()

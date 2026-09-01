@@ -32,6 +32,7 @@ name = "ai-agent"
 version = "0.1.0"
 source = { editable = "services/ai-agent" }
 dependencies = [
+    { name = "alembic" },
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "fastapi" },
@@ -57,6 +58,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", specifier = ">=1.14,<2" },
     { name = "apscheduler", specifier = ">=3.10,<4" },
     { name = "asyncpg", specifier = ">=0.30,<1" },
     { name = "fastapi", specifier = ">=0.115,<1" },

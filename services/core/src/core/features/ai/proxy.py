@@ -1,7 +1,8 @@
 """Transport logic for proxying requests to the ai-agent microservice.
 
-Pure asyncio/httpx — no FastAPI imports — so failure mapping and header
-hygiene are exhaustively unit-testable with ``httpx.MockTransport``.
+Pure asyncio/httpx — no FastAPI router/request imports — so failure mapping
+and header hygiene are exhaustively unit-testable with ``httpx.MockTransport``.
+The only FastAPI surface is the two response wrappers (buffered + streaming).
 
 Security posture:
 - ONLY the caller's ``Authorization: Bearer`` header and the resolved
@@ -16,14 +17,22 @@ Security posture:
 - Transport failures (connect/timeout) raise the typed 503 problem the
   frontend mock-fallback policy consumes; upstream application errors
   pass through untouched (ai-agent speaks RFC 7807 already).
+- Streaming relays (``stream=True``) keep the upstream connection open and
+  forward each chunk as it arrives; a client disconnect closes that
+  connection, cancelling the upstream SSE stream — no orphaned generation.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import httpx
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from core.core.exceptions import AiServiceUnavailableError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 def build_forward_headers(*, authorization: str | None, tenant_slug: str | None) -> dict[str, str]:
@@ -45,8 +54,13 @@ async def forward_to_ai_agent(
     tenant_slug: str | None,
     body: bytes | None = None,
     params: httpx.QueryParams | None = None,
+    stream: bool = False,
 ) -> httpx.Response:
     """Send one request to ai-agent and return its response untouched.
+
+    ``stream=True`` returns a streaming response whose body must be consumed
+    via ``aiter_bytes()`` and closed with ``aclose()`` — use it only with
+    :func:`relay_stream_response`.
 
     Raises:
         AiServiceUnavailableError: On any transport-level failure
@@ -71,7 +85,7 @@ async def forward_to_ai_agent(
     if request.url.host != client.base_url.host:
         raise ValueError(f"refusing to relay to non-configured host: {request.url.host!r}")
     try:
-        return await client.send(request)
+        return await client.send(request, stream=stream)
     except httpx.TransportError as exc:
         raise AiServiceUnavailableError("AI agent service did not respond") from exc
 
@@ -86,4 +100,30 @@ def relay_response(upstream: httpx.Response) -> Response:
         content=upstream.content,
         status_code=upstream.status_code,
         media_type=upstream.headers.get("content-type", "application/json"),
+    )
+
+
+def relay_stream_response(upstream: httpx.Response) -> Response:
+    """Relay a streaming upstream body chunk-by-chunk (SSE never buffered).
+
+    The upstream connection is closed when the stream ends OR the client
+    disconnects, which cancels the ai-agent generator upstream — no orphaned
+    LLM generation keeps running server-side.
+    """
+
+    async def _iter_body() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream.aclose()
+
+    return StreamingResponse(
+        _iter_body(),
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "text/event-stream"),
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

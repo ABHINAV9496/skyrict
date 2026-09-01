@@ -17,7 +17,12 @@ from ai_agent.core.audit_events import (
     AI_ANOMALY_DISMISSED,
     AI_ANOMALY_ESCALATED,
     AI_ANOMALY_RESOLVED,
+    AI_DEAL_HEALTH_ASSESSED,
+    AI_FOLLOW_UP_APPLIED,
+    AI_FOLLOW_UP_DISMISSED,
+    AI_FOLLOW_UP_GENERATED,
     AI_HR_COPILOT_EXCHANGE,
+    AI_LEAD_SCORED,
     AI_NARRATOR_GENERATED,
     AI_NARRATOR_REFRESHED,
     AI_QUERY_EXECUTED,
@@ -49,6 +54,12 @@ class TestAppendixBVocabulary:
         assert AI_AGENT_INTERRUPT_APPROVED == "ai.agent.interrupt.approved"
         assert AI_AGENT_INTERRUPT_DENIED == "ai.agent.interrupt.denied"
         assert AI_AGENT_INTERRUPT_EXPIRED == "ai.agent.interrupt.expired"
+        # SKY-61 CRM AI events.
+        assert AI_LEAD_SCORED == "ai.crm.lead.scored"
+        assert AI_DEAL_HEALTH_ASSESSED == "ai.crm.deal.health"
+        assert AI_FOLLOW_UP_GENERATED == "ai.crm.follow_up.generated"
+        assert AI_FOLLOW_UP_APPLIED == "ai.crm.follow_up.applied"
+        assert AI_FOLLOW_UP_DISMISSED == "ai.crm.follow_up.dismissed"
 
     def test_all_events_covers_exactly_the_documented_constants(self) -> None:
         expected = {
@@ -66,6 +77,11 @@ class TestAppendixBVocabulary:
             audit_events.AI_AGENT_INTERRUPT_APPROVED,
             audit_events.AI_AGENT_INTERRUPT_DENIED,
             audit_events.AI_AGENT_INTERRUPT_EXPIRED,
+            audit_events.AI_LEAD_SCORED,
+            audit_events.AI_DEAL_HEALTH_ASSESSED,
+            audit_events.AI_FOLLOW_UP_GENERATED,
+            audit_events.AI_FOLLOW_UP_APPLIED,
+            audit_events.AI_FOLLOW_UP_DISMISSED,
         }
         assert set(ALL_AI_AUDIT_EVENTS) == expected
 

@@ -5,7 +5,9 @@ inventory module.  Every feature is designed as an **advisor** — it suggests,
 never executes.  All mutations require human approval through the existing
 permission system.
 
-> **Status:** Planned — not yet implemented.
+> **Status:** Feature 1 (NL queries) remains a later milestone. Features 2–3
+> are implemented (INV-AI-002, SKY-69) and Feature 4 — semantic product
+> search — is implemented (INV-AI-003, SKY-70).
 > **Security posture:** Read-only by default; mutations only on explicit human
 > approval through the existing RBAC layer.
 
@@ -21,6 +23,7 @@ permission system.
 6. [Implementation plan](#6-implementation-plan)
 7. [Risk assessment](#7-risk-assessment)
 8. [Testing strategy](#8-testing-strategy)
+9. [Feature 4 — Semantic product search](#9-feature-4--semantic-product-search)
 
 ---
 
@@ -718,6 +721,108 @@ services:
 
 ---
 
+## 9. Feature 4 — Semantic product search (INV-AI-003 / SKY-70)
+
+**Status: implemented.** Users search products by meaning, not just exact text:
+"noise cancelling headphones" resolves to *HPH-100 Wireless Noise-Cancelling
+Headphones* even when no keyword matches. The index is a **post-commit
+snapshot** of each product's catalog text (SKU, name, category, unit) with a
+pgvector embedding column, kept in sync by core or rebuilt on demand.
+
+### 9.1 What it does
+
+| Surface | Description |
+|---------|-------------|
+| `GET /ai/inventory/search` | Hybrid search over the tenant's snapshot: exact (`ILIKE`) first, then semantic (cosine) top-k, merged without duplicates |
+| `POST /ai/inventory/embeddings/sync` | Machine-to-machine batch upsert/remove of snapshot rows, dispatched by core after product create/update/reactivate/deactivate |
+| `ai-agent inventory reindex` | Operator CLI to rebuild one tenant's snapshot (full or incremental) from core's catalog when events are not configured or history must be backfilled |
+
+Embedding text is exactly `"{sku} {name} {category} {unit}"` (empty parts
+dropped) — see migration `0007_inv_item_embeddings` and
+`build_embedding_text`; sync and reindex produce identical vectors for the
+same product. Only those four searchable fields are embedded/served; cost and
+sell prices, reorder points, customer/supplier names, and user IDs never leave
+the trust boundary for embeddings (§5.5).
+
+### 9.2 Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/ai/inventory/search` (ai-agent) | GET | JWT + `erp.inventory.read` (reached through core's `/api/v1/ai/*` proxy) | Hybrid product search, optional `warehouse_id` filter |
+| `/ai/inventory/embeddings/sync` (ai-agent) | POST | Shared secret `AI_INVENTORY_SYNC_TOKEN` | Apply an envelope of `{upserts, removes}`; fails closed (401 mismatch, 503 unconfigured) |
+| `GET /inventory/products` (core) | GET | JWT + `erp.inventory.read`, **or** m2m `CORE_AI_INGEST_TOKEN` | Catalog source for reindex; the m2m branch exists only for the machine-to-machine pulls |
+
+### 9.3 Snapshot lifecycle
+
+```
+core product create/update/reactivate  deactivate
+        │                                     │
+        ▼                                     ▼
+inventory.product.upserted         inventory.product.removed
+        │                                     │
+        └─────────────► core dispatch (POST /api/v1/ai/inventory/embeddings/sync)
+                                     │ bearer: CORE_AI_SYNC_TOKEN (≡ AI_INVENTORY_SYNC_TOKEN)
+                                     │ tenant: routed X-Tenant-Slug
+                                     ▼
+                    ai-agent snapshot apply (removes first, never choked by an embed failure)
+                    ➜ stores embedding row in inv_item_embeddings
+
+Reindex path (backfill / no events): ai-agent inventory reindex --tenant <uuid|slug>
+  ➜ pulls core's catalog (m2m CORE_AI_INGEST_TOKEN) ➜ embeds ➜ writes snapshot
+```
+
+The dispatch is **best-effort by design**: the DB commit is authoritative and
+the HTTP call happens after it in a background task — a failure is logged, it
+never fails the committed request. Removes apply even when no embedding
+provider is configured (they need no vectors); a missing/failed provider skips
+upserts and reports `skipped=True`.
+
+### 9.4 Search behaviour
+
+- **Exact first:** where-clause hit when the query matches `name`/`sku`
+  (`ILIKE`); exact hits rank above semantic.
+- **Semantic leg:** cosine over `inv_item_embeddings.embedding`, gated by the
+  configured provider; when the provider is unavailable the service degrades
+  to exact-only rather than erroring.
+- **Merge:** exact + semantic results are de-duplicated on product id.
+- **Warehouse filter:** if `warehouse_id` is passed, results restrict to
+  products stocked there.
+- **Valuation enrichment:** stock + valuation context is appended only when
+  the caller holds `erp.inventory.valuation` (gate added with SKY-70);
+  otherwise cost-relative fields are omitted.
+
+### 9.5 Configuration
+
+Core (`CORE_`-prefixed):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CORE_AI_SYNC_TOKEN` | empty | Bearer core presents on the sync dispatch; must match ai-agent's `AI_INVENTORY_SYNC_TOKEN`. Empty disables the dispatch |
+| `CORE_AI_INGEST_TOKEN` | empty | Shared secret ai-agent reindex/ingest CLIs present on `GET /inventory/products`. Empty disables the m2m branch |
+| `CORE_AI_AGENT_URL` | `http://localhost:8002` | Base URL of ai-agent (`http://skyrict-ai-agent:8000` in docker) |
+| `CORE_AI_AGENT_TIMEOUT_SECONDS` | `30` | Timeout for ai-agent calls |
+
+AI-agent (`AI_`-prefixed):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_INVENTORY_SYNC_TOKEN` | empty | Must match core's `CORE_AI_SYNC_TOKEN`; empty disables the sync endpoint (503) |
+| `AI_INGEST_TOKEN` | empty | Bearer the reindex/ingest CLIs present to core; must match core's `CORE_AI_INGEST_TOKEN` |
+| `AI_INV_SEARCH_DEFAULT_LIMIT` | `20` | Max products returned |
+| `AI_INV_SEARCH_SEMANTIC_TOP_K` | `50` | Rows pulled from the vector index before merge |
+| `AI_INV_SEARCH_CACHE_TTL_SECONDS` | `300` | Hot-cache TTL for search results |
+| `AI_RATE_LIMIT_INV_SEARCH_PER_MIN` | `30` | Searches per user per minute |
+
+### 9.6 Demo data
+
+`core seed_demo.py` appends five semantically distinct hardware SKUs (HPH-100,
+KBD-200, MON-300, DKL-400, CHA-500) stocked in the Main DC so acceptance
+queries ("noise cancelling headphones", "office chair", "monitor") resolve
+through the embedding index. Existing SKUs are never renamed; products are
+seeded per-SKU so the list is idempotent.
+
+---
+
 ## Appendix A — Permission keys
 
 | Key | Description | Used by |
@@ -756,7 +861,7 @@ services:
 | `AI_ANOMALY_AUTO_CLOSE_DAYS` | No | `30` | Days before open anomaly auto-closes |
 | `AI_EMAIL_SMTP_HOST` | No | — | SMTP relay host for critical-anomaly alerts; empty = log-only transport |
 | `AI_EMAIL_SMTP_PORT` | No | `1025` | SMTP relay port |
-| `AI_EMAIL_SMTP_USERNAME` | No | — | SMTP auth username (MailHog needs none) |
+| `AI_EMAIL_SMTP_USERNAME` | No | — | SMTP auth username (Mailpit needs none) |
 | `AI_EMAIL_SMTP_PASSWORD` | No | — | SMTP auth password |
 | `AI_EMAIL_SMTP_USE_TLS` | No | `false` | Enable STARTTLS to the relay |
 | `AI_EMAIL_FROM_ADDR` | No | `Skyrict <no-reply@skyrict.dev>` | From address for alert email |

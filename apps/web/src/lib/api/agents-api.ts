@@ -4,7 +4,7 @@
  * service later is a one-line change per function.
  */
 
-import { apiFetch, apiPost } from "@/lib/api/http";
+import { apiDelete, apiFetch, apiPatch, apiPost } from "@/lib/api/http";
 import type { Conversation } from "@/lib/mock/agents-store";
 
 export async function getConversations(): Promise<Conversation[]> {
@@ -38,4 +38,16 @@ export async function appendAgentMessage(id: string, content: string): Promise<C
     content,
     role: "agent",
   });
+}
+
+export async function renameConversation(id: string, title: string): Promise<Conversation> {
+  return apiPatch<Conversation>(`/api/v1/agents/conversations/${id}`, { title });
+}
+
+export async function setConversationPinned(id: string, pin: boolean): Promise<Conversation> {
+  return apiPatch<Conversation>(`/api/v1/agents/conversations/${id}`, { pin });
+}
+
+export async function deleteConversation(id: string): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>(`/api/v1/agents/conversations/${id}`);
 }

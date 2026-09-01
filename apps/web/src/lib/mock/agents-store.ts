@@ -22,6 +22,8 @@ export interface Conversation {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** True when the conversation is pinned to the top of the sidebar list. */
+  pinned?: boolean;
   messages: ChatMessage[];
 }
 
@@ -42,11 +44,42 @@ function deriveTitle(prompt: string): string {
 }
 
 export function listConversations(): Conversation[] {
-  return [...conversations.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return [...conversations.values()].sort(
+    (a, b) =>
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+      b.updatedAt.localeCompare(a.updatedAt),
+  );
 }
 
 export function getConversation(id: string): Conversation | undefined {
   return conversations.get(id);
+}
+
+/** Rename a conversation. Returns the updated conversation or undefined. */
+export function renameConversation(
+  id: string,
+  title: string,
+): Conversation | undefined {
+  const conversation = conversations.get(id);
+  const trimmed = title.trim();
+  if (!conversation || !trimmed) return conversation;
+  conversation.title = trimmed.length > 60 ? `${trimmed.slice(0, 57)}…` : trimmed;
+  conversation.updatedAt = new Date().toISOString();
+  return conversation;
+}
+
+/** Toggle a conversation's pinned state. Returns the updated conversation or undefined. */
+export function togglePinConversation(id: string): Conversation | undefined {
+  const conversation = conversations.get(id);
+  if (!conversation) return undefined;
+  conversation.pinned = !conversation.pinned;
+  conversation.updatedAt = new Date().toISOString();
+  return conversation;
+}
+
+/** Delete a conversation. Returns true when a conversation was removed. */
+export function deleteConversation(id: string): boolean {
+  return conversations.delete(id);
 }
 
 export function createConversation(title: string, firstPrompt?: string): Conversation {

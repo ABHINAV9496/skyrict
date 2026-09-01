@@ -402,6 +402,8 @@ export interface AccountCodeSuggestion {
   reasoning: string;
   amount: number | null;
   side: "debit" | "credit";
+  contra_code: string;
+  contra_name: string;
 }
 
 export interface WorkingCapitalAlert {

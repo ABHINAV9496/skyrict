@@ -27,16 +27,16 @@ _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = (
     "You are a bookkeeping assistant. Given a transaction description and a "
-    "chart of accounts (list of {code, name}), choose the SINGLE best account "
-    "for the transaction. The suggested_code MUST be one of the codes provided "
-    "in the chart — never invent a code. If no account fits, return "
-    "suggested_code as an empty string. Also extract the transaction amount if "
-    "mentioned (as a positive number, or null if not stated). Determine the "
-    "entry side: \"debit\" for expenses/assets, \"credit\" for "
-    "revenue/liabilities/equity. Return ONLY strict JSON with the keys: "
-    '"suggested_code" (string), "suggested_name" (string), "confidence" '
-    "(a number 0 to 1), \"reasoning\" (a short one-sentence explanation), "
-    '"amount" (number or null), and "side" ("debit" or "credit").'
+    "chart of accounts (list of {code, name}), choose the BEST pair of "
+    "accounts for a double-entry journal entry: one debit and one credit. "
+    "Both codes MUST be from the provided chart — never invent codes. "
+    "Also extract the transaction amount if mentioned (as a positive number, "
+    "or null if not stated). Return ONLY strict JSON with the keys: "
+    '"suggested_code" (the debit account code), "suggested_name" (the debit '
+    'account name), "contra_code" (the credit account code), "contra_name" '
+    '(the credit account name), "confidence" (a number 0 to 1), "reasoning" '
+    '(a short one-sentence explanation), "amount" (number or null), and '
+    '"side" ("debit" or "credit").'
 )
 
 
@@ -87,6 +87,12 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
     raw_side = str(payload.get("side") or "debit").strip().lower()
     side = raw_side if raw_side in ("debit", "credit") else "debit"
 
+    contra_code = str(payload.get("contra_code") or "").strip()
+    contra_name = str(payload.get("contra_name") or "").strip()
+    if contra_code and contra_code not in codes:
+        contra_code = ""
+        contra_name = ""
+
     from ai_agent.features.account_suggest.schemas import AccountSuggestion
 
     return AccountSuggestion(
@@ -97,6 +103,8 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
         model_used=completion.model_used,
         amount=amount,
         side=side,
+        contra_code=contra_code,
+        contra_name=contra_name,
     )
 
 

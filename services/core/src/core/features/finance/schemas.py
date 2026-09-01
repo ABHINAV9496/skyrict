@@ -305,6 +305,8 @@ class AccountCodeSuggestionResponse(BaseModel):
     reasoning: str = ""
     amount: Decimal | None = None
     side: str = "debit"
+    contra_code: str = ""
+    contra_name: str = ""
 
 
 class WorkingCapitalAlertResponse(BaseModel):

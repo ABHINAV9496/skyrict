@@ -615,6 +615,9 @@ export function SuggestAccountCode({ accounts = [] }: { accounts?: Account[] }) 
       draft_memo: suggestion.description || description,
       draft_account: suggestion.suggested_code,
     });
+    if (suggestion.contra_code) {
+      params.set("draft_contra_account", suggestion.contra_code);
+    }
     if (suggestion.amount != null && suggestion.amount > 0) {
       params.set("draft_amount", String(suggestion.amount));
       params.set("draft_side", suggestion.side);

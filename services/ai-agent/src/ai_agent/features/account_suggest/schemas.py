@@ -34,3 +34,5 @@ class AccountSuggestion:
     model_used: str
     amount: float | None = None
     side: str = "debit"
+    contra_code: str = ""
+    contra_name: str = ""

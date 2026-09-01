@@ -138,7 +138,7 @@ function AccountRow({
 interface CreateJournalEntryDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  initialValues?: { memo: string; accountCode: string; amount: number | null; side: "debit" | "credit" };
+  initialValues?: { memo: string; accountCode: string; contraAccount: string; amount: number | null; side: "debit" | "credit" };
 }
 
 function CreateJournalEntryDialog({
@@ -163,6 +163,8 @@ function CreateJournalEntryDialog({
     accountType?: string;
     amount: number | null;
     side: "debit" | "credit";
+    contraCode: string;
+    contraName: string;
   }>(null);
   const [memoSuggestionLoading, setMemoSuggestionLoading] = useState(false);
 
@@ -228,6 +230,9 @@ function CreateJournalEntryDialog({
         } else {
           setValue("lines.1.credit", amountStr);
         }
+        if (initialValues.contraAccount) {
+          setValue("lines.1.account_code", initialValues.contraAccount);
+        }
       }
       initialValuesAppliedRef.current = true;
     }
@@ -263,6 +268,8 @@ function CreateJournalEntryDialog({
         accountType: matched?.account_type,
         amount: result.amount ?? extractAmountFromText(text),
         side: result.side,
+        contraCode: result.contra_code,
+        contraName: result.contra_name,
       });
     } catch {
       setMemoSuggestion(null);
@@ -307,6 +314,9 @@ function CreateJournalEntryDialog({
         setValue(`lines.${oppositeIdx}.debit`, amountStr);
       } else {
         setValue(`lines.${oppositeIdx}.credit`, amountStr);
+      }
+      if (memoSuggestion.contraCode) {
+        setValue(`lines.${oppositeIdx}.account_code`, memoSuggestion.contraCode);
       }
     }
     setMemoSuggestion(null);
@@ -440,6 +450,12 @@ function CreateJournalEntryDialog({
                   <span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">
                     {memoSuggestion.side === "credit" ? "Cr" : "Dr"}{" "}
                     {formatMoney(memoSuggestion.amount)}
+                  </span>
+                ) : null}
+                {memoSuggestion.contraCode ? (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    / <span className="font-mono font-semibold">{memoSuggestion.contraCode}</span>{" "}
+                    <span className="text-foreground">{memoSuggestion.contraName}</span>
                   </span>
                 ) : null}
                 <span className="ml-2 text-xs text-muted-foreground">
@@ -639,7 +655,7 @@ function FinanceJournalEntries() {
 
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftInitialValues, setDraftInitialValues] = useState<
-    { memo: string; accountCode: string; amount: number | null; side: "debit" | "credit" } | undefined
+    { memo: string; accountCode: string; contraAccount: string; amount: number | null; side: "debit" | "credit" } | undefined
   >(undefined);
   const paramsAppliedRef = useRef(false);
 
@@ -651,9 +667,11 @@ function FinanceJournalEntries() {
       const draftAmountStr = searchParams.get("draft_amount");
       const draftAmount = draftAmountStr ? Number(draftAmountStr) : null;
       const draftSide = searchParams.get("draft_side");
+      const draftContraAccount = searchParams.get("draft_contra_account") || "";
       setDraftInitialValues({
         memo: draftMemo,
         accountCode: draftAccount,
+        contraAccount: draftContraAccount,
         amount: Number.isFinite(draftAmount) && (draftAmount as number) > 0 ? draftAmount : null,
         side: draftSide === "credit" ? "credit" : "debit",
       });
@@ -663,6 +681,7 @@ function FinanceJournalEntries() {
       params.delete("draft_account");
       params.delete("draft_amount");
       params.delete("draft_side");
+      params.delete("draft_contra_account");
       const qs = params.toString();
       router.replace(`/dashboard/erp/finance/journal-entries${qs ? `?${qs}` : ""}`, { scroll: false });
     }

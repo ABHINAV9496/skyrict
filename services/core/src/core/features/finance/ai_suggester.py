@@ -69,6 +69,9 @@ async def suggest_account_code_with_ai(
     raw_side = str(data.get("side") or "debit").strip().lower()
     side = raw_side if raw_side in ("debit", "credit") else "debit"
 
+    contra_code = str(data.get("contra_code") or "").strip()
+    contra_name = str(data.get("contra_name") or "").strip()
+
     return AccountCodeSuggestion(
         description=description,
         suggested_code=code,
@@ -77,4 +80,6 @@ async def suggest_account_code_with_ai(
         reasoning=str(data.get("reasoning") or "").strip(),
         amount=amount,
         side=side,
+        contra_code=contra_code,
+        contra_name=contra_name,
     )

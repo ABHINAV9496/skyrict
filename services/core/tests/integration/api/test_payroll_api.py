@@ -599,6 +599,94 @@ class TestJeBridge:
         assert je["status"] == "draft"
         assert je["line_count"] == 3
 
+    async def test_full_cycle_schedule_to_accrual_draft(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        """HR-AUT-001 full-cycle demo (Gherkin 3) across every deliverable.
+
+        batch computes payslips -> run approved -> payslip-review approve gates
+        the employee's ``payslip_ready`` notification (no duplicates) -> paying
+        drafts the Finance accrual JE. Chains the previously isolated
+        notification orchestrator and JE-bridge paths into one cross-module
+        proof.
+        """
+        from sqlalchemy import text as sa_text
+
+        from core.db.session import async_session_factory
+
+        tenant_id = await _seed_payroll_accrual_chart(integration_db)
+        headers = tenant_headers("olympus")
+
+        # Non-zero deductions exercise the 3-leg accrual entry.
+        settings_resp = await client.put(
+            "/api/v1/payroll/settings",
+            json={"pf_rate": 0.05, "tax_rate": 0.10},
+            headers=headers,
+        )
+        assert settings_resp.status_code == 200, settings_resp.text
+
+        # Batch completes -> exactly one computed payslip queued for review.
+        employee = await hire_employee(client, headers, hire_date="2026-01-05")
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        run_id = run["id"]
+        result = await _compute(client, headers, run_id)
+        assert len(result["entries"]) == 1
+
+        # Link a portal user so payroll-review approval gates their delivery.
+        linked_user = uuid.uuid4()
+        async with async_session_factory() as session:
+            await session.execute(
+                sa_text(
+                    "UPDATE erp_employees SET user_id = :uid "
+                    "WHERE id = :eid AND tenant_id = :tid"
+                ),
+                {"uid": linked_user, "eid": uuid.UUID(employee["id"]), "tid": tenant_id},
+            )
+            await session.commit()
+
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
+        assert approved.status_code == 200, approved.text
+
+        # Approval releases the employee's payslip_ready notification (0030).
+        reviews_resp = await client.get("/api/v1/payroll/payslips/reviews", headers=headers)
+        assert reviews_resp.status_code == 200, reviews_resp.text
+        reviews = reviews_resp.json()["data"]
+        assert len(reviews) == 1
+        review_id = reviews[0]["id"]
+        approve_resp = await client.post(
+            f"/api/v1/payroll/payslips/reviews/{review_id}/approve", headers=headers
+        )
+        assert approve_resp.status_code == 200, approve_resp.text
+        assert approve_resp.json()["data"]["status"] == "approved"
+
+        async with async_session_factory() as session:
+            count = (
+                await session.execute(
+                    sa_text(
+                        "SELECT count(*) FROM ai_payroll_notifications "
+                        "WHERE tenant_id = :tid AND recipient_user_id = :uid "
+                        "AND event_type = 'payslip_ready'"
+                    ),
+                    {"tid": tenant_id, "uid": linked_user},
+                )
+            ).scalar_one()
+            assert count == 1  # exactly one: the dedupe key prevents re-delivery
+
+        # Mark-paid cross-module bridge -> accrual JE draft appears in Finance.
+        paid = await client.post(f"/api/v1/payroll/runs/{run_id}/pay", headers=headers)
+        assert paid.status_code == 200, paid.text
+        paid_data = paid.json()["data"]
+        assert paid_data["status"] == "paid"
+        assert paid_data["je_bridge_status"] == "draft"
+        je = await _fetch_payroll_journal_entry(tenant_id, run_id)
+        assert je is not None
+        assert je["status"] == "draft"
+        assert je["line_count"] == 3
+
     async def test_mark_paid_pending_when_chart_missing(
         self,
         client: AsyncClient,

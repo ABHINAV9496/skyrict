@@ -14,9 +14,18 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
-from core.domain.entities import Product, StockLevel, StockMovement, Warehouse
+from core.domain.entities import (
+    DeadStockItem,
+    MovementTrendPoint,
+    Product,
+    SlowMoverItem,
+    StockHealthSummary,
+    StockLevel,
+    StockMovement,
+    Warehouse,
+)
 from core.domain.value_objects import Money, StockMovementType
 
 
@@ -196,6 +205,59 @@ class InventoryRepositoryPort(Protocol):
         movement_type: StockMovementType | None = None,
     ) -> int: ...
 
+    # --- Stock-health analytics (INV-ANL-001) ---
+    async def dead_stock(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        days: int = 90,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[DeadStockItem]: ...
+
+    async def count_dead_stock(self, tenant_id: uuid.UUID, *, days: int = 90) -> int: ...
+
+    async def slow_movers(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        window_days: int = 180,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[SlowMoverItem]: ...
+
+    async def count_slow_movers(self, tenant_id: uuid.UUID, *, window_days: int = 180) -> int: ...
+
+    async def movement_trends(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID | None = None,
+        weeks: int = 13,
+    ) -> Sequence[MovementTrendPoint]: ...
+
+    async def health_summary(
+        self, tenant_id: uuid.UUID, *, days: int = 90
+    ) -> StockHealthSummary: ...
+
+    # --- Report snapshots (M-RPT lightweight persistence) ---
+    async def save_snapshot(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        definition_slug: str,
+        period: str,
+        payload: dict[str, Any],
+    ) -> None: ...
+
+    async def get_snapshot(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        definition_slug: str,
+        period: str,
+    ) -> dict[str, Any] | None: ...
+
     async def commit(self) -> None: ...
 
 
@@ -277,3 +339,38 @@ class InventoryServicePort(Protocol):
         qty: Decimal,
         ref_id: str,
     ) -> tuple[StockMovement, StockMovement]: ...
+
+    # --- Stock-health analytics (INV-ANL-001) ---
+    async def dead_stock(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        days: int = 90,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[DeadStockItem]: ...
+
+    async def count_dead_stock(self, tenant_id: uuid.UUID, *, days: int = 90) -> int: ...
+
+    async def slow_movers(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        window_days: int = 180,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Sequence[SlowMoverItem]: ...
+
+    async def count_slow_movers(self, tenant_id: uuid.UUID, *, window_days: int = 180) -> int: ...
+
+    async def movement_trends(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        warehouse_id: uuid.UUID | None = None,
+        weeks: int = 13,
+    ) -> Sequence[MovementTrendPoint]: ...
+
+    async def health_summary(
+        self, tenant_id: uuid.UUID, *, days: int = 90
+    ) -> StockHealthSummary: ...

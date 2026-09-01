@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  LogOut,
   MessageSquareText,
   MoreHorizontal,
   Pencil,
@@ -17,6 +16,7 @@ import {
 
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/dashboard/workspace/user-menu";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -39,15 +40,9 @@ import {
   renameConversation,
   setConversationPinned,
 } from "@/lib/api/agents-api";
-import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/mock/agents-store";
-
-/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
-function avatarSrc(user: AuthUser | null): string | null {
-  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
-}
 
 function isActive(pathname: string, id: string): boolean {
   const normalized =
@@ -203,7 +198,7 @@ export function AgentsChatSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, status } = useSession();
+  const { status } = useSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -310,59 +305,125 @@ export function AgentsChatSidebar({
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-3">
           <NewChatButton collapsed={collapsed} onNavigate={onCloseMobile} />
 
-          {conversations.filter((c) => c.pinned).length > 0 && (
-            <section className="space-y-1" aria-label="Pinned conversations">
-              {!collapsed ? (
-                <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
-                  Pinned
-                </p>
-              ) : null}
-              {conversations
-                .filter((conversation) => conversation.pinned)
-                .map((conversation) => (
-                  <ConversationRow
-                    key={conversation.id}
-                    conversation={conversation}
-                    active={isActive(pathname, conversation.id)}
-                    collapsed={collapsed}
-                    onSelect={onCloseMobile}
-                    onRename={() => handleRename(conversation)}
-                    onDelete={() => handleDelete(conversation)}
-                    onTogglePin={() => handleTogglePin(conversation)}
-                  />
-                ))}
-            </section>
-          )}
+          {collapsed ? (
+            /* Collapsed sidebar: category icons with dropdown lists */
+            <nav className="space-y-1" aria-label="Conversations">
+              {conversations.filter((c) => c.pinned).length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title="Pinned chats"
+                      className="flex w-full items-center justify-center rounded-lg px-0 py-2 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    >
+                      <Pin aria-hidden="true" className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="right" align="start" sideOffset={8}>
+                    <DropdownMenuLabel>Pinned</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {conversations
+                      .filter((conversation) => conversation.pinned)
+                      .map((conversation) => (
+                        <DropdownMenuItem key={conversation.id} asChild>
+                          <Link
+                            href={`/dashboard/agents/c/${conversation.id}`}
+                            onClick={onCloseMobile}
+                            className="w-full truncate"
+                          >
+                            {conversation.title}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
-          <section className="space-y-1" aria-label="Recent conversations">
-            {!collapsed ? (
-              <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
-                Recents
-              </p>
-            ) : null}
-            {conversations.filter((c) => !c.pinned).length > 0 ? (
-              conversations
-                .filter((conversation) => !conversation.pinned)
-                .map((conversation) => (
-                  <ConversationRow
-                    key={conversation.id}
-                    conversation={conversation}
-                    active={isActive(pathname, conversation.id)}
-                    collapsed={collapsed}
-                    onSelect={onCloseMobile}
-                    onRename={() => handleRename(conversation)}
-                    onDelete={() => handleDelete(conversation)}
-                    onTogglePin={() => handleTogglePin(conversation)}
-                  />
-                ))
-            ) : (
-              !collapsed && (
-                <p className="px-2.5 py-1 text-xs text-muted-foreground/60">
-                  No recent chats
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="Recent chats"
+                    className="flex w-full items-center justify-center rounded-lg px-0 py-2 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  >
+                    <MessageSquareText aria-hidden="true" className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start" sideOffset={8}>
+                  <DropdownMenuLabel>Recents</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {conversations.length > 0 ? (
+                    conversations.map((conversation) => (
+                      <DropdownMenuItem key={conversation.id} asChild>
+                        <Link
+                          href={`/dashboard/agents/c/${conversation.id}`}
+                          onClick={onCloseMobile}
+                          className="w-full truncate"
+                        >
+                          {conversation.title}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground">No chats yet</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </nav>
+          ) : (
+            /* Expanded sidebar: section headers with conversation rows */
+            <>
+              {conversations.filter((c) => c.pinned).length > 0 && (
+                <section className="space-y-1" aria-label="Pinned conversations">
+                  <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                    Pinned
+                  </p>
+                  {conversations
+                    .filter((conversation) => conversation.pinned)
+                    .map((conversation) => (
+                      <ConversationRow
+                        key={conversation.id}
+                        conversation={conversation}
+                        active={isActive(pathname, conversation.id)}
+                        collapsed={collapsed}
+                        onSelect={onCloseMobile}
+                        onRename={() => handleRename(conversation)}
+                        onDelete={() => handleDelete(conversation)}
+                        onTogglePin={() => handleTogglePin(conversation)}
+                      />
+                    ))}
+                </section>
+              )}
+
+              <section className="space-y-1" aria-label="Recent conversations">
+                <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                  Recents
                 </p>
-              )
-            )}
-          </section>
+                {conversations.filter((c) => !c.pinned).length > 0 ? (
+                  conversations
+                    .filter((conversation) => !conversation.pinned)
+                    .map((conversation) => (
+                      <ConversationRow
+                        key={conversation.id}
+                        conversation={conversation}
+                        active={isActive(pathname, conversation.id)}
+                        collapsed={collapsed}
+                        onSelect={onCloseMobile}
+                        onRename={() => handleRename(conversation)}
+                        onDelete={() => handleDelete(conversation)}
+                        onTogglePin={() => handleTogglePin(conversation)}
+                      />
+                    ))
+                ) : (
+                  <p className="px-2.5 py-1 text-xs text-muted-foreground/60">
+                    No recent chats
+                  </p>
+                )}
+              </section>
+            </>
+          )}
         </div>
 
         <div className="border-t border-sidebar-border p-3">
@@ -381,38 +442,8 @@ export function AgentsChatSidebar({
           </Link>
         </div>
 
-        <footer className="space-y-2 border-t border-sidebar-border p-3">
-          <div className={cn("flex items-center gap-3", collapsed && "flex-col")}>
-            <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-              {avatarSrc(user) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarSrc(user) ?? ""}
-                  alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
-                  className="size-full object-cover"
-                />
-              ) : (
-                (user?.fullName || user?.email || "A").slice(0, 2).toUpperCase()
-              )}
-            </div>
-            {!collapsed ? (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {user?.fullName || user?.email || "Account"}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LogOut aria-hidden="true" className="size-4" />
-            </button>
-          </div>
+        <footer className="border-t border-sidebar-border p-3">
+          <UserMenu collapsed={collapsed} />
         </footer>
       </aside>
 

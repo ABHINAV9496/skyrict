@@ -1271,7 +1271,7 @@ class FinanceRepository:
         raw = match.group(1).replace(",", "")
         try:
             amount = Decimal(raw)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None, "debit"
         if amount <= 0:
             return None, "debit"

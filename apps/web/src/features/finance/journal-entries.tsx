@@ -230,13 +230,24 @@ function CreateJournalEntryDialog({
         } else {
           setValue("lines.1.credit", amountStr);
         }
-        if (initialValues.contraAccount) {
-          setValue("lines.1.account_code", initialValues.contraAccount);
+        const contraCode = initialValues.contraAccount || findContraAccountRef.current(initialValues.accountCode);
+        if (contraCode) {
+          setValue("lines.1.account_code", contraCode);
         }
       }
       initialValuesAppliedRef.current = true;
     }
   }, [open, initialValues, setValue, fields.length]);
+
+  useEffect(() => {
+    if (!open || !initialValuesAppliedRef.current || fields.length < 2) return;
+    const line1Account = watch(`lines.1.account_code`);
+    if (line1Account || accounts.length === 0) return;
+    const contraCode = findContraAccountRef.current(initialValues?.accountCode ?? "");
+    if (contraCode) {
+      setValue("lines.1.account_code", contraCode);
+    }
+  }, [open, accounts.length, fields.length, setValue, initialValues, watch]);
 
   useEffect(() => {
     if (!open) {
@@ -291,6 +302,21 @@ function CreateJournalEntryDialog({
     return () => clearTimeout(timer);
   }, [memoValue, open, fetchMemoSuggestion]);
 
+  const findContraAccount = useCallback(
+    (primaryCode: string): string => {
+      const lower = (s: string) => s.toLowerCase();
+      const isCashOrBank = (a: Account) =>
+        lower(a.name).includes("cash") || lower(a.name).includes("bank");
+      const contra = accounts.find(
+        (a) => a.code !== primaryCode && (isCashOrBank(a) || lower(a.name).includes("checking") || lower(a.name).includes("savings")),
+      );
+      return contra?.code ?? accounts.find((a) => a.code !== primaryCode && a.account_type === "asset")?.code ?? "";
+    },
+    [accounts],
+  );
+  const findContraAccountRef = useRef(findContraAccount);
+  findContraAccountRef.current = findContraAccount;
+
   function applyMemoSuggestion() {
     if (!memoSuggestion) return;
     const targetIndex = fields.findIndex((f) => {
@@ -315,8 +341,9 @@ function CreateJournalEntryDialog({
       } else {
         setValue(`lines.${oppositeIdx}.credit`, amountStr);
       }
-      if (memoSuggestion.contraCode) {
-        setValue(`lines.${oppositeIdx}.account_code`, memoSuggestion.contraCode);
+      const contraCode = memoSuggestion.contraCode || findContraAccount(memoSuggestion.code);
+      if (contraCode) {
+        setValue(`lines.${oppositeIdx}.account_code`, contraCode);
       }
     }
     setMemoSuggestion(null);

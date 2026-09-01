@@ -20,7 +20,9 @@ LLM stream — no orphaned generation runs server-side.
 
 from __future__ import annotations
 
+import contextlib
 import json
+from asyncio import CancelledError
 from typing import TYPE_CHECKING, Annotated, Any
 
 import structlog
@@ -209,7 +211,15 @@ async def _event_stream(
     tenant_id: Any,
     user_id: Any,
 ) -> AsyncIterator[str]:
-    """Map supervisor events to SSE frames; sanitized failure frames only."""
+    """Map supervisor events to SSE frames; sanitized failure frames only.
+
+    Lifecycle guarantees:
+      - A ``done`` event is ALWAYS the last frame, even when the generator
+        is cancelled (client disconnect) or the upstream LLM fails.
+      - ``CancelledError`` (client disconnect) is caught explicitly because
+        it inherits from ``BaseException`` in Python 3.9+ and would bypass
+        ``except Exception``.
+    """
     done_sent = False
     try:
         async for event in runtime.stream_answer(
@@ -219,17 +229,23 @@ async def _event_stream(
             if name == EVENT_DONE:
                 done_sent = True
             yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+    except CancelledError:
+        # Client disconnected — the ASGI server cancelled this task.
+        # Do NOT yield here; the generator is being torn down.
+        logger.info("chat.stream_cancelled")
     except AiUnavailableError as exc:
         logger.warning("chat.stream_unavailable", error=str(exc))
-        yield _error_frame("ai_unavailable")
+        yield _error_frame("The AI service is temporarily unavailable. Please try again.")
     except Exception:
         logger.exception("chat.stream_failed")
-        yield _error_frame("internal_error")
+        yield _error_frame("An unexpected error occurred. Please try again.")
     finally:
         # Safety net: always send a done event so the client never stays
         # stuck on loading dots if the generator exits without one.
+        # On CancelledError the client is already gone, so we skip the yield.
         if not done_sent:
-            yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
+            with contextlib.suppress(GeneratorExit):
+                yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
 
 
 def _to_sse(event: SupervisorEvent) -> tuple[str, dict[str, object]]:

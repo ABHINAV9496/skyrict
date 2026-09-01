@@ -2,19 +2,20 @@
 
 Fanned out once a batch reaches a terminal state:
 
-* ``payslip_ready`` — for every employee with a committed payslip entry in a
-  *completed* (run-finalized) batch, routed to the employee's linked identity
-  user and by their own delivery preference. A missing preference row means
-  the defaults (in-app ON, email OFF); ``email_stub`` is set when the user
-  opted in. Employees without a linked user get no row (documented: in-app
-  delivery needs a portal account).
+* ``payslip_ready`` — fires PER-EMPLOYEE when the payslip is approved
+  (``PayrollService.approve_payslip`` 0030 delivery-gate), routed to the
+  employee's linked identity user and by their own delivery preference. A
+  missing preference row means the defaults (in-app ON, email OFF);
+  ``email_stub`` is set when the user opted in. Employees without a linked
+  user get no row (documented: in-app delivery needs a portal account). This
+  no longer fires at batch-complete — approval gates employee delivery.
 * ``payroll_batch_digest`` — for completed AND failed batches, one row per
   payroll admin (holders of ``erp.payroll.ai.read``) carrying totals and the
-  failure list.
+  failure list (still fires at batch terminal state).
 
 Dedupe: ``(tenant_id, recipient_user_id, dedupe_key)`` is unique, and every
-insert is ``ON CONFLICT DO NOTHING`` — re-running the orchestrator for an
-already-notified batch inserts nothing, which is exactly the acceptance
+insert is ``ON CONFLICT DO NOTHING`` — re-running the orchestrator (or
+re-approving the same version) inserts nothing, which is exactly the acceptance
 criterion "each employee holds exactly one notification row".
 """
 
@@ -124,17 +125,14 @@ class PayrollNotificationOrchestrator:
         Returns the number of rows actually inserted (0 when the batch was
         already notified — the dedupe made this a no-op, or the batch deserves
         nothing: dry-run, aborted, or still in flight).
+
+        Only the admin digest fans out here. ``payslip_ready`` is delivered
+        per-employee on payslip approval (0030 delivery-gate), so a completed
+        batch does not itself email any employee.
         """
         if batch.dry_run or status not in (BATCH_COMPLETED, BATCH_FAILED):
             return 0
-        inserted = 0
-        if status == BATCH_COMPLETED:
-            inserted += await self._payslip_ready_rows(
-                tenant_id=tenant_id,
-                batch_id=batch.id,
-                run_id=run_id,
-            )
-        inserted += await self._admin_digests(
+        inserted = await self._admin_digests(
             tenant_id=tenant_id,
             batch_id=batch.id,
             run_id=run_id,
@@ -165,41 +163,54 @@ class PayrollNotificationOrchestrator:
             )
         return inserted
 
-    async def _payslip_ready_rows(
+    async def notify_payslip_approved(
         self,
         *,
         tenant_id: uuid.UUID,
-        batch_id: uuid.UUID,
-        run_id: uuid.UUID | None,
-    ) -> int:
-        employee_ids = await self._repo.done_employee_ids(batch_id, tenant_id=tenant_id)
-        user_by_employee = await self._repo.employee_user_ids(tenant_id, employee_ids)
-        recipients = [user_id for user_id in user_by_employee.values() if user_id is not None]
-        prefs = await self._repo.prefs_for_users(tenant_id, recipients)
-        notifications: list[PayrollNotification] = []
-        for employee_id, user_id in user_by_employee.items():
-            if user_id is None:
-                # No portal account to receive the in-app notification.
-                continue
-            pref = prefs[user_id]
-            notifications.append(
-                PayrollNotification(
-                    tenant_id=tenant_id,
-                    recipient_user_id=user_id,
-                    event_type=EVENT_PAYSLIP_READY,
-                    dedupe_key=f"payslip:{batch_id}:{employee_id}",
-                    in_app=pref.in_app_on,
-                    email_stub=pref.email_on,
-                    subject="Your payslip is ready",
-                    body=(
-                        f"Your payslip for payroll run {run_id} is ready to view."
-                    ),
-                    batch_id=batch_id,
-                    run_id=run_id,
-                    employee_id=employee_id,
-                )
+        run_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        version: int,
+    ) -> None:
+        """Deliver one employee's ``payslip_ready`` on payslip approval (0030).
+
+        Implements ``PayslipApprovedNotifierPort`` — the delivery-gate that
+        makes "approval gates employee delivery" literal. Idempotent per
+        ``(run_id, employee_id, version)`` via the dedupe key, so re-approving
+        the same version inserts nothing.
+        """
+        user_by_employee = await self._repo.employee_user_ids(tenant_id, [employee_id])
+        user_id = user_by_employee.get(employee_id)
+        if user_id is None:
+            # No portal account to receive the in-app notification.
+            return
+        pref = await self._repo.get_pref(tenant_id, user_id)
+        notification = PayrollNotification(
+            tenant_id=tenant_id,
+            recipient_user_id=user_id,
+            event_type=EVENT_PAYSLIP_READY,
+            dedupe_key=f"payslip:{run_id}:{employee_id}:{version}",
+            in_app=pref.in_app_on,
+            email_stub=pref.email_on,
+            subject="Your payslip is ready",
+            body=f"Your payslip for payroll run {run_id} is ready to view.",
+            batch_id=None,
+            run_id=run_id,
+            employee_id=employee_id,
+        )
+        await self._repo.insert_notifications(tenant_id=tenant_id, notifications=[notification])
+        if self._audit is not None:
+            await self._audit.log(
+                action=PAYROLL_AUTO_NOTIFICATIONS_SENT,
+                target=f"payslip:{employee_id}:{version}",
+                tenant_id=tenant_id,
+                user_id=user_id,
+                details={
+                    "event_type": EVENT_PAYSLIP_READY,
+                    "run_id": str(run_id),
+                    "employee_id": str(employee_id),
+                    "version": version,
+                },
             )
-        return await self._repo.insert_notifications(tenant_id=tenant_id, notifications=notifications)
 
     async def _admin_digests(
         self,
@@ -246,7 +257,9 @@ class PayrollNotificationOrchestrator:
             )
             for admin_id in admins
         ]
-        return await self._repo.insert_notifications(tenant_id=tenant_id, notifications=notifications)
+        return await self._repo.insert_notifications(
+            tenant_id=tenant_id, notifications=notifications
+        )
 
     async def list_notifications(
         self,
@@ -284,9 +297,7 @@ class PayrollNotificationOrchestrator:
             for row in rows
         ]
 
-    async def get_pref(
-        self, *, tenant_id: uuid.UUID, user_id: uuid.UUID
-    ) -> dict[str, object]:
+    async def get_pref(self, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         pref = await self._repo.get_pref(tenant_id, user_id)
         return {
             "user_id": str(pref.user_id),

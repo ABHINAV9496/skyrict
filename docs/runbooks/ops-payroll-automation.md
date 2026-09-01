@@ -15,12 +15,14 @@ lifecycle §5.3, API reference §7) and
 
 ## Operational overview
 
-Per tenant, the pipeline is: a payroll run is **enqueued** (manually via API, or
-automatically by a due **schedule**) → the in-process **worker** claims the batch
-and computes each employee's pay with a durable commit per item → the batch
-reaches a terminal state → **notifications** fan out (payslip-ready per
-employee + admin digest) → marking the run **paid** drafts the salary-accrual
-journal entry through the Finance seam.
+Per tenant, the pipeline is: a payroll run is **enqueued** (manually via API or
+run-detail UI, or automatically by a due **schedule**) → the in-process
+**worker** claims the batch and computes each employee's pay with a durable
+commit per item → the batch reaches a terminal state → an **admin digest** fans
+out, and each **payslip** enters a per-approval **review** queue → approving a
+payslip marks it ready and sends the employee's `payslip_ready` notification →
+marking the run **paid** drafts the salary-accrual journal entry through the
+Finance seam.
 
 The background worker runs inside the `services/core` process (started in the
 API lifespan; claims one eligible batch per tick via `FOR UPDATE SKIP LOCKED`,
@@ -34,6 +36,7 @@ manual/CI operator control.
 |---|---|
 | Batch (`ai_payroll_batch_runs`) | `queued` → `processing` → `completed` \| `failed` \| `aborted` |
 | Item (`ai_payroll_batch_items`) | `pending` → `processing` → `done` \| `failed` |
+| Payslip review (`payslip_review`) | `pending` → `approved` \| `rejected` (per payslip; versioned approval lifecycle) |
 | Payroll run (`erp_payroll_runs`) | `draft` → `computed` → `approved` → `paid`; `void` from `draft`/`computed`/`approved` |
 
 ### Key endpoints (full reference in `hr-payroll.md` §7)
@@ -49,6 +52,10 @@ manual/CI operator control.
 | GET/PUT | `/api/v1/ai/payroll/notifications/preferences` | `erp.payroll.ai.notify` | Per-user `in_app_on`, `email_on` (self-scoped) |
 | GET | `/api/v1/payroll/runs/{id}` | `erp.payroll.read` | Run detail incl. `je_bridge_status` |
 | GET | `/api/v1/payroll/runs/{id}/payslips` | `erp.payroll.read` | Per-employee gross/deductions/net; `[]` while `draft` |
+| GET | `/api/v1/payroll/payslips/reviews?status=&run_id=` | `erp.payroll.approve` | Payable-payslip review queue (filter by `status`, `run_id`) |
+| POST | `/api/v1/payroll/payslips/reviews/{id}/approve` | `erp.payroll.approve` | Approve one payslip; marks it ready + queues `payslip_ready` |
+| POST | `/api/v1/payroll/payslips/reviews/{id}/reject` | `erp.payroll.approve` | Reject one payslip (`reason` required) |
+| GET | `/api/v1/payroll/payslips/reviews/{id}/pdf` | `erp.payroll.read` | On-demand PDF (A4 Run/employee + pay table); regenerated, no BLOB |
 | POST | `/api/v1/payroll/runs/{id}/pay` | `erp.payroll.approve` | `approved→paid`; triggers the JE bridge (docs call this "mark-paid") |
 | PUT | `/api/v1/payroll/settings` | `erp.payroll.write` | `ai_automation_enabled`, `je_bridge_enabled` flags |
 
@@ -72,12 +79,32 @@ operator.
 
 ### Notifications
 
-`payslip_ready` (per employee) and `payroll_batch_digest` (admins) are composed
-**post-commit** when a batch reaches a terminal state; composition is idempotent
-(`dedupe_key` UNIQUE), and a fan-out failure never fails the processing tick
-(it logs and rolls back the notification rows only). Delivery pivots on
-per-user `ai_payroll_notification_prefs` (`in_app_on` default true, `email_on`
-default false).
+- **`payslip_ready`** (per employee) is composed **at payslip approval**, not at
+  batch completion. Each payslip starts the review queue as `pending`; only an
+  `erp.payroll.approve` action that transitions it to `approved` fans out the
+  employee-facing "payslip ready" notification. Rejecting a payslip instead
+  (`reason` recorded) sends no readiness signal until it is re-approved.
+- **`payroll_batch_digest`** (admins) is composed **post-commit when a batch
+  reaches a terminal state** (`completed`/`failed`/`aborted`), carrying totals
+  and a `dry_run` marker; a dry-run or non-terminal batch sends no digest.
+
+Composition is idempotent (`dedupe_key` UNIQUE), and a fan-out failure never
+fails the underlying transition (it logs and rolls back the notification rows
+only). Delivery pivots on per-user `ai_payroll_notification_prefs` (`in_app_on`
+default true, `email_on` default false).
+
+### Payslip review queue & on-demand PDF
+
+After a batch computes a run's payslips, each payslip is reviewable through the
+`/payroll/payslips/reviews` surface (requiring `erp.payroll.approve`). The queue
+can be filtered by `status` (`pending`/`approved`/`rejected`) and `run_id`, and
+drives the per-approval `payslip_ready` fan-out above.
+
+`GET /payroll/payslips/reviews/{id}/pdf` regenerates the payslip PDF **on
+demand from the frozen payslip entry** (no BLOB storage; ReportLab render in
+`services/core`). The endpoint requires only `erp.payroll.read` so payroll
+staff can download proofs before/after approval; the Content-Disposition is an
+attachment and the body is strictly `application/pdf`.
 
 ### Accrual JE bridge (Rule 10, `je_bridge_enabled` + `total_gross > 0`)
 
@@ -121,6 +148,10 @@ stuck batch or missing notification is a process impact, not a service outage.
 - A schedule's `next_run_at` passes without firing (`schedules_fired` stays 0 in
   tick responses; `last_fired_at` stale).
 - `POST /ai/payroll/tick` returns `items_processed = 0` unexpectedly.
+- Payslips sit in the review queue as `pending` well past the run completing, so
+  employees never receive `payslip_ready`.
+- A payslip PDF returns an error (e.g. review/run/entry not resolvable) or a
+  non-PDF body.
 
 ## Impact
 
@@ -226,8 +257,15 @@ Immediate operator action to restore the period-end:
   (deliverables, permissions, data model, §15.6 FIN-AI-001 seam)
 - `docs/backlog/finance-chart-of-accounts-gap.md` — missing 5010/2010/2020 → `pending`
 - Code: `services/core/src/core/features/payroll_automation/` (worker, service,
-  preflight, schedules, notifications), `features/finance/ports.py` +
-  `service.py` (`create_payroll_accrual_draft`), `api/deps.py`
-  (`get_payroll_service` — worker/scheduler constructions pass `finance=None`)
+  preflight, schedules, notifications), `features/payroll/` (review queue +
+  `pdf.py` ReportLab render, `service.render_payslip_pdf`,
+  `approve_payslip`/`reject_payslip`), `features/finance/ports.py` +
+  `service.py` (`create_payroll_accrual_draft`), `api/routers/payroll.py`
+  (`/payslips/reviews*`), `api/deps.py` (`get_payroll_service` — worker/scheduler
+  constructions pass `finance=None`)
+- Web: `apps/web/src/lib/api/payroll-api.ts` (review client),
+  `payroll-automation-api.ts` (batch client), `.../payroll/reviews/` (review
+  UI), `.../payroll/automation/` (batch outcome history + progress),
+  `.../payroll/runs/[id]/run-detail.tsx` (enqueue preflight/dry-run modal)
 - Related: existing `docs/runbooks/` incident runbooks; core service health /
   outage runbooks (worker lives in the `services/core` process)

@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         LeaveService,
     )
     from core.features.inventory.service import InventoryService
+    from core.features.payroll.ports import PayslipApprovedNotifierPort
     from core.features.payroll.service import PayrollService
     from core.features.payroll_automation.service import PayrollAutomationService
     from core.features.sales.service import SalesService
@@ -315,15 +316,16 @@ def make_payroll_service(
     db: AsyncSession,
     audit: CoreAuditService | None = None,
     finance: PayrollAccrualPort | None = None,
+    payslip_notifier: PayslipApprovedNotifierPort | None = None,
 ) -> PayrollService:
     """Plain factory — build :class:`PayrollService` without FastAPI resolution.
 
     Used by the FastAPI dependency below and by the payroll automation worker
     (which constructs services on its own per-tick session). When ``audit`` is
     omitted a core audit service on the same session is built. ``finance``
-    (the cross-feature accrual bridge used by ``mark_paid``) is injected only
-    where it is resolvable — the worker and scheduler paths never mark runs
-    paid, so they pass ``None``.
+    (the cross-feature accrual bridge used by ``mark_paid``) and
+    ``payslip_notifier`` (the 0030 approval delivery-gate) are injected only
+    where they are resolvable.
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.hr.repository import HrRepository
@@ -339,6 +341,7 @@ def make_payroll_service(
         ),
         audit=audit or make_core_audit_service(db),
         finance=finance,
+        payslip_notifier=payslip_notifier,
     )
 
 
@@ -573,9 +576,20 @@ def get_payroll_service(
     is shared (same ``db`` session), keeping payroll-driven accrual in the same
     transaction as the compute. The request-scoped ``FinanceService`` is passed
     as the accrual bridge so ``mark_paid`` can draft the payroll JE in the same
-    transaction.
+    transaction. The notification orchestrator is injected as the 0030
+    delivery-gate so ``approve_payslip`` fires the employee's ``payslip_ready``
+    in the same request-scoped session (approval gates employee delivery).
     """
-    return make_payroll_service(db, audit, finance)
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
+
+    notifier = PayrollNotificationOrchestrator(
+        repository=PostgresPayrollNotificationRepository(db),
+        audit=audit,
+    )
+    return make_payroll_service(db, audit, finance, payslip_notifier=notifier)
 
 
 async def get_adjustment_authority(

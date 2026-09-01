@@ -159,6 +159,7 @@ class FakePayrollRepository:
         self.settings: dict[uuid.UUID, ent.PayrollSettings] = {}
         self.run_numbers = 0
         self.employees: list[ent.Employee] = []
+        self.reviews: list[ent.PayslipReview] = []
 
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation:
         self.compensation.append(compensation)
@@ -320,6 +321,123 @@ class FakePayrollRepository:
             if employee.id == employee_id:
                 return employee
         return None
+
+    async def materialize_payslip_reviews(
+        self,
+        run_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        payslips: Sequence[ent.Payslip],
+    ) -> int:
+        written = 0
+        for payslip in payslips:
+            existing = next(
+                (
+                    p
+                    for p in self.reviews
+                    if p.run_id == run_id
+                    and p.employee_id == payslip.employee_id
+                    and p.status == "draft"
+                ),
+                None,
+            )
+            if existing is not None:
+                self.reviews.remove(existing)
+            max_version = max(
+                (
+                    p.version
+                    for p in self.reviews
+                    if p.run_id == run_id and p.employee_id == payslip.employee_id
+                ),
+                default=0,
+            )
+            self.reviews.append(
+                ent.PayslipReview(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    employee_id=payslip.employee_id,
+                    employee_number=payslip.employee_number,
+                    employee_name=payslip.employee_name,
+                    gross=payslip.gross,
+                    deductions=payslip.deductions,
+                    net=payslip.net,
+                    status="draft",
+                    version=max_version + 1,
+                    id=uuid.uuid4(),
+                )
+            )
+            written += 1
+        return written
+
+    async def list_payslip_reviews(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        run_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> Sequence[ent.PayslipReview]:
+        rows = [r for r in self.reviews if r.tenant_id == tenant_id]
+        if status is not None:
+            rows = [r for r in rows if r.status == status]
+        if run_id is not None:
+            rows = [r for r in rows if r.run_id == run_id]
+        return rows[:limit]
+
+    async def get_payslip_review(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None:
+        return next(
+            (r for r in self.reviews if r.id == payslip_id and r.tenant_id == tenant_id), None
+        )
+
+    async def transition_payslip_review(
+        self,
+        payslip_id: uuid.UUID,
+        from_status: str,
+        to_status: str,
+        *,
+        tenant_id: uuid.UUID,
+        reviewed_by: uuid.UUID | None = None,
+        reviewed_at: object | None = None,
+        rejected_reason: str | None = None,
+    ) -> ent.PayslipReview | None:
+        for index, r in enumerate(self.reviews):
+            if r.id == payslip_id and r.tenant_id == tenant_id and r.status == from_status:
+                values: dict[str, object] = {"status": to_status}
+                if to_status == "approved":
+                    values["reviewed_by"] = reviewed_by
+                    values["reviewed_at"] = reviewed_at
+                elif to_status == "rejected":
+                    values["rejected_by"] = reviewed_by
+                    values["rejected_at"] = reviewed_at
+                    values["rejected_reason"] = rejected_reason
+                updated = dataclasses.replace(r, **values)
+                self.reviews[index] = updated
+                return updated
+        return None
+
+    async def bump_payslip_review_version(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None:
+        source = next(
+            (r for r in self.reviews if r.id == payslip_id and r.tenant_id == tenant_id), None
+        )
+        if source is None:
+            return None
+        bumped = dataclasses.replace(
+            source,
+            id=uuid.uuid4(),
+            status="draft",
+            version=source.version + 1,
+            reviewed_by=None,
+            reviewed_at=None,
+            rejected_by=None,
+            rejected_at=None,
+            rejected_reason=None,
+        )
+        self.reviews.append(bumped)
+        return bumped
 
 
 def _service(
@@ -1049,3 +1167,35 @@ class TestPayslips:
         service, _, _ = _service()
         with pytest.raises(ValueError):
             await service.list_run_payslips(uuid.uuid4(), tenant_id=TENANT)
+
+    async def test_render_payslip_pdf_returns_valid_pdf(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+
+        reviews = await service.list_payable_payslips(TENANT)
+        assert len(reviews) == 1
+        review = reviews[0]
+        assert review.id is not None
+
+        pdf_bytes = await service.render_payslip_pdf(review.id, tenant_id=TENANT)
+
+        assert pdf_bytes.startswith(b"%PDF")
+        assert b"%%EOF" in pdf_bytes
+
+    async def test_render_payslip_pdf_unknown_review_raises(self) -> None:
+        service, _, _ = _service()
+        with pytest.raises(ValueError):
+            await service.render_payslip_pdf(uuid.uuid4(), tenant_id=TENANT)

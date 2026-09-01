@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createPayrollSchedule,
   deletePayrollSchedule,
+  enqueuePayrollBatch,
   getPayrollPreferences,
   listPayrollBatches,
   listPayrollNotifications,
@@ -306,8 +307,48 @@ describe("payroll automation batches and tick", () => {
     });
   });
 
-  it("maps the manual tick result", async () => {
+  it("enqueues a batch and maps the dry-run preflight result", async () => {
     httpMock.mockResolvedValue({
+      data: {
+        batch_id: "b-2",
+        tenant_id: "t-1",
+        source: "manual",
+        source_ref: "PR-2026-09",
+        status: "queued",
+        dry_run: true,
+        claimed_by: null,
+        preflight: {
+          version: 1,
+          passed: true,
+          checked_at: "2026-09-01T10:00:00Z",
+          run_id: "run-1",
+          roster_count: 5,
+          checks: { settings: { status: "ok", detail: "settings row present" } },
+          blocks: [],
+          warnings: [],
+        },
+        totals: {},
+        created_at: "2026-09-01T10:00:00Z",
+        started_at: null,
+        finished_at: null,
+      },
+    });
+
+    const result = await enqueuePayrollBatch({ runId: "run-1", dryRun: true });
+
+    expect(httpMock).toHaveBeenCalledWith("/api/v1/ai/payroll/batches", {
+      method: "POST",
+    });
+    expect(result).toMatchObject({
+      batchId: "b-2",
+      status: "queued",
+      dryRun: true,
+      sourceRef: "PR-2026-09",
+    });
+    expect((result.preflight as Record<string, unknown>).passed).toBe(true);
+  });
+
+  it("maps the manual tick result", async () => {    httpMock.mockResolvedValue({
       data: {
         batch_id: "b-9",
         items_processed: 4,

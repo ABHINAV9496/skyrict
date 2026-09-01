@@ -48,6 +48,9 @@ PAYROLL_AUTO_SCHEDULE_CREATED = "payroll.automation.schedule.created"
 PAYROLL_AUTO_SCHEDULE_UPDATED = "payroll.automation.schedule.updated"
 PAYROLL_AUTO_SCHEDULE_DELETED = "payroll.automation.schedule.deleted"
 PAYROLL_AUTO_SCHEDULE_FIRED = "payroll.automation.schedule.fired"
+# 0030: per-payslip review lifecycle (draft -> approved | rejected).
+PAYROLL_PAYSLIP_APPROVED = "payroll.payslip.approved"
+PAYROLL_PAYSLIP_REJECTED = "payroll.payslip.rejected"
 
 # ---------------------------------------------------------------------------
 # Finance
@@ -88,6 +91,8 @@ CATALOG: tuple[str, ...] = (
     PAYROLL_ENTRY_ADJUSTED,
     PAYROLL_SETTINGS_UPDATED,
     PAYROLL_COMPENSATION_RECORDED,
+    PAYROLL_PAYSLIP_APPROVED,
+    PAYROLL_PAYSLIP_REJECTED,
     PAYROLL_AUTO_NOTIFICATIONS_SENT,
     PAYROLL_AUTO_SCHEDULE_CREATED,
     PAYROLL_AUTO_SCHEDULE_UPDATED,
@@ -148,6 +153,8 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             PAYROLL_AUTO_SCHEDULE_UPDATED,
             PAYROLL_AUTO_SCHEDULE_DELETED,
             PAYROLL_AUTO_SCHEDULE_FIRED,
+            PAYROLL_PAYSLIP_APPROVED,
+            PAYROLL_PAYSLIP_REJECTED,
         ),
     ),
     (
@@ -221,6 +228,8 @@ __all__ = [
     "PAYROLL_AUTO_SCHEDULE_UPDATED",
     "PAYROLL_COMPENSATION_RECORDED",
     "PAYROLL_ENTRY_ADJUSTED",
+    "PAYROLL_PAYSLIP_APPROVED",
+    "PAYROLL_PAYSLIP_REJECTED",
     "PAYROLL_RUN_APPROVED",
     "PAYROLL_RUN_COMPUTED",
     "PAYROLL_RUN_CREATED",

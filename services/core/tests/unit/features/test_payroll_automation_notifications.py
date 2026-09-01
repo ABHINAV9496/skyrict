@@ -183,69 +183,61 @@ def _batch(status: str = BATCH_COMPLETED) -> PayrollBatchRun:
 class TestNotificationOrchestrator:
     async def test_payslip_ready_defaults_in_app_on_email_off(self) -> None:
         repo = FakeNotificationRepo()
-        repo.done = [EMP_1, EMP_2]
         repo.user_map = {EMP_1: USER_1, EMP_2: USER_2}
         orch = PayrollNotificationOrchestrator(repo)
 
-        inserted = await orch.record_batch_notifications(
-            tenant_id=TENANT_ID, batch=_batch(), status=BATCH_COMPLETED,
-            run_id=RUN_ID, totals={"total": 2, "done": 2, "failed": 0},
+        await orch.notify_payslip_approved(
+            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
+        )
+        await orch.notify_payslip_approved(
+            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_2, version=1,
         )
 
-        assert inserted == 2
+        assert len(repo.notifications) == 2
         for n in repo.notifications:
             assert n.event_type == EVENT_PAYSLIP_READY
             assert n.in_app is True
             assert n.email_stub is False
         keys = {n.dedupe_key for n in repo.notifications}
-        assert keys == {f"payslip:{BATCH_ID}:{EMP_1}", f"payslip:{BATCH_ID}:{EMP_2}"}
+        assert keys == {f"payslip:{RUN_ID}:{EMP_1}:1", f"payslip:{RUN_ID}:{EMP_2}:1"}
 
     async def test_email_opt_in_sets_stub(self) -> None:
         repo = FakeNotificationRepo()
-        repo.done = [EMP_1]
         repo.user_map = {EMP_1: USER_1}
         repo.prefs[USER_1] = _Pref(USER_1, in_app_on=True, email_on=True)
         orch = PayrollNotificationOrchestrator(repo)
 
-        await orch.record_batch_notifications(
-            tenant_id=TENANT_ID, batch=_batch(), status=BATCH_COMPLETED,
-            run_id=RUN_ID, totals={},
+        await orch.notify_payslip_approved(
+            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
         )
 
         assert repo.notifications[0].email_stub is True
 
     async def test_unlinked_employee_gets_no_row(self) -> None:
         repo = FakeNotificationRepo()
-        repo.done = [EMP_1]
         repo.user_map = {EMP_1: None}
         orch = PayrollNotificationOrchestrator(repo)
 
-        inserted = await orch.record_batch_notifications(
-            tenant_id=TENANT_ID, batch=_batch(), status=BATCH_COMPLETED,
-            run_id=RUN_ID, totals={},
+        await orch.notify_payslip_approved(
+            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
         )
 
-        assert inserted == 0
         assert repo.notifications == []
 
     async def test_dedupe_reinvocation_is_noop(self) -> None:
         repo = FakeNotificationRepo()
-        repo.done = [EMP_1]
         repo.user_map = {EMP_1: USER_1}
         orch = PayrollNotificationOrchestrator(repo)
         kwargs = {
             "tenant_id": TENANT_ID,
-            "batch": _batch(),
-            "status": BATCH_COMPLETED,
             "run_id": RUN_ID,
-            "totals": {"total": 1, "done": 1, "failed": 0},
+            "employee_id": EMP_1,
+            "version": 2,
         }
 
-        first = await orch.record_batch_notifications(**kwargs)
-        second = await orch.record_batch_notifications(**kwargs)
+        await orch.notify_payslip_approved(**kwargs)
+        await orch.notify_payslip_approved(**kwargs)
 
-        assert first == 1
-        assert second == 0
         assert len(repo.notifications) == 1
 
     async def test_admin_digest_routes_to_read_holders_for_failure(self) -> None:

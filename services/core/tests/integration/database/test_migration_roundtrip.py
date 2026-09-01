@@ -107,6 +107,8 @@ _HR_AI_TABLES = (
     "ai_payroll_notifications",
     "ai_payroll_notification_prefs",
     "ai_payroll_schedules",
+    # 0030: payslip review queue (HR-AUT-001, Commit 2).
+    "erp_payslip_reviews",
 )
 
 
@@ -172,7 +174,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0029", f"head is {version}, expected 0029"
+            assert version == "0030", f"head is {version}, expected 0030"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -610,6 +612,55 @@ async def _assert_upgraded_schema(url: str) -> None:
             ).one_or_none()
             assert je_bridge_col is not None, "0029 must add erp_payroll_settings.je_bridge_enabled"
             assert je_bridge_col[0] == "boolean", je_bridge_col
+
+            # 0030: payslip review queue (HR-AUT-001, Commit 2).
+            review_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_payslip_reviews')"))
+            ).scalar_one()
+            assert review_table is not None, "0030 must create erp_payslip_reviews table"
+
+            review_cols = {
+                row[0]
+                for row in await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'erp_payslip_reviews'"
+                    )
+                )
+            }
+            assert {
+                "tenant_id",
+                "id",
+                "run_id",
+                "employee_id",
+                "employee_number",
+                "employee_name",
+                "gross",
+                "deductions",
+                "net",
+                "status",
+                "version",
+                "rejected_reason",
+                "reviewed_by",
+                "reviewed_at",
+                "rejected_by",
+                "rejected_at",
+                "created_at",
+                "updated_at",
+            }.issubset(set(review_cols)), review_cols
+
+            review_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_payslip_reviews'::regclass "
+                        "AND conname = 'ck_erp_payslip_reviews_status'"
+                    )
+                )
+            ).scalar_one()
+            assert review_status_check == 1, (
+                "0030 must add the payslip review status check constraint"
+            )
     finally:
         await engine.dispose()
 

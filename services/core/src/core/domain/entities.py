@@ -449,6 +449,35 @@ class Payslip:
 
 
 @dataclass(frozen=True)
+class PayslipReview:
+    """Versioned payslip review row with approval lifecycle (HR-AUT-001, Commit 2).
+
+    Every computed payslip is materialized as a ``draft`` review row on compute.
+    An admin approves or rejects it; re-approval after correction creates a new
+    version row. The notification delivery-gate fires only on approval.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+    status: str = "draft"  # draft | approved | rejected
+    version: int = 1
+    rejected_reason: str | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    rejected_by: uuid.UUID | None = None
+    rejected_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class PayrollEntry:
     """An immutable per-employee result row inside a payroll run.
 

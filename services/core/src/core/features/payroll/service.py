@@ -41,7 +41,12 @@ from core.events.producers.payroll_events import (
     emit_run_voided,
     emit_settings_updated,
 )
-from core.features.payroll.ports import LeaveLedgerPort, PayrollRepositoryPort
+from core.features.payroll.pdf import render_payslip_pdf
+from core.features.payroll.ports import (
+    LeaveLedgerPort,
+    PayrollRepositoryPort,
+    PayslipApprovedNotifierPort,
+)
 
 if TYPE_CHECKING:
     from core.features.finance.ports import PayrollAccrualPort
@@ -188,11 +193,13 @@ class PayrollService:
         leave_ledger: LeaveLedgerPort,
         audit: AuditService,
         finance: PayrollAccrualPort | None = None,
+        payslip_notifier: PayslipApprovedNotifierPort | None = None,
     ) -> None:
         self._repo = repository
         self._leave_ledger = leave_ledger
         self._audit = audit
         self._finance = finance
+        self._payslip_notifier = payslip_notifier
 
     @property
     def repository(self) -> PayrollRepositoryPort:
@@ -478,6 +485,14 @@ class PayrollService:
             currency = settings.default_currency
             total_gross = Money(Decimal("0"), currency)
             total_net = Money(Decimal("0"), currency)
+
+        # 0030: materialize a versioned draft review row per computed payslip.
+        payslips = await self._payslips_for_run(run_id, tenant_id=tenant_id)
+        if payslips:
+            await self._repo.materialize_payslip_reviews(
+                run_id, tenant_id=tenant_id, payslips=payslips
+            )
+
         computed = await self._repo.transition_run_status(
             run_id,
             run.status.value,
@@ -660,6 +675,13 @@ class PayrollService:
             currency = settings.default_currency if settings is not None else "USD"
             total_gross = Money(Decimal("0"), currency)
             total_net = Money(Decimal("0"), currency)
+
+        # 0030: materialize a versioned draft review row per computed payslip.
+        payslips = await self._payslips_for_run(run_id, tenant_id=tenant_id)
+        if payslips:
+            await self._repo.materialize_payslip_reviews(
+                run_id, tenant_id=tenant_id, payslips=payslips
+            )
 
         computed = await self._repo.transition_run_status(
             run_id,
@@ -933,23 +955,14 @@ class PayrollService:
             entries = [entry for entry in entries if entry.employee_id == employee_id]
         return list(entries)
 
-    async def list_run_payslips(
+    async def _payslips_for_run(
         self, run_id: uuid.UUID, *, tenant_id: uuid.UUID
     ) -> list[ent.Payslip]:
-        """Per-employee payslip view of a run's frozen entries (Commit 4).
+        """Build the per-employee payslip views for a run's entries (0030).
 
-        Raises ``ValueError`` when the run does not exist. Requires at least
-        one entry — an unpaid or empty run yields an empty list.
+        Shared by :meth:`list_run_payslips` and the review materialization
+        seam so both surfaces see the same frozen snapshot.
         """
-        run = await self._repo.get_run(run_id, tenant_id)
-        if run is None:
-            raise ValueError(f"payroll run {run_id} not found")
-        if run.status not in (
-            PayrollRunStatus.COMPUTED,
-            PayrollRunStatus.APPROVED,
-            PayrollRunStatus.PAID,
-        ):
-            return []
         renders: list[ent.Payslip] = []
         for entry in await self._repo.list_entries(run_id, tenant_id=tenant_id):
             employee = await self._repo.get_employee(tenant_id, entry.employee_id)
@@ -969,6 +982,143 @@ class PayrollService:
             )
         renders.sort(key=lambda p: p.employee_number)
         return renders
+
+    async def list_run_payslips(
+        self, run_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> list[ent.Payslip]:
+        """Per-employee payslip view of a run's frozen entries (Commit 4).
+
+        Raises ``ValueError`` when the run does not exist. Requires at least
+        one entry — an unpaid or empty run yields an empty list.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        if run.status not in (
+            PayrollRunStatus.COMPUTED,
+            PayrollRunStatus.APPROVED,
+            PayrollRunStatus.PAID,
+        ):
+            return []
+        return await self._payslips_for_run(run_id, tenant_id=tenant_id)
+
+    # ------------------------------------------------------------------
+    # Payslip reviews (0030: versioned approval lifecycle)
+    # ------------------------------------------------------------------
+    async def list_payable_payslips(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        run_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> list[ent.PayslipReview]:
+        """Review-queue rows, optionally narrowed by status/run (0030)."""
+        return list(
+            await self._repo.list_payslip_reviews(
+                tenant_id, status=status, run_id=run_id, limit=limit
+            )
+        )
+
+    async def approve_payslip(
+        self,
+        payslip_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        approved_by: uuid.UUID,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.PayslipReview:
+        """Approve one payslip: ``draft`` → ``approved``, then delivery-gate.
+
+        Fires the employee's ``payslip_ready`` notification via the injected
+        notifier port (spec: "approval gates employee delivery"). A re-approval
+        of an already-approved/rejected payslip bumps a new version instead of
+        rewriting the terminal row.
+        """
+        review = await self._repo.get_payslip_review(payslip_id, tenant_id=tenant_id)
+        if review is None:
+            raise ValueError(f"payslip review {payslip_id} not found")
+        if review.status == "approved":
+            return review
+        if review.status == "rejected":
+            bumped = await self._repo.bump_payslip_review_version(payslip_id, tenant_id=tenant_id)
+            if bumped is None or bumped.id is None:
+                raise ValueError(f"payslip review {payslip_id} not found")
+            return await self.approve_payslip(
+                bumped.id,
+                tenant_id=tenant_id,
+                approved_by=approved_by,
+                actor_user_id=actor_user_id,
+            )
+        transitioned = await self._repo.transition_payslip_review(
+            payslip_id,
+            "draft",
+            "approved",
+            tenant_id=tenant_id,
+            reviewed_by=approved_by,
+            reviewed_at=datetime.now(UTC),
+        )
+        if transitioned is None:
+            raise IllegalStateTransitionError("payslip is not in draft state") from None
+        await self._audit.log(
+            action=audit_events.PAYROLL_PAYSLIP_APPROVED,
+            target=f"payslip:{payslip_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id or approved_by,
+            details={
+                "run_id": str(review.run_id),
+                "employee_id": str(review.employee_id),
+                "version": transitioned.version,
+            },
+        )
+        if self._payslip_notifier is not None:
+            await self._payslip_notifier.notify_payslip_approved(
+                tenant_id=tenant_id,
+                run_id=review.run_id,
+                employee_id=review.employee_id,
+                version=transitioned.version,
+            )
+        return transitioned
+
+    async def reject_payslip(
+        self,
+        payslip_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        rejected_by: uuid.UUID,
+        reason: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.PayslipReview:
+        """Reject one payslip: ``draft`` → ``rejected`` (0030)."""
+        review = await self._repo.get_payslip_review(payslip_id, tenant_id=tenant_id)
+        if review is None:
+            raise ValueError(f"payslip review {payslip_id} not found")
+        if review.status != "draft":
+            raise IllegalStateTransitionError("only draft payslips can be rejected") from None
+        transitioned = await self._repo.transition_payslip_review(
+            payslip_id,
+            "draft",
+            "rejected",
+            tenant_id=tenant_id,
+            reviewed_by=rejected_by,
+            reviewed_at=datetime.now(UTC),
+            rejected_reason=reason,
+        )
+        if transitioned is None:
+            raise IllegalStateTransitionError("payslip is not in draft state") from None
+        await self._audit.log(
+            action=audit_events.PAYROLL_PAYSLIP_REJECTED,
+            target=f"payslip:{payslip_id}",
+            tenant_id=tenant_id,
+            user_id=actor_user_id or rejected_by,
+            details={
+                "run_id": str(review.run_id),
+                "employee_id": str(review.employee_id),
+                "version": transitioned.version,
+                "reason": reason,
+            },
+        )
+        return transitioned
 
     # ------------------------------------------------------------------
     # Compensation (Rule 7: effective-date pick is repo-side; write here)
@@ -1016,6 +1166,48 @@ class PayrollService:
     ) -> list[ent.Compensation]:
         """Compensation history for one employee, newest first."""
         return list(await self._repo.list_compensation(employee_id, tenant_id=tenant_id))
+
+    # ------------------------------------------------------------------
+    # Payslip PDF (HR-AUT-001, Commit 3)
+    # ------------------------------------------------------------------
+
+    async def render_payslip_pdf(self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID) -> bytes:
+        """Render a payslip PDF on demand from the frozen entry (no BLOB store).
+
+        ``payslip_id`` is the review-queue row id; the PDF is rebuilt from the
+        underlying frozen ``PayrollEntry`` so it always reflects the current
+        approved state of the run.
+
+        Raises ``ValueError`` when the review row or its frozen entry is missing.
+        """
+        review = await self._repo.get_payslip_review(payslip_id, tenant_id=tenant_id)
+        if review is None:
+            raise ValueError(f"payslip review {payslip_id} not found")
+        run = await self._repo.get_run(review.run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {review.run_id} not found")
+        entry = next(
+            (
+                e
+                for e in await self._repo.list_entries(review.run_id, tenant_id=tenant_id)
+                if e.employee_id == review.employee_id
+            ),
+            None,
+        )
+        if entry is None:
+            raise ValueError("payslip has no computed entry")
+        return render_payslip_pdf(
+            run_code=run.run_code,
+            period_start=run.period_start,
+            period_end=run.period_end,
+            employee_number=review.employee_number,
+            employee_name=review.employee_name,
+            base_salary=entry.base_salary,
+            pay_days=entry.pay_days,
+            gross=entry.gross,
+            deductions=entry.deductions,
+            net=entry.net,
+        )
 
 
 def _next_run_code(sequence: int) -> str:

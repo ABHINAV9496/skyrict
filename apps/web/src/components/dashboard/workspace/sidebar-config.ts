@@ -286,6 +286,12 @@ export const erpNavGroups: NavGroup[] = [
                         permission: "erp.payroll.read",
                     },
                     {
+                        href: "/dashboard/erp/payroll/reviews",
+                        label: "Reviews",
+                        icon: ClipboardCheck,
+                        permission: "erp.payroll.approve",
+                    },
+                    {
                         href: "/dashboard/erp/payroll/compensation",
                         label: "Compensation",
                         icon: Coins,

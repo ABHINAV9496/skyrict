@@ -14,6 +14,7 @@ import {
   type SearchableSelectOption,
 } from "@/components/dashboard/shared/searchable-select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,11 +23,13 @@ import {
   createPayrollSchedule,
   deletePayrollSchedule,
   getPayrollPreferences,
+  listPayrollBatches,
   listPayrollNotifications,
   listPayrollSchedules,
   runPayrollAutomationTick,
   updatePayrollPreferences,
   updatePayrollSchedule,
+  type PayrollBatchListItem,
   type PayrollNotification,
   type PayrollNotificationEventType,
   type PayrollPreferences,
@@ -48,6 +51,7 @@ type PageStatus =
       state: "ready";
       schedules: PayrollSchedule[];
       notifications: PayrollNotification[];
+      batches: PayrollBatchListItem[];
       preferences: PayrollPreferences | null;
     };
 
@@ -252,6 +256,37 @@ function ScheduleForm({
 
 const PAGE_SIZE = 20;
 
+function batchProgress(totals: Record<string, unknown>): {
+  pct: number;
+  done: number;
+  total: number;
+} {
+  const total = Number(totals.total ?? 0);
+  const done = Number(totals.done ?? 0);
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return { pct, done, total };
+}
+
+function BatchStatusBadge({ status }: { status: PayrollBatchListItem["status"] }) {
+  const styles: Record<PayrollBatchListItem["status"], string> = {
+    queued: "bg-slate-500/15 text-slate-700 ring-slate-500/30 dark:text-slate-300",
+    processing: "bg-sky-500/15 text-sky-700 ring-sky-500/30 dark:text-sky-400",
+    completed: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400",
+    failed: "bg-destructive/15 text-destructive ring-destructive/30",
+    aborted: "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-400",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1",
+        styles[status],
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
 export function AutomationClient() {
   const { permissions } = useModuleAccess();
   const canRun = permissions.includes("*") || permissions.includes("erp.payroll.ai.run");
@@ -266,11 +301,12 @@ export function AutomationClient() {
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
-    const [scheduleResult, notificationResult, preferenceResult] =
+    const [scheduleResult, notificationResult, preferenceResult, batchResult] =
       await Promise.allSettled([
         listPayrollSchedules(),
         listPayrollNotifications({ limit: PAGE_SIZE }),
         getPayrollPreferences(),
+        listPayrollBatches({ page: 1, pageSize: PAGE_SIZE }),
       ]);
 
     if (scheduleResult.status === "rejected") {
@@ -288,6 +324,8 @@ export function AutomationClient() {
       schedules: scheduleResult.value,
       notifications:
         notificationResult.status === "fulfilled" ? notificationResult.value : [],
+      batches:
+        batchResult.status === "fulfilled" ? batchResult.value.items : [],
       preferences:
         preferenceResult.status === "fulfilled" ? preferenceResult.value : null,
     });
@@ -568,8 +606,7 @@ export function AutomationClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <PageHeader
+      <div className="flex flex-wrap items-start justify-between gap-3">        <PageHeader
           title="Payroll automation"
           description="Automated payroll batch runs, recurring schedules, and payslip notifications."
           icon={CalendarClock}
@@ -643,6 +680,89 @@ export function AutomationClient() {
             />
           </div>
         </div>
+      </section>
+
+      <section aria-label="Batch runs" className="space-y-3">
+        <div>
+          <h2 className="font-display text-sm font-semibold tracking-tight text-foreground">
+            Batch runs
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Outcome history for submitted payroll batches — progress, totals, and
+            terminal status.
+          </p>
+        </div>
+        {status.batches.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+            No batch runs yet. Submit a computed run to the automation worker to see
+            progress here.
+          </div>
+        ) : (
+          <ErpDataTable
+            columns={[
+              {
+                key: "batchId",
+                label: "Batch",
+                render: (batch) => (
+                  <span className="font-medium text-foreground">
+                    #{batch.batchId.slice(0, 8)}
+                    {batch.dryRun ? (
+                      <Badge variant="secondary" className="ml-1.5">
+                        dry-run
+                      </Badge>
+                    ) : null}
+                  </span>
+                ),
+              },
+              {
+                key: "sourceRef",
+                label: "Run",
+                render: (batch) => (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {batch.sourceRef}
+                  </span>
+                ),
+              },
+              {
+                key: "status" as const,
+                label: "Status",
+                render: (batch) => <BatchStatusBadge status={batch.status} />,
+              },
+              {
+                key: "totals",
+                label: "Progress",
+                render: (batch) => {
+                  const { pct, done, total } = batchProgress(batch.totals);
+                  return (
+                    <div className="flex min-w-32 items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="w-16 text-xs tabular-nums text-muted-foreground">
+                        {done}/{total}
+                      </span>
+                    </div>
+                  );
+                },
+              },
+              {
+                key: "finishedAt",
+                label: "Finished",
+                render: (batch) => (
+                  <span className="text-muted-foreground">
+                    {batch.finishedAt ? formatDateTime(batch.finishedAt) : "—"}
+                  </span>
+                ),
+              },
+            ]}
+            rows={status.batches.map((batch) => ({ ...batch, id: batch.batchId }))}
+            meta={{ total: status.batches.length, page: 1, page_size: PAGE_SIZE, total_pages: 1 }}
+            onPageChange={() => undefined}
+          />
+        )}
       </section>
 
       <section aria-label="Delivery preferences" className="space-y-3">

@@ -157,7 +157,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0025", f"head is {version}, expected 0025"
+            assert version == "0027", f"head is {version}, expected 0027"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -364,6 +364,43 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert set(rls_tables) == set(_HR_AI_TABLES), (
                 f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
             )
+
+            # 0026: stock-movement analytics index exists.
+            mv_index_count = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_stock_movements' "
+                        "AND indexname = 'ix_erp_stock_movements_tenant_wh_type_created'"
+                    )
+                )
+            ).scalar_one()
+            assert mv_index_count == 1, "0026 must create the movement analytics index"
+
+            # 0027: stock-health snapshot table (tenant-scoped, RLS) + cost permission.
+            assert (
+                await conn.execute(
+                    text("SELECT to_regclass('public.erp_report_snapshots')")
+                )
+            ).scalar_one() is not None, "0027 must create erp_report_snapshots"
+            snapshot_rls = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_report_snapshots' "
+                        "AND policyname = 'tenant_isolation_erp_report_snapshots'"
+                    )
+                )
+            ).scalar_one()
+            assert snapshot_rls == 1, "erp_report_snapshots RLS policy missing"
+            cost_perm = (
+                await conn.execute(
+                    text("SELECT description FROM core_permissions WHERE key = 'erp.inventory.cost'")
+                )
+            ).scalar_one_or_none()
+            assert cost_perm is not None, "0027 must register erp.inventory.cost"
     finally:
         await engine.dispose()
 

@@ -17,6 +17,8 @@ from ai_agent.api.v1.routers.chat import router as chat_router
 from ai_agent.api.v1.routers.crm import router as crm_router
 from ai_agent.api.v1.routers.forecast import router as forecast_router
 from ai_agent.api.v1.routers.hr_copilot import router as hr_copilot_router
+from ai_agent.api.v1.routers.inventory_search import router as inventory_search_router
+from ai_agent.api.v1.routers.inventory_sync import router as inventory_sync_router
 from ai_agent.api.v1.routers.narrator import router as narrator_router
 from ai_agent.api.v1.routers.nl_query import router as nl_query_router
 from ai_agent.api.v1.routers.rag import router as rag_router
@@ -32,6 +34,8 @@ api_router.include_router(restock_router)
 api_router.include_router(anomalies_router)
 api_router.include_router(narrator_router)
 api_router.include_router(rag_router)
+api_router.include_router(inventory_search_router)
+api_router.include_router(inventory_sync_router)
 api_router.include_router(attrition_router)
 api_router.include_router(hr_copilot_router)
 api_router.include_router(abc_router)

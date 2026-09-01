@@ -32,9 +32,8 @@ async function proxy(request: NextRequest) {
 
   const path = `/${request.nextUrl.pathname.replace(/^\/api\/v1\//, "")}${request.nextUrl.search}`;
   const segment = path.split("/")[1];
-  const target = ["crm", "ai", "sales", "finance", "inventory", "hr", "payroll", "portal"].includes(
-    segment,
-  )
+  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai"].includes(segment)
+
     ? "core"
     : "identity";
   const body =

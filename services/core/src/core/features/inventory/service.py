@@ -71,7 +71,11 @@ from core.domain.entities import (
     Warehouse,
 )
 from core.domain.value_objects import Money, StockMovementType
-from core.features.inventory.events.producers import emit_stock_level_changed
+from core.features.inventory.events.producers import (
+    emit_inventory_product_removed,
+    emit_inventory_product_upserted,
+    emit_stock_level_changed,
+)
 from core.features.inventory.repository import _UNSET
 from skyrict_common.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
@@ -282,6 +286,14 @@ class InventoryService:
             target=f"product:{created.id}",
             details={"sku": sku, "name": name},
         )
+        await emit_inventory_product_upserted(
+            tenant_id=tid,
+            product_id=created.id,
+            sku=created.sku,
+            name=created.name,
+            category=created.category,
+            unit=created.unit,
+        )
         return created
 
     async def create_warehouse(
@@ -359,6 +371,14 @@ class InventoryService:
             target=f"product:{product_id}",
             details={"sku": updated.sku, "name": updated.name},
         )
+        await emit_inventory_product_upserted(
+            tenant_id=tid,
+            product_id=product_id,
+            sku=updated.sku,
+            name=updated.name,
+            category=updated.category,
+            unit=updated.unit,
+        )
         return updated
 
     async def update_warehouse(
@@ -426,6 +446,7 @@ class InventoryService:
                 "reserved_qty": str(reserved),
             },
         )
+        await emit_inventory_product_removed(tenant_id=tid, product_id=product_id)
         return deactivated
 
     async def reactivate_product(
@@ -443,6 +464,14 @@ class InventoryService:
             action=PRODUCT_REACTIVATED,
             target=f"product:{product_id}",
             details={"sku": reactivated.sku, "name": reactivated.name},
+        )
+        await emit_inventory_product_upserted(
+            tenant_id=tid,
+            product_id=product_id,
+            sku=reactivated.sku,
+            name=reactivated.name,
+            category=reactivated.category,
+            unit=reactivated.unit,
         )
         return reactivated
 

@@ -380,9 +380,7 @@ async def _assert_upgraded_schema(url: str) -> None:
 
             # 0027: stock-health snapshot table (tenant-scoped, RLS) + cost permission.
             assert (
-                await conn.execute(
-                    text("SELECT to_regclass('public.erp_report_snapshots')")
-                )
+                await conn.execute(text("SELECT to_regclass('public.erp_report_snapshots')"))
             ).scalar_one() is not None, "0027 must create erp_report_snapshots"
             snapshot_rls = (
                 await conn.execute(
@@ -397,7 +395,9 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert snapshot_rls == 1, "erp_report_snapshots RLS policy missing"
             cost_perm = (
                 await conn.execute(
-                    text("SELECT description FROM core_permissions WHERE key = 'erp.inventory.cost'")
+                    text(
+                        "SELECT description FROM core_permissions WHERE key = 'erp.inventory.cost'"
+                    )
                 )
             ).scalar_one_or_none()
             assert cost_perm is not None, "0027 must register erp.inventory.cost"

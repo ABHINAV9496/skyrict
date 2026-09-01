@@ -1,0 +1,58 @@
+# Keep Docker build contexts small — the dev compose builds use the repo root
+# as context while the Dockerfiles COPY only scoped paths. Without this file
+# every build ships the whole workspace (including the multi-GB root .venv)
+# to the daemon, stalling context transfer.
+
+# Workspace / tool caches
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Local tooling
+.git/
+.uv/
+.dev/
+.local/
+.opencode/
+
+# Secrets — never baked into images (keys/env are runtime volumes/args)
+.env
+.env.*
+!.env.example
+*.pem
+!*.pem.example
+secrets.yml
+secrets.yaml
+
+# Node / frontend
+node_modules/
+**/node_modules/
+.next/
+.nuxt/
+.pnpm-store/
+
+# Build & dist artifacts
+dist/
+build/
+site/
+out/
+*.log
+*.pid
+tmp/
+temp/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
+*.iml

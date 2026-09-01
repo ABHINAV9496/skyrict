@@ -9,6 +9,7 @@ from the database at request time (never from JWT claims) through
 
 from __future__ import annotations
 
+import hmac
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
@@ -205,6 +206,52 @@ def resolve_permission(permission: str) -> Callable[[], Awaitable[bool]]:
             tenant_id=current_user["tenant_id"],
         )
         return bool(grants_permission(granted, permission))
+
+    return _check
+
+
+def require_ingest_m2m_or_permission(
+    permission: str,
+) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory — machine-to-machine shared-secret read OR JWT+permission.
+
+    Lets the ai-agent ``inventory reindex`` / ``ingest --source module`` CLIs
+    pull core's product catalog with the ingest secret (``Authorization:
+    Bearer AI_INGEST_TOKEN`` + a routed ``X-Tenant-Slug``), mirroring the sync
+    direction where core presents ``AI_SYNC_TOKEN`` to ai-agent (SKY-70). The
+    m2m branch carries NO user identity and resolves no DB grants — possession
+    of the shared secret plus the routed tenant is enough for a read-only
+    catalog pull.
+
+    Fails closed: an empty/absent ``AI_INGEST_TOKEN`` makes the branch
+    unreachable (the secret can never match), and every other bearer falls
+    through to :func:`get_current_user` + the ``permission`` check exactly as
+    before. Comparison uses ``hmac.compare_digest`` for constant time.
+    """
+
+    async def _check(
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        from core.core.config import settings
+
+        secret = settings.AI_INGEST_TOKEN
+        candidate = credentials.credentials if credentials else ""
+        if secret and candidate and hmac.compare_digest(candidate, secret):
+            return {
+                "user_id": None,
+                "tenant_id": TenantContext.get(),
+                "machine": True,
+            }
+
+        current_user = await get_current_user(credentials)
+        granted = await RbacRepository(db).resolve_user_permissions(
+            user_id=current_user["user_id"],
+            tenant_id=current_user["tenant_id"],
+        )
+        if not grants_permission(granted, permission):
+            raise PermissionDeniedError(f"Missing required permission: {permission}")
+        return current_user
 
     return _check
 

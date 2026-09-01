@@ -186,6 +186,8 @@ function CreateJournalEntryDialog({
   const memoValue = watch("memo");
 
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const appendRef = useRef(append);
+  appendRef.current = append;
   const lines = watch("lines");
   const { debit, credit } = useMemo(() => totals(lines), [lines]);
   const balanced = isBalanced(lines);
@@ -217,6 +219,14 @@ function CreateJournalEntryDialog({
           setValue("lines.0.credit", amountStr);
         } else {
           setValue("lines.0.debit", amountStr);
+        }
+        if (fields.length < 2) {
+          appendRef.current({ account_code: "", debit: "", credit: "" });
+        }
+        if (initialValues.side === "credit") {
+          setValue("lines.1.debit", amountStr);
+        } else {
+          setValue("lines.1.credit", amountStr);
         }
       }
       initialValuesAppliedRef.current = true;
@@ -288,6 +298,15 @@ function CreateJournalEntryDialog({
         setValue(`lines.${idx}.credit`, amountStr);
       } else {
         setValue(`lines.${idx}.debit`, amountStr);
+      }
+      const oppositeIdx = idx === 0 ? 1 : 0;
+      if (oppositeIdx >= fields.length) {
+        append({ account_code: "", debit: "", credit: "" });
+      }
+      if (memoSuggestion.side === "credit") {
+        setValue(`lines.${oppositeIdx}.debit`, amountStr);
+      } else {
+        setValue(`lines.${oppositeIdx}.credit`, amountStr);
       }
     }
     setMemoSuggestion(null);
@@ -625,12 +644,6 @@ function FinanceJournalEntries() {
   const paramsAppliedRef = useRef(false);
 
   useEffect(() => {
-    if (!draftOpen) {
-      setDraftInitialValues(undefined);
-    }
-  }, [draftOpen]);
-
-  useEffect(() => {
     const draftMemo = searchParams.get("draft_memo");
     const draftAccount = searchParams.get("draft_account");
     if (draftMemo && draftAccount && !paramsAppliedRef.current) {
@@ -753,7 +766,7 @@ function FinanceJournalEntries() {
               label="Entry period"
             />
           }
-          actions={canWrite ? <CreateJournalEntryDialog open={draftOpen} onOpenChange={setDraftOpen} initialValues={draftInitialValues} /> : null}
+          actions={canWrite ? <CreateJournalEntryDialog open={draftOpen} onOpenChange={(v) => { setDraftOpen(v); if (!v) setDraftInitialValues(undefined); }} initialValues={draftInitialValues} /> : null}
         />
       </div>
 

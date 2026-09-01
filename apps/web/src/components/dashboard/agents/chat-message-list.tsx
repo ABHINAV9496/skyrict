@@ -226,7 +226,7 @@ export const MessageBubble = memo(function MessageBubble({
           <div
             className={cn(
               "absolute -bottom-7 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
-              isUser ? "right-0" : "left-11",
+              isUser ? "right-0" : "left-0",
             )}
           >
             <CopyButton text={message.content} />
@@ -235,9 +235,9 @@ export const MessageBubble = memo(function MessageBubble({
                 <EditButton onClick={() => setEditing(!editing)} />
                 {onResend ? <ResendButton onClick={() => onResend(message.content)} /> : null}
               </>
-            ) : message.failed ? (
+            ) : (
               onResend ? <RetryButton onClick={() => onResend(message.content)} /> : null
-            ) : null}
+            )}
           </div>
         ) : null}
       </div>

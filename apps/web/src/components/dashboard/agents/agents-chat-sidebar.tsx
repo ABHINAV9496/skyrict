@@ -170,9 +170,9 @@ function NewChatButton({
   const router = useRouter();
   return (
     <Button
-      variant="secondary"
+      variant="ghost"
       className={cn(
-        "w-full gap-2 text-sidebar-foreground",
+        "w-full gap-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         collapsed ? "justify-center px-0" : "justify-start",
       )}
       title={collapsed ? "New chat" : undefined}
@@ -297,7 +297,7 @@ export function AgentsChatSidebar({
           </Link>
           {!collapsed ? (
             <span className="font-display text-sm font-semibold tracking-tight text-sidebar-foreground">
-              AI Agents
+              SKYAgent
             </span>
           ) : null}
         </header>

@@ -15,6 +15,7 @@ import {
   fetchAiSuggestion,
 } from "@/lib/dashboard/layout-api";
 import { getDefaultLayout } from "@/lib/dashboard/widget-registry";
+import { trackWidgetEvent } from "@/lib/dashboard/widget-events";
 
 /**
  * Client component for the ERP dashboard with layout customization.
@@ -118,9 +119,8 @@ export function ErpDashboardClient() {
     setAiSuggestion(null);
   }, []);
 
-  const handleWidgetShow = useCallback((_widgetId: string) => {
-    // Telemetry: record widget visibility (batched, fire-and-forget)
-    // Implemented in commit 7
+  const handleWidgetShow = useCallback((widgetId: string) => {
+    trackWidgetEvent(widgetId, "open");
   }, []);
 
   if (!loaded) {

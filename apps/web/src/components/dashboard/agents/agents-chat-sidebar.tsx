@@ -79,37 +79,41 @@ function ConversationRow({
   const pinned = Boolean(conversation.pinned);
 
   return (
-    <div className={cn("group flex items-center rounded-lg", active ? "" : "hover:bg-muted/60")}>
+    <div
+      className={cn(
+        "group flex items-center rounded-lg text-sm transition-colors",
+        active
+          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+          : "text-foreground hover:bg-muted/60",
+      )}
+    >
       <Link
         href={`/dashboard/agents/c/${conversation.id}`}
         onClick={onSelect}
         aria-current={active ? "page" : undefined}
         title={collapsed ? conversation.title : undefined}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 rounded-lg text-sm transition-colors",
+          "flex min-w-0 flex-1 items-center gap-2",
           collapsed ? "justify-center px-0 py-2" : "px-2.5 py-2",
-          active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-foreground",
         )}
       >
         {collapsed ? (
           <MessageSquareText aria-hidden="true" className="size-4 shrink-0" />
         ) : (
           <>
-            <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
             {pinned ? (
-              <Pin aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/70" />
+              <Pin aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
             ) : null}
+            <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
           </>
         )}
       </Link>
 
       {!collapsed && (
-        <div className="mr-1 flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100">
+        <div className="mr-1 flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {/* Quick pin/unpin action */}
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="icon-sm"
             tabIndex={-1}
             onClick={(event) => {
               event.preventDefault();
@@ -117,28 +121,27 @@ function ConversationRow({
             }}
             aria-label={pinned ? `Unpin ${conversation.title}` : `Pin ${conversation.title}`}
             title={pinned ? "Unpin chat" : "Pin chat"}
-            className={cn("text-muted-foreground", pinned && "text-primary")}
+            className="flex size-6 items-center justify-center rounded-md text-current/50 transition-colors hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50"
           >
             {pinned ? (
-              <PinOff aria-hidden="true" className="size-4" />
+              <PinOff aria-hidden="true" className="size-3.5" />
             ) : (
-              <Pin aria-hidden="true" className="size-4" />
+              <Pin aria-hidden="true" className="size-3.5" />
             )}
-          </Button>
+          </button>
 
           {/* More actions: rename, delete, pin */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <button
+                type="button"
                 tabIndex={-1}
                 onClick={(event) => event.preventDefault()}
                 aria-label={`Options for ${conversation.title}`}
-                className="text-muted-foreground"
+                className="flex size-6 items-center justify-center rounded-md text-current/50 transition-colors hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50 data-[state=open]:bg-current/10"
               >
                 <MoreHorizontal aria-hidden="true" className="size-4" />
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={onRename}>
@@ -307,26 +310,58 @@ export function AgentsChatSidebar({
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-3">
           <NewChatButton collapsed={collapsed} onNavigate={onCloseMobile} />
 
+          {conversations.filter((c) => c.pinned).length > 0 && (
+            <section className="space-y-1" aria-label="Pinned conversations">
+              {!collapsed ? (
+                <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                  Pinned
+                </p>
+              ) : null}
+              {conversations
+                .filter((conversation) => conversation.pinned)
+                .map((conversation) => (
+                  <ConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                    active={isActive(pathname, conversation.id)}
+                    collapsed={collapsed}
+                    onSelect={onCloseMobile}
+                    onRename={() => handleRename(conversation)}
+                    onDelete={() => handleDelete(conversation)}
+                    onTogglePin={() => handleTogglePin(conversation)}
+                  />
+                ))}
+            </section>
+          )}
+
           <section className="space-y-1" aria-label="Recent conversations">
             {!collapsed ? (
               <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
                 Recents
               </p>
             ) : null}
-            {conversations.length > 0 ? (
-              conversations.map((conversation) => (
-                <ConversationRow
-                  key={conversation.id}
-                  conversation={conversation}
-                  active={isActive(pathname, conversation.id)}
-                  collapsed={collapsed}
-                  onSelect={onCloseMobile}
-                  onRename={() => handleRename(conversation)}
-                  onDelete={() => handleDelete(conversation)}
-                  onTogglePin={() => handleTogglePin(conversation)}
-                />
-              ))
-            ) : null}
+            {conversations.filter((c) => !c.pinned).length > 0 ? (
+              conversations
+                .filter((conversation) => !conversation.pinned)
+                .map((conversation) => (
+                  <ConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                    active={isActive(pathname, conversation.id)}
+                    collapsed={collapsed}
+                    onSelect={onCloseMobile}
+                    onRename={() => handleRename(conversation)}
+                    onDelete={() => handleDelete(conversation)}
+                    onTogglePin={() => handleTogglePin(conversation)}
+                  />
+                ))
+            ) : (
+              !collapsed && (
+                <p className="px-2.5 py-1 text-xs text-muted-foreground/60">
+                  No recent chats
+                </p>
+              )
+            )}
           </section>
         </div>
 

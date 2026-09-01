@@ -51,11 +51,13 @@ class PayslipReviewModel(Base):
             ["tenant_id", "run_id"],
             ["erp_payroll_runs.tenant_id", "erp_payroll_runs.id"],
             name="fk_erp_payslip_reviews_run",
+            ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "employee_id"],
             ["erp_employees.tenant_id", "erp_employees.id"],
             name="fk_erp_payslip_reviews_employee",
+            ondelete="CASCADE",
         ),
         CheckConstraint(
             "status IN ('draft', 'approved', 'rejected')",

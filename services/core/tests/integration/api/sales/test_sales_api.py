@@ -162,17 +162,23 @@ async def rbac_world(integration_db: dict[str, str]) -> AsyncGenerator[dict[str,
             ]
         )
         # The fulfilment invoice posts against the tenant's standard Revenue
-        # account (finance resolves code "4000"); seed it like finance's own
-        # seeders do so the cross-module port works in isolation.
+        # and COGS accounts (finance resolves codes "4000"/"5000"); seed them
+        # like finance's own seeders do so the cross-module port works in
+        # isolation.
         for tid in (acme, globex):
-            await session.execute(
-                text(
-                    "INSERT INTO erp_chart_of_accounts (tenant_id, id, code, name, account_type) "
-                    "VALUES (:tid, :id, '4000', 'Revenue', 'revenue') "
-                    "ON CONFLICT (tenant_id, code) DO NOTHING"
-                ),
-                {"tid": tid, "id": uuid.uuid4()},
-            )
+            for code, name, account_type in (
+                ("4000", "Revenue", "revenue"),
+                ("5000", "Cost of Goods Sold", "expense"),
+                ("1300", "Inventory Asset", "asset"),
+            ):
+                await session.execute(
+                    text(
+                        "INSERT INTO erp_chart_of_accounts (tenant_id, id, code, name, account_type) "
+                        "VALUES (:tid, :id, :code, :name, :account_type) "
+                        "ON CONFLICT (tenant_id, code) DO NOTHING"
+                    ),
+                    {"tid": tid, "id": uuid.uuid4(), "code": code, "name": name, "account_type": account_type},
+                )
         await session.commit()
 
     yield {"acme_id": integration_db["acme_id"], "globex_id": integration_db["globex_id"]}

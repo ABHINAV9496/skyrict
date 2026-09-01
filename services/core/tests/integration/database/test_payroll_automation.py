@@ -1055,7 +1055,7 @@ async def _seed_terminal_batch(
 
 
 class TestCommit3Notifications:
-    async def test_payslip_ready_routes_by_linked_user_with_defaults_and_dedupe(
+    async def test_batch_completion_delivers_digest_only_payslip_ready_fires_on_approval(
         self, commit3_world: dict[str, str]
     ) -> None:
         from core.features.payroll_automation.domain import PayrollBatchRun
@@ -1090,6 +1090,8 @@ class TestCommit3Notifications:
                 status="processing",
                 dry_run=False,
             )
+            # Per 0030, a completed batch sends ONLY the admin digest;
+            # payslip_ready is delivered per-employee on approval.
             inserted = await orch.record_batch_notifications(
                 tenant_id=batch.tenant_id,
                 batch=batch,
@@ -1110,15 +1112,9 @@ class TestCommit3Notifications:
                 )
             ).all()
             by_recipient = {(row.recipient_user_id, row.event_type): row for row in rows}
-            user_1 = uuid.UUID(commit3_world["user_ids"]["user_1"])
-            user_2 = uuid.UUID(commit3_world["user_ids"]["user_2"])
             admin = uuid.UUID(commit3_world["user_ids"]["admin"])
-            assert inserted == 3  # 2 payslip-ready (emp_3 has no user) + 1 digest
+            assert inserted == 1  # digest only — no payslip_ready at batch completion
 
-            payslip_1 = by_recipient[(user_1, "payslip_ready")]
-            assert payslip_1.in_app is True and payslip_1.email_stub is False
-            payslip_2 = by_recipient[(user_2, "payslip_ready")]
-            assert payslip_2.in_app is True and payslip_2.email_stub is True
             digest = by_recipient[(admin, "payroll_batch_digest")]
             assert digest.event_type == "payroll_batch_digest"
 
@@ -1140,7 +1136,47 @@ class TestCommit3Notifications:
                     {"tid": batch.tenant_id},
                 )
             ).scalar_one()
-            assert count == 3
+            assert count == 1
+
+        # --- payslip_ready fires on per-payslip approval ---
+        async with async_session_factory() as session:
+            orch = PayrollNotificationOrchestrator(
+                PostgresPayrollNotificationRepository(session),
+                audit=make_core_audit_service(session),
+            )
+            tenant_id = uuid.UUID(commit3_world["tenant_id"])
+            run_id = uuid.UUID(commit3_world["run_id"])
+            emp_1 = uuid.UUID(commit3_world["employee_ids"]["emp_1"])
+            emp_2 = uuid.UUID(commit3_world["employee_ids"]["emp_2"])
+            emp_3 = uuid.UUID(commit3_world["employee_ids"]["emp_3"])
+            # emp_2's email opt-in is already persisted from the first block.
+            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1)
+            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_2, version=1)
+            # emp_3 has no linked portal user — nothing inserted, no error.
+            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_3, version=1)
+            # Re-approving the same version is idempotent.
+            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1)
+            await session.commit()
+
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT recipient_user_id, event_type, in_app, email_stub "
+                        "FROM ai_payroll_notifications WHERE tenant_id = :tid "
+                        "ORDER BY recipient_user_id, dedupe_key"
+                    ),
+                    {"tid": tenant_id},
+                )
+            ).all()
+            by_recipient = {(row.recipient_user_id, row.event_type): row for row in rows}
+            user_1 = uuid.UUID(commit3_world["user_ids"]["user_1"])
+            user_2 = uuid.UUID(commit3_world["user_ids"]["user_2"])
+            payslip_1 = by_recipient[(user_1, "payslip_ready")]
+            assert payslip_1.in_app is True and payslip_1.email_stub is False
+            payslip_2 = by_recipient[(user_2, "payslip_ready")]
+            assert payslip_2.in_app is True and payslip_2.email_stub is True
+            # 1 digest + 2 payslip_ready, no duplicates from the idempotent re-approval.
+            assert len(rows) == 3
 
     async def test_failed_batch_digests_admin_with_failure_list(self, commit3_world: dict[str, str]) -> None:
         from core.features.payroll_automation.constants import BATCH_FAILED

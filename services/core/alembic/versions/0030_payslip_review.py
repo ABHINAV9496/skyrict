@@ -30,6 +30,20 @@ branch_labels = None
 depends_on = None
 
 
+def _enable_rls(table: str) -> None:
+    op.execute(f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY")
+    op.execute(
+        f"CREATE POLICY tenant_isolation_{table} ON public.{table} "
+        "USING (tenant_id = public.current_tenant_id()) "
+        "WITH CHECK (tenant_id = public.current_tenant_id())"
+    )
+
+
+def _disable_rls(table: str) -> None:
+    op.execute(f"ALTER TABLE public.{table} DISABLE ROW LEVEL SECURITY")
+    op.execute(f"DROP POLICY IF EXISTS tenant_isolation_{table} ON public.{table}")
+
+
 def upgrade() -> None:
     op.create_table(
         "erp_payslip_reviews",
@@ -82,11 +96,13 @@ def upgrade() -> None:
             ["tenant_id", "run_id"],
             ["erp_payroll_runs.tenant_id", "erp_payroll_runs.id"],
             name="fk_erp_payslip_reviews_run",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["tenant_id", "employee_id"],
             ["erp_employees.tenant_id", "erp_employees.id"],
             name="fk_erp_payslip_reviews_employee",
+            ondelete="CASCADE",
         ),
     )
 
@@ -112,8 +128,11 @@ def upgrade() -> None:
         ["tenant_id", "run_id", "employee_id", "version"],
     )
 
+    _enable_rls("erp_payslip_reviews")
+
 
 def downgrade() -> None:
+    _disable_rls("erp_payslip_reviews")
     op.drop_constraint(
         "uq_erp_payslip_reviews_run_employee_version",
         "erp_payslip_reviews",

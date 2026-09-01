@@ -110,14 +110,14 @@ def test_anomaly_notify_emails_comma_list(monkeypatch, tmp_path) -> None:
     # Spec §4.3 "Email to admin (critical only)": comma-separated recipients
     # arrive through a plain env string, whitespace tolerant.
     monkeypatch.setenv("AI_ANOMALY_NOTIFY_EMAILS", "ops@skyrict.dev, admin@skyrict.dev ")
-    monkeypatch.setenv("AI_EMAIL_SMTP_HOST", "mailhog")
+    monkeypatch.setenv("AI_EMAIL_SMTP_HOST", "mailpit")
     monkeypatch.setenv("AI_EMAIL_FROM_ADDR", "Skyrict <no-reply@skyrict.dev>")
     monkeypatch.setenv("AI_ANOMALY_REVIEW_BASE_URL", "https://app.skyrict.io/anomalies")
 
     s = Settings(_env_file=None)  # type: ignore[call-arg]
 
     assert s.anomaly_notify_emails == ["ops@skyrict.dev", "admin@skyrict.dev"]
-    assert s.EMAIL_SMTP_HOST == "mailhog"
+    assert s.EMAIL_SMTP_HOST == "mailpit"
     assert s.EMAIL_FROM_ADDR == "Skyrict <no-reply@skyrict.dev>"
     assert s.ANOMALY_REVIEW_BASE_URL == "https://app.skyrict.io/anomalies"
 

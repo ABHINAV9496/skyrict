@@ -228,7 +228,9 @@ def test_stream_sanitizes_ai_unavailable_error(client: TestClient) -> None:
 
     assert response.status_code == 200
     frames = _sse_events(response.text)
-    assert frames == [("error", {"message": "ai_unavailable"})]
+    # The safety done event always fires (even on error) so the frontend
+    # knows the stream is over.
+    assert frames == [("error", {"message": "ai_unavailable"}), ("done", {"agents": []})]
     assert "openai" not in response.text.lower()
 
 
@@ -245,7 +247,7 @@ def test_stream_sanitizes_unexpected_error(client: TestClient) -> None:
 
     assert response.status_code == 200
     frames = _sse_events(response.text)
-    assert frames == [("error", {"message": "internal_error"})]
+    assert frames == [("error", {"message": "internal_error"}), ("done", {"agents": []})]
     assert "sensitive" not in response.text
     assert "5432" not in response.text
 

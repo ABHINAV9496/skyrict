@@ -3,7 +3,7 @@
 Two transports behind the same ``EmailService`` protocol:
 
 * ``LogEmailService`` — logs the payload (default when no SMTP is configured).
-* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: MailHog;
+* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: Mailpit;
   prod: a real relay).
 
 SMTP failures are logged but never raised, so auth flows don't hard-fail on
@@ -22,6 +22,8 @@ import structlog
 
 from identity.core.email_templates import (
     SecurityAlert,
+    render_otp_html,
+    render_otp_text,
     render_security_alert_html,
     render_security_alert_text,
 )
@@ -129,17 +131,8 @@ class SmtpEmailService:
         self._use_tls = use_tls
 
     async def send_otp(self, *, to: str, code: str) -> None:
-        text = (
-            f"Your Skyrict verification code is {code}.\n\n"
-            "It expires in 10 minutes. If you didn't request this, you can "
-            "ignore this email."
-        )
-        html = (
-            f"<p>Your Skyrict verification code is "
-            f"<strong>{code}</strong>.</p>"
-            "<p>It expires in 10 minutes. If you didn't request this, you can "
-            "ignore this email.</p>"
-        )
+        text = render_otp_text(code)
+        html = render_otp_html(code)
         await self._deliver(to, "Your Skyrict verification code", text, html)
 
     async def send_verification(

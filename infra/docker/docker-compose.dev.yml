@@ -53,8 +53,8 @@ services:
       # Tighten to the compose subnet (docker network inspect skyrict_default)
       # if the exposed :8000 port is reachable by untrusted hosts.
       IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
-      # Outbound email → MailHog container (Web UI: http://localhost:8025).
-      IDENTITY_EMAIL_SMTP_HOST: mailhog
+      # Outbound email → Mailpit container (Web UI: http://localhost:8025).
+      IDENTITY_EMAIL_SMTP_HOST: mailpit
       IDENTITY_EMAIL_SMTP_PORT: "1025"
       # Security-alert CTAs auto-derive as http://{slug}.localhost:3000 in dev.
     volumes:
@@ -70,7 +70,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mailhog:
+      mailpit:
         condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
@@ -100,8 +100,8 @@ services:
       # is the service name, not localhost. These override the host-oriented
       # defaults in services/core/.env.
       CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
-      # Reach the ai-agent container on the compose network for the /api/v1/ai/*
-      # proxy and the post-commit embedding sync dispatch (SKY-70).
+      # Inside the compose network the ai-agent service listens on port 8000
+      # internally (host 8002 → container 8000).
       CORE_AI_AGENT_URL: http://skyrict-ai-agent:8000
     volumes:
       - ../../services/core/src:/app/services/core/src
@@ -147,6 +147,9 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
+      # The groq fallback model was renamed — llama-3.1-8b-instant no longer
+      # exists. qwen/qwen3.8-27b is a 131k-context model that supports tools.
+      AI_FALLBACK_MODEL: qwen/qwen3.8-27b
       # Core data plane for the inventory AI engines — the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001

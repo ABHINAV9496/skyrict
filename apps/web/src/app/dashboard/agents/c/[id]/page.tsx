@@ -6,7 +6,6 @@ import { notFound } from "next/navigation";
 import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
-import { ChatSkeleton } from "@/components/ui/page-skeletons";
 import { appendAgentMessage, getConversation, saveUserMessage } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
@@ -91,7 +90,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }, [params]);
 
   if (loading) {
-    return <ChatSkeleton />;
+    return (
+      <div className="flex h-full flex-1 items-center justify-center">
+        <div className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
+      </div>
+    );
   }
 
   if (!conversation) {

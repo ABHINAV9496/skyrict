@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Check, Copy, Pencil, RefreshCw, RotateCw } from "lucide-react";
 import Markdown from "react-markdown";
 
@@ -172,7 +172,7 @@ function DateSeparator({ label }: { label: string }) {
 /*  Message bubble                                                     */
 /* ------------------------------------------------------------------ */
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
   onResend,
 }: {
@@ -243,7 +243,7 @@ export function MessageBubble({
       </div>
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /*  Message list                                                       */
@@ -259,11 +259,16 @@ export function MessageList({
   onResend?: (content: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageCountRef = useRef(messages.length);
 
+  // Auto-scroll on new messages (not on content updates during streaming).
   useEffect(() => {
-    const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [messages]);
+    if (messages.length > messageCountRef.current) {
+      const node = scrollRef.current;
+      if (node) node.scrollTop = node.scrollHeight;
+    }
+    messageCountRef.current = messages.length;
+  }, [messages.length]);
 
   if (messages.length === 0) {
     return (

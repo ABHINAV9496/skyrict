@@ -165,15 +165,30 @@ export function useAgentChat(
     // find the agent bubble — leaving it stuck on the loading dots forever.
     await yieldToReact();
 
-    const appendDelta = (delta: string) => {
-      lastAgentContentRef.current += delta;
+    // Buffer token deltas and flush at animation-frame rate to avoid
+    // re-rendering the entire message list (and re-parsing markdown) on
+    // every single SSE token — the main cause of UI lag during streaming.
+    let pendingDelta = "";
+    let rafId = 0;
+
+    const flushDelta = () => {
+      rafId = 0;
+      const batch = pendingDelta;
+      pendingDelta = "";
+      if (!batch) return;
+      lastAgentContentRef.current += batch;
       setMessages((previous) =>
         previous.map((message) =>
           message.id === agentMessage.id
-            ? { ...message, content: message.content + delta }
+            ? { ...message, content: message.content + batch }
             : message,
         ),
       );
+    };
+
+    const appendDelta = (delta: string) => {
+      pendingDelta += delta;
+      if (rafId === 0) rafId = requestAnimationFrame(flushDelta);
     };
 
     const onEvent = (event: ChatStreamEvent) => {
@@ -208,6 +223,12 @@ export function useAgentChat(
           );
           break;
         case "done":
+          // Flush any remaining buffered tokens before signalling completion.
+          if (rafId !== 0) {
+            cancelAnimationFrame(rafId);
+            rafId = 0;
+            flushDelta();
+          }
           setActiveAgent(null);
           // Persist the agent response to the conversation store so it
           // survives page navigation. Fire-and-forget — storage failure
@@ -236,6 +257,12 @@ export function useAgentChat(
     try {
       await streamAgentChat({ message: trimmed, signal: controller.signal, onEvent });
     } catch (error) {
+      // Cancel any pending animation frame so no stale flush runs after unmount.
+      if (rafId !== 0) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+        pendingDelta = "";
+      }
       // User-initiated stop (or unmount) is not an error state.
       const aborted =
         error instanceof DOMException && error.name === "AbortError";

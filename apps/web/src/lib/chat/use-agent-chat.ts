@@ -35,6 +35,15 @@ export interface AgentChatCitation {
   url: string | null;
 }
 
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  /** Object URL for client-side preview ( revoked on unmount or send ). */
+  previewUrl?: string;
+}
+
 export interface AgentChatMessage {
   id: string;
   role: "user" | "agent";
@@ -43,6 +52,8 @@ export interface AgentChatMessage {
   /** Module agent that answered (from `agent_start`); null while classifying. */
   agentName?: string | null;
   citations?: AgentChatCitation[];
+  /** Files attached to this message. */
+  attachments?: ChatAttachment[];
   /** True when the turn failed and `content` holds the error copy. */
   failed?: boolean;
 }
@@ -59,7 +70,7 @@ export interface AgentChatState {
    * NOT re-append the user bubble nor re-persist it. Every other call (typed
    * message or a resend) appends the user bubble and persists it.
    */
-  send: (content: string, echo?: boolean) => Promise<void>;
+  send: (content: string, echo?: boolean, attachments?: ChatAttachment[]) => Promise<void>;
   stop: () => void;
 }
 
@@ -121,7 +132,7 @@ export function useAgentChat(
     abortRef.current?.abort();
   }, []);
 
-  const send = useCallback(async (content: string, echo?: boolean) => {
+  const send = useCallback(async (content: string, echo?: boolean, attachments?: ChatAttachment[]) => {
     const trimmed = content.trim();
     if (!trimmed) return;
 
@@ -141,6 +152,7 @@ export function useAgentChat(
       role: "user",
       content: trimmed,
       createdAt: now,
+      attachments: attachments?.length ? attachments : undefined,
     };
     const agentMessage: AgentChatMessage = {
       id: newId(),

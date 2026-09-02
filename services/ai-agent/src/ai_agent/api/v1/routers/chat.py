@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import uuid
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -31,7 +32,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
-from ai_agent.api.v1.schemas.chat import ChatStreamRequest
+from ai_agent.api.v1.schemas.chat import AttachmentData, ChatStreamRequest
 from ai_agent.core.audit_service import AuditService
 from ai_agent.core.config import settings
 from ai_agent.core.embedding import build_embedding_provider
@@ -192,6 +193,8 @@ async def stream_chat(
         _event_stream(
             runtime=runtime,
             message=body.message,
+            attachments=body.attachments,
+            conversation_id=body.conversation_id,
             tenant_id=user["tenant_id"],
             user_id=user["user_id"],
         ),
@@ -208,6 +211,8 @@ async def _event_stream(
     *,
     runtime: SupervisorRuntime,
     message: str,
+    attachments: list[AttachmentData] | None = None,
+    conversation_id: uuid.UUID | None = None,
     tenant_id: Any,
     user_id: Any,
 ) -> AsyncIterator[str]:
@@ -223,7 +228,11 @@ async def _event_stream(
     done_sent = False
     try:
         async for event in runtime.stream_answer(
-            query=message, tenant_id=tenant_id, user_id=user_id
+            query=message,
+            attachments=attachments,
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
         ):
             name, payload = _to_sse(event)
             if name == EVENT_DONE:

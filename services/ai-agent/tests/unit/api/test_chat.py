@@ -52,6 +52,8 @@ class _FakeRuntime:
         self,
         *,
         query: str,
+        attachments: Any = None,
+        conversation_id: Any = None,
         tenant_id: Any,
         user_id: Any,
     ) -> AsyncIterator[SupervisorEvent]:
@@ -70,6 +72,8 @@ class _FailingRuntime:
         self,
         *,
         query: str,
+        attachments: Any = None,
+        conversation_id: Any = None,
         tenant_id: Any,
         user_id: Any,
     ) -> AsyncIterator[SupervisorEvent]:

@@ -1146,6 +1146,7 @@ class FinanceRepository:
             .where(
                 ErpJournalEntryModel.tenant_id == tenant_id,
                 ErpJournalEntryModel.status == EntryStatus.POSTED,
+                ErpJournalEntryModel.reversal_entry_id.is_(None),
                 ErpJournalEntryModel.memo.isnot(None),
             )
             .group_by(ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date)
@@ -1160,6 +1161,7 @@ class FinanceRepository:
                 .where(
                     ErpJournalEntryModel.tenant_id == tenant_id,
                     ErpJournalEntryModel.status == EntryStatus.POSTED,
+                    ErpJournalEntryModel.reversal_entry_id.is_(None),
                     ErpJournalEntryModel.memo == row.memo,
                     ErpJournalEntryModel.entry_date == row.entry_date,
                 )

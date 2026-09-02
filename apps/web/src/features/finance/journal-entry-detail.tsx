@@ -21,7 +21,7 @@ import { ApiError } from "@/lib/api/http";
 import { formatDate, formatDateTime, formatMoney, sumMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 import { FinanceTable, type FinanceColumn } from "@/features/finance/components/finance-table";
-import { EntryStatusBadge } from "@/features/finance/components/status-badge";
+import { EntryStatusBadge, StatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
 
 type BusyAction = "post" | "void" | "reverse";
@@ -134,9 +134,10 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
     { label: "Credit", align: "right", render: (line) => formatMoney(line.credit) },
   ];
 
+  const isReversal = entry.memo?.startsWith("Reversal of") ?? false;
   const canPost = entry.status === "draft" && canApprove;
   const canVoid = entry.status === "draft" && canWrite;
-  const canReverse = entry.status === "posted" && entry.reversal_entry_id === null && canApprove;
+  const canReverse = entry.status === "posted" && entry.reversal_entry_id === null && !isReversal && canApprove;
 
   return (
     <div className="space-y-6">
@@ -157,6 +158,9 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <EntryStatusBadge status={entry.status} />
+          {entry.reversal_entry_id ? (
+            <StatusBadge tone="warning">Reversed</StatusBadge>
+          ) : null}
           {canPost ? (
             <Button
               type="button"

@@ -1438,6 +1438,8 @@ class FinanceRepository:
             return None
         if model.reversal_entry_id is not None:
             return None
+        if model.memo and model.memo.startswith("Reversal of"):
+            return None
 
         source_lines = await self._journal_lines(entry_id, tenant_id)
         reversal = ErpJournalEntryModel(

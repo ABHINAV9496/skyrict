@@ -9,7 +9,19 @@ import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { appendAgentMessage, getConversation, saveUserMessage } from "@/lib/api/agents-api";
 import type { ChatMessage, Conversation } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
+import {
+  CONVERSATION_LIST_CHANGED_EVENT,
+  notifyConversationListChanged,
+} from "@/lib/chat/conversation-list-events";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
+
+/**
+ * How long to wait before broadcasting the list-refresh after a turn. The AI
+ * title is generated in a background task just after the agent message is
+ * persisted, so the first broadcast (right after persistence) lands before
+ * the title exists; this second one catches it.
+ */
+const TITLE_REFRESH_DELAY_MS = 3500;
 
 function toAgentMessage(message: ChatMessage): AgentChatMessage {
   return {
@@ -32,6 +44,7 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
  */
 function ConversationView({ conversation }: { conversation: Conversation }) {
   const { user, status } = useSession();
+  const refreshTimerRef = useRef<number | null>(null);
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
     (conversation.messages ?? []).map(toAgentMessage),
     {
@@ -41,11 +54,26 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
         void saveUserMessage(conversation.id, content);
       },
       onComplete: (content) => {
-        void appendAgentMessage(conversation.id, content);
+        void appendAgentMessage(conversation.id, content).then(() => {
+          notifyConversationListChanged();
+        });
+        // The AI title lands a moment later; broadcast again so the sidebar
+        // and header pick it up without a manual refresh.
+        if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = window.setTimeout(
+          notifyConversationListChanged,
+          TITLE_REFRESH_DELAY_MS,
+        );
       },
     },
   );
   const autoStarted = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (autoStarted.current || sending || status !== "authenticated") return;
@@ -108,6 +136,32 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       });
     return () => {
       cancelled = true;
+    };
+  }, [params]);
+
+  // Reflect server-side metadata changes (e.g. the AI title landing right
+  // after a turn) by refreshing ONLY the header fields — the live message
+  // list stays untouched so streaming is never disrupted.
+  useEffect(() => {
+    let cancelled = false;
+    const onConversationListChanged = () => {
+      void params
+        .then(({ id }) => getConversation(id))
+        .then((data) => {
+          if (!cancelled) {
+            setConversation((previous) =>
+              previous
+                ? { ...previous, title: data.title, updated_at: data.updated_at }
+                : previous,
+            );
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
     };
   }, [params]);
 

@@ -52,6 +52,8 @@ class _FakeRuntime:
         self,
         *,
         query: str,
+        attachments: Any = None,
+        conversation_id: Any = None,
         tenant_id: Any,
         user_id: Any,
     ) -> AsyncIterator[SupervisorEvent]:
@@ -70,6 +72,8 @@ class _FailingRuntime:
         self,
         *,
         query: str,
+        attachments: Any = None,
+        conversation_id: Any = None,
         tenant_id: Any,
         user_id: Any,
     ) -> AsyncIterator[SupervisorEvent]:
@@ -230,7 +234,10 @@ def test_stream_sanitizes_ai_unavailable_error(client: TestClient) -> None:
     frames = _sse_events(response.text)
     # The safety done event always fires (even on error) so the frontend
     # knows the stream is over.
-    assert frames == [("error", {"message": "ai_unavailable"}), ("done", {"agents": []})]
+    assert frames == [
+        ("error", {"message": "The AI service is temporarily unavailable. Please try again."}),
+        ("done", {"agents": []}),
+    ]
     assert "openai" not in response.text.lower()
 
 
@@ -247,7 +254,10 @@ def test_stream_sanitizes_unexpected_error(client: TestClient) -> None:
 
     assert response.status_code == 200
     frames = _sse_events(response.text)
-    assert frames == [("error", {"message": "internal_error"}), ("done", {"agents": []})]
+    assert frames == [
+        ("error", {"message": "An unexpected error occurred. Please try again."}),
+        ("done", {"agents": []}),
+    ]
     assert "sensitive" not in response.text
     assert "5432" not in response.text
 
@@ -309,3 +319,102 @@ def test_stream_returns_rfc7807_429_when_user_quota_exhausted(
     # RFC 7807 error response — never an SSE stream that dies mid-turn.
     assert response.status_code == 429
     assert "ai-rate-limited" in response.text
+
+
+# --- Lifecycle: terminal state guarantees -----------------------------------
+
+
+def test_done_event_always_last_after_error(client: TestClient) -> None:
+    """A done event MUST follow every error event so the frontend never gets stuck."""
+    _override_runtime(
+        client,
+        _FailingRuntime(AiUnavailableError("provider down")),
+    )
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "test"},
+    )
+
+    frames = _sse_events(response.text)
+    assert frames[-1][0] == "done"
+    assert frames[0][0] == "error"
+
+
+def test_done_event_always_last_after_unexpected_error(client: TestClient) -> None:
+    """Even an unhandled exception must be followed by a done event."""
+    _override_runtime(
+        client,
+        _FailingRuntime(RuntimeError("something broke")),
+    )
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "test"},
+    )
+
+    frames = _sse_events(response.text)
+    assert frames[-1][0] == "done"
+    assert frames[0][0] == "error"
+    # The error message must be human-readable, not a mode string.
+    assert "unexpected error" in frames[0][1]["message"].lower()
+
+
+def test_empty_stream_still_sends_done(client: TestClient) -> None:
+    """A stream that yields no events must still close with a done frame."""
+    _override_runtime(client, _FakeRuntime([]))
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "empty"},
+    )
+
+    frames = _sse_events(response.text)
+    assert len(frames) == 1
+    assert frames[0] == ("done", {"agents": []})
+
+
+def test_done_event_not_sent_after_normal_completion(client: TestClient) -> None:
+    """When the runtime emits a DoneEvent, the safety net must not duplicate it."""
+    events: list[SupervisorEvent] = [
+        ClassificationEvent(
+            agents=["inventory_monitor"], confidence=0.9, abstain=False, reason=None
+        ),
+        AgentStartEvent(agent="inventory_monitor", display_name="Inventory Monitor"),
+        TokenEvent(agent="inventory_monitor", delta="All good."),
+        DoneEvent(agents=["inventory_monitor"]),
+    ]
+    _override_runtime(client, _FakeRuntime(events))
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "status"},
+    )
+
+    frames = _sse_events(response.text)
+    done_frames = [f for f in frames if f[0] == "done"]
+    assert len(done_frames) == 1
+    assert done_frames[0][1] == {"agents": ["inventory_monitor"]}
+
+
+def test_error_message_does_not_leak_internals(client: TestClient) -> None:
+    """Error frames must never contain provider details, connection strings, or stack traces."""
+    _override_runtime(
+        client,
+        _FailingRuntime(
+            RuntimeError(
+                "psycopg2.OperationalError: connection to server at db.internal:5432 failed"
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "leak test"},
+    )
+
+    text = response.text.lower()
+    assert "psycopg2" not in text
+    assert "db.internal" not in text
+    assert "5432" not in text
+    assert "operationalerror" not in text

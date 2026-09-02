@@ -21,9 +21,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { useModuleAccess } from "@/lib/access/modules";
+import { cn } from "@/lib/utils";
 import {
   disqualifyLead,
   listLeads,
@@ -266,26 +266,45 @@ export function LeadsTable() {
 
   return (
     <div className="space-y-4">
+      <nav
+        aria-label="Lead status views"
+        role="tablist"
+        className="flex items-center gap-1 overflow-x-auto border-b border-border/60"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {STATUS_FILTERS.map((tab) => {
+          const active = statusFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                setStatusFilter(tab.value);
+                setOffset(0);
+              }}
+              className={cn(
+                "relative inline-flex h-9 shrink-0 items-center px-3 text-sm font-medium transition-colors",
+                active
+                  ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {tab.label}
+              {active && (
+                <span
+                  aria-hidden="true"
+                  className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-emerald-500 dark:bg-emerald-400"
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value as LeadStatus | "all");
-              setOffset(0);
-            }}
-          >
-            <SelectTrigger className="w-40" aria-label="Filter by status">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_FILTERS.map((filter) => (
-                <SelectItem key={filter.value} value={filter.value}>
-                  {filter.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <div className="relative">
             <Search
               aria-hidden="true"

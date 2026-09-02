@@ -560,11 +560,13 @@
   margin: 0.4em 0;
 }
 
-.chat-markdown p:first-child {
+/* Was p-only before — a reply that starts/ends with a heading or list
+   still had extra top/bottom air. Apply to any direct block child. */
+.chat-markdown > *:first-child {
   margin-top: 0;
 }
 
-.chat-markdown p:last-child {
+.chat-markdown > *:last-child {
   margin-bottom: 0;
 }
 
@@ -663,5 +665,3 @@
   background: hsl(var(--muted));
   font-weight: 600;
 }
-
-

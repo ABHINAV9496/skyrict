@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -80,9 +80,7 @@ async def test_resolve_layout_returns_empty_when_nothing_exists(
 
 
 @pytest.mark.asyncio
-async def test_save_user_layout(
-    service: DashboardService, mock_repo: AsyncMock
-) -> None:
+async def test_save_user_layout(service: DashboardService, mock_repo: AsyncMock) -> None:
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
@@ -103,28 +101,20 @@ async def test_save_user_layout(
 
 
 @pytest.mark.asyncio
-async def test_reset_user_layout(
-    service: DashboardService, mock_repo: AsyncMock
-) -> None:
+async def test_reset_user_layout(service: DashboardService, mock_repo: AsyncMock) -> None:
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
     mock_repo.delete_user_layout.return_value = True
 
-    result = await service.reset_user_layout(
-        tenant_id=tenant_id, user_id=user_id
-    )
+    result = await service.reset_user_layout(tenant_id=tenant_id, user_id=user_id)
 
     assert result is True
-    mock_repo.delete_user_layout.assert_called_once_with(
-        tenant_id=tenant_id, user_id=user_id
-    )
+    mock_repo.delete_user_layout.assert_called_once_with(tenant_id=tenant_id, user_id=user_id)
 
 
 @pytest.mark.asyncio
-async def test_record_events(
-    service: DashboardService, mock_repo: AsyncMock
-) -> None:
+async def test_record_events(service: DashboardService, mock_repo: AsyncMock) -> None:
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
@@ -144,9 +134,7 @@ async def test_record_events(
 
 
 @pytest.mark.asyncio
-async def test_has_enough_events_true(
-    service: DashboardService, mock_repo: AsyncMock
-) -> None:
+async def test_has_enough_events_true(service: DashboardService, mock_repo: AsyncMock) -> None:
     tenant_id = uuid.uuid4()
 
     mock_repo.get_widget_event_summary.return_value = [
@@ -159,9 +147,7 @@ async def test_has_enough_events_true(
 
 
 @pytest.mark.asyncio
-async def test_has_enough_events_false(
-    service: DashboardService, mock_repo: AsyncMock
-) -> None:
+async def test_has_enough_events_false(service: DashboardService, mock_repo: AsyncMock) -> None:
     tenant_id = uuid.uuid4()
 
     mock_repo.get_widget_event_summary.return_value = [

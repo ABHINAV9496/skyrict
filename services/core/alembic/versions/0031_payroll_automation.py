@@ -21,8 +21,8 @@ check constraints so they stay mutable without a type migration):
   batch:  queued | processing | completed | failed | aborted
   item:   pending | processing | done | failed
 
-Revision ID: 0026
-Revises: 0025
+Revision ID: 0031
+Revises: 0026
 Create Date: 2026-08-29
 """
 
@@ -32,8 +32,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0026"
-down_revision = "0025"
+revision = "0031"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 

@@ -14,8 +14,8 @@ migration.
 ``version`` increments per (tenant, run, employee) on re-approval, enabling
 the notification delivery-gate to fire only once per approved version.
 
-Revision ID: 0030
-Revises: 0029
+Revision ID: 0035
+Revises: 0034
 Create Date: 2026-09-01
 """
 
@@ -24,8 +24,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0030"
-down_revision = "0029"
+revision = "0035"
+down_revision = "0034"
 branch_labels = None
 depends_on = None
 

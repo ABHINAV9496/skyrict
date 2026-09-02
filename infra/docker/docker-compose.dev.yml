@@ -152,6 +152,7 @@ services:
       # The groq fallback model was renamed — llama-3.1-8b-instant no longer
       # exists. qwen/qwen3.8-27b is a 131k-context model that supports tools.
       AI_FALLBACK_MODEL: qwen/qwen3.8-27b
+      AI_FALLBACK_PROVIDER: openrouter
       # Core data plane for the inventory AI engines — the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001

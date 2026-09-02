@@ -31,8 +31,8 @@ All three follow the ``ai_`` table conventions from 0026: tenant-scoped,
 RLS enabled, composite ``(tenant_id, id)`` primary keys (prefs key on
 ``(tenant_id, user_id)`` — one row per user).
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0033
+Revises: 0032
 Create Date: 2026-08-30
 """
 
@@ -41,8 +41,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0028"
-down_revision = "0027"
+revision = "0033"
+down_revision = "0032"
 branch_labels = None
 depends_on = None
 

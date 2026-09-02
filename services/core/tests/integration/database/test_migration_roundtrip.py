@@ -74,7 +74,7 @@ _ERP_PERMISSION_KEYS = (
     "erp.hr.ai.eval",
     # 0025: inventory AI approve permission (SKY-68, renumbered on HR-AI-002).
     "erp.inventory.ai.approve",
-    # 0026: payroll automation permissions (HR-AUT-001).
+    # 0031: payroll automation permissions (HR-AUT-001).
     "erp.payroll.ai.read",
     "erp.payroll.ai.run",
     "erp.payroll.ai.notify",
@@ -97,17 +97,17 @@ _HR_AI_TABLES = (
     # 0024: HR-AI-002 pattern-engine input tables (holidays + blackouts).
     "ai_hr_public_holidays",
     "ai_hr_leave_blackout_periods",
-    # 0026: payroll automation engine tables (HR-AUT-001, Commit 1).
+    # 0031: payroll automation engine tables (HR-AUT-001, Commit 1).
     "ai_payroll_batch_runs",
     "ai_payroll_batch_items",
-    # 0027: benefit plans + elections (HR-AUT-001, pre-flight finish-up).
+    # 0032: benefit plans + elections (HR-AUT-001, pre-flight finish-up).
     "erp_benefit_plans",
     "erp_benefit_elections",
-    # 0028: payroll notifications + schedules (HR-AUT-001, Commit 3).
+    # 0033: payroll notifications + schedules (HR-AUT-001, Commit 3).
     "ai_payroll_notifications",
     "ai_payroll_notification_prefs",
     "ai_payroll_schedules",
-    # 0030: payslip review queue (HR-AUT-001, Commit 2).
+    # 0035: payslip review queue (HR-AUT-001, Commit 2).
     "erp_payslip_reviews",
 )
 
@@ -174,7 +174,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0030", f"head is {version}, expected 0030"
+assert version == "0035", f"head is {version}, expected 0035"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -382,7 +382,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
             )
 
-            # 0026: payroll automation columns on settings + employees.
+            # 0031: payroll automation columns on settings + employees.
             settings_col = (
                 await conn.execute(
                     text(
@@ -394,7 +394,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).one_or_none()
             assert settings_col is not None, (
-                "0026 must add erp_payroll_settings.ai_automation_enabled"
+                "0031 must add erp_payroll_settings.ai_automation_enabled"
             )
             assert settings_col[0] == "boolean"
 
@@ -410,10 +410,10 @@ async def _assert_upgraded_schema(url: str) -> None:
                         {"name": col_name},
                     )
                 ).one_or_none()
-                assert bank_col is not None, f"0026 must add erp_employees.{col_name}"
+                assert bank_col is not None, f"0031 must add erp_employees.{col_name}"
                 assert bank_col[0] == "character varying"
 
-            # 0027: benefit catalogue — columns + status/type constraints.
+            # 0032: benefit catalogue — columns + status/type constraints.
             plan_cols = (
                 (
                     await conn.execute(
@@ -471,7 +471,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert plan_type_check == 1, "0027 must add the plan_type check constraint"
+            assert plan_type_check == 1, "0032 must add the plan_type check constraint"
 
             election_status_check = (
                 await conn.execute(
@@ -482,9 +482,9 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert election_status_check == 1, "0027 must add the election status check constraint"
+            assert election_status_check == 1, "0032 must add the election status check constraint"
 
-            # 0028: notifications + schedules — tables, dedupe constraint, checks.
+            # 0033: notifications + schedules — tables, dedupe constraint, checks.
             notif_cols = (
                 (
                     await conn.execute(
@@ -523,7 +523,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert notif_dedupe == 1, "0028 must add the notification dedupe constraint"
+            assert notif_dedupe == 1, "0033 must add the notification dedupe constraint"
 
             pref_cols = (
                 (
@@ -573,7 +573,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 "updated_at",
             }.issubset(set(schedule_cols)), schedule_cols
 
-            # 0029: payroll accrual JE bridge (HR-AUT-001, Commit 4).
+            # 0034: payroll accrual JE bridge (HR-AUT-001, Commit 4).
             je_status_col = (
                 await conn.execute(
                     text(
@@ -585,7 +585,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).one_or_none()
-            assert je_status_col is not None, "0029 must add erp_payroll_runs.je_bridge_status"
+            assert je_status_col is not None, "0034 must add erp_payroll_runs.je_bridge_status"
             assert je_status_col[0] == "character varying", je_status_col
             assert je_status_col[1] == 16, je_status_col
 
@@ -598,7 +598,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert je_status_check == 1, "0029 must add the je_bridge_status check constraint"
+            assert je_status_check == 1, "0034 must add the je_bridge_status check constraint"
 
             je_bridge_col = (
                 await conn.execute(
@@ -610,14 +610,14 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).one_or_none()
-            assert je_bridge_col is not None, "0029 must add erp_payroll_settings.je_bridge_enabled"
+            assert je_bridge_col is not None, "0034 must add erp_payroll_settings.je_bridge_enabled"
             assert je_bridge_col[0] == "boolean", je_bridge_col
 
-            # 0030: payslip review queue (HR-AUT-001, Commit 2).
+            # 0035: payslip review queue (HR-AUT-001, Commit 2).
             review_table = (
                 await conn.execute(text("SELECT to_regclass('public.erp_payslip_reviews')"))
             ).scalar_one()
-            assert review_table is not None, "0030 must create erp_payslip_reviews table"
+            assert review_table is not None, "0035 must create erp_payslip_reviews table"
 
             review_cols = {
                 row[0]
@@ -659,7 +659,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 )
             ).scalar_one()
             assert review_status_check == 1, (
-                "0030 must add the payslip review status check constraint"
+                "0035 must add the payslip review status check constraint"
             )
     finally:
         await engine.dispose()

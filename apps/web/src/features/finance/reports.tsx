@@ -13,7 +13,13 @@ import {
     getProfitAndLoss,
     getTrialBalance,
     listFiscalPeriods,
+    getCashflowProjection,
+    getComparativePnl,
+    getAging,
+    type ArAging,
     type BalanceSheet,
+    type CashflowProjection,
+    type ComparativePnl,
     type FiscalPeriod,
     type ProfitAndLoss,
     type TrialBalance,
@@ -44,14 +50,20 @@ import {
     type PeriodValue,
 } from "@/features/finance/components/period-selector";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
+import {
+    ComparativePnlWidget,
+    CashflowWidget,
+    ArAgingWidget,
+} from "@/features/finance/components/automation-widgets";
 import { cn } from "@/lib/utils";
 
-type ReportKey = "trial-balance" | "profit-and-loss" | "balance-sheet";
+type ReportKey = "trial-balance" | "profit-and-loss" | "balance-sheet" | "automation";
 
 const REPORT_TABS: { key: ReportKey; label: string }[] = [
     { key: "trial-balance", label: "Trial Balance" },
     { key: "profit-and-loss", label: "Profit & Loss" },
     { key: "balance-sheet", label: "Balance Sheet" },
+    { key: "automation", label: "Automation" },
 ];
 
 function today(): string {
@@ -814,6 +826,110 @@ function BalanceSheetView({ periods }: { periods: FiscalPeriod[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Automation reports
+// ---------------------------------------------------------------------------
+
+function dateYearsAgo(years: number): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - years);
+    return d.toISOString().slice(0, 10);
+}
+
+function AutomationView() {
+    const todayStr = today();
+    const [aging, setAging] = useState<ArAging | null>(null);
+    const [agingLoading, setAgingLoading] = useState(true);
+    const [projection, setProjection] = useState<CashflowProjection | null>(null);
+    const [comparative, setComparative] = useState<ComparativePnl | null>(null);
+    const [compLoading, setCompLoading] = useState(true);
+    const [compError, setCompError] = useState<string | null>(null);
+    const [agingError, setAgingError] = useState<string | null>(null);
+    const [projError, setProjError] = useState<string | null>(null);
+
+    // Backdate one full year for the prior period.
+    const priorFrom = dateYearsAgo(1);
+    const currentFrom = dateYearsAgo(0).slice(0, 4) + "-01-01";
+
+    const loadAging = useCallback(async () => {
+        setAgingLoading(true);
+        setAgingError(null);
+        try {
+            setAging(await getAging(todayStr));
+        } catch (err) {
+            setAgingError(errorMessage(err, "Could not load AR aging."));
+        } finally {
+            setAgingLoading(false);
+        }
+    }, [todayStr]);
+
+    const loadProjection = useCallback(async () => {
+        setProjError(null);
+        try {
+            setProjection(await getCashflowProjection(todayStr));
+        } catch (err) {
+            setProjError(errorMessage(err, "Could not load the cash-flow projection."));
+        }
+    }, [todayStr]);
+
+    const loadComparative = useCallback(async () => {
+        setCompLoading(true);
+        setCompError(null);
+        try {
+            setComparative(
+                await getComparativePnl(currentFrom, todayStr, priorFrom, todayStr),
+            );
+        } catch (err) {
+            setCompError(errorMessage(err, "Could not load the comparative P&L."));
+        } finally {
+            setCompLoading(false);
+        }
+    }, [currentFrom, priorFrom, todayStr]);
+
+    useEffect(() => {
+        void loadAging();
+    }, [loadAging]);
+    useEffect(() => {
+        void loadProjection();
+    }, [loadProjection]);
+    useEffect(() => {
+        void loadComparative();
+    }, [loadComparative]);
+
+    const caption = comparative
+        ? `${fmtDateLong(comparative.current_from)} \u2013 ${fmtDateLong(comparative.current_to)} vs ${fmtDateLong(comparative.prior_from)} \u2013 ${fmtDateLong(comparative.prior_to)}`
+        : "Current vs prior period";
+
+    return (
+        <div className="space-y-6">
+            <section className="space-y-4">
+                <ArAgingWidget aging={aging} loading={agingLoading} />
+                {agingError ? (
+                    <FinanceErrorState message={agingError} onRetry={() => void loadAging()} />
+                ) : null}
+            </section>
+            <section className="space-y-4">
+                <CashflowWidget projection={projection ?? { positions: [] }} />
+                {projError ? (
+                    <FinanceErrorState
+                        message={projError}
+                        onRetry={() => void loadProjection()}
+                    />
+                ) : null}
+            </section>
+            <section className="space-y-4">
+                <ComparativePnlWidget
+                    rows={comparative?.rows ?? []}
+                    caption={caption}
+                    loading={compLoading}
+                    error={compError}
+                    onRetry={() => void loadComparative()}
+                />
+            </section>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
@@ -868,6 +984,7 @@ export function FinanceReports() {
             {report === "balance-sheet" ? (
                 <BalanceSheetView periods={periods} />
             ) : null}
+            {report === "automation" ? <AutomationView /> : null}
         </div>
     );
 }

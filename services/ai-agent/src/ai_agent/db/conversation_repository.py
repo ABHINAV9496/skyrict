@@ -243,6 +243,35 @@ class ConversationRepository:
         )
         await self._session.execute(stmt)
 
+    async def mark_title_generated(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str,
+    ) -> bool:
+        """Set the AI-generated title and record the generation timestamp.
+
+        Idempotent: only updates when ``title_generated_at IS NULL``.
+        Returns True if a row was actually updated.
+        """
+        from datetime import UTC, datetime
+
+        stmt = (
+            update(AiConversation)
+            .where(
+                AiConversation.tenant_id == tenant_id,
+                AiConversation.id == conversation_id,
+                AiConversation.title_generated_at.is_(None),
+            )
+            .values(
+                title=title,
+                title_generated_at=datetime.now(UTC),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return bool(result.rowcount)  # type: ignore[attr-defined]
+
 
 # ------------------------------------------------------------------
 # Helpers
@@ -255,6 +284,9 @@ def _conversation_to_dict(row: AiConversation) -> dict[str, Any]:
         "tenant_id": str(row.tenant_id),
         "user_id": str(row.user_id),
         "title": row.title,
+        "title_generated_at": row.title_generated_at.isoformat()
+        if row.title_generated_at
+        else None,
         "pinned": row.pinned,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,

@@ -1071,7 +1071,7 @@ class FinanceRepository:
             CloseChecklistItem(
                 label="Previous period closed",
                 status="ok"
-                if all(p.is_closed for p in periods if p.id != period.id)
+                if all(p.is_closed for p in periods if p.start_date < period.start_date)
                 else "warning",
                 detail="All earlier periods must be closed before this one",
             )
@@ -1081,7 +1081,7 @@ class FinanceRepository:
         items.append(
             CloseChecklistItem(
                 label="Journal entries posted",
-                status="ok" if entry_count and entry_count >= 8 else "missing",
+                status="ok" if entry_count and entry_count >= 1 else "missing",
                 detail=f"{entry_count} posted entries in period",
             )
         )

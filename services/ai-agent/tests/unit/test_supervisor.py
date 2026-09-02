@@ -162,7 +162,6 @@ def make_service(
         return resolved_gateway
 
     return SupervisorService(
-        session=None,
         llm_router=router or FakeLlmRouter(has_providers=True),
         gateway_factory=gateway_factory,
         rag=rag,

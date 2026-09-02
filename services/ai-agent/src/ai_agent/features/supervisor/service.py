@@ -20,7 +20,7 @@ Routing contract:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
@@ -112,13 +112,21 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+class ConversationHistoryPort(Protocol):
+    async def get_messages(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> list[dict[str, Any]]: ...
+
+
 class SupervisorService:
     """Routes one Agents-shell question and streams the delegated answer."""
 
     def __init__(
         self,
         *,
-        session: Any,
         llm_router: LlmRouter,
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagSearchPort | None = None,
@@ -126,10 +134,11 @@ class SupervisorService:
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
         memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
+        conversation_history: ConversationHistoryPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
     ) -> None:
-        self._session = session
+        self._conversation_history = conversation_history
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
@@ -356,11 +365,11 @@ class SupervisorService:
         injection into the supervisor system prompt. Returns empty string on
         any failure — history is best-effort and must never block the turn.
         """
-        try:
-            from ai_agent.db.conversation_repository import ConversationRepository
+        if self._conversation_history is None:
+            return ""
 
-            repo = ConversationRepository(self._session)
-            messages = await repo.get_messages(
+        try:
+            messages = await self._conversation_history.get_messages(
                 tenant_id=tenant_id,
                 conversation_id=conversation_id,
             )

@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ai_agent.db.agent_registry_repository import AgentRegistryRepository
+from ai_agent.db.conversation_repository import ConversationRepository
 from ai_agent.features.supervisor.schemas import (
     AGENT_CRM,
     AGENT_FINANCE,
@@ -95,7 +96,6 @@ class SupervisorRuntime:
         repo = AgentRegistryRepository(self._session)
         provisioned = {name: await repo.get_enabled(name) for name in self.REGISTERED_AGENTS}
         return SupervisorService(
-            session=self._session,
             llm_router=self._llm_router,
             gateway_factory=self._gateway_factory,
             rag=self._rag,
@@ -103,6 +103,7 @@ class SupervisorRuntime:
             crm_gateway_factory=self._crm_gateway_factory,
             memory_service=self._memory_service,
             forecast=self._forecast,
+            conversation_history=ConversationRepository(self._session),
             provisioned=provisioned,
             confidence_threshold=self._confidence_threshold,
         )

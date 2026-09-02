@@ -21,6 +21,8 @@ from ai_agent.models.agent_registry import AgentRegistryModel
 from ai_agent.models.ai_anomaly import AiAnomalyModel
 from ai_agent.models.ai_anomaly_rule_stats import AiAnomalyRuleStatsModel
 from ai_agent.models.ai_audit_log import AiAuditLogModel
+from ai_agent.models.ai_conversation import AiConversation
+from ai_agent.models.ai_conversation_message import AiConversationMessage
 from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_episodic_memory import AiEpisodicMemoryModel
@@ -49,6 +51,8 @@ __all__ = [
     "AiAnomalyModel",
     "AiAnomalyRuleStatsModel",
     "AiAuditLogModel",
+    "AiConversation",
+    "AiConversationMessage",
     "AiDealHealthModel",
     "AiDigestModel",
     "AiEpisodicMemoryModel",

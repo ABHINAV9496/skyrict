@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,6 +121,7 @@ async def append_message(
     body: AppendMessageRequest,
     user: Annotated[dict[str, Any], Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> dict[str, Any]:
     """Append a message to a conversation."""
     repo = ConversationRepository(session)
@@ -150,6 +151,18 @@ async def append_message(
             tenant_id=user["tenant_id"],
             conversation_id=conversation_id,
             title=title,
+        )
+
+    # Schedule AI title generation after the first agent reply.
+    if body.role == "agent" and conversation["title_generated_at"] is None:
+        from ai_agent.db.session import async_session_factory
+        from ai_agent.features.supervisor.title import schedule_title_generation
+
+        schedule_title_generation(
+            conversation_id=conversation_id,
+            tenant_id=user["tenant_id"],
+            llm_router=request.app.state.llm_router,
+            session_factory=async_session_factory,
         )
 
     # Return the full conversation (with updated title) so the frontend

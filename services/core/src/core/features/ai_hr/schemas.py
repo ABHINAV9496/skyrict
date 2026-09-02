@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 from core.features.ai_hr.anomaly_repository import LeaveAnomaly
 from core.features.ai_hr.anomaly_service import AnomalyOrgSummary
 from core.features.ai_hr.attrition_repository import ScoredRisk
+from core.features.ai_hr.compliance_repository import ComplianceFindingRow
+from core.features.ai_hr.compliance_service import ComplianceOrgSummary
 from core.features.ai_hr.pattern_data_repository import LeaveBlackoutPeriod, PublicHoliday
 from core.features.ai_hr.payroll_anomaly_repository import PayrollAnomaly
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyOrgSummary
@@ -615,10 +617,88 @@ def payroll_anomaly_org_to_out(summary: PayrollAnomalyOrgSummary) -> PayrollAnom
     )
 
 
+class ComplianceFindingOut(BaseModel):
+    """One compliance finding (L2 / individual drill-down).
+
+    ``employee_id``/``employee_number``/``name`` are nullable (tenant-level
+    findings anchor to no single person). ``title``/``description`` live under
+    the ``evidence`` keys of the same name and are surfaced here as first-class
+    fields; ``evidence`` never carries employee PII.
+    """
+
+    check_id: uuid.UUID
+    employee_id: uuid.UUID | None
+    employee_number: str | None
+    name: str | None
+    department_name: str | None
+    check_type: str
+    severity: str
+    owner_rule: str
+    title: str
+    description: str
+    evidence: dict[str, Any]
+    status: str
+    owner_user_id: uuid.UUID | None
+    created_at: datetime
+
+
+class ComplianceOrgOut(BaseModel):
+    """L1 aggregate response — never carries an employee identifier/name."""
+
+    total_findings: int
+    open_findings: int
+    by_type: dict[str, int]
+    by_severity: dict[str, int]
+    generated_at: datetime
+    narrative: str
+
+
+class ComplianceStatusWrite(BaseModel):
+    """Body for a status POST (``erp.hr.ai.acknowledge``).
+
+    The compliance lifecycle is ``open -> acknowledged -> resolved``.
+    """
+
+    status: str = Field(pattern="^(acknowledged|resolved)$")
+
+
+def compliance_finding_to_out(r: ComplianceFindingRow) -> ComplianceFindingOut:
+    return ComplianceFindingOut(
+        check_id=r.check_id if r.check_id is not None else uuid.uuid4(),
+        employee_id=r.employee_id,
+        employee_number=r.employee_number,
+        name=f"{r.first_name or ''} {r.last_name or ''}".strip() or None,
+        department_name=r.department_name,
+        check_type=r.check_type,
+        severity=r.severity,
+        owner_rule=r.owner_rule,
+        title=r.title,
+        description=r.description,
+        evidence=r.evidence,
+        status=r.status,
+        owner_user_id=r.owner_user_id,
+        created_at=r.created_at,
+    )
+
+
+def compliance_org_to_out(summary: ComplianceOrgSummary) -> ComplianceOrgOut:
+    return ComplianceOrgOut(
+        total_findings=summary.total_findings,
+        open_findings=summary.open_findings,
+        by_type=summary.by_type,
+        by_severity=summary.by_severity,
+        generated_at=summary.generated_at,
+        narrative=summary.narrative,
+    )
+
+
 __all__ = [
     "AnomalyOrgOut",
     "AttritionDetailOut",
     "AttritionSummaryOut",
+    "ComplianceFindingOut",
+    "ComplianceOrgOut",
+    "ComplianceStatusWrite",
     "DepartmentCount",
     "DepartmentCountOut",
     "DepartmentQualityOut",
@@ -653,6 +733,8 @@ __all__ = [
     "anomaly_to_out",
     "attrition_l1_to_out",
     "attrition_l2_to_out",
+    "compliance_finding_to_out",
+    "compliance_org_to_out",
     "employee_quality_to_out",
     "leave_blackout_to_out",
     "overview_to_out",

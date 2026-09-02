@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse, Response
 from core.api.deps import (
     get_ai_hr_service,
     get_anomaly_service,
+    get_compliance_service,
     get_current_user,
     get_eval_repository,
     get_hr_ai_individual,
@@ -52,6 +53,7 @@ from core.features.ai.router import get_ai_client
 from core.features.ai_hr.anomaly_service import AnomalyService
 from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
+from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
@@ -60,6 +62,9 @@ from core.features.ai_hr.schemas import (
     AnomalyOrgOut,
     AttritionDetailOut,
     AttritionSummaryOut,
+    ComplianceFindingOut,
+    ComplianceOrgOut,
+    ComplianceStatusWrite,
     EmployeeQualityOut,
     HrEvalRunWrite,
     HrEvalWriteOut,
@@ -83,6 +88,8 @@ from core.features.ai_hr.schemas import (
     anomaly_to_out,
     attrition_l1_to_out,
     attrition_l2_to_out,
+    compliance_finding_to_out,
+    compliance_org_to_out,
     employee_quality_to_out,
     leave_blackout_to_out,
     overview_to_out,
@@ -127,6 +134,9 @@ _AnomalyServiceDep = Annotated[AnomalyService, Depends(get_anomaly_service)]
 _SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_service)]
 _PayrollAnomalyServiceDep = Annotated[
     PayrollAnomalyService, Depends(get_payroll_anomaly_service)
+]
+_ComplianceServiceDep = Annotated[
+    ComplianceService, Depends(get_compliance_service)
 ]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
 _PatternDataRepositoryDep = Annotated[
@@ -651,4 +661,69 @@ async def record_eval_runs(
     return ResponseEnvelope(
         data=HrEvalWriteOut(recorded=recorded),
         message="HR AI eval metrics recorded",
+    )
+
+
+@router.get("/alerts/compliance", response_model=ResponseEnvelope[ComplianceOrgOut])
+async def compliance_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    compliance_service: _ComplianceServiceDep,
+) -> ResponseEnvelope[ComplianceOrgOut]:
+    """L1 compliance feed (HR-AI-001, Unit C). No per-person values."""
+    summary = await compliance_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=compliance_org_to_out(summary),
+        message="HR AI compliance feed retrieved",
+    )
+
+
+@router.get(
+    "/alerts/compliance/{employee_id}",
+    response_model=ResponseEnvelope[list[ComplianceFindingOut]],
+)
+async def compliance_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    compliance_service: _ComplianceServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[ComplianceFindingOut]] | JSONResponse:
+    """L2 per-employee compliance findings for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    findings = await compliance_service.employee_findings(
+        _tenant_id(current_user), employee_id
+    )
+    return ResponseEnvelope(
+        data=[compliance_finding_to_out(f) for f in findings],
+        message="HR AI employee compliance findings retrieved",
+    )
+
+
+@router.post(
+    "/alerts/compliance/{check_id}/status",
+    response_model=ResponseEnvelope[ComplianceFindingOut],
+)
+async def compliance_set_status(
+    check_id: uuid.UUID,
+    body: ComplianceStatusWrite,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiAckDep,
+    compliance_service: _ComplianceServiceDep,
+) -> ResponseEnvelope[ComplianceFindingOut]:
+    """Move one compliance finding along (acknowledged|resolved)."""
+    updated = await compliance_service.set_status(
+        _tenant_id(current_user),
+        check_id,
+        status=body.status,
+        actor_user_id=current_user["user_id"],
+    )
+    return ResponseEnvelope(
+        data=compliance_finding_to_out(updated),
+        message="Compliance finding status applied",
     )

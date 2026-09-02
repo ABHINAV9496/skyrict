@@ -251,6 +251,12 @@ export const erpNavGroups: NavGroup[] = [
                         icon: AlertTriangle,
                         permission: "erp.hr.ai.read",
                     },
+                    {
+                        href: "/dashboard/erp/hr/compliance",
+                        label: "Compliance",
+                        icon: ShieldCheck,
+                        permission: "erp.hr.ai.read",
+                    },
                 ],
             },
             {

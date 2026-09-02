@@ -586,3 +586,149 @@ def test_payroll_anomaly_disposition_requires_ack_permission_and_returns_updated
     assert resp.status_code == 200
     assert service.disposition_calls == [(TENANT_ID, ACTOR_ID, "acknowledged", ACTOR_ID)]
     assert resp.json()["data"]["status"] == "acknowledged"
+
+
+# Compliance engine v1 endpoints (HR-AI-001, Unit C)
+# ---------------------------------------------------------------------------
+
+
+class _FakeComplianceService:
+    def __init__(self) -> None:
+        self.org_calls: list[uuid.UUID] = []
+        self.employee_calls: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.status_calls: list[tuple[uuid.UUID, uuid.UUID, str, uuid.UUID]] = []
+
+    async def org_feed(self, tenant_id: uuid.UUID) -> object:
+        self.org_calls.append(tenant_id)
+        from core.features.ai_hr.compliance_service import ComplianceOrgSummary
+
+        return ComplianceOrgSummary(
+            total_findings=3,
+            open_findings=2,
+            by_type={
+                "document_expiry": 1,
+                "training_overdue": 1,
+                "contract_missing_field": 1,
+            },
+            by_severity={"high": 1, "medium": 1, "low": 1},
+            generated_at=datetime(2026, 1, 1, tzinfo=UTC),
+            narrative="2 open compliance finding(-ies) ...",
+        )
+
+    async def employee_findings(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> list[object]:
+        self.employee_calls.append((tenant_id, employee_id))
+        return [_compliance_finding()]
+
+    async def set_status(
+        self,
+        tenant_id: uuid.UUID,
+        check_id: uuid.UUID,
+        *,
+        status: str,
+        actor_user_id: uuid.UUID,
+    ) -> object:
+        self.status_calls.append((tenant_id, check_id, status, actor_user_id))
+        return _compliance_finding(status=status)
+
+
+def _compliance_finding(*, status: str = "open") -> object:
+    from core.features.ai_hr.compliance_repository import ComplianceFindingRow
+
+    return ComplianceFindingRow(
+        employee_id=EMP_ID,
+        check_type="document_expiry",
+        severity="high",
+        owner_rule="compliance_officer",
+        status=status,
+        title="Identity document expiring",
+        description="Visa document has expired (5 day(s) past due).",
+        evidence={"doc_type": "visa", "days_left": -5},
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        check_id=ACTOR_ID,
+        owner_user_id=ACTOR_ID if status == "acknowledged" else None,
+        department_name="Eng",
+    )
+
+
+def _build_compliance_app(service: _FakeComplianceService, *, individual: bool) -> TestClient:
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[ai_hr_router._require_hr_ai_read] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[ai_hr_router._require_hr_ai_acknowledge] = lambda: {
+        "tenant_id": TENANT_ID,
+        "user_id": ACTOR_ID,
+    }
+    from core.api.deps import get_compliance_service
+
+    app.dependency_overrides[get_compliance_service] = lambda: service
+    app.dependency_overrides[get_hr_ai_individual] = lambda: individual
+    return TestClient(app)
+
+
+def test_compliance_org_feed_returns_l1_aggregate() -> None:
+    service = _FakeComplianceService()
+    client = _build_compliance_app(service, individual=False)
+
+    resp = client.get(
+        "/api/v1/ai/hr/alerts/compliance", headers={"authorization": "Bearer tok"}
+    )
+
+    assert resp.status_code == 200
+    assert service.org_calls == [TENANT_ID]
+    body = resp.json()["data"]
+    assert body["total_findings"] == 3
+    assert body["open_findings"] == 2
+    assert body["by_type"]["document_expiry"] == 1
+    assert body["by_type"]["contract_missing_field"] == 1
+    assert body["by_severity"]["high"] == 1
+    assert "narrative" in body
+
+
+def test_compliance_employee_feed_403_without_individual() -> None:
+    service = _FakeComplianceService()
+    client = _build_compliance_app(service, individual=False)
+
+    resp = client.get(
+        f"/api/v1/ai/hr/alerts/compliance/{TENANT_ID}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 403
+    assert service.employee_calls == []
+
+
+def test_compliance_employee_feed_200_with_individual() -> None:
+    service = _FakeComplianceService()
+    client = _build_compliance_app(service, individual=True)
+
+    resp = client.get(
+        f"/api/v1/ai/hr/alerts/compliance/{TENANT_ID}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert service.employee_calls == [(TENANT_ID, TENANT_ID)]
+    row = resp.json()["data"][0]
+    assert row["check_type"] == "document_expiry"
+    assert row["severity"] == "high"
+    assert row["owner_rule"] == "compliance_officer"
+    assert row["check_id"] == str(ACTOR_ID)
+    assert row["department_name"] == "Eng"
+
+
+def test_compliance_status_requires_ack_permission_and_returns_updated() -> None:
+    service = _FakeComplianceService()
+    client = _build_compliance_app(service, individual=False)
+
+    resp = client.post(
+        f"/api/v1/ai/hr/alerts/compliance/{ACTOR_ID}/status",
+        json={"status": "acknowledged"},
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert service.status_calls == [(TENANT_ID, ACTOR_ID, "acknowledged", ACTOR_ID)]
+    assert resp.json()["data"]["status"] == "acknowledged"

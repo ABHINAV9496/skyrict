@@ -163,6 +163,15 @@ class Settings(BaseSettings):
             "many days."
         ),
     )
+    AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the compliance engine v1 (HR-AI-001, Unit C): "
+            "the compliance inbox is regenerated from current people + documents "
+            "when it is read and the latest scan is older than this many days."
+        ),
+    )
     AI_SYNC_TOKEN: str = Field(
         default="",
         description=(

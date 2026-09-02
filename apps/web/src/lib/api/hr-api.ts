@@ -1362,3 +1362,157 @@ export async function disposePayrollAnomaly(
   return mapPayrollAnomaly(response);
 }
 
+// ---------------------------------------------------------------------------
+// HR AI — compliance engine v1 (HR-AI-001, Unit C): L1 feed / L2 drill-down /
+// status updates
+// ---------------------------------------------------------------------------
+
+export type HrComplianceCheckType =
+  | "document_expiry"
+  | "training_overdue"
+  | "contract_missing_field";
+
+export interface HrComplianceFinding {
+  checkId: string;
+  employeeId: string | null;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  checkType: HrComplianceCheckType;
+  severity: "low" | "medium" | "high" | "critical";
+  ownerRule: string;
+  title: string;
+  description: string;
+  evidence: Record<string, unknown>;
+  status: "open" | "acknowledged" | "resolved";
+  ownerUserId: string | null;
+  createdAt: string;
+}
+
+export interface HrComplianceSummary {
+  totalFindings: number;
+  openFindings: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+interface HrComplianceFindingPayload {
+  check_id?: unknown;
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  check_type?: unknown;
+  severity?: unknown;
+  owner_rule?: unknown;
+  title?: unknown;
+  description?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  owner_user_id?: unknown;
+  created_at?: unknown;
+}
+
+interface HrComplianceSummaryPayload {
+  total_findings?: unknown;
+  open_findings?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+function mapComplianceFinding(payload: HrComplianceFindingPayload): HrComplianceFinding {
+  const type = String(payload.check_type ?? "document_expiry") as HrComplianceCheckType;
+  const status = String(payload.status ?? "open") as HrComplianceFinding["status"];
+  return {
+    checkId: String(payload.check_id ?? ""),
+    employeeId: payload.employee_id != null ? String(payload.employee_id) : null,
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    checkType: type,
+    severity: String(payload.severity ?? "medium") as HrComplianceFinding["severity"],
+    ownerRule: String(payload.owner_rule ?? ""),
+    title: String(payload.title ?? "Compliance finding"),
+    description: String(payload.description ?? ""),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status,
+    ownerUserId: payload.owner_user_id != null ? String(payload.owner_user_id) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+function mapComplianceSummary(payload: HrComplianceSummaryPayload): HrComplianceSummary {
+  return {
+    totalFindings: Number(payload.total_findings ?? 0),
+    openFindings: Number(payload.open_findings ?? 0),
+    byType:
+      payload.by_type != null && typeof payload.by_type === "object"
+        ? (payload.by_type as Record<string, number>)
+        : {},
+    bySeverity:
+      payload.by_severity != null && typeof payload.by_severity === "object"
+        ? (payload.by_severity as Record<string, number>)
+        : {},
+    generatedAt: String(payload.generated_at ?? ""),
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+/** L1 compliance feed — aggregate counts only, never per-person data. */
+export async function getComplianceSummary(): Promise<HrComplianceSummary> {
+  const response = await fetchWithSession("/api/v1/ai/hr/alerts/compliance", {});
+  if (!response.ok) {
+    throw new ApiError(response.status, "Compliance feed could not be loaded.");
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrComplianceSummaryPayload | null;
+  };
+  if (payload.data && typeof payload.data === "object") {
+    return mapComplianceSummary(payload.data as HrComplianceSummaryPayload);
+  }
+  throw new ApiError(response.status, "Compliance feed could not be loaded.");
+}
+
+/** L2 per-employee compliance findings (needs `erp.hr.ai.individual`). */
+export async function getEmployeeComplianceFindings(
+  employeeId: string,
+): Promise<HrComplianceFinding[]> {
+  const response = await fetchWithSession(
+    `/api/v1/ai/hr/alerts/compliance/${employeeId}`,
+    {},
+  );
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.status === 403
+        ? "erp.hr.ai.individual required for the individual view."
+        : "Compliance findings could not be loaded.",
+    );
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrComplianceFindingPayload[] | null;
+  };
+  return Array.isArray(payload.data)
+    ? (payload.data as HrComplianceFindingPayload[]).map(mapComplianceFinding)
+    : [];
+}
+
+/** Move one finding along `acknowledged | resolved` (audited). */
+export async function setComplianceStatus(
+  checkId: string,
+  status: "acknowledged" | "resolved",
+): Promise<HrComplianceFinding> {
+  const response = await apiPost<HrComplianceFindingPayload>(
+    `/api/v1/ai/hr/alerts/compliance/${checkId}/status`,
+    { status },
+  );
+  return mapComplianceFinding(response);
+}
+

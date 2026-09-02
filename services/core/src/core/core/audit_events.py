@@ -34,6 +34,8 @@ HR_AI_RISK_ACKNOWLEDGED = "hr.ai.risk.acknowledged"
 HR_AI_ANOMALY_ACKNOWLEDGED = "hr.ai.anomaly.acknowledged"
 HR_AI_ANOMALY_DISMISSED = "hr.ai.anomaly.dismissed"
 HR_AI_ANOMALY_RESOLVED = "hr.ai.anomaly.resolved"
+HR_AI_COMPLIANCE_ACKNOWLEDGED = "hr.ai.compliance.acknowledged"
+HR_AI_COMPLIANCE_RESOLVED = "hr.ai.compliance.resolved"
 
 # ---------------------------------------------------------------------------
 # Payroll
@@ -92,6 +94,8 @@ CATALOG: tuple[str, ...] = (
     HR_AI_ANOMALY_ACKNOWLEDGED,
     HR_AI_ANOMALY_DISMISSED,
     HR_AI_ANOMALY_RESOLVED,
+    HR_AI_COMPLIANCE_ACKNOWLEDGED,
+    HR_AI_COMPLIANCE_RESOLVED,
     PAYROLL_RUN_CREATED,
     PAYROLL_RUN_COMPUTED,
     PAYROLL_RUN_APPROVED,
@@ -149,6 +153,8 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_AI_ANOMALY_ACKNOWLEDGED,
             HR_AI_ANOMALY_DISMISSED,
             HR_AI_ANOMALY_RESOLVED,
+            HR_AI_COMPLIANCE_ACKNOWLEDGED,
+            HR_AI_COMPLIANCE_RESOLVED,
         ),
     ),
     (
@@ -232,6 +238,8 @@ __all__ = [
     "HR_AI_ANOMALY_ACKNOWLEDGED",
     "HR_AI_ANOMALY_DISMISSED",
     "HR_AI_ANOMALY_RESOLVED",
+    "HR_AI_COMPLIANCE_ACKNOWLEDGED",
+    "HR_AI_COMPLIANCE_RESOLVED",
     "HR_AI_RISK_ACKNOWLEDGED",
     "HR_DEPARTMENT_CREATED",
     "HR_DEPARTMENT_UPDATED",

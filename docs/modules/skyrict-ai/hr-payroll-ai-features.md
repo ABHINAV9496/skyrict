@@ -34,6 +34,8 @@ own.
 13. [HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
 14. [Test strategy](#14-test-strategy)
 15. [HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)](#15-hr-aut-001--payroll-automation-batches-schedules-notifications--digests)
+16. [HR-AI-001 Unit B — Payroll anomaly engine (implemented)](#16-hr-ai-001-unit-b--payroll-anomaly-engine-implemented)
+17. [HR-AI-001 Unit C — Compliance engine v1 (implemented)](#17-hr-ai-001-unit-c--compliance-engine-v1-implemented)
 
 ---
 
@@ -758,3 +760,79 @@ admin's first read because `latest_generated_at` starts `NULL`:
 These three fixtures are documented here so the live-gate expectations match
 the seed rows exactly; if the seed ever changes, the fixture block
 (`# ── PAYROLL ANOMALY FIXTURE` in `seed_demo.py`) must be reviewed with it.
+
+## 17. HR-AI-001 Unit C — Compliance engine v1 (implemented)
+
+**Unit C** ships the Feature 4 compliance rule pack (§8.1) as a deployed
+surface: a lazy-on-read TTL scan over `erp_employee_documents` +
+`erp_employees`, plus a **deterministic demo fixture** — see §17.3 for exactly
+which seed rows must fire.
+
+### 17.1 Engine & lifecycle
+
+- **Location:** pure engine `libs/skyrict-common/skyrict_common/ai_hr_rules.py`
+  (`detect_compliance_findings`) — the literal code core deploys and the
+  ai-agent eval harness can grade. The repository layer is
+  `core/features/ai_hr/compliance_repository.py` (projection +
+  `replace_tenant_findings` regenerate) and the service is
+  `compliance_service.py` (lazy TTL
+  `AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS`, default 7).
+- **Scan scope:** the tenant's **current** people + documents (no payroll-run
+  coupling). The inbox is regenerated per tenant each scan (replace-tenant), so
+  dispositions survive only until the next regeneration — the same documented
+  tradeoff as the leave/payroll inboxes.
+- **Rules (from §8.1):**
+
+| Check | Signal | Severity |
+|-------|--------|----------|
+| `document_expiry` | an active `work_permit`/`visa`/`passport`/`national_id` document whose `expiry_date` is within 30 days → medium, or already past → high | high (past) / medium (within 30 d) |
+| `training_overdue` | a **required** `certification` that is expired → medium; or absent for an employee who holds a certification (training-mandated) → medium | medium |
+| `contract_missing_field` | an active employee missing `email` / `department_id` / `job_title` / `phone` → one low finding per missing field | low |
+
+- **Owner routing:** `document_expiry`/`training_overdue` → `compliance_officer`;
+  `contract_missing_field` → `hr_admin` (`owner_rule` column).
+- **Evidence hygiene:** `evidence` carries only document types, dates, and field
+  **names** — never employee email/phone/job values (no PII). `title`/
+  `description` have no columns on `ai_compliance_checks`, so they are persisted
+  under the `evidence` keys and re-surfaced as first-class fields on read.
+- **Lifecycle:** `open → acknowledged → resolved`; `acknowledged` records
+  `owner_user_id` (the actor). Each transition emits an audited event
+  (`hr.ai.compliance.acknowledged` / `hr.ai.compliance.resolved`). Moving a
+  terminal state or an unknown status is rejected
+  (`IllegalStateTransitionError` → 409). `requires_training` is derived in the
+  repository as "holds a certification document" — there is no native column —
+  so the missing-document training branch stays exercised by the pure engine's
+  unit tests.
+
+### 17.2 API surface
+
+| Endpoint | Permission | Output |
+|----------|-----------|--------|
+| `GET /alerts/compliance` | `erp.ai.invoke` + `erp.hr.ai.read` | **L1** org feed (counts by check type/severity, open count, deterministic narrative) |
+| `GET /alerts/compliance/{employee_id}` | + `erp.hr.ai.individual` | **L2** per-employee findings (403 + L1 403 body without the key) |
+| `POST /alerts/compliance/{check_id}/status` | + `erp.hr.ai.acknowledge` | body `{status}` in `acknowledged\|resolved` → updated finding; audited |
+
+All under `/api/v1/ai/hr`. The BFF surface is `apps/web` → `hr-api.ts`
+(`getComplianceSummary` / `getEmployeeComplianceFindings` /
+`setComplianceStatus`) and the dashboard page at
+`/dashboard/erp/hr/compliance`.
+
+### 17.3 Deterministic demo fixture
+
+The raw seed has **no** `erp_employee_documents` rows and every employee has
+complete HR fields, so the compliance engine finds **zero** findings against the
+unmodified seed. To keep the demo (and the Unit C live gate) reproducible on
+*any* seed day, `seed_demo.py` applies a scoped fixture anchored to
+`date.today()` (the lazy scan rebuilds the inbox on first read because
+`latest_generated_at` starts `NULL`):
+
+| Finding | Exact seed construction | Expected result |
+|---------|-------------------------|-----------------|
+| `document_expiry` (medium) | employee index 3 (EMP-0004) gets an active required `work_permit` expiring in **20 days** | one medium finding, `owner_rule` = `compliance_officer` |
+| `document_expiry` (high) | employee index 4 (EMP-0005) gets an active required `visa` that expired **5 days ago** | one high finding |
+| `training_overdue` (medium) | employee index 5 (EMP-0006) gets a required `certification` that expired **14 days ago** (holding it derives `requires_training`) | one medium finding |
+| `contract_missing_field` (low) | employee index 6 (EMP-0007) has `phone` set to `NULL` | one low finding, `owner_rule` = `hr_admin` |
+
+These fixtures are documented here so the live-gate expectations match the seed
+rows exactly; if the seed ever changes, the fixture block
+(`# ── COMPLIANCE FIXTURE` in `seed_demo.py`) must be reviewed with it.

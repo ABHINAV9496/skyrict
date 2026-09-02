@@ -529,13 +529,236 @@ def detect_payroll_anomalies(
     )
 
 
+# --- Compliance rule pack v1 (HR-AI-001, Unit C) ------------------------------
+# Checks are pure and read only the projected signals below; the caller owns
+# persistence. No employee identifier or PII ever lands in ``evidence`` — only
+# document types, dates, and field *names* (never field *values*).
+
+
+@dataclass(frozen=True, slots=True)
+class EmployeeComplianceContext:
+    """HR facts about one employee needed by the compliance rules.
+
+    ``requires_training`` marks an employee whose role mandates a current
+    ``certification``; it drives the ``training_overdue`` missing-document rule.
+    Field names mirror ``erp_employees`` so the engine can stay pure.
+    """
+
+    employee_id: uuid.UUID
+    status: str
+    email: str | None = None
+    department_id: uuid.UUID | None = None
+    job_title: str | None = None
+    phone: str | None = None
+    requires_training: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentComplianceSignal:
+    """One ``erp_employee_documents`` row as the compliance rules see it."""
+
+    employee_id: uuid.UUID
+    document_id: uuid.UUID
+    doc_type: str
+    expiry_date: date | None = None
+    is_required: bool = False
+    status: str = "active"
+
+
+@dataclass(frozen=True, slots=True)
+class ComplianceFinding:
+    """One computed compliance finding.
+
+    ``owner_rule`` names the routing owner key (``hr_admin`` /
+    ``compliance_officer``); ``evidence`` deliberately omits employee PII.
+    """
+
+    employee_id: uuid.UUID | None
+    check_type: str
+    severity: str
+    owner_rule: str
+    title: str
+    description: str
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+# Document types whose near-/past expiry is a hard ``document_expiry`` finding.
+_COMPLIANCE_EXPIRING_DOC_TYPES: frozenset[str] = frozenset(
+    {"work_permit", "visa", "passport", "national_id"}
+)
+
+
+def _days_until(expiry: date, today: date) -> int:
+    return (expiry - today).days
+
+
+def detect_compliance_findings(
+    *,
+    documents: Sequence[DocumentComplianceSignal],
+    employees: Mapping[uuid.UUID, EmployeeComplianceContext],
+    today: date,
+    expiry_window_days: int = 30,
+) -> list[ComplianceFinding]:
+    """Run the v1 compliance rule pack (Feature 4, §8 table).
+
+    Rules:
+    1. ``document_expiry`` (``compliance_officer``): a
+       work_permit/visa/passport/national_id document expiring within
+       ``expiry_window_days`` is ``medium``; already expired is ``high``.
+    2. ``training_overdue`` (``compliance_officer``): a required ``certification``
+       that is expired, or entirely absent for a training-mandated employee, is
+       ``medium``.
+    3. ``contract_missing_field`` (``hr_admin``): an active employee lacking
+       ``email``/``department_id``/``job_title``/``phone`` is ``low`` per field.
+
+    Terminated employees are excluded from document/training evaluations.
+    """
+    context: dict[uuid.UUID, EmployeeComplianceContext] = {
+        e.employee_id: e for e in employees.values()
+    }
+    active_ids = {
+        eid
+        for eid, ctx in context.items()
+        if ctx.status != "terminated"
+    }
+
+    findings: list[ComplianceFinding] = []
+
+    # document_expiry — one finding per at-risk identity document.
+    for doc in documents:
+        if doc.status != "active":
+            continue
+        if doc.doc_type not in _COMPLIANCE_EXPIRING_DOC_TYPES:
+            continue
+        if doc.expiry_date is None:
+            continue
+        if doc.employee_id not in active_ids:
+            continue
+        days = _days_until(doc.expiry_date, today)
+        if days < 0:
+            severity, label = "high", "has expired"
+        elif days <= expiry_window_days:
+            severity, label = "medium", "expires soon"
+        else:
+            continue
+        findings.append(
+            ComplianceFinding(
+                employee_id=doc.employee_id,
+                check_type="document_expiry",
+                severity=severity,
+                owner_rule="compliance_officer",
+                title="Identity document expiring",
+                description=(
+                    f"{doc.doc_type} document {label} "
+                    f"({abs(days)} day(s) {'past due' if days < 0 else 'remaining'})."
+                ),
+                evidence={
+                    "doc_type": doc.doc_type,
+                    "document_id": str(doc.document_id),
+                    "expiry_date": doc.expiry_date.isoformat(),
+                    "days_left": days,
+                },
+            )
+        )
+
+    certifications_by_employee: dict[uuid.UUID, list[DocumentComplianceSignal]] = {}
+    for doc in documents:
+        if doc.doc_type != "certification":
+            continue
+        certifications_by_employee.setdefault(doc.employee_id, []).append(doc)
+
+    # training_overdue — expired required certification, or none at all.
+    for eid, ctx in context.items():
+        if eid not in active_ids:
+            continue
+        certs = certifications_by_employee.get(eid, [])
+        expired = [
+            c
+            for c in certs
+            if c.is_required
+            and c.status == "active"
+            and c.expiry_date is not None
+            and _days_until(c.expiry_date, today) < 0
+        ]
+        for cert in sorted(expired, key=lambda c: c.expiry_date or date.max):
+            days_late = -_days_until(cert.expiry_date, today)  # type: ignore[arg-type]
+            findings.append(
+                ComplianceFinding(
+                    employee_id=eid,
+                    check_type="training_overdue",
+                    severity="medium",
+                    owner_rule="compliance_officer",
+                    title="Required training overdue",
+                    description=(
+                        f"Required certification is {days_late} day(s) past its "
+                        "expiry date."
+                    ),
+                    evidence={
+                        "doc_type": "certification",
+                        "document_id": str(cert.document_id),
+                        "expiry_date": cert.expiry_date.isoformat(),
+                        "days_late": days_late,
+                    },
+                )
+            )
+        if ctx.requires_training and not certs:
+            findings.append(
+                ComplianceFinding(
+                    employee_id=eid,
+                    check_type="training_overdue",
+                    severity="medium",
+                    owner_rule="compliance_officer",
+                    title="Required training missing",
+                    description="Employee has no certification document on file.",
+                    evidence={"doc_type": "certification", "missing": True},
+                )
+            )
+
+    # contract_missing_field — active employee with a missing HR field (low).
+    field_names: tuple[str, ...] = ("email", "department_id", "job_title", "phone")
+    for eid, ctx in context.items():
+        if eid not in active_ids:
+            continue
+        missing = [
+            name
+            for name in field_names
+            if getattr(ctx, name) is None or str(getattr(ctx, name)).strip() == ""
+        ]
+        for name in missing:
+            findings.append(
+                ComplianceFinding(
+                    employee_id=eid,
+                    check_type="contract_missing_field",
+                    severity="low",
+                    owner_rule="hr_admin",
+                    title="Missing employee record field",
+                    description=f"{name} is missing from the employee record.",
+                    evidence={"missing_fields": [name]},
+                )
+            )
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    return sorted(
+        findings,
+        key=lambda f: (
+            severity_order.get(f.severity, 3),
+            f.check_type,
+            str(f.employee_id or ""),
+        ),
+    )
+
+
 __all__ = [
     "AnomalyFinding",
+    "ComplianceFinding",
+    "DocumentComplianceSignal",
+    "EmployeeComplianceContext",
     "Holiday",
     "PayrollAnomalyFinding",
     "PayrollEmployeeContext",
     "PayrollEntrySignal",
     "RequestSignal",
+    "detect_compliance_findings",
     "detect_leave_pattern_anomalies",
     "detect_payroll_anomalies",
     "mask_account",

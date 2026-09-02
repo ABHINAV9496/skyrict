@@ -1737,7 +1737,7 @@ async def seed_demo_data(
     """
     from core.features.ai_hr.models.attrition_score import AttritionScoreModel
     from core.features.ai_hr.models.compliance_check import ComplianceCheckModel
-    from core.features.ai_hr.models.employee_document import EmployeeDocumentModel
+    from core.features.ai_hr.models.employee_document import DocumentType, EmployeeDocumentModel
     from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
     from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
     from core.features.ai_hr.models.leave_suggestion import LeaveSuggestionModel
@@ -1776,6 +1776,9 @@ async def seed_demo_data(
     from core.features.payroll_automation.models import (
         PayrollBatchItemModel,
         PayrollBatchRunModel,
+        PayrollNotificationModel,
+        PayrollNotificationPrefModel,
+        PayrollScheduleModel,
     )
     from core.features.sales.models.order import ErpSalesOrderModel
     from core.features.sales.models.order_line import ErpSalesOrderLineModel
@@ -1845,8 +1848,12 @@ async def seed_demo_data(
                 ErpProductModel,
                 PayrollBatchItemModel,
                 PayrollBatchRunModel,
+                PayrollNotificationModel,
+                PayrollNotificationPrefModel,
+                PayrollScheduleModel,
                 PayrollEntryModel,
                 PayslipReviewModel,
+                PayrollAnomalyModel,
                 PayrollRunModel,
                 CompensationModel,
                 BenefitElectionModel,
@@ -1867,7 +1874,6 @@ async def seed_demo_data(
                 UtilizationAlertModel,
                 LeaveAnomalyModel,
                 LeaveSuggestionModel,
-                PayrollAnomalyModel,
                 EmployeeDocumentModel,
                 AttritionScoreModel,
                 ComplianceCheckModel,
@@ -2488,6 +2494,58 @@ async def seed_demo_data(
                 ).scalars().first()
                 if emp_1 is not None and emp_2 is not None:
                     emp_1.bank_account = emp_2.bank_account
+
+        # ── COMPLIANCE FIXTURE (HR-AI-001, Unit C) ──────────────────────────
+        # Same philosophy as the payroll fixture: the raw seed has NO employee
+        # documents (so the compliance engine finds nothing) and every employee
+        # has complete HR fields. Introduce four deterministic findings across
+        # the v1 rule pack, all anchored to ``date.today()`` so they reproduce
+        # on ANY seed day:
+        #   document_expiry (medium): EMP-0004 WORK_PERMIT expiring in 20 days.
+        #   document_expiry (high):   EMP-0005 VISA already expired 5 days ago.
+        #   training_overdue (medium): EMP-0006 required CERTIFICATION expired
+        #    14 days ago (requires_training is derived from holding a cert).
+        #   contract_missing_field (low): EMP-0007 has no phone on file.
+        if len(emp_ids) > 6:
+            today = date.today()
+            session.add_all(
+                [
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[3],
+                        doc_type=DocumentType.WORK_PERMIT,
+                        expiry_date=today + timedelta(days=20),
+                        is_required=True,
+                        status="active",
+                    ),
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[4],
+                        doc_type=DocumentType.VISA,
+                        expiry_date=today - timedelta(days=5),
+                        is_required=True,
+                        status="active",
+                    ),
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[5],
+                        doc_type=DocumentType.CERTIFICATION,
+                        expiry_date=today - timedelta(days=14),
+                        is_required=True,
+                        status="active",
+                    ),
+                ]
+            )
+            emp_6 = (
+                await session.execute(
+                    select(EmployeeModel).where(
+                        EmployeeModel.tenant_id == tenant_id,
+                        EmployeeModel.id == emp_ids[6],
+                    )
+                )
+            ).scalars().first()
+            if emp_6 is not None:
+                emp_6.phone = None
 
         # ── SALES ORDERS + LINES ─────────────────────────────────────
         for idx, row in enumerate(SALES_ORDER_ROWS):

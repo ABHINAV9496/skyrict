@@ -31,6 +31,7 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
     from core.features.ai_hr.anomaly_service import AnomalyService
+    from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
@@ -543,6 +544,22 @@ def get_payroll_anomaly_service(
     return PayrollAnomalyService(
         repository=AiHrPayrollAnomalyRepository(db),
         refresh_days=settings.AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS,
+        audit=audit,
+    )
+
+
+def get_compliance_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> ComplianceService:
+    """Composition root for the compliance engine v1 (HR-AI-001, Unit C)."""
+    from core.core.config import settings
+    from core.features.ai_hr.compliance_repository import AiHrComplianceRepository
+    from core.features.ai_hr.compliance_service import ComplianceService
+
+    return ComplianceService(
+        repository=AiHrComplianceRepository(db),
+        refresh_days=settings.AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS,
         audit=audit,
     )
 

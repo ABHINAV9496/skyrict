@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
-from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -372,7 +372,7 @@ def make_payroll_service(
     (which constructs services on its own per-tick session). When ``audit`` is
     omitted a core audit service on the same session is built. ``finance``
     (the cross-feature accrual bridge used by ``mark_paid``) and
-    ``payslip_notifier`` (the 0030 approval delivery-gate) are injected only
+    ``payslip_notifier`` (the 0035 approval delivery-gate) are injected only
     where they are resolvable.
     """
     from core.db.sequence_repository import SequenceRepository
@@ -624,7 +624,7 @@ def get_payroll_service(
     is shared (same ``db`` session), keeping payroll-driven accrual in the same
     transaction as the compute. The request-scoped ``FinanceService`` is passed
     as the accrual bridge so ``mark_paid`` can draft the payroll JE in the same
-    transaction. The notification orchestrator is injected as the 0030
+    transaction. The notification orchestrator is injected as the 0035
     delivery-gate so ``approve_payslip`` fires the employee's ``payslip_ready``
     in the same request-scoped session (approval gates employee delivery).
     """

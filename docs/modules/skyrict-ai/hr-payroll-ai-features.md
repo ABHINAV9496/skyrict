@@ -624,7 +624,7 @@ Role wiring mirrors the core payroll keys (`organization_admin` full; read for
 `erp.payroll.ai.read`; management/preference actions check `run` / `notify`
 client-side, with the backend as the real gate.
 
-### 15.3 Data model (migration `0028_payroll_notifications_schedules`)
+### 15.3 Data model (migration `0033_payroll_notifications_schedules`)
 
 - **`ai_payroll_schedules`** — `name?`, `cron_expression`, `enabled`,
   `last_fired_at`, `next_run_at`; index `(tenant_id, enabled, next_run_at)` for

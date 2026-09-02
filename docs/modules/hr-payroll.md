@@ -564,7 +564,7 @@ Alembic under `services/core/alembic/`. Migration **`0005_hr_payroll`** (after `
 6. Seed nothing tenant-specific here (leave types are seeded at tenant provisioning — see `core/seed.py`). Reference data (currencies via `0001`) is already global.
 7. Downgrade drops policies first, then tables (reverse order), then enums.
 
-Commits 1–3 picked up the base schema via `0025`→`0028` (payroll settings `ai_automation_enabled`, compensation/employee tweaks, payroll automation tables). Commit 4 — **`0029_payroll_accrual_je_bridge`** (revision `0029`, `down_revision 0028`) — takes the payroll settings `default true` columns/flags path: adds `erp_payroll_runs.je_bridge_status` (+ CHECK) and `erp_payroll_settings.je_bridge_enabled` server-defaults. One migration, same shape the older flag tickets used; validated by the integration suite running `alembic upgrade head`.
+Commits 1–3 picked up the base schema via `0026`→`0033` (payroll settings `ai_automation_enabled`, compensation/employee tweaks, payroll automation tables; dev's `0026_finance_automation` sits in front of `0031`–`0035` after the merge renumber). Commit 4 — **`0034_payroll_accrual_je_bridge`** (revision `0034`, `down_revision 0033`) — takes the payroll settings `default true` columns/flags path: adds `erp_payroll_runs.je_bridge_status` (+ CHECK) and `erp_payroll_settings.je_bridge_enabled` server-defaults. One migration, same shape the older flag tickets used; validated by the integration suite running `alembic upgrade head`.
 
 Reference data (`src/core/seed.py`): leave-type defaults per tenant (`annual`/`sick`/`unpaid`), payroll settings default row (currency from `CORE_DEFAULT_CURRENCY`, zero rates), `EMP-`/`PR-` numbering seeds.
 

@@ -174,7 +174,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-assert version == "0035", f"head is {version}, expected 0035"
+            assert version == "0035", f"head is {version}, expected 0035"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (

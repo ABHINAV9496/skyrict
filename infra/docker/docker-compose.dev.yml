@@ -151,6 +151,7 @@ services:
       INVENTORY_SERVICE_URL: http://skyrict-core:8001
     volumes:
       - ../../services/ai-agent/src:/app/services/ai-agent/src
+      - ../../services/ai-agent/alembic:/app/services/ai-agent/alembic
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/ai-agent, so the relative key path

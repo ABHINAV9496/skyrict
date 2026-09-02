@@ -286,7 +286,7 @@ def test_copilot_chat_forwards_to_ai_agent_and_relays_response() -> None:
 
     assert resp.status_code == 200
     # Upstream path + identity are relayed exactly.
-    assert captured["path"] == "/ai/hr/copilot/chat"
+    assert captured["path"] == "/api/v1/ai/hr/copilot/chat"
     assert captured["auth"] == "Bearer tok"
     assert resp.json() == {"answer": "drafted", "model_used": "m", "latency_ms": 3}
 

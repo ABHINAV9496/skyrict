@@ -25,7 +25,7 @@ from core.core.exceptions import AiServiceUnavailableError
 from core.features.ai.proxy import forward_to_ai_agent
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
 
-_UPSTREAM_PATH = "/ai/hr/attrition/score"
+_UPSTREAM_PATH = "/api/v1/ai/hr/attrition/score"
 
 
 async def score_features(

@@ -74,7 +74,7 @@ async def test_posts_anonymous_features_and_parses_scored_employees() -> None:
         features=_features(),
     )
 
-    assert seen["path"] == "/ai/hr/attrition/score"
+    assert seen["path"] == "/api/v1/ai/hr/attrition/score"
     assert seen["auth"] == "Bearer tok"
     assert seen["slug"] == "acme"
     # No name/email/number keys in the payload.

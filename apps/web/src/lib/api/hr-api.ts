@@ -7,10 +7,12 @@
  */
 
 import {
+  ApiError,
   apiFetch,
   apiList,
   apiPost,
   buildQueryString,
+  fetchWithSession,
   type Paginated,
 } from "@/lib/api/http";
 
@@ -1027,3 +1029,177 @@ export async function listQualityScores(input: {
   });
   return { items: result.items.map(mapQualityScore), meta: result.meta };
 }
+
+// ---------------------------------------------------------------------------
+// HR AI — attrition risk (8.1.x): L1 aggregates / L2 per-employee slices
+// ---------------------------------------------------------------------------
+
+export interface HrDepartmentRisk {
+  departmentName: string;
+  highRiskCount: number;
+  totalScores: number;
+  averageRisk: number;
+}
+
+export interface HrAttritionSummary {
+  generatedAt: string;
+  modelVersion: string;
+  highRiskCount: number;
+  mediumRiskCount: number;
+  lowRiskCount: number;
+  topRiskDepartments: HrDepartmentRisk[];
+  narrative: string;
+}
+
+export interface HrAttritionFactor {
+  feature: string;
+  contribution: number;
+  direction: string;
+}
+
+export interface HrEmployeeRisk {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  riskBand: "high" | "medium" | "low";
+  score: number;
+  confidence: number;
+  factors: HrAttritionFactor[];
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+}
+
+/** The `/attrition` endpoint varies on the caller's `erp.hr.ai.individual`. */
+export type HrAttritionView =
+  | { mode: "summary"; summary: HrAttritionSummary }
+  | { mode: "detail"; modelVersion: string; generatedAt: string; employees: HrEmployeeRisk[] };
+
+interface HrDepartmentRiskPayload {
+  department_name?: unknown;
+  high_risk_count?: unknown;
+  total_scores?: unknown;
+  average_risk?: unknown;
+}
+
+interface HrAttritionSummaryPayload {
+  generated_at?: unknown;
+  model_version?: unknown;
+  high_risk_count?: unknown;
+  medium_risk_count?: unknown;
+  low_risk_count?: unknown;
+  top_risk_departments?: unknown;
+  narrative?: unknown;
+}
+
+interface HrAttritionFactorPayload {
+  feature?: unknown;
+  contribution?: unknown;
+  direction?: unknown;
+}
+
+interface HrEmployeeRiskPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  risk_band?: unknown;
+  score?: unknown;
+  confidence?: unknown;
+  factors?: unknown;
+  acknowledged?: unknown;
+  acknowledged_at?: unknown;
+}
+
+interface HrAttritionDetailPayload {
+  generated_at?: unknown;
+  model_version?: unknown;
+  employees?: unknown;
+}
+
+function mapDepartmentRisk(payload: HrDepartmentRiskPayload): HrDepartmentRisk {
+  return {
+    departmentName: String(payload.department_name ?? ""),
+    highRiskCount: Number(payload.high_risk_count ?? 0),
+    totalScores: Number(payload.total_scores ?? 0),
+    averageRisk: Number(payload.average_risk ?? 0),
+  };
+}
+
+function mapAttritionSummary(payload: HrAttritionSummaryPayload): HrAttritionSummary {
+  return {
+    generatedAt: String(payload.generated_at ?? ""),
+    modelVersion: String(payload.model_version ?? ""),
+    highRiskCount: Number(payload.high_risk_count ?? 0),
+    mediumRiskCount: Number(payload.medium_risk_count ?? 0),
+    lowRiskCount: Number(payload.low_risk_count ?? 0),
+    topRiskDepartments: Array.isArray(payload.top_risk_departments)
+      ? (payload.top_risk_departments as HrDepartmentRiskPayload[]).map(mapDepartmentRisk)
+      : [],
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+function mapEmployeeRisk(payload: HrEmployeeRiskPayload): HrEmployeeRisk {
+  const band = String(payload.risk_band ?? "low");
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    riskBand: band === "high" || band === "medium" ? band : "low",
+    score: Number(payload.score ?? 0),
+    confidence: Number(payload.confidence ?? 0),
+    factors: Array.isArray(payload.factors)
+      ? (payload.factors as HrAttritionFactorPayload[]).map((factor) => ({
+          feature: String(factor.feature ?? ""),
+          contribution: Number(factor.contribution ?? 0),
+          direction: String(factor.direction ?? ""),
+        }))
+      : [],
+    acknowledged: Boolean(payload.acknowledged ?? false),
+    acknowledgedAt: payload.acknowledged_at != null ? String(payload.acknowledged_at) : null,
+  };
+}
+
+/**
+ * Attrition risk: L2 per-employee detail for `erp.hr.ai.individual` holders,
+ * otherwise the backend answers 403 with the L1 aggregates in the body — which
+ * is a usable summary, not a lock. This client keeps both modes so the page can
+ * render the aggregate always and the drill-down only when permitted.
+ */
+export async function getAttrition(): Promise<HrAttritionView> {
+  const response = await fetchWithSession("/api/v1/ai/hr/attrition", {});
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrAttritionDetailPayload | HrAttritionSummaryPayload | null;
+  };
+  const data = payload.data;
+  if (data && typeof data === "object") {
+    if ("employees" in data && Array.isArray((data as HrAttritionDetailPayload).employees)) {
+      const detail = data as HrAttritionDetailPayload;
+      return {
+        mode: "detail",
+        modelVersion: String(detail.model_version ?? ""),
+        generatedAt: String(detail.generated_at ?? ""),
+        employees: Array.isArray(detail.employees)
+          ? (detail.employees as HrEmployeeRiskPayload[]).map(mapEmployeeRisk)
+          : [],
+      };
+    }
+    if ("high_risk_count" in data) {
+      return { mode: "summary", summary: mapAttritionSummary(data as HrAttritionSummaryPayload) };
+    }
+  }
+  throw new ApiError(
+    response.status,
+    response.status === 403
+      ? "erp.hr.ai.individual required for the individual view."
+      : "Attrition risk could not be loaded.",
+  );
+}
+
+/** Record a manager's acknowledgement of one employee's attrition risk. */
+export async function acknowledgeAttrition(employeeId: string): Promise<void> {
+  await apiPost<void>(`/api/v1/ai/hr/attrition/${employeeId}/acknowledge`, {});
+}
+

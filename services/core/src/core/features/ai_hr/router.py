@@ -547,7 +547,7 @@ async def copilot_chat(
     upstream = await forward_to_ai_agent(
         client,
         method=request.method,
-        upstream_path="/ai/hr/copilot/chat",
+        upstream_path="/api/v1/ai/hr/copilot/chat",
         authorization=request.headers.get("authorization"),
         tenant_slug=derive_tenant_slug(request),
         body=body,

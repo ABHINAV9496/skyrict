@@ -34,6 +34,13 @@ class LlmRequest:
     user_prompt: str
     max_tokens: int = 512
     temperature: float = 0.2
+    """Optional multimodal content blocks (OpenAI vision format).
+
+    When present, the provider sends ``content`` as an array of blocks
+    instead of a plain string for the user message.  Each block is a dict
+    with a ``"type"`` key (``"text"`` or ``"image_url"``).
+    """
+    image_blocks: list[dict[str, object]] | None = None
 
 
 @dataclass(frozen=True, slots=True)

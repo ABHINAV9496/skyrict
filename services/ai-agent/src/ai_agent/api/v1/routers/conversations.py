@@ -15,6 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
 from ai_agent.db.conversation_repository import ConversationRepository
+from ai_agent.features.supervisor.title import (
+    is_conversation_title_retryable,
+    schedule_title_generation,
+)
 
 router = APIRouter(prefix="/ai/agents/conversations", tags=["ai-agent-conversations"])
 
@@ -97,6 +101,7 @@ async def get_conversation(
     conversation_id: uuid.UUID,
     user: Annotated[dict[str, Any], Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> dict[str, Any]:
     """Fetch a single conversation with its messages."""
     repo = ConversationRepository(session)
@@ -112,6 +117,24 @@ async def get_conversation(
         conversation_id=conversation_id,
     )
     conversation["messages"] = messages
+
+    # Retry-on-read: a background title generation may have failed or been
+    # skipped. When the title is still retryable, try again on page load so
+    # a real title eventually appears even if no new message arrives.
+    roles = {message["role"] for message in messages}
+    if {"user", "agent"} <= roles and is_conversation_title_retryable(
+        conversation["title"],
+        conversation["title_generated_at"],
+    ):
+        from ai_agent.db.session import async_session_factory
+
+        schedule_title_generation(
+            conversation_id=conversation_id,
+            tenant_id=user["tenant_id"],
+            llm_router=request.app.state.llm_router,
+            session_factory=async_session_factory,
+        )
+
     return {"data": conversation}
 
 
@@ -153,10 +176,15 @@ async def append_message(
             title=title,
         )
 
-    # Schedule AI title generation after the first agent reply.
-    if body.role == "agent" and conversation["title_generated_at"] is None:
+    # Schedule AI title generation after an agent reply. Unconditional for
+    # every module path (supervisor, module agent, greeting, abstention):
+    # the generator produces the deterministic greeting title when the
+    # exchange has no topic and keeps non-final states retryable.
+    if body.role == "agent" and is_conversation_title_retryable(
+        conversation["title"],
+        conversation["title_generated_at"],
+    ):
         from ai_agent.db.session import async_session_factory
-        from ai_agent.features.supervisor.title import schedule_title_generation
 
         schedule_title_generation(
             conversation_id=conversation_id,

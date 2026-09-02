@@ -234,10 +234,10 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "border border-border bg-card text-foreground",
+          "rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+          isUser
+            ? "whitespace-pre-wrap bg-primary text-primary-foreground"
+            : "border border-border bg-card text-foreground",
             message.failed ? "text-muted-foreground italic" : null,
           )}
         >

@@ -153,6 +153,24 @@ class Settings(BaseSettings):
             "the latest scan is older than this many days."
         ),
     )
+    AI_SYNC_TOKEN: str = Field(
+        default="",
+        description=(
+            "bearer token ai-agent requires on POST /ai/inventory/embeddings/sync "
+            "(SKY-70 product->embedding sync). Must match ai-agent's "
+            "AI_INVENTORY_SYNC_TOKEN; empty disables the HTTP dispatch and keeps "
+            "the feature fed only by the `ai-agent inventory reindex` CLI."
+        ),
+    )
+    AI_INGEST_TOKEN: str = Field(
+        default="",
+        description=(
+            "shared secret the ai-agent reindex/ingest CLIs present as a bearer "
+            "on GET /inventory/products (SKY-70). Must match ai-agent's "
+            "AI_INGEST_TOKEN; empty disables the machine-to-machine branch so "
+            "only JWT + erp.inventory.read reads succeed. Never logged."
+        ),
+    )
 
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""

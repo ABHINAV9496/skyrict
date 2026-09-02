@@ -29,6 +29,8 @@ def _make_provider(
     api_key: str = "sk-embed-secret",
     dims: int = _DIMS,
     batch_size: int = 2,
+    name: str = "openai",
+    send_dimensions: bool = True,
 ) -> tuple[OpenAiCompatibleEmbeddingProvider, list[httpx.Request]]:
     """Build a provider wired to a MockTransport; capture outbound requests."""
     seen: list[httpx.Request] = []
@@ -38,13 +40,14 @@ def _make_provider(
         return handler(request)
 
     provider = OpenAiCompatibleEmbeddingProvider(
-        name="openai",
+        name=name,
         model="text-embedding-3-small",
         base_url="https://api.openai.com/v1",
         api_key=api_key,
         dims=dims,
         batch_size=batch_size,
         timeout_seconds=5,
+        send_dimensions=send_dimensions,
     )
     provider._create_client = lambda: httpx.AsyncClient(  # type: ignore[method-assign]
         timeout=5,
@@ -99,6 +102,19 @@ class TestOpenAiCompatibleEmbeddingProvider:
         assert body["model"] == "text-embedding-3-small"
         assert body["input"] == ["hello", "world"]
         assert body["dimensions"] == _DIMS
+
+    async def test_send_dimensions_false_omits_dimensions_key(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json=_embedding_body(2))
+
+        # ollama (name="ollama", send_dimensions=False) never sends the key.
+        provider, _ = _make_provider(handler, name="ollama", send_dimensions=False)
+        await provider.embed(["hello", "world"])
+
+        assert "dimensions" not in captured["body"]
 
     async def test_batches_requests_at_batch_size_boundary(self) -> None:
         requests_seen: list[list[str]] = []
@@ -236,7 +252,18 @@ class TestBuildEmbeddingProvider:
         provider = build_embedding_provider(config)
         assert provider is not None
         assert provider.name == "openai"
-        assert provider.dims == 512
+        assert provider.dims == 768
+        assert provider.send_dimensions is True
+
+    def test_dimension_mismatch_rejected_for_openai(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = self._settings(
+            monkeypatch,
+            EMBEDDING_PROVIDER="openai",
+            EMBEDDING_API_KEY="sk-123",
+            EMBEDDING_DIMENSIONS="512",
+        )
+        with pytest.raises(StartupError, match="must match"):
+            build_embedding_provider(config)
 
     def test_ollama_requires_explicit_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         config = self._settings(
@@ -259,3 +286,17 @@ class TestBuildEmbeddingProvider:
         assert provider is not None
         assert provider.name == "ollama"
         assert provider.model == "nomic-embed-text"
+        assert provider.dims == 768
+        assert provider.send_dimensions is False
+
+    def test_ollama_dimension_mismatch_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = self._settings(
+            monkeypatch,
+            EMBEDDING_PROVIDER="ollama",
+            EMBEDDING_API_KEY="",
+            EMBEDDING_MODEL="nomic-embed-text",
+            EMBEDDING_BASE_URL="http://localhost:11434/v1",
+            EMBEDDING_DIMENSIONS="512",
+        )
+        with pytest.raises(StartupError, match="must match"):
+            build_embedding_provider(config)

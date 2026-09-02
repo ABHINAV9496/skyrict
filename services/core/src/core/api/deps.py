@@ -9,6 +9,7 @@ from the database at request time (never from JWT claims) through
 
 from __future__ import annotations
 
+import hmac
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
+    from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.ports import AuditSink
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -182,6 +184,52 @@ def require_all_permissions(*permissions: str) -> Callable[[], Awaitable[dict[st
         for remaining in permissions:
             if not grants_permission(granted, remaining):
                 raise PermissionDeniedError(f"Missing required permission: {remaining}")
+        return current_user
+
+    return _check
+
+
+def require_ingest_m2m_or_permission(
+    permission: str,
+) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory — machine-to-machine shared-secret read OR JWT+permission.
+
+    Lets the ai-agent ``inventory reindex`` / ``ingest --source module`` CLIs
+    pull core's product catalog with the ingest secret (``Authorization:
+    Bearer AI_INGEST_TOKEN`` + a routed ``X-Tenant-Slug``), mirroring the sync
+    direction where core presents ``AI_SYNC_TOKEN`` to ai-agent (SKY-70). The
+    m2m branch carries NO user identity and resolves no DB grants — possession
+    of the shared secret plus the routed tenant is enough for a read-only
+    catalog pull.
+
+    Fails closed: an empty/absent ``AI_INGEST_TOKEN`` makes the branch
+    unreachable (the secret can never match), and every other bearer falls
+    through to :func:`get_current_user` + the ``permission`` check exactly as
+    before. Comparison uses ``hmac.compare_digest`` for constant time.
+    """
+
+    async def _check(
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),
+        db: AsyncSession = Depends(get_db),
+    ) -> dict[str, Any]:
+        from core.core.config import settings
+
+        secret = settings.AI_INGEST_TOKEN
+        candidate = credentials.credentials if credentials else ""
+        if secret and candidate and hmac.compare_digest(candidate, secret):
+            return {
+                "user_id": None,
+                "tenant_id": TenantContext.get(),
+                "machine": True,
+            }
+
+        current_user = await get_current_user(credentials)
+        granted = await RbacRepository(db).resolve_user_permissions(
+            user_id=current_user["user_id"],
+            tenant_id=current_user["tenant_id"],
+        )
+        if not grants_permission(granted, permission):
+            raise PermissionDeniedError(f"Missing required permission: {permission}")
         return current_user
 
     return _check
@@ -470,6 +518,60 @@ def get_finance_service(
         customers=crm_repo,
         timeline=crm_repo,
         order_lookup=sales_repo,
+    )
+
+
+def get_finance_automation_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceAutomationService:
+    """Composition root for the finance automation feature (SKY-56/SKY-64)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    return FinanceAutomationService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_automation_service_with_ai(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceAutomationService:
+    """Composition root for finance automation incl. AI account suggestions."""
+    from collections.abc import Sequence
+
+    from core.core.tenant_resolver import derive_tenant_slug
+    from core.domain.entities import AccountCodeSuggestion, ChartOfAccount
+    from core.features.ai.router import get_ai_client
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.ai_suggester import suggest_account_code_with_ai
+    from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.repository import FinanceRepository
+
+    client = get_ai_client(request)
+    authorization = request.headers.get("authorization")
+    tenant_slug = derive_tenant_slug(request)
+
+    async def ai_suggest(
+        description: str, accounts: Sequence[ChartOfAccount]
+    ) -> AccountCodeSuggestion | None:
+        return await suggest_account_code_with_ai(
+            client,
+            authorization=authorization,
+            tenant_slug=tenant_slug,
+            description=description,
+            accounts=accounts,
+        )
+
+    return FinanceAutomationService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+        ai_suggest=ai_suggest,
     )
 
 

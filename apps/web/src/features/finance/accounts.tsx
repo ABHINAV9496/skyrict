@@ -54,6 +54,7 @@ import {
   today,
   type PeriodValue,
 } from "@/features/finance/components/period-selector";
+import { SuggestAccountCode } from "@/features/finance/components/automation-widgets";
 
 type Status =
   | { state: "loading" }
@@ -362,6 +363,8 @@ function FinanceAccounts() {
           />
         </div>
       </div>
+
+      <SuggestAccountCode accounts={status.accounts} />
 
       {status.accounts.length === 0 ? (
         <FinanceEmptyState

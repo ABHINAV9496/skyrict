@@ -47,6 +47,9 @@ class ProductRef:
     # Local-only money data (spec §5.5): used for local estimates, never
     # sent to any LLM provider. None when core omits it.
     cost_price: Decimal | None = None
+    # Semantic-search snapshot fields (SKY-70); None when core omits them.
+    category: str | None = None
+    unit: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,12 +235,16 @@ def _parse_product(item: dict[str, object]) -> ProductRef:
     cost_price = (
         Decimal(str(raw_cost[0])) if isinstance(raw_cost, list | tuple) and raw_cost else None
     )
+    category = item.get("category")
+    unit = item.get("unit")
     return ProductRef(
         id=uuid.UUID(str(item["id"])),
         sku=str(item["sku"]),
         name=str(item["name"]),
         reorder_point=Decimal(str(item["reorder_point"])),
         cost_price=cost_price,
+        category=None if category is None else str(category),
+        unit=None if unit is None else str(unit),
     )
 
 

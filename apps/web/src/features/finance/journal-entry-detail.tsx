@@ -12,6 +12,7 @@ import {
   getJournalEntry,
   listAccounts,
   postJournalEntry,
+  reverseJournalEntry,
   voidJournalEntry,
   type Account,
   type JournalEntry,
@@ -23,10 +24,12 @@ import { FinanceTable, type FinanceColumn } from "@/features/finance/components/
 import { EntryStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
 
+type BusyAction = "post" | "void" | "reverse";
+
 type Status =
   | { state: "loading" }
   | { state: "error"; message: string }
-  | { state: "ready"; entry: JournalEntry; accounts: Account[]; busy: "post" | "void" | null };
+  | { state: "ready"; entry: JournalEntry; accounts: Account[]; busy: BusyAction | null };
 
 export function JournalEntryDetail({ entryId }: { entryId: string }) {
   const { permissions } = useModuleAccess();
@@ -60,16 +63,25 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
     return map;
   }, [status]);
 
-  async function runAction(action: "post" | "void") {
+  async function runAction(action: "post" | "void" | "reverse") {
     if (status.state !== "ready" || status.busy !== null) return;
     if (action === "void" && !window.confirm("Void this draft entry? This cannot be undone.")) {
+      return;
+    }
+    if (
+      action === "reverse" &&
+      !window.confirm(
+        "Reverse this posted entry? A reversing entry with opposite debits and credits will be created.",
+      )
+    ) {
       return;
     }
     setActionError(null);
     setStatus({ ...status, busy: action });
     try {
       if (action === "post") await postJournalEntry(entryId);
-      else await voidJournalEntry(entryId);
+      else if (action === "void") await voidJournalEntry(entryId);
+      else await reverseJournalEntry(entryId);
       await load();
     } catch (error) {
       setActionError(
@@ -124,6 +136,7 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
 
   const canPost = entry.status === "draft" && canApprove;
   const canVoid = entry.status === "draft" && canWrite;
+  const canReverse = entry.status === "posted" && entry.reversal_entry_id === null && canApprove;
 
   return (
     <div className="space-y-6">
@@ -167,6 +180,19 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : null}
               Void
+            </Button>
+          ) : null}
+          {canReverse ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={status.busy !== null}
+              onClick={() => void runAction("reverse")}
+            >
+              {status.busy === "reverse" ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : null}
+              Reverse
             </Button>
           ) : null}
         </div>

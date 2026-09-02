@@ -27,9 +27,10 @@ inventory repository's contract.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -38,12 +39,25 @@ from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import INVOICE_PREFIX, PAYMENT_PREFIX
 from core.domain.entities import (
+    AccountCodeSuggestion,
+    AiFinanceAnomaly,
+    AiFinanceSuggestion,
     ArAging,
     ArAgingBucket,
     BalanceSheet,
     BalanceSheetLine,
+    CashflowPosition,
+    CashflowProjection,
     ChartOfAccount,
+    CloseChecklist,
+    CloseChecklistItem,
+    ComparativePnl,
+    ComparativePnlRow,
+    DuplicateCandidate,
+    DuplicateGroup,
     FiscalPeriod,
+    HealthComponent,
+    HealthScore,
     Invoice,
     InvoiceLine,
     JournalEntry,
@@ -51,10 +65,14 @@ from core.domain.entities import (
     Payment,
     PnlLine,
     ProfitAndLoss,
+    TenantSetting,
     TrialBalance,
     TrialBalanceRow,
+    WorkingCapitalAlert,
 )
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
+from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
+from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
@@ -62,6 +80,7 @@ from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
 from core.features.finance.models.payment import ErpPaymentModel
+from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 from skyrict_common.exceptions import ConflictError
 
 if TYPE_CHECKING:
@@ -167,6 +186,7 @@ def _journal_entry_from_orm(
         posted_at=model.posted_at,
         posted_by_user_id=model.posted_by_user_id,
         voided_at=model.voided_at,
+        reversal_entry_id=model.reversal_entry_id,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -222,6 +242,55 @@ def _payment_from_orm(model: ErpPaymentModel) -> Payment:
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
+
+
+def _tenant_setting_from_orm(model: ErpTenantSettingModel) -> TenantSetting:
+    return TenantSetting(
+        tenant_id=model.tenant_id,
+        key=model.key,
+        value=model.value,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _ai_suggestion_from_orm(model: AiFinanceSuggestionModel) -> AiFinanceSuggestion:
+    return AiFinanceSuggestion(
+        tenant_id=model.tenant_id,
+        description=model.description,
+        suggested_code=model.suggested_code,
+        suggested_name=model.suggested_name,
+        confidence=model.confidence,
+        status=model.status,
+        id=model.id,
+        created_at=model.created_at,
+    )
+
+
+def _ai_anomaly_from_orm(model: AiFinanceAnomalyModel) -> AiFinanceAnomaly:
+    return AiFinanceAnomaly(
+        tenant_id=model.tenant_id,
+        entity_type=model.entity_type,
+        entity_id=model.entity_id,
+        anomaly_type=model.anomaly_type,
+        severity=model.severity,
+        description=model.description,
+        status=model.status,
+        id=model.id,
+        detected_at=model.detected_at,
+        reviewed_at=model.reviewed_at,
+    )
+
+
+def _sum_type_balance(lines: Sequence[BalanceSheetLine], account_type: AccountType) -> Decimal:
+    return sum((line.balance for line in lines if line.account_type == account_type), Decimal("0"))
+
+
+def _end_of_month(month_start: date) -> date:
+    if month_start.month == 12:
+        return date(month_start.year + 1, 1, 1) - timedelta(days=1)
+    return date(month_start.year, month_start.month + 1, 1) - timedelta(days=1)
 
 
 class FinanceRepository:
@@ -904,13 +973,19 @@ class FinanceRepository:
             credit = Decimal(row.credit)
             if row.account_type == AccountType.ASSET:
                 balance = debit - credit
-                assets.append(BalanceSheetLine(row.account_id, row.code, row.name, balance))
+                assets.append(
+                    BalanceSheetLine(row.account_id, row.code, row.name, balance, row.account_type)
+                )
             elif row.account_type == AccountType.LIABILITY:
                 balance = credit - debit
-                liabilities.append(BalanceSheetLine(row.account_id, row.code, row.name, balance))
+                liabilities.append(
+                    BalanceSheetLine(row.account_id, row.code, row.name, balance, row.account_type)
+                )
             else:
                 balance = credit - debit
-                equity.append(BalanceSheetLine(row.account_id, row.code, row.name, balance))
+                equity.append(
+                    BalanceSheetLine(row.account_id, row.code, row.name, balance, row.account_type)
+                )
 
         return BalanceSheet(
             as_of=as_of,
@@ -971,3 +1046,518 @@ class FinanceRepository:
             total_ar=total_ar,
             buckets=tuple(ar_buckets),
         )
+
+    # ------------------------------------------------------------------
+    # Finance automation (SKY-56/SKY-64)
+    # ------------------------------------------------------------------
+
+    async def _get_period(
+        self, tenant_id: uuid.UUID, period_id: uuid.UUID
+    ) -> ErpFiscalPeriodModel | None:
+        stmt = select(ErpFiscalPeriodModel).where(
+            ErpFiscalPeriodModel.tenant_id == tenant_id,
+            ErpFiscalPeriodModel.id == period_id,
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def close_checklist(self, tenant_id: uuid.UUID, period_id: uuid.UUID) -> CloseChecklist:
+        period = await self._get_period(tenant_id, period_id)
+        if period is None:
+            return CloseChecklist(period_id=period_id, period_name="", items=(), ready=False)
+        items: list[CloseChecklistItem] = []
+
+        periods = await self.list_fiscal_periods(tenant_id)
+        items.append(
+            CloseChecklistItem(
+                label="Previous period closed",
+                status="ok"
+                if all(p.is_closed for p in periods if p.id != period.id)
+                else "warning",
+                detail="All earlier periods must be closed before this one",
+            )
+        )
+
+        entry_count = await self._count_posted_entries_in_period(tenant_id, period)
+        items.append(
+            CloseChecklistItem(
+                label="Journal entries posted",
+                status="ok" if entry_count and entry_count >= 8 else "missing",
+                detail=f"{entry_count} posted entries in period",
+            )
+        )
+
+        trial = await self.trial_balance(tenant_id, period.end_date)
+        balanced = trial.total_debit == trial.total_credit
+        items.append(
+            CloseChecklistItem(
+                label="Trial balance balanced",
+                status="ok" if balanced else "missing",
+                detail=(
+                    f"Debit {trial.total_debit} = Credit {trial.total_credit}"
+                    if balanced
+                    else f"Debit {trial.total_debit} != Credit {trial.total_credit}"
+                ),
+            )
+        )
+
+        aging = await self.ar_aging(tenant_id, period.end_date)
+        over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
+        unreconciled = (over_90.amount if over_90 else Decimal("0")) > Decimal("0")
+        items.append(
+            CloseChecklistItem(
+                label="No aged receivables",
+                status="warning" if unreconciled else "ok",
+                detail="Outstanding AR that is more than 90 days past due"
+                if unreconciled
+                else "No aging AR in the over-90 bucket",
+            )
+        )
+
+        all_ok = all(item.status == "ok" for item in items)
+        return CloseChecklist(
+            period_id=period.id,
+            period_name=period.name,
+            items=tuple(items),
+            ready=all_ok,
+        )
+
+    async def _count_posted_entries_in_period(
+        self, tenant_id: uuid.UUID, period: ErpFiscalPeriodModel
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.status == EntryStatus.POSTED,
+                ErpJournalEntryModel.entry_date >= period.start_date,
+                ErpJournalEntryModel.entry_date <= period.end_date,
+            )
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def duplicates(self, tenant_id: uuid.UUID) -> Sequence[DuplicateGroup]:
+        stmt = (
+            select(
+                ErpJournalEntryModel.memo.label("memo"),
+                ErpJournalEntryModel.entry_date.label("entry_date"),
+                func.count().label("cnt"),
+            )
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.status == EntryStatus.POSTED,
+                ErpJournalEntryModel.memo.isnot(None),
+            )
+            .group_by(ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date)
+            .having(func.count() > 1)
+        )
+        rows = (await self.session.execute(stmt)).all()
+
+        groups: list[DuplicateGroup] = []
+        for row in rows:
+            entry_stmt = (
+                select(ErpJournalEntryModel)
+                .where(
+                    ErpJournalEntryModel.tenant_id == tenant_id,
+                    ErpJournalEntryModel.status == EntryStatus.POSTED,
+                    ErpJournalEntryModel.memo == row.memo,
+                    ErpJournalEntryModel.entry_date == row.entry_date,
+                )
+                .order_by(ErpJournalEntryModel.created_at)
+            )
+            entries = (await self.session.execute(entry_stmt)).scalars().all()
+            groups.append(
+                DuplicateGroup(
+                    key=f"{row.memo}|{row.entry_date.isoformat()}",
+                    reason=f"{len(entries)} entries share memo '{row.memo}' on {row.entry_date}",
+                    entries=tuple(
+                        DuplicateCandidate(
+                            entry_id=e.id,
+                            entry_date=e.entry_date,
+                            memo=e.memo,
+                            source_ref=e.source_ref,
+                        )
+                        for e in entries
+                    ),
+                )
+            )
+        return tuple(groups)
+
+    async def suggest_account_code(
+        self, tenant_id: uuid.UUID, description: str
+    ) -> AccountCodeSuggestion:
+        """Deterministic keyword fallback — best-effort, honest no-match.
+
+        Returns an empty suggestion (no code/name, confidence 0) when no
+        account scores above zero, so the UI never shows a misleading
+        "first account" guess. AI-backed suggestions are produced upstream in
+        :class:`FinanceService`/the router when ai-agent is reachable.
+        """
+        accounts = await self.list_accounts(tenant_id)
+        if not accounts:
+            return AccountCodeSuggestion(
+                description=description,
+                suggested_code="",
+                suggested_name="",
+                confidence=Decimal("0"),
+            )
+        text_lower = description.lower()
+        best = None
+        best_score = 0
+        for account in accounts:
+            score = self._keyword_score(text_lower, account.name.lower())
+            if score > best_score:
+                best = account
+                best_score = score
+
+        amount, side = self._extract_amount_from_description(text_lower)
+
+        if best is None:
+            return AccountCodeSuggestion(
+                description=description,
+                suggested_code="",
+                suggested_name="",
+                confidence=Decimal("0"),
+                amount=amount,
+                side=side,
+            )
+        return AccountCodeSuggestion(
+            description=description,
+            suggested_code=best.code,
+            suggested_name=best.name,
+            confidence=Decimal(str(best_score)),
+            amount=amount,
+            side=side,
+        )
+
+    @staticmethod
+    def _keyword_score(haystack: str, account_name: str) -> int:
+        keywords = {
+            "rent": 3,
+            "salary": 3,
+            "wage": 3,
+            "utilities": 3,
+            "electric": 3,
+            "insurance": 3,
+            "travel": 3,
+            "office": 2,
+            "supplies": 2,
+        }
+        score = 0
+        for word, weight in keywords.items():
+            if word in haystack and word in account_name:
+                score += weight
+        return score
+
+    _AMOUNT_RE = re.compile(
+        r"(?:(?:usd|eur|gbp|\$)\s*)?"
+        r"(\d{1,3}(?:[,\.]\d{3})*(?:\.\d{1,2})?)"
+        r"\s*(?:usd|eur|gbp)?(?!\w)",
+        re.IGNORECASE,
+    )
+    _DEBIT_HINTS = frozenset(
+        {
+            "paid",
+            "expense",
+            "cost",
+            "purchase",
+            "rent",
+            "salary",
+            "wage",
+            "utilities",
+            "insurance",
+            "travel",
+            "supplies",
+            "office",
+            "electric",
+            "debit",
+        }
+    )
+    _CREDIT_HINTS = frozenset(
+        {"received", "revenue", "income", "credit", "refund", "interest earned"}
+    )
+
+    @staticmethod
+    def _extract_amount_from_description(text: str) -> tuple[Decimal | None, str]:
+        """Best-effort amount + side extraction from free-text description.
+
+        Returns ``(amount, side)`` where *side* is ``"debit"`` or ``"credit"``.
+        If no amount pattern is found, returns ``(None, "debit")``.
+        """
+        match = FinanceRepository._AMOUNT_RE.search(text)
+        if not match:
+            return None, "debit"
+        raw = match.group(1).replace(",", "")
+        try:
+            amount = Decimal(raw)
+        except Exception:
+            return None, "debit"
+        if amount <= 0:
+            return None, "debit"
+        words = set(text.split())
+        side = "credit" if words & FinanceRepository._CREDIT_HINTS else "debit"
+        return amount, side
+
+    async def working_capital_alert(self, tenant_id: uuid.UUID, as_of: date) -> WorkingCapitalAlert:
+        threshold = Decimal("1.5")
+        balance = await self.balance_sheet(tenant_id, as_of)
+        # ponytail: every ASSET is treated as current and every LIABILITY as
+        # current — no current/non-current split exists on the chart yet. Add
+        # a sub-classification on the COA if the ratio needs to be precise.
+        current_assets = sum((line.balance for line in balance.assets), Decimal("0"))
+        current_liabilities = sum((line.balance for line in balance.liabilities), Decimal("0"))
+        ratio = current_assets / current_liabilities if current_liabilities else Decimal("0")
+        quantum = Decimal("0.01")
+        ratio = ratio.quantize(quantum)
+        return WorkingCapitalAlert(
+            ratio=ratio,
+            threshold=threshold,
+            current_assets=current_assets,
+            current_liabilities=current_liabilities,
+            alert=current_liabilities > 0 and ratio < threshold,
+        )
+
+    async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> HealthScore:
+        quantum = Decimal("0.01")
+        wc = await self.working_capital_alert(tenant_id, as_of)
+        wc_score = Decimal("100") if not wc.alert else Decimal("50")
+
+        aging = await self.ar_aging(tenant_id, as_of)
+        over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
+        over_90_amount = over_90.amount if over_90 else Decimal("0")
+        ar_ok = over_90_amount <= (aging.total_ar * Decimal("0.2"))
+        ar_score = Decimal("100") if ar_ok else Decimal("60")
+
+        entries = await self.list_journal_entries(tenant_id, limit=100)
+        drafts = sum(1 for e in entries if e.status == EntryStatus.DRAFT)
+        drafts_score = max(Decimal("100") - Decimal(drafts) * Decimal("10"), Decimal("0"))
+
+        components = (
+            HealthComponent("working_capital", wc_score, Decimal("0.4")),
+            HealthComponent("receivables_aging", ar_score, Decimal("0.3")),
+            HealthComponent("journal_cleanliness", drafts_score, Decimal("0.3")),
+        )
+        overall = sum((c.score * c.weight for c in components), Decimal("0")).quantize(quantum)
+        return HealthScore(overall=overall, components=components)
+
+    async def cashflow_projection(self, tenant_id: uuid.UUID, as_of: date) -> CashflowProjection:
+        months: list[CashflowPosition] = []
+        opening = Decimal("0")
+        for i in range(6):
+            month_start = date(
+                as_of.year + (as_of.month + i - 1) // 12, (as_of.month + i - 1) % 12 + 1, 1
+            )
+            inflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=True)
+            outflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=False)
+            closing = opening + inflows - outflows
+            months.append(
+                CashflowPosition(
+                    month=month_start.strftime("%Y-%m"),
+                    opening=opening,
+                    inflows=inflows,
+                    outflows=outflows,
+                    closing=closing,
+                )
+            )
+            opening = closing
+        return CashflowProjection(positions=tuple(months))
+
+    async def _monthly_outstanding(
+        self, tenant_id: uuid.UUID, month_start: date, *, is_inflow: bool
+    ) -> Decimal:
+        month_end = _end_of_month(month_start)
+        statuses = (
+            [InvoiceStatus.ISSUED, InvoiceStatus.APPROVED] if is_inflow else [InvoiceStatus.ISSUED]
+        )
+        stmt = select(func.coalesce(func.sum(ErpInvoiceModel.total), 0)).where(
+            ErpInvoiceModel.tenant_id == tenant_id,
+            ErpInvoiceModel.status.in_(statuses),
+            ErpInvoiceModel.due_date >= month_start,
+            ErpInvoiceModel.due_date <= month_end,
+        )
+        return Decimal((await self.session.execute(stmt)).scalar_one())
+
+    async def anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]:
+        return await self.list_open_ai_anomalies(tenant_id)
+
+    async def comparative_pnl(
+        self,
+        tenant_id: uuid.UUID,
+        current_from: date,
+        current_to: date,
+        prior_from: date,
+        prior_to: date,
+    ) -> ComparativePnl:
+        current = await self.profit_and_loss(tenant_id, current_from, current_to)
+        prior = await self.profit_and_loss(tenant_id, prior_from, prior_to)
+        by_code = {line.code: line for line in prior.revenue + prior.expenses}
+        rows: list[ComparativePnlRow] = []
+        for line in current.revenue + current.expenses:
+            prior_line = by_code.get(line.code)
+            prior_amount = prior_line.amount if prior_line else Decimal("0")
+            variance = line.amount - prior_amount
+            variance_pct = (
+                (variance / prior_amount).quantize(Decimal("0.0001"))
+                if prior_amount
+                else Decimal("0")
+            )
+            rows.append(
+                ComparativePnlRow(
+                    account_code=line.code,
+                    account_name=line.name,
+                    current_amount=line.amount,
+                    prior_amount=prior_amount,
+                    variance=variance,
+                    variance_pct=variance_pct,
+                )
+            )
+        return ComparativePnl(
+            current_from=current_from,
+            current_to=current_to,
+            prior_from=prior_from,
+            prior_to=prior_to,
+            rows=tuple(rows),
+        )
+
+    async def reverse_journal_entry(
+        self,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        reversed_by_user_id: uuid.UUID,
+        reversed_at: datetime,
+    ) -> JournalEntry | None:
+        stmt = select(ErpJournalEntryModel).where(
+            ErpJournalEntryModel.tenant_id == tenant_id,
+            ErpJournalEntryModel.id == entry_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None or model.status != EntryStatus.POSTED:
+            return None
+        if model.reversal_entry_id is not None:
+            return None
+
+        source_lines = await self._journal_lines(entry_id, tenant_id)
+        reversal = ErpJournalEntryModel(
+            tenant_id=tenant_id,
+            entry_date=model.entry_date,
+            memo=f"Reversal of {model.memo or model.id}",
+            status=EntryStatus.POSTED,
+            source="manual",
+            source_ref=None,
+            posted_at=reversed_at,
+            posted_by_user_id=reversed_by_user_id,
+            reversal_entry_id=None,
+        )
+        self.session.add(reversal)
+        await self.session.flush()
+        reversal_line_models = [
+            ErpJournalLineModel(
+                tenant_id=tenant_id,
+                entry_id=reversal.id,
+                account_id=line.account_id,
+                debit=line.credit,
+                credit=line.debit,
+                currency=line.currency,
+            )
+            for line in source_lines
+        ]
+        self.session.add_all(reversal_line_models)
+        model.reversal_entry_id = reversal.id
+        await self.session.flush()
+        await self.session.refresh(model)
+        lines = await self._journal_lines(entry_id, tenant_id)
+        return _journal_entry_from_orm(model, lines)
+
+    # --- Tenant settings (KV store) ---
+
+    async def get_tenant_setting(self, tenant_id: uuid.UUID, key: str) -> TenantSetting | None:
+        stmt = select(ErpTenantSettingModel).where(
+            ErpTenantSettingModel.tenant_id == tenant_id,
+            ErpTenantSettingModel.key == key,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _tenant_setting_from_orm(model) if model else None
+
+    async def upsert_tenant_setting(
+        self, tenant_id: uuid.UUID, key: str, value: str
+    ) -> TenantSetting:
+        stmt = select(ErpTenantSettingModel).where(
+            ErpTenantSettingModel.tenant_id == tenant_id,
+            ErpTenantSettingModel.key == key,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            model = ErpTenantSettingModel(tenant_id=tenant_id, key=key, value=value)
+            self.session.add(model)
+        else:
+            model.value = value
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _tenant_setting_from_orm(model)
+
+    # --- AI suggestion / anomaly persistence ---
+
+    async def upsert_ai_suggestion(
+        self, tenant_id: uuid.UUID, suggestion: AiFinanceSuggestion
+    ) -> AiFinanceSuggestion:
+        stmt = select(AiFinanceSuggestionModel).where(
+            AiFinanceSuggestionModel.tenant_id == tenant_id,
+            AiFinanceSuggestionModel.description == suggestion.description,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            model = AiFinanceSuggestionModel(
+                tenant_id=tenant_id,
+                description=suggestion.description,
+                suggested_code=suggestion.suggested_code,
+                suggested_name=suggestion.suggested_name,
+                confidence=suggestion.confidence,
+            )
+            self.session.add(model)
+        else:
+            model.suggested_code = suggestion.suggested_code
+            model.suggested_name = suggestion.suggested_name
+            model.confidence = suggestion.confidence
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _ai_suggestion_from_orm(model)
+
+    async def upsert_ai_anomaly(
+        self, tenant_id: uuid.UUID, anomaly: AiFinanceAnomaly
+    ) -> AiFinanceAnomaly:
+        stmt = select(AiFinanceAnomalyModel).where(
+            AiFinanceAnomalyModel.tenant_id == tenant_id,
+            AiFinanceAnomalyModel.entity_type == anomaly.entity_type,
+            AiFinanceAnomalyModel.entity_id == anomaly.entity_id,
+            AiFinanceAnomalyModel.anomaly_type == anomaly.anomaly_type,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            model = AiFinanceAnomalyModel(
+                tenant_id=tenant_id,
+                entity_type=anomaly.entity_type,
+                entity_id=anomaly.entity_id,
+                anomaly_type=anomaly.anomaly_type,
+                severity=anomaly.severity,
+                description=anomaly.description,
+            )
+            self.session.add(model)
+        else:
+            model.severity = anomaly.severity
+            model.description = anomaly.description
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _ai_anomaly_from_orm(model)
+
+    async def list_open_ai_anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]:
+        stmt = (
+            select(AiFinanceAnomalyModel)
+            .where(
+                AiFinanceAnomalyModel.tenant_id == tenant_id,
+                AiFinanceAnomalyModel.status == "open",
+            )
+            .order_by(AiFinanceAnomalyModel.detected_at.desc())
+        )
+        models = (await self.session.execute(stmt)).scalars().all()
+        return [_ai_anomaly_from_orm(m) for m in models]

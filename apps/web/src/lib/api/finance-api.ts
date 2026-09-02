@@ -64,6 +64,7 @@ export interface JournalEntry {
   posted_at: string | null;
   posted_by_user_id: string | null;
   voided_at: string | null;
+  reversal_entry_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -348,4 +349,196 @@ export interface Customer {
 
 export function listCustomers(): Promise<Customer[]> {
   return apiFetch<Customer[]>("/api/v1/crm/customers");
+}
+
+// --- Finance automation (SKY-56/SKY-64) ---
+
+const AUTOMATION = "/api/v1/finance/automation";
+
+export interface ArAgingBucket {
+  bucket: string;
+  count: number;
+  amount: number;
+  share: number;
+}
+
+export interface ArAging {
+  as_of: string;
+  total_ar: number;
+  buckets: ArAgingBucket[];
+}
+
+export interface CloseChecklistItem {
+  label: string;
+  status: string;
+  detail: string | null;
+}
+
+export interface CloseChecklist {
+  period_id: string;
+  period_name: string;
+  items: CloseChecklistItem[];
+  ready: boolean;
+}
+
+export interface DuplicateCandidate {
+  entry_id: string;
+  entry_date: string;
+  memo: string | null;
+  source_ref: string | null;
+}
+
+export interface DuplicateGroup {
+  key: string;
+  reason: string;
+  entries: DuplicateCandidate[];
+}
+
+export interface AccountCodeSuggestion {
+  description: string;
+  suggested_code: string;
+  suggested_name: string;
+  confidence: number;
+  reasoning: string;
+  amount: number | null;
+  side: "debit" | "credit";
+  contra_code: string;
+  contra_name: string;
+}
+
+export interface WorkingCapitalAlert {
+  ratio: number;
+  threshold: number;
+  current_assets: number;
+  current_liabilities: number;
+  alert: boolean;
+}
+
+export interface HealthComponent {
+  name: string;
+  score: number;
+  weight: number;
+  detail: string | null;
+}
+
+export interface HealthScore {
+  overall: number;
+  components: HealthComponent[];
+}
+
+export interface CashflowPosition {
+  month: string;
+  opening: number;
+  inflows: number;
+  outflows: number;
+  closing: number;
+}
+
+export interface CashflowProjection {
+  positions: CashflowPosition[];
+}
+
+export interface ComparativePnlRow {
+  account_code: string;
+  account_name: string;
+  current_amount: number;
+  prior_amount: number;
+  variance: number;
+  variance_pct: number;
+}
+
+export interface ComparativePnl {
+  current_from: string;
+  current_to: string;
+  prior_from: string;
+  prior_to: string;
+  rows: ComparativePnlRow[];
+}
+
+export interface FinanceAnomaly {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  anomaly_type: string;
+  severity: string;
+  description: string;
+  status: string;
+  detected_at: string;
+}
+
+export interface TenantSettings {
+  working_capital_threshold: number;
+}
+
+export function getAging(asOf: string): Promise<ArAging> {
+  return apiFetch<ArAging>(`${AUTOMATION}/aging${queryString({ as_of: asOf })}`);
+}
+
+export function getCloseChecklist(periodId: string): Promise<CloseChecklist> {
+  return apiFetch<CloseChecklist>(
+    `${AUTOMATION}/close-checklist${queryString({ period_id: periodId })}`,
+  );
+}
+
+export function getDuplicates(): Promise<DuplicateGroup[]> {
+  return apiFetch<DuplicateGroup[]>(`${AUTOMATION}/duplicates`);
+}
+
+export function suggestAccountCode(description: string): Promise<AccountCodeSuggestion> {
+  return apiPost<AccountCodeSuggestion>(`${AUTOMATION}/suggest-account-code`, { description });
+}
+
+export function getWorkingCapitalAlert(asOf: string): Promise<WorkingCapitalAlert> {
+  return apiFetch<WorkingCapitalAlert>(
+    `${AUTOMATION}/working-capital-alert${queryString({ as_of: asOf })}`,
+  );
+}
+
+export function getHealthScore(asOf: string): Promise<HealthScore> {
+  return apiFetch<HealthScore>(`${AUTOMATION}/health-score${queryString({ as_of: asOf })}`);
+}
+
+export function getCashflowProjection(asOf: string): Promise<CashflowProjection> {
+  return apiFetch<CashflowProjection>(
+    `${AUTOMATION}/cashflow-projection${queryString({ as_of: asOf })}`,
+  );
+}
+
+export function getAnomalies(): Promise<FinanceAnomaly[]> {
+  return apiFetch<FinanceAnomaly[]>(`${AUTOMATION}/anomalies`);
+}
+
+export function scanAnomalies(): Promise<FinanceAnomaly[]> {
+  return apiPost<FinanceAnomaly[]>(`${AUTOMATION}/anomalies/scan`, {});
+}
+
+export function getComparativePnl(
+  currentFrom: string,
+  currentTo: string,
+  priorFrom: string,
+  priorTo: string,
+): Promise<ComparativePnl> {
+  return apiFetch<ComparativePnl>(
+    `${AUTOMATION}/reports/comparative-pnl${queryString({
+      current_from: currentFrom,
+      current_to: currentTo,
+      prior_from: priorFrom,
+      prior_to: priorTo,
+    })}`,
+  );
+}
+
+export function getAutomationSettings(): Promise<TenantSettings> {
+  return apiFetch<TenantSettings>(`${AUTOMATION}/settings`);
+}
+
+export function updateAutomationSettings(threshold: number): Promise<TenantSettings> {
+  return apiFetch<TenantSettings>(`${AUTOMATION}/settings`, {
+    method: "PUT",
+    body: JSON.stringify({ threshold }),
+  });
+}
+
+export function reverseJournalEntry(entryId: string): Promise<JournalEntry> {
+  return apiPost<JournalEntry>(`${AUTOMATION}/journal-entries/${entryId}/reverse`, {});
 }

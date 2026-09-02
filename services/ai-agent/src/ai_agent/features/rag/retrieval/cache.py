@@ -35,9 +35,9 @@ def hash_query(text: str) -> str:
     return hashlib.sha256(normalize_query(text).encode("utf-8")).hexdigest()
 
 
-def cache_key(tenant_id: uuid.UUID, query_hash: str) -> str:
+def cache_key(tenant_id: uuid.UUID, query_hash: str, prefix: str = "ai:rag:cache:") -> str:
     """Redis key: never contains query text (PII) — hash + tenant only."""
-    return f"ai:rag:cache:{tenant_id}:{query_hash}"
+    return f"{prefix}{tenant_id}:{query_hash}"
 
 
 class QueryCache(Protocol):
@@ -60,10 +60,15 @@ class QueryCache(Protocol):
 
 
 class RedisQueryCache:
-    """Redis-backed hot cache (lazy client, fail-open on errors)."""
+    """Redis-backed hot cache (lazy client, fail-open on errors).
 
-    def __init__(self, client: Redis | None = None) -> None:
+    ``key_prefix`` scopes the keyspace per feature (RAG vs inventory search)
+    so one Redis key scheme cannot leak between query caches.
+    """
+
+    def __init__(self, client: Redis | None = None, key_prefix: str = "ai:rag:cache:") -> None:
         self._client = client
+        self._key_prefix = key_prefix
 
     def _get_client(self) -> Redis | None:
         if self._client is None:
@@ -77,7 +82,7 @@ class RedisQueryCache:
         if client is None:
             return None
         try:
-            raw = await client.get(cache_key(tenant_id, query_hash))
+            raw = await client.get(cache_key(tenant_id, query_hash, self._key_prefix))
             if raw is None:
                 return None
             decoded: Any = json.loads(raw)
@@ -101,7 +106,7 @@ class RedisQueryCache:
             return
         try:
             await client.set(
-                cache_key(tenant_id, query_hash),
+                cache_key(tenant_id, query_hash, self._key_prefix),
                 json.dumps(payload),
                 ex=ttl_seconds,
             )

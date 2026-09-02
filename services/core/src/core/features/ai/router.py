@@ -110,6 +110,24 @@ async def _proxy(
 # --- NL inventory query (feature 1) ----------------------------------------
 
 
+@router.get("/inventory/search")
+async def proxy_semantic_search(
+    request: Request,
+    _invoke: _InvokeDep,
+    _read: _ReadDep,
+    client: _ClientDep,
+) -> Response:
+    """Hybrid exact+semantic product search (SKY-70) -> ai-agent.
+
+    Forwarded verbatim to ai-agent /api/v1/ai/inventory/search; the caller
+    must hold ``erp.ai.invoke`` + ``erp.inventory.read`` (the SKY-57 rule
+    that AI is a proxy, never an auth bypass). The upstream service verifies
+    the JWT against the relayed tenant slug and degrades to exact-only search
+    when no embedding provider is configured.
+    """
+    return await _proxy(request, client, "/api/v1/ai/inventory/search")
+
+
 @router.post("/inventory/query")
 async def proxy_nl_query(
     request: Request,

@@ -30,15 +30,25 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from core.domain.entities import (
+        AccountCodeSuggestion,
+        AiFinanceAnomaly,
+        AiFinanceSuggestion,
         ArAging,
         BalanceSheet,
+        CashflowProjection,
         ChartOfAccount,
+        CloseChecklist,
+        ComparativePnl,
+        DuplicateGroup,
         FiscalPeriod,
+        HealthScore,
         Invoice,
         JournalEntry,
         Payment,
         ProfitAndLoss,
+        TenantSetting,
         TrialBalance,
+        WorkingCapitalAlert,
     )
     from core.domain.value_objects import EntryStatus, InvoiceStatus
 
@@ -215,6 +225,68 @@ class FinanceRepositoryPort(Protocol):
     async def balance_sheet(self, tenant_id: uuid.UUID, as_of: date) -> BalanceSheet: ...
 
     async def ar_aging(self, tenant_id: uuid.UUID, as_of: date) -> ArAging: ...
+
+    # --- Automation ports (SKY-56/SKY-64) ---
+
+    async def close_checklist(
+        self, tenant_id: uuid.UUID, period_id: uuid.UUID
+    ) -> CloseChecklist: ...
+
+    async def duplicates(self, tenant_id: uuid.UUID) -> Sequence[DuplicateGroup]: ...
+
+    async def suggest_account_code(
+        self, tenant_id: uuid.UUID, description: str
+    ) -> AccountCodeSuggestion: ...
+
+    async def working_capital_alert(
+        self, tenant_id: uuid.UUID, as_of: date
+    ) -> WorkingCapitalAlert: ...
+
+    async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> HealthScore: ...
+
+    async def cashflow_projection(
+        self, tenant_id: uuid.UUID, as_of: date
+    ) -> CashflowProjection: ...
+
+    async def anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
+
+    async def comparative_pnl(
+        self,
+        tenant_id: uuid.UUID,
+        current_from: date,
+        current_to: date,
+        prior_from: date,
+        prior_to: date,
+    ) -> ComparativePnl: ...
+
+    async def reverse_journal_entry(
+        self,
+        entry_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        reversed_by_user_id: uuid.UUID,
+        reversed_at: datetime,
+    ) -> JournalEntry | None: ...
+
+    # --- Tenant settings (KV store) ---
+
+    async def get_tenant_setting(self, tenant_id: uuid.UUID, key: str) -> TenantSetting | None: ...
+
+    async def upsert_tenant_setting(
+        self, tenant_id: uuid.UUID, key: str, value: str
+    ) -> TenantSetting: ...
+
+    # --- AI suggestion persistence ---
+
+    async def upsert_ai_suggestion(
+        self, tenant_id: uuid.UUID, suggestion: AiFinanceSuggestion
+    ) -> AiFinanceSuggestion: ...
+
+    async def upsert_ai_anomaly(
+        self, tenant_id: uuid.UUID, anomaly: AiFinanceAnomaly
+    ) -> AiFinanceAnomaly: ...
+
+    async def list_open_ai_anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
 
 
 # ---------------------------------------------------------------------------

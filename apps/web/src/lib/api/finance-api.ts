@@ -36,7 +36,7 @@ export interface AccountCreateInput {
   account_type: AccountType;
 }
 
-export type EntryStatus = "draft" | "posted" | "voided";
+export type EntryStatus = "draft" | "posted" | "voided" | "reversed";
 
 export interface JournalLine {
   id: string;

@@ -248,4 +248,4 @@ async def test_reverse_flips_lines_and_stamps(automation_world: dict[str, str]) 
         await session.rollback()
 
     assert reversed_entry is not None
-    assert reversed_entry.reversal_entry_id is not None
+    assert reversed_entry.status == EntryStatus.REVERSED

@@ -8,21 +8,30 @@ import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { LogoMark } from "@/components/brand/logo";
 import { appendAgentMessage, createConversation, saveUserMessage } from "@/lib/api/agents-api";
+import type { ChatMessage, Conversation } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
-import type { ChatMessage, Conversation } from "@/lib/mock/agents-store";
 
 function toAgentMessage(message: ChatMessage): AgentChatMessage {
-  return { ...message, agentName: null, citations: [], failed: false };
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.created_at,
+    agentName: message.agent_name ?? null,
+    citations: [],
+    failed: false,
+  };
 }
 
 /** Live conversation view. Streams via SSE, no page navigation needed. */
 function ConversationView({ conversation }: { conversation: Conversation }) {
   const { user, status } = useSession();
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
-    conversation.messages.map(toAgentMessage),
+    (conversation.messages ?? []).map(toAgentMessage),
     {
       initialMessagesComplete: true,
+      conversationId: conversation.id,
       onUserMessage: (content) => {
         void saveUserMessage(conversation.id, content);
       },
@@ -35,7 +44,8 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
 
   useEffect(() => {
     if (autoStarted.current || sending || status !== "authenticated") return;
-    const last = conversation.messages[conversation.messages.length - 1];
+    const msgs = conversation.messages ?? [];
+    const last = msgs[msgs.length - 1];
     if (last && last.role === "user") {
       autoStarted.current = true;
       // Echo the already-persisted last user message: append the agent bubble
@@ -67,7 +77,7 @@ export default function AgentsHomePage() {
   const [conversation] = useState<Conversation | null>(null);
 
   const startChat = useCallback(async (prompt: string) => {
-    const conv = await createConversation({ prompt });
+    const conv = await createConversation({ first_prompt: prompt });
     // Navigate to the conversation route so the sidebar picks it up from the
     // pathname change and the [id]/page.tsx takes over rendering.
     router.push(`/dashboard/agents/c/${conv.id}`);

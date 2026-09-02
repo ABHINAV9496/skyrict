@@ -47,7 +47,7 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
   return <FileText aria-hidden="true" className={className} />;
 }
 
-/** Convert a File into a ChatAttachment. */
+/** Convert a File into a ChatAttachment, retaining the File for base64 reading. */
 function fileToAttachment(file: File): ChatAttachment {
   return {
     id: newId(),
@@ -55,6 +55,7 @@ function fileToAttachment(file: File): ChatAttachment {
     type: file.type,
     size: file.size,
     previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+    file,
   };
 }
 

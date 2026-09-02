@@ -42,7 +42,7 @@ import {
 } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
-import type { Conversation } from "@/lib/mock/agents-store";
+import type { Conversation } from "@/lib/api/agents-api";
 
 function isActive(pathname: string, id: string): boolean {
   const normalized =
@@ -256,7 +256,7 @@ export function AgentsChatSidebar({
           .sort(
             (a, b) =>
               Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-              b.updatedAt.localeCompare(a.updatedAt),
+              b.updated_at.localeCompare(a.updated_at),
           ),
       );
       void setConversationPinned(conversation.id, !conversation.pinned).then(() => load());

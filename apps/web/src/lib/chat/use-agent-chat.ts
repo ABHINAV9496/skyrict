@@ -26,6 +26,7 @@ import {
   streamAgentChat,
   type ChatCitation,
   type ChatStreamEvent,
+  type StreamAttachment,
 } from "@/lib/chat/sse-client";
 
 export interface AgentChatCitation {
@@ -40,8 +41,10 @@ export interface ChatAttachment {
   name: string;
   type: string;
   size: number;
-  /** Object URL for client-side preview ( revoked on unmount or send ). */
+  /** Object URL for client-side preview (revoked on unmount or send). */
   previewUrl?: string;
+  /** Retained File object for reading content as base64 before sending. */
+  file?: File;
 }
 
 export interface AgentChatMessage {
@@ -100,10 +103,27 @@ function yieldToReact(): Promise<void> {
   });
 }
 
+/** Read a File as a base64 string (data-URL prefix stripped). */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Strip "data:<mime>;base64," prefix to get raw base64.
+      const base64 = dataUrl.split(",")[1] ?? "";
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function useAgentChat(
   initialMessages: AgentChatMessage[],
   options?: {
     initialMessagesComplete?: boolean;
+    /** Conversation ID for multi-turn context (LLM receives history). */
+    conversationId?: string;
     /** Called when a turn completes with the agent's full response text. */
     onComplete?: (content: string) => void;
     /** Called when a user message is appended, so callers can persist it. */
@@ -127,6 +147,8 @@ export function useAgentChat(
   onCompleteRef.current = options?.onComplete;
   const onUserMessageRef = useRef(options?.onUserMessage);
   onUserMessageRef.current = options?.onUserMessage;
+  const conversationIdRef = useRef(options?.conversationId);
+  conversationIdRef.current = options?.conversationId;
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -292,8 +314,33 @@ export function useAgentChat(
       }
     };
 
+    // Read attached files as base64 for the backend (best-effort; skip broken reads).
+    let streamAttachments: StreamAttachment[] | undefined;
+    if (attachments && attachments.length > 0) {
+      const results = await Promise.allSettled(
+        attachments
+          .filter((a) => a.file)
+          .map(async (a) => ({
+            name: a.name,
+            type: a.type,
+            size: a.size,
+            base64: await readFileAsBase64(a.file!),
+          })),
+      );
+      const successful = results
+        .filter((r): r is PromiseFulfilledResult<StreamAttachment> => r.status === "fulfilled")
+        .map((r) => r.value);
+      if (successful.length > 0) streamAttachments = successful;
+    }
+
     try {
-      await streamAgentChat({ message: trimmed, signal: controller.signal, onEvent });
+      await streamAgentChat({
+        message: trimmed,
+        conversationId: conversationIdRef.current,
+        attachments: streamAttachments,
+        signal: controller.signal,
+        onEvent,
+      });
     } catch (error) {
       // Cancel any pending animation frame so no stale flush runs after unmount.
       if (rafId !== 0) {

@@ -7,12 +7,20 @@ import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { appendAgentMessage, getConversation, saveUserMessage } from "@/lib/api/agents-api";
+import type { ChatMessage, Conversation } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
-import type { ChatMessage, Conversation } from "@/lib/mock/agents-store";
 
 function toAgentMessage(message: ChatMessage): AgentChatMessage {
-  return { ...message, agentName: null, citations: [], failed: false };
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.created_at,
+    agentName: message.agent_name ?? null,
+    citations: [],
+    failed: false,
+  };
 }
 
 /**
@@ -25,9 +33,10 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
 function ConversationView({ conversation }: { conversation: Conversation }) {
   const { user, status } = useSession();
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
-    conversation.messages.map(toAgentMessage),
+    (conversation.messages ?? []).map(toAgentMessage),
     {
       initialMessagesComplete: true,
+      conversationId: conversation.id,
       onUserMessage: (content) => {
         void saveUserMessage(conversation.id, content);
       },
@@ -40,7 +49,8 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
 
   useEffect(() => {
     if (autoStarted.current || sending || status !== "authenticated") return;
-    const last = conversation.messages[conversation.messages.length - 1];
+    const msgs = conversation.messages ?? [];
+    const last = msgs[msgs.length - 1];
     if (!last || last.role !== "user") return;
     // Echo the already-persisted last user message: append the agent bubble
     // and stream, but do not re-append or re-save the user message.

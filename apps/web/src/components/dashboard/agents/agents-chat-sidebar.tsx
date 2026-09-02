@@ -3,20 +3,46 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, LogOut, MessageSquareText, SquarePen } from "lucide-react";
+import {
+  ArrowLeft,
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-import { getConversations } from "@/lib/api/agents-api";
-import type { AuthUser } from "@/lib/api/auth-api";
+import { UserMenu } from "@/components/dashboard/workspace/user-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  deleteConversation,
+  getConversations,
+  renameConversation,
+  setConversationPinned,
+} from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
-import type { Conversation } from "@/lib/mock/agents-store";
-
-/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
-function avatarSrc(user: AuthUser | null): string | null {
-  return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
-}
+import type { Conversation } from "@/lib/api/agents-api";
 
 function isActive(pathname: string, id: string): boolean {
   const normalized =
@@ -33,32 +59,104 @@ function ConversationRow({
   active,
   collapsed,
   onSelect,
+  onRename,
+  onDelete,
+  onTogglePin,
 }: {
   conversation: Conversation;
   active: boolean;
   collapsed: boolean;
   onSelect: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onTogglePin: () => void;
 }) {
+  const pinned = Boolean(conversation.pinned);
+
   return (
-    <Link
-      href={`/dashboard/agents/c/${conversation.id}`}
-      onClick={onSelect}
-      aria-current={active ? "page" : undefined}
-      title={collapsed ? conversation.title : undefined}
+    <div
       className={cn(
-        "flex items-center gap-2 rounded-lg text-sm transition-colors",
-        collapsed ? "justify-center px-0 py-2" : "px-2.5 py-2",
+        "group flex items-center rounded-lg text-sm transition-colors",
         active
           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
           : "text-foreground hover:bg-muted/60",
       )}
     >
-      {collapsed ? (
-        <MessageSquareText aria-hidden="true" className="size-4 shrink-0" />
-      ) : (
-        <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
+      <Link
+        href={`/dashboard/agents/c/${conversation.id}`}
+        onClick={onSelect}
+        aria-current={active ? "page" : undefined}
+        title={collapsed ? conversation.title : undefined}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2",
+          collapsed ? "justify-center px-0 py-2" : "px-2.5 py-2",
+        )}
+      >
+        {collapsed ? (
+          <MessageSquareText aria-hidden="true" className="size-4 shrink-0" />
+        ) : (
+          <>
+            {pinned ? (
+              <Pin aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
+            ) : null}
+            <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
+          </>
+        )}
+      </Link>
+
+      {!collapsed && (
+        <div className="mr-1 flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {/* Quick pin/unpin action */}
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={(event) => {
+              event.preventDefault();
+              onTogglePin();
+            }}
+            aria-label={pinned ? `Unpin ${conversation.title}` : `Pin ${conversation.title}`}
+            title={pinned ? "Unpin chat" : "Pin chat"}
+            className="flex size-6 items-center justify-center rounded-md text-current/50 transition-colors hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50"
+          >
+            {pinned ? (
+              <PinOff aria-hidden="true" className="size-3.5" />
+            ) : (
+              <Pin aria-hidden="true" className="size-3.5" />
+            )}
+          </button>
+
+          {/* More actions: rename, delete, pin */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={(event) => event.preventDefault()}
+                aria-label={`Options for ${conversation.title}`}
+                className="flex size-6 items-center justify-center rounded-md text-current/50 transition-colors hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50 data-[state=open]:bg-current/10"
+              >
+                <MoreHorizontal aria-hidden="true" className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onRename}>
+                <Pencil aria-hidden="true" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onTogglePin}>
+                {pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
+                {pinned ? "Unpin chat" : "Pin chat"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                <Trash2 aria-hidden="true" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
-    </Link>
+    </div>
   );
 }
 
@@ -72,9 +170,9 @@ function NewChatButton({
   const router = useRouter();
   return (
     <Button
-      variant="secondary"
+      variant="ghost"
       className={cn(
-        "w-full gap-2 text-sidebar-foreground",
+        "w-full gap-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         collapsed ? "justify-center px-0" : "justify-start",
       )}
       title={collapsed ? "New chat" : undefined}
@@ -99,8 +197,11 @@ export function AgentsChatSidebar({
   collapsed: boolean;
 }) {
   const pathname = usePathname();
-  const { user, logout, status } = useSession();
+  const router = useRouter();
+  const { status } = useSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const load = useCallback(() => {
     getConversations()
@@ -113,6 +214,55 @@ export function AgentsChatSidebar({
   useEffect(() => {
     if (status === "authenticated") load();
   }, [pathname, load, status]);
+
+  const handleRename = useCallback(
+    (conversation: Conversation) => {
+      setRenameTarget(conversation);
+      setRenameValue(conversation.title);
+    },
+    [],
+  );
+
+  const submitRename = useCallback(() => {
+    const target = renameTarget;
+    const value = renameValue.trim();
+    setRenameTarget(null);
+    if (!target || !value || value === target.title) return;
+    void renameConversation(target.id, value).then(() => load());
+  }, [renameTarget, renameValue, load]);
+
+  const handleDelete = useCallback(
+    (conversation: Conversation) => {
+      void deleteConversation(conversation.id).then(() => {
+        // If the deleted conversation is the one we are viewing, leave the page.
+        if (isActive(pathname, conversation.id)) {
+          router.push("/dashboard/agents");
+        }
+        load();
+      });
+    },
+    [pathname, router, load],
+  );
+
+  const handleTogglePin = useCallback(
+    (conversation: Conversation) => {
+      // Pinning re-sorts the list; optimistically update so the row moves
+      // immediately, then reconcile with the server response.
+      setConversations((previous) =>
+        previous
+          .map((item) =>
+            item.id === conversation.id ? { ...item, pinned: !Boolean(item.pinned) } : item,
+          )
+          .sort(
+            (a, b) =>
+              Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+              b.updated_at.localeCompare(a.updated_at),
+          ),
+      );
+      void setConversationPinned(conversation.id, !conversation.pinned).then(() => load());
+    },
+    [load],
+  );
 
   return (
     <>
@@ -147,7 +297,7 @@ export function AgentsChatSidebar({
           </Link>
           {!collapsed ? (
             <span className="font-display text-sm font-semibold tracking-tight text-sidebar-foreground">
-              AI Agents
+              SkyAgent
             </span>
           ) : null}
         </header>
@@ -155,24 +305,125 @@ export function AgentsChatSidebar({
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-3">
           <NewChatButton collapsed={collapsed} onNavigate={onCloseMobile} />
 
-          <section className="space-y-1" aria-label="Recent conversations">
-            {!collapsed ? (
-              <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
-                Recents
-              </p>
-            ) : null}
-            {conversations.length > 0 ? (
-              conversations.map((conversation) => (
-                <ConversationRow
-                  key={conversation.id}
-                  conversation={conversation}
-                  active={isActive(pathname, conversation.id)}
-                  collapsed={collapsed}
-                  onSelect={onCloseMobile}
-                />
-              ))
-            ) : null}
-          </section>
+          {collapsed ? (
+            /* Collapsed sidebar: category icons with dropdown lists */
+            <nav className="space-y-1" aria-label="Conversations">
+              {conversations.filter((c) => c.pinned).length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title="Pinned chats"
+                      className="flex w-full items-center justify-center rounded-lg px-0 py-2 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    >
+                      <Pin aria-hidden="true" className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="right" align="start" sideOffset={8}>
+                    <DropdownMenuLabel>Pinned</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {conversations
+                      .filter((conversation) => conversation.pinned)
+                      .map((conversation) => (
+                        <DropdownMenuItem key={conversation.id} asChild>
+                          <Link
+                            href={`/dashboard/agents/c/${conversation.id}`}
+                            onClick={onCloseMobile}
+                            className="w-full truncate"
+                          >
+                            {conversation.title}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="Recent chats"
+                    className="flex w-full items-center justify-center rounded-lg px-0 py-2 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  >
+                    <MessageSquareText aria-hidden="true" className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start" sideOffset={8}>
+                  <DropdownMenuLabel>Recents</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {conversations.length > 0 ? (
+                    conversations.map((conversation) => (
+                      <DropdownMenuItem key={conversation.id} asChild>
+                        <Link
+                          href={`/dashboard/agents/c/${conversation.id}`}
+                          onClick={onCloseMobile}
+                          className="w-full truncate"
+                        >
+                          {conversation.title}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground">No chats yet</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </nav>
+          ) : (
+            /* Expanded sidebar: section headers with conversation rows */
+            <>
+              {conversations.filter((c) => c.pinned).length > 0 && (
+                <section className="space-y-1" aria-label="Pinned conversations">
+                  <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                    Pinned
+                  </p>
+                  {conversations
+                    .filter((conversation) => conversation.pinned)
+                    .map((conversation) => (
+                      <ConversationRow
+                        key={conversation.id}
+                        conversation={conversation}
+                        active={isActive(pathname, conversation.id)}
+                        collapsed={collapsed}
+                        onSelect={onCloseMobile}
+                        onRename={() => handleRename(conversation)}
+                        onDelete={() => handleDelete(conversation)}
+                        onTogglePin={() => handleTogglePin(conversation)}
+                      />
+                    ))}
+                </section>
+              )}
+
+              <section className="space-y-1" aria-label="Recent conversations">
+                <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                  Recents
+                </p>
+                {conversations.filter((c) => !c.pinned).length > 0 ? (
+                  conversations
+                    .filter((conversation) => !conversation.pinned)
+                    .map((conversation) => (
+                      <ConversationRow
+                        key={conversation.id}
+                        conversation={conversation}
+                        active={isActive(pathname, conversation.id)}
+                        collapsed={collapsed}
+                        onSelect={onCloseMobile}
+                        onRename={() => handleRename(conversation)}
+                        onDelete={() => handleDelete(conversation)}
+                        onTogglePin={() => handleTogglePin(conversation)}
+                      />
+                    ))
+                ) : (
+                  <p className="px-2.5 py-1 text-xs text-muted-foreground/60">
+                    No recent chats
+                  </p>
+                )}
+              </section>
+            </>
+          )}
         </div>
 
         <div className="border-t border-sidebar-border p-3">
@@ -191,40 +442,64 @@ export function AgentsChatSidebar({
           </Link>
         </div>
 
-        <footer className="space-y-2 border-t border-sidebar-border p-3">
-          <div className={cn("flex items-center gap-3", collapsed && "flex-col")}>
-            <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-              {avatarSrc(user) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarSrc(user) ?? ""}
-                  alt={user?.fullName ? `${user.fullName}'s avatar` : "Profile avatar"}
-                  className="size-full object-cover"
-                />
-              ) : (
-                (user?.fullName || user?.email || "A").slice(0, 2).toUpperCase()
-              )}
-            </div>
-            {!collapsed ? (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {user?.fullName || user?.email || "Account"}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LogOut aria-hidden="true" className="size-4" />
-            </button>
-          </div>
+        <footer className="border-t border-sidebar-border p-3">
+          <UserMenu collapsed={collapsed} />
         </footer>
       </aside>
+
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(event) => {
+            // Focus the input so the user can start typing immediately.
+            const input = document.querySelector<HTMLInputElement>(
+              '[data-slot="rename-chat-input"]',
+            );
+            if (input) {
+              event.preventDefault();
+              input.focus();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Rename chat</DialogTitle>
+            <DialogDescription>
+              Give this conversation a clearer name so it is easy to find later.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            data-slot="rename-chat-input"
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitRename();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setRenameTarget(null);
+              }
+            }}
+            placeholder="Chat name"
+            maxLength={60}
+            aria-label="Chat name"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={submitRename} disabled={!renameValue.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

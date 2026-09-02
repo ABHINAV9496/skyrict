@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from ai_agent.api.v1.schemas.chat import AttachmentData
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
@@ -74,18 +75,27 @@ class SupervisorRuntime:
         self,
         *,
         query: str,
+        attachments: list[AttachmentData] | None = None,
+        conversation_id: uuid.UUID | None = None,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[SupervisorEvent]:
         """Stream one full turn; registry provisioned-state is read per turn."""
         service = await self._build_service()
-        async for event in service.stream_answer(query=query, tenant_id=tenant_id, user_id=user_id):
+        async for event in service.stream_answer(
+            query=query,
+            attachments=attachments,
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        ):
             yield event
 
     async def _build_service(self) -> SupervisorService:
         repo = AgentRegistryRepository(self._session)
         provisioned = {name: await repo.get_enabled(name) for name in self.REGISTERED_AGENTS}
         return SupervisorService(
+            session=self._session,
             llm_router=self._llm_router,
             gateway_factory=self._gateway_factory,
             rag=self._rag,

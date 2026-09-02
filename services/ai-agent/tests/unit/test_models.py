@@ -65,6 +65,9 @@ class TestRegistry:
             "ai_follow_up_suggestions",
             # SKY-61 memory persistence
             "ai_semantic_memory",
+            # Conversation persistence (SKY-60)
+            "ai_conversations",
+            "ai_conversation_messages",
         }
         assert expected == set(Base.metadata.tables.keys())
 

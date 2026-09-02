@@ -28,6 +28,7 @@ from core.core.permissions import (
     ERP_AI_INVOKE,
     ERP_AI_NARRATOR_REFRESH,
     ERP_CRM_READ,
+    ERP_CRM_WRITE,
     ERP_FINANCE_READ,
     ERP_INVENTORY_AI_APPROVE,
     ERP_INVENTORY_READ,
@@ -45,11 +46,15 @@ _require_ai_invoke = require_permission(ERP_AI_INVOKE)
 _require_inventory_read = require_permission(ERP_INVENTORY_READ)
 _require_inventory_write = require_permission(ERP_INVENTORY_WRITE)
 _require_inventory_ai_approve = require_permission(ERP_INVENTORY_AI_APPROVE)
+_require_crm_read = require_permission(ERP_CRM_READ)
+_require_crm_write = require_permission(ERP_CRM_WRITE)
 
 _InvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
 _ReadDep = Annotated[dict[str, Any], Depends(_require_inventory_read)]
 _WriteDep = Annotated[dict[str, Any], Depends(_require_inventory_write)]
 _AIApproveDep = Annotated[dict[str, Any], Depends(_require_inventory_ai_approve)]
+_CrmReadDep = Annotated[dict[str, Any], Depends(_require_crm_read)]
+_CrmWriteDep = Annotated[dict[str, Any], Depends(_require_crm_write)]
 
 # --- Cross-module narrator (SKY-63) strict matrix ---------------------------
 # The digest spans all four ERP domains, so a caller must hold erp.ai.invoke
@@ -320,3 +325,68 @@ async def proxy_get_abc_summary(
 ) -> Response:
     """ABC band counts (A/B/C) -> ai-agent /api/v1/ai/abc/summary."""
     return await _proxy(request, client, "/api/v1/ai/abc/summary")
+
+
+# --- CRM AI (SKY-61) -------------------------------------------------------
+
+CRM_READ_DEPS = (_require_ai_invoke, _require_crm_read)
+CRM_WRITE_DEPS = (_require_ai_invoke, _require_crm_write)
+
+
+@router.get("/crm/follow-ups")
+async def proxy_list_crm_follow_ups(
+    request: Request,
+    _invoke: _InvokeDep,
+    _crm_read: _CrmReadDep,
+    client: _ClientDep,
+) -> Response:
+    """Pending CRM follow-up suggestions -> ai-agent /api/v1/ai/crm/follow-ups."""
+    return await _proxy(request, client, "/api/v1/ai/crm/follow-ups")
+
+
+@router.post("/crm/follow-ups/{suggestion_id}/apply")
+async def proxy_apply_crm_follow_up(
+    request: Request,
+    suggestion_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_write: _CrmWriteDep,
+    client: _ClientDep,
+) -> Response:
+    """Apply a CRM follow-up suggestion -> ai-agent /api/v1/ai/crm/follow-ups/{id}/apply."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/follow-ups/{suggestion_id}/apply")
+
+
+@router.post("/crm/follow-ups/{suggestion_id}/dismiss")
+async def proxy_dismiss_crm_follow_up(
+    request: Request,
+    suggestion_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_write: _CrmWriteDep,
+    client: _ClientDep,
+) -> Response:
+    """Dismiss a CRM follow-up suggestion -> ai-agent /api/v1/ai/crm/follow-ups/{id}/dismiss."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/follow-ups/{suggestion_id}/dismiss")
+
+
+@router.post("/crm/leads/{lead_id}/score")
+async def proxy_score_crm_lead(
+    request: Request,
+    lead_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_write: _CrmWriteDep,
+    client: _ClientDep,
+) -> Response:
+    """Score a CRM lead -> ai-agent /api/v1/ai/crm/leads/{id}/score."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/leads/{lead_id}/score")
+
+
+@router.get("/crm/opportunities/{opportunity_id}/health")
+async def proxy_crm_deal_health(
+    request: Request,
+    opportunity_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_read: _CrmReadDep,
+    client: _ClientDep,
+) -> Response:
+    """CRM deal health assessment -> ai-agent /api/v1/ai/crm/opportunities/{id}/health."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/opportunities/{opportunity_id}/health")

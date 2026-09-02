@@ -1,40 +1,125 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { appendMessage, getConversation } from "@/lib/mock/agents-store";
+import { assertSameOrigin, callBackend, resolveTenantSlug } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
+function extractToken(request: NextRequest): string | null {
+  const authorization = request.headers.get("authorization");
+  return authorization?.toLowerCase().startsWith("bearer ")
+    ? authorization.slice("Bearer ".length)
+    : null;
+}
+
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const conversation = getConversation(id);
-  if (!conversation) {
-    return NextResponse.json({ detail: "Conversation not found." }, { status: 404 });
+  if (!assertSameOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
-  return NextResponse.json({ data: conversation });
+
+  const { id } = await params;
+  const slug = resolveTenantSlug(request.headers.get("host"));
+
+  const result = await callBackend(`/ai/agents/conversations/${id}`, {
+    method: "GET",
+    tenantSlug: slug,
+    token: extractToken(request),
+    target: "core",
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { detail: result.payload?.detail ?? "Conversation not found." },
+      { status: result.status },
+    );
+  }
+  return NextResponse.json({ data: result.data });
 }
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!assertSameOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as {
-    content?: string;
-    role?: "user" | "agent";
-  };
-  const prompt = (body.content ?? "").trim();
-  if (!prompt) {
-    return NextResponse.json({ detail: "Message content is required." }, { status: 422 });
+  const slug = resolveTenantSlug(request.headers.get("host"));
+  const body = await request.json().catch(() => ({}));
+
+  const result = await callBackend(`/ai/agents/conversations/${id}`, {
+    method: "POST",
+    body,
+    tenantSlug: slug,
+    token: extractToken(request),
+    target: "core",
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { detail: result.payload?.detail ?? "Failed to append message." },
+      { status: result.status },
+    );
+  }
+  return NextResponse.json({ data: result.data }, { status: 201 });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  if (!assertSameOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
-  const role = body.role === "agent" ? "agent" : "user";
-  const conversation = appendMessage(id, role, prompt);
-  if (!conversation) {
-    return NextResponse.json({ detail: "Conversation not found." }, { status: 404 });
+  const { id } = await params;
+  const slug = resolveTenantSlug(request.headers.get("host"));
+  const body = await request.json().catch(() => ({}));
+
+  const result = await callBackend(`/ai/agents/conversations/${id}`, {
+    method: "PATCH",
+    body,
+    tenantSlug: slug,
+    token: extractToken(request),
+    target: "core",
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { detail: result.payload?.detail ?? "Failed to update conversation." },
+      { status: result.status },
+    );
+  }
+  return NextResponse.json({ data: result.data });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  if (!assertSameOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
-  return NextResponse.json({ data: conversation });
+  const { id } = await params;
+  const slug = resolveTenantSlug(request.headers.get("host"));
+
+  const result = await callBackend(`/ai/agents/conversations/${id}`, {
+    method: "DELETE",
+    tenantSlug: slug,
+    token: extractToken(request),
+    target: "core",
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { detail: result.payload?.detail ?? "Failed to delete conversation." },
+      { status: result.status },
+    );
+  }
+  return NextResponse.json({ data: { deleted: true } });
 }

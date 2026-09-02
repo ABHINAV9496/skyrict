@@ -145,8 +145,19 @@ export function parseSseFrame(frame: string): ChatStreamEvent | null {
   }
 }
 
+/** Attachment sent with a chat message (base64-encoded content for the backend). */
+export interface StreamAttachment {
+  name: string;
+  type: string;
+  size: number;
+  /** Base64-encoded file content (data-URL stripped — pure base64). */
+  base64: string;
+}
+
 export interface StreamAgentChatInput {
   message: string;
+  conversationId?: string;
+  attachments?: StreamAttachment[];
   signal?: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -157,10 +168,18 @@ export interface StreamAgentChatInput {
  * status before any SSE frame (e.g. 502 service unavailable).
  */
 export async function streamAgentChat(input: StreamAgentChatInput): Promise<void> {
+  const payload: Record<string, unknown> = { message: input.message };
+  if (input.conversationId) {
+    payload.conversation_id = input.conversationId;
+  }
+  if (input.attachments && input.attachments.length > 0) {
+    payload.attachments = input.attachments;
+  }
+
   const response = await fetchWithSession("/api/v1/ai/agents/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: input.message }),
+    body: JSON.stringify(payload),
     signal: input.signal,
   });
 

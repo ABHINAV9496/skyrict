@@ -1,7 +1,6 @@
 import { LayoutDashboard } from "lucide-react";
 
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
-import { CrmSectionTabs } from "@/components/dashboard/erp/crm/crm-section-tabs";
 import { CrmOverview } from "@/components/dashboard/erp/crm/crm-overview";
 
 export default function CrmOverviewPage() {
@@ -19,7 +18,6 @@ export default function CrmOverviewPage() {
             Pipeline, customers, leads, and follow-ups at a glance.
           </p>
         </div>
-        <CrmSectionTabs />
         <CrmOverview />
       </div>
     </RequirePermission>

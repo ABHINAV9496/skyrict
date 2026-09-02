@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BookOpenText, RefreshCw, Sparkles } from "lucide-react";
+import { BookOpenText, ChevronDown, ChevronUp, RefreshCw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getDigest, refreshDigest, type Digest } from "@/lib/api/ai-api";
@@ -30,6 +30,7 @@ function formatDate(asOf: string): string {
  */
 export function DigestCard() {
   const [status, setStatus] = useState<CardState>({ state: "loading" });
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -109,36 +110,53 @@ export function DigestCard() {
             </p>
           </div>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void handleRefresh()}>
-          <RefreshCw aria-hidden="true" className="size-3.5" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleRefresh()}>
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            aria-label={isExpanded ? "Collapse digest" : "Expand digest"}
+          >
+            {isExpanded ? (
+              <ChevronUp aria-hidden="true" className="size-4" />
+            ) : (
+              <ChevronDown aria-hidden="true" className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
-      <div className="px-5 py-4">
-        {isGenerated ? (
-          <div className="space-y-3">
-            <p className="font-display text-lg font-semibold text-foreground">{digest.title}</p>
-            {digest.summary ? (
-              <p className="text-sm leading-relaxed text-muted-foreground">{digest.summary}</p>
-            ) : null}
-            {digest.points.length > 0 ? (
-              <ul className="space-y-2">
-                {digest.points.map((point, index) => (
-                  <li key={index} className="flex gap-2.5 text-sm text-muted-foreground">
-                    <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-primary/70" />
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {digest.caveat ?? "No material cross-module activity to report today."}
-          </p>
-        )}
-      </div>
+      {isExpanded && (
+        <div className="px-5 py-4">
+          {isGenerated ? (
+            <div className="space-y-3">
+              <p className="font-display text-lg font-semibold text-foreground">{digest.title}</p>
+              {digest.summary ? (
+                <p className="text-sm leading-relaxed text-muted-foreground">{digest.summary}</p>
+              ) : null}
+              {digest.points.length > 0 ? (
+                <ul className="space-y-2">
+                  {digest.points.map((point, index) => (
+                    <li key={index} className="flex gap-2.5 text-sm text-muted-foreground">
+                      <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-primary/70" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {digest.caveat ?? "No material cross-module activity to report today."}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

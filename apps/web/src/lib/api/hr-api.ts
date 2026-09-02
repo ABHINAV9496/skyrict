@@ -688,6 +688,211 @@ export async function listEmployeeSuggestions(
 }
 
 // ---------------------------------------------------------------------------
+// HR AI — utilization alerts (8.1.4) + leave-pattern anomalies (8.2.1)
+// ---------------------------------------------------------------------------
+
+export interface HrUtilizationOrg {
+  totalAlerts: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+export interface HrUtilizationAlert {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  alertType: string;
+  severity: string;
+  balanceDays: number;
+  projectedForfeitureDays: number | null;
+  daysRemainingInYear: number | null;
+  leaveType: string | null;
+  status: string | null;
+  evidence: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface HrUtilizationOrgPayload {
+  total_alerts?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+interface HrUtilizationAlertPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  alert_type?: unknown;
+  severity?: unknown;
+  balance_days?: unknown;
+  projected_forfeiture_days?: unknown;
+  days_remaining_in_year?: unknown;
+  leave_type?: unknown;
+  status?: unknown;
+  evidence?: unknown;
+  created_at?: unknown;
+}
+
+function mapUtilizationAlert(payload: HrUtilizationAlertPayload): HrUtilizationAlert {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    alertType: String(payload.alert_type ?? ""),
+    severity: String(payload.severity ?? ""),
+    balanceDays: Number(payload.balance_days ?? 0),
+    projectedForfeitureDays:
+      payload.projected_forfeiture_days != null
+        ? Number(payload.projected_forfeiture_days)
+        : null,
+    daysRemainingInYear:
+      payload.days_remaining_in_year != null ? Number(payload.days_remaining_in_year) : null,
+    leaveType: payload.leave_type != null ? String(payload.leave_type) : null,
+    status: payload.status != null ? String(payload.status) : null,
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+/** L1 usage-balance alert aggregate (never carries per-person values). */
+export async function getUtilizationSummary(): Promise<HrUtilizationOrg | null> {
+  const raw = await apiFetch<HrUtilizationOrgPayload | null>("/api/v1/ai/hr/alerts/utilization");
+  if (!raw) return null;
+  return {
+    totalAlerts: Number(raw.total_alerts ?? 0),
+    byType: Object.fromEntries(
+      Object.entries((raw.by_type ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    bySeverity: Object.fromEntries(
+      Object.entries((raw.by_severity ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    generatedAt: String(raw.generated_at ?? ""),
+    narrative: String(raw.narrative ?? ""),
+  };
+}
+
+/** L2 per-employee utilization alerts. Requires `erp.hr.ai.individual`. */
+export async function getEmployeeUtilization(employeeId: string): Promise<HrUtilizationAlert[]> {
+  const raw = await apiFetch<HrUtilizationAlertPayload[] | null>(
+    `/api/v1/ai/hr/alerts/utilization/${employeeId}`,
+  );
+  return Array.isArray(raw) ? raw.map(mapUtilizationAlert) : [];
+}
+
+export interface HrAnomalyOrg {
+  totalAnomalies: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+export interface HrLeaveAnomaly {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  anomalyType: string;
+  severity: string;
+  title: string;
+  description: string;
+  teamSize: number;
+  evidence: Record<string, unknown>;
+  status: string | null;
+  createdAt: string;
+}
+
+interface HrAnomalyOrgPayload {
+  total_anomalies?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+interface HrLeaveAnomalyPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  anomaly_type?: unknown;
+  severity?: unknown;
+  title?: unknown;
+  description?: unknown;
+  team_size?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  created_at?: unknown;
+}
+
+function mapLeaveAnomaly(payload: HrLeaveAnomalyPayload): HrLeaveAnomaly {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    anomalyType: String(payload.anomaly_type ?? ""),
+    severity: String(payload.severity ?? ""),
+    title: String(payload.title ?? ""),
+    description: String(payload.description ?? ""),
+    teamSize: Number(payload.team_size ?? 0),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status: payload.status != null ? String(payload.status) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+/** L1 leave-pattern anomaly aggregate (never carries per-person values). */
+export async function getAnomalySummary(): Promise<HrAnomalyOrg | null> {
+  const raw = await apiFetch<HrAnomalyOrgPayload | null>("/api/v1/ai/hr/alerts/anomalies");
+  if (!raw) return null;
+  return {
+    totalAnomalies: Number(raw.total_anomalies ?? 0),
+    byType: Object.fromEntries(
+      Object.entries((raw.by_type ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    bySeverity: Object.fromEntries(
+      Object.entries((raw.by_severity ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    generatedAt: String(raw.generated_at ?? ""),
+    narrative: String(raw.narrative ?? ""),
+  };
+}
+
+/** L2 per-employee leave-pattern anomalies. Requires `erp.hr.ai.individual`. */
+export async function getEmployeeAnomalies(employeeId: string): Promise<HrLeaveAnomaly[]> {
+  const raw = await apiFetch<HrLeaveAnomalyPayload[] | null>(
+    `/api/v1/ai/hr/alerts/anomalies/${employeeId}`,
+  );
+  return Array.isArray(raw) ? raw.map(mapLeaveAnomaly) : [];
+}
+
+// ---------------------------------------------------------------------------
 // HR AI — data quality (8.1.3): L1 org KPI + L2 per-employee drill-down
 // ---------------------------------------------------------------------------
 

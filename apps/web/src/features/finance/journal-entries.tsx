@@ -44,7 +44,7 @@ import {
   resolvePeriodRange,
   type PeriodValue,
 } from "@/features/finance/components/period-selector";
-import { EntryStatusBadge, StatusBadge } from "@/features/finance/components/status-badge";
+import { EntryStatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
 import { DuplicatesWidget } from "@/features/finance/components/automation-widgets";
 import { cn } from "@/lib/utils";
@@ -628,17 +628,7 @@ function CreateJournalEntryDialog({
 const columns: FinanceColumn<JournalEntry>[] = [
   { label: "Date", render: (entry) => formatDate(entry.entry_date) },
   { label: "Memo", render: (entry) => entry.memo ?? "—" },
-  {
-    label: "Status",
-    render: (entry) => (
-      <span className="inline-flex items-center gap-1.5">
-        <EntryStatusBadge status={entry.status} />
-        {entry.reversal_entry_id ? (
-          <StatusBadge tone="warning">Reversed</StatusBadge>
-        ) : null}
-      </span>
-    ),
-  },
+  { label: "Status", render: (entry) => <EntryStatusBadge status={entry.status} /> },
   {
     label: "Debit",
     align: "right",

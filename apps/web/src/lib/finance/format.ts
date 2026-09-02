@@ -77,12 +77,13 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   expense: "Expense",
 };
 
-export type EntryStatus = "draft" | "posted" | "voided";
+export type EntryStatus = "draft" | "posted" | "voided" | "reversed";
 
 export const ENTRY_STATUS_LABELS: Record<EntryStatus, string> = {
   draft: "Draft",
   posted: "Posted",
   voided: "Voided",
+  reversed: "Reversed",
 };
 
 export type InvoiceStatus = "draft" | "issued" | "approved" | "paid" | "voided";

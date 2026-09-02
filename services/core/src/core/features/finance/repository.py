@@ -1146,7 +1146,6 @@ class FinanceRepository:
             .where(
                 ErpJournalEntryModel.tenant_id == tenant_id,
                 ErpJournalEntryModel.status == EntryStatus.POSTED,
-                ErpJournalEntryModel.reversal_entry_id.is_(None),
                 ErpJournalEntryModel.memo.isnot(None),
             )
             .group_by(ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date)
@@ -1161,7 +1160,6 @@ class FinanceRepository:
                 .where(
                     ErpJournalEntryModel.tenant_id == tenant_id,
                     ErpJournalEntryModel.status == EntryStatus.POSTED,
-                    ErpJournalEntryModel.reversal_entry_id.is_(None),
                     ErpJournalEntryModel.memo == row.memo,
                     ErpJournalEntryModel.entry_date == row.entry_date,
                 )
@@ -1436,38 +1434,8 @@ class FinanceRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None or model.status != EntryStatus.POSTED:
             return None
-        if model.reversal_entry_id is not None:
-            return None
-        if model.memo and model.memo.startswith("Reversal of"):
-            return None
 
-        source_lines = await self._journal_lines(entry_id, tenant_id)
-        reversal = ErpJournalEntryModel(
-            tenant_id=tenant_id,
-            entry_date=model.entry_date,
-            memo=f"Reversal of {model.memo or model.id}",
-            status=EntryStatus.POSTED,
-            source="manual",
-            source_ref=None,
-            posted_at=reversed_at,
-            posted_by_user_id=reversed_by_user_id,
-            reversal_entry_id=None,
-        )
-        self.session.add(reversal)
-        await self.session.flush()
-        reversal_line_models = [
-            ErpJournalLineModel(
-                tenant_id=tenant_id,
-                entry_id=reversal.id,
-                account_id=line.account_id,
-                debit=line.credit,
-                credit=line.debit,
-                currency=line.currency,
-            )
-            for line in source_lines
-        ]
-        self.session.add_all(reversal_line_models)
-        model.reversal_entry_id = reversal.id
+        model.status = EntryStatus.REVERSED
         await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)

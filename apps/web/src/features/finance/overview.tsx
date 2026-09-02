@@ -9,6 +9,10 @@ import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { StatCardSkeleton } from "@/components/ui/page-skeletons";
 import {
   getProfitAndLoss,
+  getWorkingCapitalAlert,
+  getHealthScore,
+  getAnomalies,
+  scanAnomalies,
   listAccounts,
   listFiscalPeriods,
   listInvoices,
@@ -18,6 +22,9 @@ import {
   type Invoice,
   type JournalEntry,
   type ProfitAndLoss,
+  type WorkingCapitalAlert,
+  type HealthScore,
+  type FinanceAnomaly,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
@@ -36,6 +43,11 @@ import {
 import { EntryStatusBadge, InvoiceStatusBadge } from "@/features/finance/components/status-badge";
 import { KpiCard } from "@/features/finance/components/kpi-card";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
+import {
+  WorkingCapitalCard,
+  HealthScoreCard,
+  AnomalyFeed,
+} from "@/features/finance/components/automation-widgets";
 
 type Status =
   | { state: "loading" }
@@ -47,6 +59,10 @@ type Status =
       invoices: Invoice[];
       periods: FiscalPeriod[];
       pnl: ProfitAndLoss;
+      workingCapital: WorkingCapitalAlert;
+      health: HealthScore;
+      anomalies: FinanceAnomaly[];
+      scanning: boolean;
     };
 
 const entryColumns: FinanceColumn<JournalEntry>[] = [
@@ -123,7 +139,16 @@ export function FinanceOverview() {
     setStatus({ state: "loading" });
     try {
       const range = resolvePeriodRange(periodValue);
-      const [accounts, entries, invoices, periods] = await Promise.all([
+      const asOf = range.asOf ?? today();
+      const [
+        accounts,
+        entries,
+        invoices,
+        periods,
+        workingCapital,
+        health,
+        anomalies,
+      ] = await Promise.all([
         listAccounts(false),
         listJournalEntries({
           limit: 5,
@@ -132,6 +157,9 @@ export function FinanceOverview() {
         }),
         listInvoices({ limit: 200 }),
         listFiscalPeriods(),
+        getWorkingCapitalAlert(asOf),
+        getHealthScore(asOf),
+        getAnomalies().catch(() => []),
       ]);
       const pnlFrom =
         range.from ??
@@ -145,6 +173,10 @@ export function FinanceOverview() {
         invoices: invoices.data,
         periods,
         pnl,
+        workingCapital,
+        health,
+        anomalies,
+        scanning: false,
       });
     } catch (error) {
       setStatus({
@@ -153,6 +185,21 @@ export function FinanceOverview() {
       });
     }
   }, [periodValue]);
+
+  const runScan = useCallback(async () => {
+    if (status.state !== "ready" || status.scanning) return;
+    setStatus({ ...status, scanning: true });
+    try {
+      const detected = await scanAnomalies();
+      setStatus({ ...status, scanning: false, anomalies: detected });
+    } catch (error) {
+      setStatus({
+        ...status,
+        scanning: false,
+      });
+      void error;
+    }
+  }, [status]);
 
   useEffect(() => {
     void load();
@@ -245,6 +292,18 @@ export function FinanceOverview() {
           value={formatMoney(outstanding)}
           hint={`${unpaidInvoices.length} unpaid`}
         />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <WorkingCapitalCard alert={status.workingCapital} />
+        <HealthScoreCard score={status.health} />
+        <div className="rounded-xl border border-border bg-card p-4">
+          <AnomalyFeed
+            anomalies={status.anomalies}
+            onScan={() => void runScan()}
+            scanning={status.scanning}
+          />
+        </div>
       </section>
 
       <section className="space-y-4 rounded-xl border border-border bg-card p-5">

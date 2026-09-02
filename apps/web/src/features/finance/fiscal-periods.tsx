@@ -24,7 +24,9 @@ import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   closeFiscalPeriod,
   createFiscalPeriod,
+  getCloseChecklist,
   listFiscalPeriods,
+  type CloseChecklist,
   type FiscalPeriod,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
@@ -39,6 +41,14 @@ import {
 } from "@/features/finance/components/period-selector";
 import { StatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState, FinanceErrorState } from "@/features/finance/components/state-cards";
+import { CloseChecklistWidget } from "@/features/finance/components/automation-widgets";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Status =
   | { state: "loading" }
@@ -186,6 +196,39 @@ export function FinanceFiscalPeriods() {
   const canApprove = hasPermission(permissions, "erp.finance.approve");
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
+  const [checklistPeriodId, setChecklistPeriodId] = useState<string>("");
+  const [checklist, setChecklist] = useState<CloseChecklist | null>(null);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+
+  const loadChecklist = useCallback(async (periodId: string) => {
+    if (!periodId) {
+      setChecklist(null);
+      setChecklistLoading(false);
+      setChecklistError(null);
+      return;
+    }
+    setChecklistLoading(true);
+    setChecklistError(null);
+    try {
+      setChecklist(await getCloseChecklist(periodId));
+    } catch (error) {
+      setChecklistError(
+        error instanceof ApiError ? error.message : "Could not load the close checklist.",
+      );
+      setChecklist(null);
+    } finally {
+      setChecklistLoading(false);
+    }
+  }, []);
+
+  // Default the checklist to the first period once loaded.
+  useEffect(() => {
+    if (status.state === "ready" && status.periods.length > 0 && !checklistPeriodId) {
+      setChecklistPeriodId(status.periods[0].id);
+      void loadChecklist(status.periods[0].id);
+    }
+  }, [status, checklistPeriodId, loadChecklist]);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -293,6 +336,31 @@ export function FinanceFiscalPeriods() {
           }
           actions={canWrite ? <CreateFiscalPeriodDialog onCreated={() => void load()} /> : null}
         />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="checklist-period">Period checklist</Label>
+            <Select value={checklistPeriodId} onValueChange={(value) => void loadChecklist(value)}>
+              <SelectTrigger id="checklist-period" className="w-64">
+                <SelectValue placeholder="Select a period" />
+              </SelectTrigger>
+              <SelectContent>
+                {status.periods.map((period) => (
+                  <SelectItem key={period.id} value={period.id}>
+                    {period.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {checklistError ? (
+          <FinanceErrorState message={checklistError} />
+        ) : (
+          <CloseChecklistWidget list={checklist} loading={checklistLoading} />
+        )}
       </div>
 
       {visiblePeriods.length === 0 ? (

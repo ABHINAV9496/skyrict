@@ -576,6 +576,14 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 55,
         "lines": [(12, Decimal("1200"), None), (2, None, Decimal("1200"))],
     },
+    {
+        "memo": "Software license purchase",
+        "source": "manual",
+        "source_ref": "JE-0020",
+        "status": EntryStatus.POSTED,
+        "days_ago": 25,
+        "lines": [(17, Decimal("1200"), None), (0, None, Decimal("1200"))],
+    },
 )
 
 # Invoices: (number, customer_name_idx, invoice_days_ago, due_days_ahead, status, total, lines)
@@ -781,6 +789,21 @@ INVOICE_ROWS: tuple[dict[str, object], ...] = (
         "lines": [
             {"desc": "API gateway setup", "account_idx": 10, "qty": 1, "price": Decimal("14400")},
             {"desc": "Security audit", "account_idx": 10, "qty": 1, "price": Decimal("8000")},
+        ],
+    },
+    {
+        "number": "INV-0013",
+        "days_ago": 300,
+        "due_ahead": -120,
+        "status": InvoiceStatus.APPROVED,
+        "total": Decimal("15800"),
+        "lines": [
+            {
+                "desc": "Legacy migration — overdue",
+                "account_idx": 10,
+                "qty": 1,
+                "price": Decimal("15800"),
+            },
         ],
     },
 )

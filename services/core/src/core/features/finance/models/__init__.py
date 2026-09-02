@@ -5,6 +5,8 @@ package from ``core.features`` would violate the import-linter layering
 contract, so the migration runner imports these models directly.
 """
 
+from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
+from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
@@ -12,8 +14,11 @@ from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
 from core.features.finance.models.payment import ErpPaymentModel
+from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 
 __all__ = [
+    "AiFinanceAnomalyModel",
+    "AiFinanceSuggestionModel",
     "ErpChartOfAccountModel",
     "ErpFiscalPeriodModel",
     "ErpInvoiceLineModel",
@@ -21,4 +26,5 @@ __all__ = [
     "ErpJournalEntryModel",
     "ErpJournalLineModel",
     "ErpPaymentModel",
+    "ErpTenantSettingModel",
 ]

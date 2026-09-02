@@ -679,3 +679,82 @@ The Finance integration ships as a **synchronous, DRAFT-only** seam on
   payroll-sourced post/void of the DRAFT entry, and any AI-driven
   decisioning — the existing Finance JE inbox (draft/post/void) is the
   human path today. `erp.payroll.ai.approve` remains reserved.
+
+---
+
+## 16. HR-AI-001 Unit B — Payroll anomaly engine (implemented)
+
+**Unit B** ships the payroll-anomaly engine as a real deployed surface (the
+ticket's Feature 3). It is a lazy-on-read TTL scan plus a **deterministic
+demo fixture** — see §16.3 for exactly which seed rows must fire.
+
+### 16.1 Engine & lifecycle
+
+- **Location:** pure engine `libs/skyrict-common/skyrict_common/ai_hr_rules.py`
+  (`detect_payroll_anomalies`) — the literal code core deploys. It lives in the
+  shared lib alongside the leave-anomaly rules (which the ai-agent eval
+  harness already grades via `anomaly_precision`), so a future payroll eval
+  set can reuse the exact same engine. The repository layer is
+  `core/features/ai_hr/payroll_anomaly_repository.py`
+  (projection + `replace_tenant_anomalies` regenerate) and the service is
+  `payroll_anomaly_service.py` (lazy TTL
+  `AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS`, default 7).
+- **Scan scope:** the tenant's **latest non-void run that holds payroll
+  entries** (a DRAFT run has no entries and is skipped) vs the **immediately
+  preceding** entry-bearing run. The inbox is regenerated per tenant each scan
+  (replace-tenant), so dispositions survive only until the next regeneration —
+  the same documented tradeoff as the leave-anomaly inbox.
+- **Rules (all scoped to the latest run):**
+
+| Anomaly | Detection | Severity |
+|---------|-----------|----------|
+| `net_pay_delta` | per-day net (`net/pay_days`) swings ≥ `delta_ratio` (default 1.5×) vs the prior run's per-day net | `ratio_severity`: ≥5 critical, ≥4 high, else medium |
+| `duplicate_account` | one normalized (case/punctuation-insensitive) payout account shared by 2+ employees in the latest run | medium (2 members), high (3+), **critical if a terminated employee is in the group** |
+| `ghost_employee` | latest run pays an employee whose employment is **terminated**, or who has **no bank account on file** | critical (terminated) / medium (no account) |
+
+- **Evidence hygiene:** `employee_id` is the finding's primary subject (for
+  `duplicate_account`, the group's highest-net member; all members are listed
+  in `evidence['employee_ids']`). Payout accounts are **masked to the last
+  four digits** — never a full account number — inside `evidence`. `title` and
+  `description` have no dedicated columns on `ai_payroll_anomaly_log`, so they
+  are persisted under the `evidence` keys and re-surfaced as first-class
+  fields on read.
+- **Lifecycle:** `open → acknowledged | dismissed | resolved`, each transition
+  emitting an audited event
+  (`hr.ai.anomaly.acknowledged/dismissed/resolved`). Rediposition of a
+  terminal state or an unknown status is rejected
+  (`IllegalStateTransitionError` → 409).
+
+### 16.2 API surface
+
+| Endpoint | Permission | Output |
+|----------|-----------|--------|
+| `GET /alerts/payroll` | `erp.ai.invoke` + `erp.hr.ai.read` | **L1** org feed (counts by type/severity, open count, deterministic narrative) |
+| `GET /alerts/payroll/{employee_id}` | + `erp.hr.ai.individual` | **L2** per-employee findings (403 + L1 403 body without the key) |
+| `POST /alerts/payroll/{anomaly_id}/disposition` | + `erp.hr.ai.acknowledge` | body `{status}` in `acknowledged\|dismissed\|resolved` → updated finding; audited |
+
+All under `/api/v1/ai/hr`. The BFF surface is `apps/web` → `hr-api.ts`
+(`getPayrollAnomalySummary` / `getEmployeePayrollAnomalies` /
+`disposePayrollAnomaly`) and the dashboard page at
+`/dashboard/erp/hr/payroll-anomalies`.
+
+### 16.3 Deterministic demo fixture
+
+The raw seed payroll is deliberately **clean**: every eligible employee is
+paid a flat `0.85×` of base each run, every employee has a unique bank
+account, and terminated/uncompensated employees never receive entries. The
+detector therefore finds **zero** anomalies against the unmodified seed. To
+keep the demo (and the Unit B live gate) reproducible on *any* seed day,
+`seed_demo.py` applies a scoped fixture to the **latest entry-bearing
+non-void run** (PR-2026-04) and the lazy scan rebuilds the inbox on the
+admin's first read because `latest_generated_at` starts `NULL`:
+
+| Finding | Exact seed construction | Expected result |
+|---------|-------------------------|-----------------|
+| `ghost_employee` (critical) | EMP-0014 (employee index 13, terminated + uncompensated, never seeded an entry) gets a **phantom entry** in PR-2026-04 only | one critical `ghost_employee` finding; `employee_id` = EMP-0014 |
+| `net_pay_delta` (medium) | employee index 0's PR-2026-04 `net` is bumped to `2.5×` its prior-run flat net via an `adjustments` bonus | `ratio` ≈ 2.5 → `ratio_severity` → medium |
+| `duplicate_account` (medium) | employee index 1's `bank_account` is rewritten to employee index 2's account | 2-member group → medium, masked `****xxxx`, both employee ids in evidence |
+
+These three fixtures are documented here so the live-gate expectations match
+the seed rows exactly; if the seed ever changes, the fixture block
+(`# ── PAYROLL ANOMALY FIXTURE` in `seed_demo.py`) must be reviewed with it.

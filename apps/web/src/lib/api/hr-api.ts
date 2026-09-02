@@ -1203,3 +1203,162 @@ export async function acknowledgeAttrition(employeeId: string): Promise<void> {
   await apiPost<void>(`/api/v1/ai/hr/attrition/${employeeId}/acknowledge`, {});
 }
 
+// ---------------------------------------------------------------------------
+// HR AI — payroll anomalies (HR-AI-001, Unit B): L1 feed / L2 drill-down /
+// dispositions
+// ---------------------------------------------------------------------------
+
+export type HrPayrollAnomalyType = "net_pay_delta" | "duplicate_account" | "ghost_employee";
+
+export interface HrPayrollAnomaly {
+  anomalyId: string;
+  runId: string;
+  runCode: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  employeeId: string | null;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  anomalyType: HrPayrollAnomalyType;
+  severity: "low" | "medium" | "high" | "critical";
+  title: string;
+  description: string;
+  evidence: Record<string, unknown>;
+  status: "open" | "acknowledged" | "dismissed" | "resolved";
+  acknowledgedAt: string | null;
+  createdAt: string;
+}
+
+export interface HrPayrollAnomalySummary {
+  totalAnomalies: number;
+  openAnomalies: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+interface HrPayrollAnomalyPayload {
+  anomaly_id?: unknown;
+  run_id?: unknown;
+  run_code?: unknown;
+  period_start?: unknown;
+  period_end?: unknown;
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  anomaly_type?: unknown;
+  severity?: unknown;
+  title?: unknown;
+  description?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  acknowledged_at?: unknown;
+  created_at?: unknown;
+}
+
+interface HrPayrollAnomalySummaryPayload {
+  total_anomalies?: unknown;
+  open_anomalies?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+function mapPayrollAnomaly(payload: HrPayrollAnomalyPayload): HrPayrollAnomaly {
+  const type = String(payload.anomaly_type ?? "net_pay_delta") as HrPayrollAnomalyType;
+  const status = String(payload.status ?? "open") as HrPayrollAnomaly["status"];
+  return {
+    anomalyId: String(payload.anomaly_id ?? ""),
+    runId: String(payload.run_id ?? ""),
+    runCode: payload.run_code != null ? String(payload.run_code) : null,
+    periodStart: payload.period_start != null ? String(payload.period_start) : null,
+    periodEnd: payload.period_end != null ? String(payload.period_end) : null,
+    employeeId: payload.employee_id != null ? String(payload.employee_id) : null,
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    anomalyType: type,
+    severity: String(payload.severity ?? "medium") as HrPayrollAnomaly["severity"],
+    title: String(payload.title ?? "Payroll anomaly"),
+    description: String(payload.description ?? ""),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status,
+    acknowledgedAt: payload.acknowledged_at != null ? String(payload.acknowledged_at) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+function mapPayrollAnomalySummary(
+  payload: HrPayrollAnomalySummaryPayload,
+): HrPayrollAnomalySummary {
+  return {
+    totalAnomalies: Number(payload.total_anomalies ?? 0),
+    openAnomalies: Number(payload.open_anomalies ?? 0),
+    byType:
+      payload.by_type != null && typeof payload.by_type === "object"
+        ? (payload.by_type as Record<string, number>)
+        : {},
+    bySeverity:
+      payload.by_severity != null && typeof payload.by_severity === "object"
+        ? (payload.by_severity as Record<string, number>)
+        : {},
+    generatedAt: String(payload.generated_at ?? ""),
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+/** L1 payroll-anomaly feed — aggregate counts only, never per-person data. */
+export async function getPayrollAnomalySummary(): Promise<HrPayrollAnomalySummary> {
+  const response = await fetchWithSession("/api/v1/ai/hr/alerts/payroll", {});
+  if (!response.ok) {
+    throw new ApiError(response.status, "Payroll anomaly feed could not be loaded.");
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrPayrollAnomalySummaryPayload | null;
+  };
+  if (payload.data && typeof payload.data === "object") {
+    return mapPayrollAnomalySummary(payload.data as HrPayrollAnomalySummaryPayload);
+  }
+  throw new ApiError(response.status, "Payroll anomaly feed could not be loaded.");
+}
+
+/** L2 per-employee payroll findings (needs `erp.hr.ai.individual`). */
+export async function getEmployeePayrollAnomalies(
+  employeeId: string,
+): Promise<HrPayrollAnomaly[]> {
+  const response = await fetchWithSession(`/api/v1/ai/hr/alerts/payroll/${employeeId}`, {});
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.status === 403
+        ? "erp.hr.ai.individual required for the individual view."
+        : "Payroll anomalies could not be loaded.",
+    );
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrPayrollAnomalyPayload[] | null;
+  };
+  return Array.isArray(payload.data)
+    ? (payload.data as HrPayrollAnomalyPayload[]).map(mapPayrollAnomaly)
+    : [];
+}
+
+/** Move one finding along `acknowledged | dismissed | resolved` (audited). */
+export async function disposePayrollAnomaly(
+  anomalyId: string,
+  status: "acknowledged" | "dismissed" | "resolved",
+): Promise<HrPayrollAnomaly> {
+  const response = await apiPost<HrPayrollAnomalyPayload>(
+    `/api/v1/ai/hr/alerts/payroll/${anomalyId}/disposition`,
+    { status },
+  );
+  return mapPayrollAnomaly(response);
+}
+

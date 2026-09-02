@@ -290,10 +290,255 @@ def detect_leave_pattern_anomalies(
     return findings
 
 
+# ---------------------------------------------------------------------------
+# Payroll anomaly rules (HR-AI-001 Unit B) — detection only, no I/O.
+#
+# The ``ai_payroll_anomaly_log`` table and its three anomaly types are defined
+# up front (Commit 4 table); the ENGINE lives here so core and the ai-agent
+# eval harness run the literal same code. Every finding must stay anonymous in
+# ``evidence``: bank accounts are masked to the last four digits, never full
+# numbers, and no name/number/email is ever written by the rules.
+#
+# Rules (latest-non-void-run scan, delta vs the immediately preceding run):
+#   - ``net_pay_delta``: an employee's net-per-payday in the latest run
+#     departs from their PRECEDING run by >= ``delta_ratio`` (>= 5x critical,
+#     >= 4x high, else medium via :func:`ratio_severity`).
+#   - ``duplicate_account``: the same payout account is shared by 2+ distinct
+#     employees in the latest run. Medium for 2, high for 3+, critical when a
+#     terminated employee is in the group. Row ``employee_id`` = the group's
+#     highest-net member (deterministic); all members are in ``evidence``.
+#   - ``ghost_employee``: the latest run pays an employee who is terminated
+#     (critical) or who has NO bank account on file (medium).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PayrollEntrySignal:
+    """One payroll-entry row as the rules see it (projected from ORM)."""
+
+    employee_id: uuid.UUID
+    run_code: str
+    period_start: date
+    period_end: date
+    base_salary: float
+    pay_days: int
+    gross: float
+    deductions: float
+    net: float
+
+
+@dataclass(frozen=True, slots=True)
+class PayrollEmployeeContext:
+    """HR facts about one employee needed by the payroll rules."""
+
+    employee_id: uuid.UUID
+    status: str
+    bank_account: str | None
+    termination_date: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PayrollAnomalyFinding:
+    """One computed payroll finding (``employee_id`` is account-level None)."""
+
+    employee_id: uuid.UUID | None
+    anomaly_type: str
+    severity: str
+    title: str
+    description: str
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+_PAYROLL_FINDING_TITLES: dict[str, str] = {
+    "net_pay_delta": "Unusual change in net pay",
+    "duplicate_account": "Shared payout account",
+    "ghost_employee": "Ghost employee payout",
+}
+
+
+def normalize_account(raw: str) -> str:
+    """Uppercase, alphanumeric-only account key for duplicate comparison."""
+    return "".join(ch for ch in raw if ch.isalnum()).casefold()
+
+
+def mask_account(raw: str) -> str:
+    """Last four digits only — never a full account number in evidence."""
+    normalized = normalize_account(raw)
+    if len(normalized) <= 4:
+        return "****"
+    return f"****{normalized[-4:]}"
+
+
+def _net_per_day(entry: PayrollEntrySignal) -> float:
+    return entry.net / max(entry.pay_days, 1)
+
+
+def detect_payroll_anomalies(
+    *,
+    latest_entries: Sequence[PayrollEntrySignal],
+    prior_entries: Sequence[PayrollEntrySignal],
+    employees: Mapping[uuid.UUID, PayrollEmployeeContext],
+    delta_ratio: float = 1.5,
+) -> list[PayrollAnomalyFinding]:
+    """Run every payroll rule over the latest run vs the preceding one.
+
+    ``latest_entries``/``prior_entries`` are the two runs' entry rows (the
+    caller resolves which run is "latest"); ``employees`` carries the HR facts.
+    Inputs are immutable; the caller owns persistence.
+    """
+    latest_by_emp = {e.employee_id: e for e in latest_entries}
+    prior_by_emp = {e.employee_id: e for e in prior_entries}
+    latest_code = (
+        latest_entries[0].run_code if latest_entries else "unknown"
+    )
+    findings: list[PayrollAnomalyFinding] = []
+
+    # net_pay_delta — magnitude of the per-payday swing vs the preceding run.
+    for emp_id, current in latest_by_emp.items():
+        prior = prior_by_emp.get(emp_id)
+        if prior is None:
+            continue
+        current_npd = _net_per_day(current)
+        prior_npd = _net_per_day(prior)
+        if prior_npd <= 0 or current_npd <= 0:
+            continue
+        ratio = max(current_npd, prior_npd) / min(current_npd, prior_npd)
+        if ratio < delta_ratio:
+            continue
+        direction = "increase" if current_npd >= prior_npd else "decrease"
+        findings.append(
+            PayrollAnomalyFinding(
+                employee_id=emp_id,
+                anomaly_type="net_pay_delta",
+                severity=ratio_severity(ratio),
+                title=_PAYROLL_FINDING_TITLES["net_pay_delta"],
+                description=(
+                    f"Net pay per day changed {ratio:.2f}x ({direction}) in "
+                    f"{current.run_code} against {prior.run_code}."
+                ),
+                evidence={
+                    "current_run": current.run_code,
+                    "prior_run": prior.run_code,
+                    "current_net": round(current.net, 2),
+                    "prior_net": round(prior.net, 2),
+                    "current_pay_days": current.pay_days,
+                    "prior_pay_days": prior.pay_days,
+                    "ratio": round(ratio, 3),
+                    "direction": direction,
+                },
+            )
+        )
+
+    # duplicate_account — one normalized payout account shared by 2+ employees.
+    groups: dict[str, list[uuid.UUID]] = {}
+    for emp_id, _current in latest_by_emp.items():
+        ctx = employees.get(emp_id)
+        account = (ctx.bank_account or "").strip() if ctx else ""
+        if not account:
+            continue
+        groups.setdefault(normalize_account(account), []).append(emp_id)
+    for account_key, member_ids in groups.items():
+        if len(member_ids) < 2:
+            continue
+        members = [(emp_id, employees.get(emp_id)) for emp_id in member_ids]
+        has_terminated = any(ctx is not None and ctx.status == "terminated" for _, ctx in members)
+        # Deterministic primary: highest net in the current run, then uuid.
+        def _net_of(emp_id: uuid.UUID, ctx: PayrollEmployeeContext | None) -> float:
+            entry = latest_by_emp.get(emp_id)
+            return entry.net if entry is not None else 0.0
+
+        primary = max(
+            (emp_id for emp_id, ctx in members),
+            key=lambda emp_id: (_net_of(emp_id, employees.get(emp_id)), emp_id),
+        )
+        masked = mask_account(account_key)
+        findings.append(
+            PayrollAnomalyFinding(
+                employee_id=primary,
+                anomaly_type="duplicate_account",
+                severity="critical" if has_terminated else ("high" if len(member_ids) >= 3 else "medium"),
+                title=_PAYROLL_FINDING_TITLES["duplicate_account"],
+                description=(
+                    f"{len(member_ids)} employees share payout account "
+                    f"{masked} in {latest_code}."
+                ),
+                evidence={
+                    "account_masked": masked,
+                    "employee_ids": [str(mid) for mid in member_ids],
+                    "employee_count": len(member_ids),
+                    "run_code": latest_code,
+                    "includes_terminated": has_terminated,
+                },
+            )
+        )
+
+    # ghost_employee — paid while terminated, or payable with no account.
+    for emp_id, current in latest_by_emp.items():
+        ctx = employees.get(emp_id)
+        if ctx is None:
+            continue
+        if ctx.status == "terminated":
+            findings.append(
+                PayrollAnomalyFinding(
+                    employee_id=emp_id,
+                    anomaly_type="ghost_employee",
+                    severity="critical",
+                    title=_PAYROLL_FINDING_TITLES["ghost_employee"],
+                    description=(
+                        f"{current.run_code} pays net {current.net} to an "
+                        "employee whose employment is terminated."
+                    ),
+                    evidence={
+                        "status": ctx.status,
+                        "termination_date": (
+                            ctx.termination_date.isoformat() if ctx.termination_date else None
+                        ),
+                        "run_code": current.run_code,
+                        "net": round(current.net, 2),
+                    },
+                )
+            )
+        elif not (ctx.bank_account or "").strip():
+            findings.append(
+                PayrollAnomalyFinding(
+                    employee_id=emp_id,
+                    anomaly_type="ghost_employee",
+                    severity="medium",
+                    title=_PAYROLL_FINDING_TITLES["ghost_employee"],
+                    description=(
+                        f"{current.run_code} pays an employee who has no bank "
+                        "account on file."
+                    ),
+                    evidence={
+                        "status": ctx.status,
+                        "has_bank_account": False,
+                        "run_code": current.run_code,
+                        "net": round(current.net, 2),
+                    },
+                )
+            )
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    return sorted(
+        findings,
+        key=lambda f: (
+            severity_order.get(f.severity, 3),
+            f.anomaly_type,
+            str(f.employee_id),
+        ),
+    )
+
+
 __all__ = [
     "AnomalyFinding",
     "Holiday",
+    "PayrollAnomalyFinding",
+    "PayrollEmployeeContext",
+    "PayrollEntrySignal",
     "RequestSignal",
     "detect_leave_pattern_anomalies",
+    "detect_payroll_anomalies",
+    "mask_account",
+    "normalize_account",
     "ratio_severity",
 ]

@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )
+    from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
     from core.features.ai_hr.quality_service import QualityService
     from core.features.ai_hr.service import AiHrService
     from core.features.ai_hr.suggestion_service import SuggestionService
@@ -527,6 +528,22 @@ def get_anomaly_service(
     return AnomalyService(
         repository=AiHrAnomalyRepository(db),
         refresh_days=settings.AI_HR_ANOMALY_SCAN_INTERVAL_DAYS,
+    )
+
+
+def get_payroll_anomaly_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> PayrollAnomalyService:
+    """Composition root for the payroll anomaly scanner (HR-AI-001, Unit B)."""
+    from core.core.config import settings
+    from core.features.ai_hr.payroll_anomaly_repository import AiHrPayrollAnomalyRepository
+    from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
+
+    return PayrollAnomalyService(
+        repository=AiHrPayrollAnomalyRepository(db),
+        refresh_days=settings.AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS,
+        audit=audit,
     )
 
 

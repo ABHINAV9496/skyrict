@@ -1735,9 +1735,15 @@ async def seed_demo_data(
     seeded employee also gets bank details and enrolled benefit elections so the
     pre-flight ``banking``/``benefit_elections`` warnings stay quiet on demos.
     """
+    from core.features.ai_hr.models.attrition_score import AttritionScoreModel
+    from core.features.ai_hr.models.compliance_check import ComplianceCheckModel
+    from core.features.ai_hr.models.employee_document import EmployeeDocumentModel
     from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
     from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
+    from core.features.ai_hr.models.leave_suggestion import LeaveSuggestionModel
+    from core.features.ai_hr.models.payroll_anomaly import PayrollAnomalyModel
     from core.features.ai_hr.models.public_holiday import AiHrPublicHolidayModel
+    from core.features.ai_hr.models.quality_score import QualityScoreModel
     from core.features.ai_hr.models.utilization_alert import (
         UtilizationAlertModel,
         UtilizationAlertType,
@@ -1766,6 +1772,11 @@ async def seed_demo_data(
     from core.features.payroll.models.compensation import CompensationModel
     from core.features.payroll.models.payroll_entry import PayrollEntryModel
     from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
+    from core.features.payroll.models.payslip_review import PayslipReviewModel
+    from core.features.payroll_automation.models import (
+        PayrollBatchItemModel,
+        PayrollBatchRunModel,
+    )
     from core.features.sales.models.order import ErpSalesOrderModel
     from core.features.sales.models.order_line import ErpSalesOrderLineModel
 
@@ -1832,9 +1843,14 @@ async def seed_demo_data(
                 ErpStockLevelModel,
                 ErpWarehouseModel,
                 ErpProductModel,
+                PayrollBatchItemModel,
+                PayrollBatchRunModel,
                 PayrollEntryModel,
+                PayslipReviewModel,
                 PayrollRunModel,
                 CompensationModel,
+                BenefitElectionModel,
+                BenefitPlanModel,
                 ErpPaymentModel,
                 ErpInvoiceLineModel,
                 ErpInvoiceModel,
@@ -1850,6 +1866,12 @@ async def seed_demo_data(
                 AiHrPublicHolidayModel,
                 UtilizationAlertModel,
                 LeaveAnomalyModel,
+                LeaveSuggestionModel,
+                PayrollAnomalyModel,
+                EmployeeDocumentModel,
+                AttritionScoreModel,
+                ComplianceCheckModel,
+                QualityScoreModel,
                 EmployeeModel,
                 DepartmentModel,
             ):
@@ -2382,6 +2404,90 @@ async def seed_demo_data(
             run.total_net = net if net > 0 else None
 
         counts["payroll_runs"] = len(PAYROLL_RUN_ROWS)
+
+        # ── PAYROLL ANOMALY FIXTURE (HR-AI-001, Unit B) ─────────────────────
+        # The DEMO payroll data is deliberately CLEAN: every eligible employee
+        # is paid a flat 0.85x of base each run, every employee has a unique
+        # bank account, and terminated/uncompensated employees are never paid.
+        # The detection engine therefore finds ZERO anomalies against the raw
+        # seed. To make the demo (and the Unit B live gate) deterministic we
+        # introduce THREE controlled findings, all scoped to the LATEST run
+        # that holds entries (PR-2026-04) so the lazy scan reproduces them:
+        #   ghost_employee (critical): EMP-0014 (employee index 13) is
+        #     terminated AND uncompensated, so the seed never gives it an
+        #     entry. We add a phantom payable entry to PR-2026-04 only.
+        #   net_pay_delta (medium): employee index 0's PR-2026-04 net is
+        #     bumped 2.5x via an ``adjustments`` bonus (~2.5x the prior run's
+        #     flat net) -> ratio_severity rules it medium.
+        #   duplicate_account (medium): employees index 1 and index 2 are made
+        #     to share the SAME normalised bank account (2 members -> medium).
+        # Hitting exactly these keeps the inbox deterministic on ANY seed day.
+        latest_run = (
+            await session.execute(
+                select(PayrollRunModel)
+                .where(
+                    PayrollRunModel.tenant_id == tenant_id,
+                    PayrollRunModel.status != PayrollRunStatus.VOID,
+                    PayrollRunModel.period_start
+                    < date.fromisoformat(str(PAYROLL_RUN_ROWS[-1]["start"])),
+                )
+                .order_by(PayrollRunModel.period_start.desc())
+            )
+        ).scalars().first()
+        if latest_run is not None and len(emp_ids) > 13:
+            # ghost: pay the terminated + uncompensated EMP-0014 in the latest run.
+            ghost_base = Decimal("7000")
+            ghost_net = ghost_base - ghost_base * Decimal("0.15")
+            session.add(
+                PayrollEntryModel(
+                    tenant_id=tenant_id,
+                    run_id=latest_run.id,
+                    employee_id=emp_ids[13],
+                    base_salary=ghost_base,
+                    pay_days=22,
+                    gross=ghost_base,
+                    deductions=ghost_base * Decimal("0.15"),
+                    net=ghost_net,
+                    adjustments={"fixture": "ghost_employee"},
+                )
+            )
+            # net_pay_delta: bump employee 0's latest-run net 2.5x (medium).
+            latest_run_code = str(latest_run.run_code or "")
+            e0_entry = (
+                await session.execute(
+                    select(PayrollEntryModel).where(
+                        PayrollEntryModel.tenant_id == tenant_id,
+                        PayrollEntryModel.run_id == latest_run.id,
+                        PayrollEntryModel.employee_id == emp_ids[0],
+                    )
+                )
+            ).scalars().first()
+            if e0_entry is not None:
+                base_net = Decimal(str(e0_entry.net))
+                tripled_net = base_net * Decimal("2.5")
+                e0_entry.net = tripled_net
+                e0_entry.gross = tripled_net + e0_entry.deductions
+                e0_entry.adjustments = {"fixture": "net_pay_delta", "run": latest_run_code}
+            # duplicate_account: employee 1 reuses employee 2's bank account.
+            if len(emp_ids) > 2:
+                emp_1 = (
+                    await session.execute(
+                        select(EmployeeModel).where(
+                            EmployeeModel.tenant_id == tenant_id,
+                            EmployeeModel.id == emp_ids[1],
+                        )
+                    )
+                ).scalars().first()
+                emp_2 = (
+                    await session.execute(
+                        select(EmployeeModel).where(
+                            EmployeeModel.tenant_id == tenant_id,
+                            EmployeeModel.id == emp_ids[2],
+                        )
+                    )
+                ).scalars().first()
+                if emp_1 is not None and emp_2 is not None:
+                    emp_1.bank_account = emp_2.bank_account
 
         # ── SALES ORDERS + LINES ─────────────────────────────────────
         for idx, row in enumerate(SALES_ORDER_ROWS):

@@ -31,6 +31,7 @@ from core.api.deps import (
     get_eval_repository,
     get_hr_ai_individual,
     get_pattern_data_repository,
+    get_payroll_anomaly_service,
     get_quality_service,
     get_suggestion_service,
     get_utilization_service,
@@ -53,6 +54,7 @@ from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
 from core.features.ai_hr.eval_repository import EvalRunRepository
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
+from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
 from core.features.ai_hr.schemas import (
     AnomalyOrgOut,
@@ -66,6 +68,9 @@ from core.features.ai_hr.schemas import (
     LeaveBlackoutWrite,
     LeaveSuggestionOut,
     OverviewOut,
+    PayrollAnomalyDispositionWrite,
+    PayrollAnomalyOrgOut,
+    PayrollAnomalyOut,
     PublicHolidayOut,
     PublicHolidayWrite,
     QualityOrgOut,
@@ -81,6 +86,8 @@ from core.features.ai_hr.schemas import (
     employee_quality_to_out,
     leave_blackout_to_out,
     overview_to_out,
+    payroll_anomaly_org_to_out,
+    payroll_anomaly_to_out,
     public_holiday_to_out,
     quality_org_to_out,
     suggestion_org_to_out,
@@ -118,6 +125,9 @@ _QualityServiceDep = Annotated[QualityService, Depends(get_quality_service)]
 _UtilizationServiceDep = Annotated[UtilizationService, Depends(get_utilization_service)]
 _AnomalyServiceDep = Annotated[AnomalyService, Depends(get_anomaly_service)]
 _SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_service)]
+_PayrollAnomalyServiceDep = Annotated[
+    PayrollAnomalyService, Depends(get_payroll_anomaly_service)
+]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
 _PatternDataRepositoryDep = Annotated[
     AiHrPatternDataRepository, Depends(get_pattern_data_repository)
@@ -337,6 +347,71 @@ async def anomaly_employee(
     return ResponseEnvelope(
         data=[anomaly_to_out(a) for a in anomalies],
         message="HR AI employee leave anomaly findings retrieved",
+    )
+
+
+@router.get("/alerts/payroll", response_model=ResponseEnvelope[PayrollAnomalyOrgOut])
+async def payroll_anomaly_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+) -> ResponseEnvelope[PayrollAnomalyOrgOut]:
+    """L1 payroll anomaly feed (HR-AI-001, Unit B). No per-person values."""
+    summary = await payroll_anomaly_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=payroll_anomaly_org_to_out(summary),
+        message="HR AI payroll anomaly feed retrieved",
+    )
+
+
+@router.get(
+    "/alerts/payroll/{employee_id}",
+    response_model=ResponseEnvelope[list[PayrollAnomalyOut]],
+)
+async def payroll_anomaly_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[PayrollAnomalyOut]] | JSONResponse:
+    """L2 per-employee payroll findings for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    findings = await payroll_anomaly_service.employee_anomalies(
+        _tenant_id(current_user), employee_id
+    )
+    return ResponseEnvelope(
+        data=[payroll_anomaly_to_out(a) for a in findings],
+        message="HR AI employee payroll anomaly findings retrieved",
+    )
+
+
+@router.post(
+    "/alerts/payroll/{anomaly_id}/disposition",
+    response_model=ResponseEnvelope[PayrollAnomalyOut],
+)
+async def payroll_anomaly_disposition(
+    anomaly_id: uuid.UUID,
+    body: PayrollAnomalyDispositionWrite,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiAckDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+) -> ResponseEnvelope[PayrollAnomalyOut]:
+    """Move one payroll finding along (acknowledged|dismissed|resolved)."""
+    updated = await payroll_anomaly_service.set_disposition(
+        _tenant_id(current_user),
+        anomaly_id,
+        status=body.status,
+        actor_user_id=current_user["user_id"],
+    )
+    return ResponseEnvelope(
+        data=payroll_anomaly_to_out(updated),
+        message="Payroll anomaly disposition applied",
     )
 
 

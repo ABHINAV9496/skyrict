@@ -153,6 +153,16 @@ class Settings(BaseSettings):
             "the latest scan is older than this many days."
         ),
     )
+    AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the payroll anomaly detector (HR-AI-001, Unit B): "
+            "the payroll-anomaly inbox is regenerated from the latest non-void "
+            "payroll run when it is read and the latest scan is older than this "
+            "many days."
+        ),
+    )
     AI_SYNC_TOKEN: str = Field(
         default="",
         description=(

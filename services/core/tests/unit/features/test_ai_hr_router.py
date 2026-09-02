@@ -450,3 +450,139 @@ def test_quality_refresh_exercises_invoke_and_read_guards() -> None:
     assert resp.status_code == 200
     assert hit == ["invoke", "read"]
     assert service.refresh_calls == [TENANT_ID]
+
+
+# ---------------------------------------------------------------------------
+# Payroll anomaly endpoints (HR-AI-001, Unit B)
+# ---------------------------------------------------------------------------
+
+
+class _FakePayrollAnomalyService:
+    def __init__(self) -> None:
+        self.org_calls: list[uuid.UUID] = []
+        self.employee_calls: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.disposition_calls: list[tuple[uuid.UUID, uuid.UUID, str, uuid.UUID]] = []
+
+    async def org_feed(self, tenant_id: uuid.UUID) -> object:
+        self.org_calls.append(tenant_id)
+        from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyOrgSummary
+
+        return PayrollAnomalyOrgSummary(
+            total_anomalies=4,
+            open_anomalies=2,
+            by_type={"net_pay_delta": 2, "ghost_employee": 1, "duplicate_account": 1},
+            by_severity={"medium": 3, "critical": 1},
+            generated_at=datetime(2026, 1, 1, tzinfo=UTC),
+            narrative="2 open payroll anomaly(-ies) ...",
+        )
+
+    async def employee_anomalies(self, tenant_id: uuid.UUID, employee_id: uuid.UUID) -> list[object]:
+        self.employee_calls.append((tenant_id, employee_id))
+        return [_payroll_anomaly()]
+
+    async def set_disposition(
+        self,
+        tenant_id: uuid.UUID,
+        anomaly_id: uuid.UUID,
+        *,
+        status: str,
+        actor_user_id: uuid.UUID,
+    ) -> object:
+        self.disposition_calls.append((tenant_id, anomaly_id, status, actor_user_id))
+        return _payroll_anomaly(status=status)
+
+
+def _payroll_anomaly(*, status: str = "open") -> object:
+    from core.features.ai_hr.payroll_anomaly_repository import PayrollAnomaly
+
+    return PayrollAnomaly(
+        run_id=EMP_ID,
+        employee_id=TENANT_ID,
+        anomaly_type="net_pay_delta",
+        severity="medium",
+        status=status,
+        title="Unusual change in net pay",
+        description="1.75x swing.",
+        evidence={"current_run": "PR-2026-04", "ratio": 1.75},
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        anomaly_id=ACTOR_ID,
+        department_name="Eng",
+    )
+
+
+def _build_payroll_app(service: _FakePayrollAnomalyService, *, individual: bool) -> TestClient:
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[ai_hr_router._require_hr_ai_read] = lambda: {"tenant_id": TENANT_ID}
+    app.dependency_overrides[ai_hr_router._require_hr_ai_acknowledge] = lambda: {
+        "tenant_id": TENANT_ID,
+        "user_id": ACTOR_ID,
+    }
+    from core.api.deps import get_payroll_anomaly_service
+
+    app.dependency_overrides[get_payroll_anomaly_service] = lambda: service
+    app.dependency_overrides[get_hr_ai_individual] = lambda: individual
+    return TestClient(app)
+
+
+def test_payroll_anomaly_org_feed_returns_l1_aggregate() -> None:
+    service = _FakePayrollAnomalyService()
+    client = _build_payroll_app(service, individual=False)
+
+    resp = client.get("/api/v1/ai/hr/alerts/payroll", headers={"authorization": "Bearer tok"})
+
+    assert resp.status_code == 200
+    assert service.org_calls == [TENANT_ID]
+    body = resp.json()["data"]
+    assert body["total_anomalies"] == 4
+    assert body["open_anomalies"] == 2
+    assert body["by_type"]["ghost_employee"] == 1
+    assert body["by_severity"]["critical"] == 1
+    assert "narrative" in body
+
+
+def test_payroll_anomaly_employee_feed_403_without_individual() -> None:
+    service = _FakePayrollAnomalyService()
+    client = _build_payroll_app(service, individual=False)
+
+    resp = client.get(
+        f"/api/v1/ai/hr/alerts/payroll/{TENANT_ID}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 403
+    assert service.employee_calls == []
+
+
+def test_payroll_anomaly_employee_feed_200_with_individual() -> None:
+    service = _FakePayrollAnomalyService()
+    client = _build_payroll_app(service, individual=True)
+
+    resp = client.get(
+        f"/api/v1/ai/hr/alerts/payroll/{TENANT_ID}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert service.employee_calls == [(TENANT_ID, TENANT_ID)]
+    row = resp.json()["data"][0]
+    assert row["anomaly_type"] == "net_pay_delta"
+    assert row["severity"] == "medium"
+    assert row["anomaly_id"] == str(ACTOR_ID)
+    assert row["department_name"] == "Eng"
+
+
+def test_payroll_anomaly_disposition_requires_ack_permission_and_returns_updated() -> None:
+    service = _FakePayrollAnomalyService()
+    client = _build_payroll_app(service, individual=False)
+
+    resp = client.post(
+        f"/api/v1/ai/hr/alerts/payroll/{ACTOR_ID}/disposition",
+        json={"status": "acknowledged"},
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert service.disposition_calls == [(TENANT_ID, ACTOR_ID, "acknowledged", ACTOR_ID)]
+    assert resp.json()["data"]["status"] == "acknowledged"

@@ -25,7 +25,7 @@ from core.features.reporting.schemas import (
 )
 from core.features.reporting.service import DashboardService
 
-router = APIRouter(prefix="/api/v1/dashboards", tags=["dashboards"])
+router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
 
 def _get_service(session: AsyncSession = Depends(get_db)) -> DashboardService:

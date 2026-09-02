@@ -29,6 +29,8 @@ export function ErpDashboardClient() {
   const [customizing, setCustomizing] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
   // AI suggestion state
   const [aiSuggestion, setAiSuggestion] = useState<{
@@ -43,7 +45,8 @@ export function ErpDashboardClient() {
     fetchLayout()
       .then((res) => {
         if (!cancelled) {
-          setLayout(res.layout);
+          const effective = res.layout && res.layout.length > 0 ? res.layout : getDefaultLayout();
+          setLayout(effective);
           setLoaded(true);
         }
       })
@@ -61,25 +64,36 @@ export function ErpDashboardClient() {
 
   const handleSave = useCallback(
     async (newLayout: CustomizeLayoutItem[]) => {
+      setIsSaving(true);
+      setErrorNotice(null);
       try {
         await saveLayout(newLayout);
         setLayout(newLayout);
         setCustomizing(false);
-      } catch {
-        // Optimistic update even if API fails (offline resilience)
-        setLayout(newLayout);
-        setCustomizing(false);
+      } catch (err) {
+        setErrorNotice(
+          err instanceof Error ? err.message : "Failed to save layout. Please try again.",
+        );
+      } finally {
+        setIsSaving(false);
       }
     },
     [],
   );
 
   const handleReset = useCallback(async () => {
+    setIsSaving(true);
+    setErrorNotice(null);
     try {
       await resetLayout();
       setLayout(getDefaultLayout());
-    } catch {
-      setLayout(getDefaultLayout());
+      setCustomizing(false);
+    } catch (err) {
+      setErrorNotice(
+        err instanceof Error ? err.message : "Failed to reset layout. Please try again.",
+      );
+    } finally {
+      setIsSaving(false);
     }
   }, []);
 
@@ -181,9 +195,14 @@ export function ErpDashboardClient() {
           }))}
           onSave={handleSave}
           onReset={handleReset}
-          onClose={() => setCustomizing(false)}
+          onClose={() => {
+            setErrorNotice(null);
+            setCustomizing(false);
+          }}
           onAiSuggestion={handleAiSuggestion}
           aiLoading={aiLoading}
+          errorNotice={errorNotice}
+          isSaving={isSaving}
         />
       )}
     </div>

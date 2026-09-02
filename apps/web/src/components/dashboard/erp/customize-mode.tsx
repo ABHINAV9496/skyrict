@@ -18,19 +18,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  GripVertical,
-  Eye,
-  EyeOff,
-  Minus,
-  Plus,
-  RotateCcw,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { AlertCircle, Eye, EyeOff, GripVertical, Minus, Plus, RotateCcw, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { getWidget, WIDGET_REGISTRY, type WidgetDefinition } from "@/lib/dashboard/widget-registry";
+import { getWidget, type WidgetDefinition } from "@/lib/dashboard/widget-registry";
 import { cn } from "@/lib/utils";
 
 export interface CustomizeLayoutItem {
@@ -44,15 +35,19 @@ interface CustomizeModeProps {
   /** Current layout. */
   layout: CustomizeLayoutItem[];
   /** Called when the user saves changes. */
-  onSave: (layout: CustomizeLayoutItem[]) => void;
+  onSave: (layout: CustomizeLayoutItem[]) => Promise<void> | void;
   /** Called when the user resets to default. */
-  onReset: () => void;
+  onReset: () => Promise<void> | void;
   /** Called to close the customize panel. */
   onClose: () => void;
   /** Called when the user requests an AI suggestion. */
   onAiSuggestion?: () => void;
   /** Whether an AI suggestion is loading. */
   aiLoading?: boolean;
+  /** Error message if save/reset failed. */
+  errorNotice?: string | null;
+  /** Whether save is in progress. */
+  isSaving?: boolean;
 }
 
 /**
@@ -72,6 +67,8 @@ export function CustomizeMode({
   onClose,
   onAiSuggestion,
   aiLoading,
+  errorNotice,
+  isSaving,
 }: CustomizeModeProps) {
   const [localLayout, setLocalLayout] = useState<CustomizeLayoutItem[]>(layout);
 
@@ -151,6 +148,12 @@ export function CustomizeMode({
 
       {/* Sortable widget list */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
+        {errorNotice && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{errorNotice}</span>
+          </div>
+        )}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={localLayout.map((item) => item.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
@@ -170,11 +173,11 @@ export function CustomizeMode({
 
       {/* Footer */}
       <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
           Cancel
         </Button>
-        <Button type="button" onClick={handleSave}>
-          Save Layout
+        <Button type="button" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save Layout"}
         </Button>
       </div>
     </div>

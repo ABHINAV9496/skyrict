@@ -8,6 +8,8 @@
 
 import type { ComponentType } from "react";
 
+import { AttentionStrip } from "@/components/dashboard/erp/attention-strip";
+import { CrossModuleKpis } from "@/components/dashboard/erp/cross-module-kpis";
 import { DigestCard } from "@/components/dashboard/erp/digest-card";
 import { ErpOverviewSummary } from "@/components/dashboard/erp/erp-overview-summary";
 import { ErpReportsKpis } from "@/components/dashboard/erp/erp-reports-kpis";
@@ -35,25 +37,28 @@ export interface WidgetDefinition {
 }
 
 /**
- * Canonical list of available widgets.  Order here is the default display
- * order when no user layout has been saved.
+ * Canonical list of available widgets. Order here prioritizes:
+ * 1. Attention & Exceptions strip
+ * 2. Cross-Module KPI Snapshot (Finance & Operations clusters)
+ * 3. Module Quick Links
+ * 4. Collapsible Intelligence Digest
  */
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
   {
-    id: "ai_digest",
-    title: "Intelligence Digest",
-    description: "Daily cross-module AI summary of key signals.",
-    component: DigestCard,
+    id: "attention_strip",
+    title: "Attention Needed",
+    description: "Urgent decision items across inventory, finance, sales, and CRM.",
+    component: AttentionStrip,
     defaultCols: 4,
     minCols: 2,
     maxCols: 4,
-    group: "insights",
+    group: "overview",
   },
   {
-    id: "erp_overview",
-    title: "At a Glance",
-    description: "Live open pipeline value and open orders count.",
-    component: ErpOverviewSummary,
+    id: "cross_module_kpis",
+    title: "Cross-Module Snapshot",
+    description: "Grouped financial and operational KPIs.",
+    component: CrossModuleKpis,
     defaultCols: 4,
     minCols: 2,
     maxCols: 4,
@@ -70,8 +75,28 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     group: "modules",
   },
   {
+    id: "ai_digest",
+    title: "Intelligence Digest",
+    description: "Daily cross-module AI summary of key signals.",
+    component: DigestCard,
+    defaultCols: 4,
+    minCols: 2,
+    maxCols: 4,
+    group: "insights",
+  },
+  {
+    id: "erp_overview",
+    title: "At a Glance (Legacy)",
+    description: "Live open pipeline value and open orders count.",
+    component: ErpOverviewSummary,
+    defaultCols: 4,
+    minCols: 2,
+    maxCols: 4,
+    group: "overview",
+  },
+  {
     id: "reports_kpis",
-    title: "Report KPIs",
+    title: "Report KPIs (Legacy)",
     description: "Key performance indicators from ERP reports.",
     component: ErpReportsKpis,
     defaultCols: 3,
@@ -87,14 +112,20 @@ export function getWidget(id: string): WidgetDefinition | undefined {
   return WIDGET_REGISTRY.find((w) => w.id === id);
 }
 
-/** Return the default layout (all widgets, default order and sizes). */
+/** Default 4-widget ERP layout in priority hierarchy order. */
+const DEFAULT_PRIMARY_WIDGET_IDS = ["attention_strip", "cross_module_kpis", "module_quick_links", "ai_digest"];
+
+/** Return the default layout (prioritized default widgets, order and sizes). */
 export function getDefaultLayout(): { id: string; order: number; cols: 1 | 2 | 3 | 4; visible: boolean }[] {
-  return WIDGET_REGISTRY.map((w, i) => ({
-    id: w.id,
-    order: i,
-    cols: w.defaultCols,
-    visible: true,
-  }));
+  return DEFAULT_PRIMARY_WIDGET_IDS.map((id, index) => {
+    const widget = getWidget(id);
+    return {
+      id,
+      order: index,
+      cols: widget ? widget.defaultCols : 4,
+      visible: true,
+    };
+  });
 }
 
 /** Filter widgets by a set of permission keys. */

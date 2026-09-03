@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from core.features.inventory.service import InventoryService
     from core.features.payroll.ports import PayslipApprovedNotifierPort
     from core.features.payroll.service import PayrollService
-from core.features.payroll_automation.service import PayrollAutomationService
+    from core.features.payroll_automation.service import PayrollAutomationService
     from core.features.reporting.service import DashboardService
     from core.features.sales.service import SalesService
 

@@ -55,3 +55,29 @@ to avoid fighting that stamp.
 environment — check the current stamp first.** The naming collision must be
 reconciled (one naming choice wins, migrations properly chained) whenever
 that teammate's branch actually merges.
+
+---
+
+## Entry C — bridgeon-solutions RBAC dropped by re-seed (restored)
+
+**Status: fixed, worth knowing if you hit "No spaces available".**
+
+A re-seed of `skyrict_identity` left the `bridgeon-solutions` tenant with its
+users but **no RBAC rows** (zero `roles`, `memberships`, and `user_roles` for
+that tenant). Symptom: `abhikrishna616@gmail.com` logs in fine but the
+frontend shows *"No spaces available yet. Contact a workspace owner to grant
+you access."* — there is no active membership/role scope behind the user.
+
+Restored on `2026-09-03` by running an idempotent script through the app's own
+repositories (`RoleRepository` + `MembershipRepository`), mirroring
+`identity/seed.py`:
+
+- created the 6 `SYSTEM_ROLE_DEFINITIONS` roles scoped to `bridgeon-solutions`
+- created the active `tenant_owner` membership for `abhikrishna616@gmail.com`
+- created the tenant-scoped `user_roles` grant
+
+Verified `roles_for_user = ['tenant_owner']` (full `*` → HR + payroll). A user
+must **log out/in** to pick up the restored membership.
+
+If a future re-seed drops RBAC again, re-run the equivalent restore (roles +
+membership + grant) rather than assuming the account is broken.

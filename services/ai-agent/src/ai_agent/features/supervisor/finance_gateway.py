@@ -14,13 +14,15 @@ Adapter notes (verified against core's routers):
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import httpx
 import structlog
 
 from ai_agent.core.exceptions import AiUnavailableError
+
+if TYPE_CHECKING:
+    from datetime import date
 
 logger = structlog.get_logger("ai_agent.finance_gateway")
 

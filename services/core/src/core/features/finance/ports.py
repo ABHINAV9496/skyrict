@@ -46,7 +46,6 @@ if TYPE_CHECKING:
         JournalEntry,
         Payment,
         ProfitAndLoss,
-        ReminderDraft,
         TenantSetting,
         TrialBalance,
         WorkingCapitalAlert,

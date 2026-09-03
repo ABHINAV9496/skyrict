@@ -571,9 +571,7 @@ def get_finance_automation_service_with_ai(
             accounts=accounts,
         )
 
-    async def ai_draft(
-        description: str, accounts: Sequence[ChartOfAccount]
-    ) -> DraftEntry | None:
+    async def ai_draft(description: str, accounts: Sequence[ChartOfAccount]) -> DraftEntry | None:
         return await draft_journal_entry_with_ai(
             client,
             authorization=authorization,

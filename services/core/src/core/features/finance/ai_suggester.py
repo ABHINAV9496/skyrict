@@ -140,13 +140,15 @@ async def draft_journal_entry_with_ai(
             continue
         if side not in ("debit", "credit"):
             side = "debit"
-        lines.append(DraftEntryLine(
-            account_code=code,
-            account_name=name,
-            amount=Decimal(str(amt)),
-            side=side,
-            description=str(rl.get("description") or "").strip(),
-        ))
+        lines.append(
+            DraftEntryLine(
+                account_code=code,
+                account_name=name,
+                amount=Decimal(str(amt)),
+                side=side,
+                description=str(rl.get("description") or "").strip(),
+            )
+        )
 
     if not lines:
         return None

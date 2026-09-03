@@ -137,7 +137,7 @@ _BALANCED_DRAFT = (
     ' "side": "debit", "description": "Purchase equipment"},'
     '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
     ' "side": "credit", "description": "Cash payment"}'
-    '],'
+    "],"
     ' "explanation": "Debit equipment, credit cash.",'
     ' "confidence": 0.92,'
     ' "reasoning": "Standard purchase entry."}'
@@ -165,7 +165,7 @@ async def test_draft_entry_unbalanced_still_returns() -> None:
         ' "side": "debit", "description": ""},'
         '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "Test", "confidence": 0.8, "reasoning": "Test"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -180,7 +180,7 @@ async def test_draft_entry_out_of_chart_lines_dropped() -> None:
         ' "side": "debit", "description": ""},'
         '{"account_code": "9999", "account_name": "Fake", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "Test", "confidence": 0.8, "reasoning": "Test"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -206,7 +206,7 @@ async def test_draft_entry_invalid_amount_skipped() -> None:
         ' "side": "debit", "description": ""},'
         '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "T", "confidence": 0.8, "reasoning": "T"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -222,7 +222,7 @@ async def test_draft_entry_invalid_side_defaults_debit() -> None:
         ' "side": "bogus", "description": ""},'
         '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "T", "confidence": 0.8, "reasoning": "T"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -237,7 +237,7 @@ async def test_draft_entry_invalid_confidence_defaults_05() -> None:
         ' "side": "debit", "description": ""},'
         '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "T", "confidence": "high", "reasoning": "T"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -272,7 +272,7 @@ async def test_draft_entry_missing_name_filled_from_chart() -> None:
         ' "side": "debit", "description": ""},'
         '{"account_code": "1000", "account_name": "Cash", "amount": 500,'
         ' "side": "credit", "description": ""}'
-        '],'
+        "],"
         ' "explanation": "T", "confidence": 0.8, "reasoning": "T"}'
     )
     result = await draft_entry(FakeLlm(text=text), _req())  # type: ignore[arg-type]
@@ -408,11 +408,7 @@ async def test_draft_reminder_unparseable_returns_none() -> None:
 
 
 async def test_draft_reminder_none_customer_name() -> None:
-    text = (
-        '{"subject": "Reminder",'
-        ' "body": "Please remit payment.",'
-        ' "tone": "firm"}'
-    )
+    text = '{"subject": "Reminder", "body": "Please remit payment.", "tone": "firm"}'
     result = await draft_reminder(
         FakeLlm(text=text),  # type: ignore[arg-type]
         customer_name=None,

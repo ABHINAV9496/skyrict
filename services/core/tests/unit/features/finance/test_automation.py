@@ -8,6 +8,8 @@ integration suite against real Postgres (test_finance_automation.py).
 
 from __future__ import annotations
 
+import uuid
+from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -24,9 +26,7 @@ from core.domain.entities import (
     AiFinanceAnomaly,
     ChartOfAccount,
     Invoice,
-    InvoiceLine,
     JournalEntry,
-    ReminderDraft,
 )
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus
 from core.features.finance.automation import FinanceAutomationService
@@ -241,9 +241,6 @@ async def test_suggest_empty_when_no_accounts() -> None:
 # ---------------------------------------------------------------------------
 # FIN-AI-001 helpers
 # ---------------------------------------------------------------------------
-
-import uuid
-from datetime import date, timedelta
 
 
 def _anomaly() -> AiFinanceAnomaly:

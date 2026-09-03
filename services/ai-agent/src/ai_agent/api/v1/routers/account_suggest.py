@@ -142,13 +142,13 @@ async def draft_journal_entry(
     return DraftEntryResponse(
         lines=[
             DraftLineResponse(
-                account_code=l.account_code,
-                account_name=l.account_name,
-                amount=l.amount,
-                side=l.side,
-                description=l.description,
+                account_code=line.account_code,
+                account_name=line.account_name,
+                amount=line.amount,
+                side=line.side,
+                description=line.description,
             )
-            for l in result.lines
+            for line in result.lines
         ],
         explanation=result.explanation,
         confidence=result.confidence,

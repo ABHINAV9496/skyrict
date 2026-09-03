@@ -226,9 +226,7 @@ class FinanceAutomationService:
         )
         return TenantSettingsResponse(working_capital_threshold=Decimal(str(threshold)))
 
-    async def draft_journal_entry(
-        self, tenant_id: uuid.UUID, description: str
-    ) -> DraftEntry:
+    async def draft_journal_entry(self, tenant_id: uuid.UUID, description: str) -> DraftEntry:
         accounts = await self.repo.list_accounts(tenant_id)
         if self.ai_draft is not None and accounts:
             try:
@@ -278,9 +276,7 @@ class FinanceAutomationService:
         )
         return draft
 
-    async def narrate_anomaly(
-        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
-    ) -> dict:
+    async def narrate_anomaly(self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID) -> dict[str, str]:
         anomaly = await self.repo.get_ai_anomaly(tenant_id, anomaly_id)
         if anomaly is None:
             raise NotFoundError(f"Anomaly {anomaly_id} not found")
@@ -300,9 +296,7 @@ class FinanceAutomationService:
         )
         return narration
 
-    async def generate_reminder(
-        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
-    ) -> ReminderDraft:
+    async def generate_reminder(self, tenant_id: uuid.UUID, invoice_id: uuid.UUID) -> ReminderDraft:
         invoice = await self.repo.get_invoice_by_id(tenant_id, invoice_id)
         if invoice is None:
             raise NotFoundError(f"Invoice {invoice_id} not found")
@@ -337,16 +331,18 @@ class FinanceAutomationService:
 
             days_overdue = (_date.today() - inv.due_date).days if inv.due_date else 0
             tone = "polite" if days_overdue < 30 else "firm" if days_overdue < 60 else "final"
-            reminders.append(ReminderDraft(
-                invoice_number=inv.invoice_number,
-                customer_name=None,
-                amount=inv.total,
-                days_overdue=days_overdue,
-                tone=tone,
-                subject=f"Payment Reminder — Invoice {inv.invoice_number}",
-                body=f"Please remit payment for invoice {inv.invoice_number} totaling {inv.total}.",
-                model_used="",
-            ))
+            reminders.append(
+                ReminderDraft(
+                    invoice_number=inv.invoice_number,
+                    customer_name=None,
+                    amount=inv.total,
+                    days_overdue=days_overdue,
+                    tone=tone,
+                    subject=f"Payment Reminder — Invoice {inv.invoice_number}",
+                    body=f"Please remit payment for invoice {inv.invoice_number} totaling {inv.total}.",
+                    model_used="",
+                )
+            )
         return reminders
 
 
@@ -518,13 +514,13 @@ async def draft_journal_entry(
         data=DraftEntryResponse(
             lines=[
                 DraftEntryLineResponse(
-                    account_code=l.account_code,
-                    account_name=l.account_name,
-                    amount=l.amount,
-                    side=l.side,
-                    description=l.description,
+                    account_code=line.account_code,
+                    account_name=line.account_name,
+                    amount=line.amount,
+                    side=line.side,
+                    description=line.description,
                 )
-                for l in draft.lines
+                for line in draft.lines
             ],
             explanation=draft.explanation,
             confidence=draft.confidence,
@@ -562,9 +558,7 @@ async def generate_reminder(
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[ReminderDraftLineResponse]:
     reminder = await svc.generate_reminder(_tenant_id(current_user), body.invoice_id)
-    return ResponseEnvelope(
-        data=ReminderDraftLineResponse.model_validate(reminder)
-    )
+    return ResponseEnvelope(data=ReminderDraftLineResponse.model_validate(reminder))
 
 
 @router.post(

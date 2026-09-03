@@ -16,12 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "UPDATE agent_registry SET enabled = true WHERE name = 'finance_assistant'"
-    )
+    op.execute("UPDATE agent_registry SET enabled = true WHERE name = 'finance_assistant'")
 
 
 def downgrade() -> None:
-    op.execute(
-        "UPDATE agent_registry SET enabled = false WHERE name = 'finance_assistant'"
-    )
+    op.execute("UPDATE agent_registry SET enabled = false WHERE name = 'finance_assistant'")

@@ -1589,12 +1589,14 @@ class FinanceRepository:
         if model is None:
             return None
         line_models = (
-            await self.session.execute(
-                select(ErpInvoiceLineModel).where(
-                    ErpInvoiceLineModel.invoice_id == model.id
+            (
+                await self.session.execute(
+                    select(ErpInvoiceLineModel).where(ErpInvoiceLineModel.invoice_id == model.id)
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         lines = [_invoice_line_from_orm(lm) for lm in line_models]
         return _invoice_from_orm(model, lines)
 
@@ -1614,11 +1616,17 @@ class FinanceRepository:
         invoices = []
         for model in models:
             line_models = (
-                await self.session.execute(
-                    select(ErpInvoiceLineModel).where(
-                        ErpInvoiceLineModel.invoice_id == model.id
+                (
+                    await self.session.execute(
+                        select(ErpInvoiceLineModel).where(
+                            ErpInvoiceLineModel.invoice_id == model.id
+                        )
                     )
                 )
-            ).scalars().all()
-            invoices.append(_invoice_from_orm(model, [_invoice_line_from_orm(lm) for lm in line_models]))
+                .scalars()
+                .all()
+            )
+            invoices.append(
+                _invoice_from_orm(model, [_invoice_line_from_orm(lm) for lm in line_models])
+            )
         return invoices

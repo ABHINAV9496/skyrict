@@ -145,9 +145,7 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
     )
 
 
-async def draft_entry(
-    llm_router: LlmRouter, req: SuggestRequest
-) -> DraftSuggestion | None:
+async def draft_entry(llm_router: LlmRouter, req: SuggestRequest) -> DraftSuggestion | None:
     """Generate a multi-line journal entry draft; return ``None`` on failure."""
     chart_json = json.dumps(
         [{"code": a.code, "name": a.name} for a in req.accounts],
@@ -201,20 +199,22 @@ async def draft_entry(
                 if a.code == code:
                     name_str = a.name
                     break
-        lines.append(JournalLineSuggestion(
-            account_code=code,
-            account_name=name_str,
-            amount=float(amt),
-            side=side_val,
-            description=str(raw.get("description") or "").strip(),
-        ))
+        lines.append(
+            JournalLineSuggestion(
+                account_code=code,
+                account_name=name_str,
+                amount=float(amt),
+                side=side_val,
+                description=str(raw.get("description") or "").strip(),
+            )
+        )
 
     if not lines:
         logger.warning("draft_entry.no_valid_lines")
         return None
 
-    total_debit = sum(l.amount for l in lines if l.side == "debit")
-    total_credit = sum(l.amount for l in lines if l.side == "credit")
+    total_debit = sum(line.amount for line in lines if line.side == "debit")
+    total_credit = sum(line.amount for line in lines if line.side == "credit")
     if abs(total_debit - total_credit) > 0.01:
         logger.warning("draft_entry.unbalanced", debit=total_debit, credit=total_credit)
         # still return but lower confidence
@@ -235,13 +235,9 @@ async def draft_entry(
 
 async def narrate_anomaly(
     llm_router: LlmRouter, *, anomaly_type: str, description: str, severity: str
-) -> dict | None:
+) -> dict[str, str] | None:
     """Generate a plain-English narration of a finance anomaly."""
-    user_prompt = (
-        f"Anomaly type: {anomaly_type}\n"
-        f"Severity: {severity}\n"
-        f"Description: {description}"
-    )
+    user_prompt = f"Anomaly type: {anomaly_type}\nSeverity: {severity}\nDescription: {description}"
     try:
         completion = await llm_router.complete(
             LlmRequest(
@@ -274,7 +270,7 @@ async def draft_reminder(
     amount: float,
     days_overdue: int,
     tone: str,
-) -> dict | None:
+) -> dict[str, str] | None:
     """Draft a payment reminder email."""
     user_prompt = (
         f"Customer: {customer_name or 'Valued Customer'}\n"

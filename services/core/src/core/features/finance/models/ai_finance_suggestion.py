@@ -36,7 +36,7 @@ class AiFinanceSuggestionModel(Base):
     suggested_code: Mapped[str] = mapped_column(String(32), nullable=False)
     suggested_name: Mapped[str] = mapped_column(String(255), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(3, 2), nullable=False)
-    lines_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    lines_json: Mapped[list[object] | None] = mapped_column(JSONB, nullable=True)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'pending'")

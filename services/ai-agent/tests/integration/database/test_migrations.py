@@ -207,6 +207,10 @@ async def _fetch_upgraded_artifacts(dsn: str) -> dict[str, Any]:
             "SELECT enabled FROM agent_registry WHERE name = 'crm_assistant'"
         )
 
+        artifacts["finance_assistant_enabled"] = await conn.fetchval(
+            "SELECT enabled FROM agent_registry WHERE name = 'finance_assistant'"
+        )
+
         artifacts["rls_tables"] = {
             row["tablename"]
             for row in await conn.fetch(
@@ -405,6 +409,8 @@ class TestAiMigrationRoundTrip:
             assert "finance_assistant" in artifacts["agent_names"], "finance_assistant not seeded"
             # SKY-61 migration 0010: crm_assistant enabled (was disabled in 0009).
             assert artifacts["crm_assistant_enabled"] is True, "crm_assistant not enabled"
+            # SKY-63 migration 0016: finance_assistant enabled (was disabled in 0009).
+            assert artifacts["finance_assistant_enabled"] is True, "finance_assistant not enabled"
 
             expected_policies = {f"tenant_isolation_{t}" for t in _TENANT_SCOPED_TABLES}
             assert artifacts["rls_tables"] == set(_TENANT_SCOPED_TABLES)

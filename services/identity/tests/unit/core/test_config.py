@@ -180,7 +180,7 @@ class TestProductionSafety:
                 CORS_ORIGINS=["https://app.skyrict.io"],
             )
         )
-        assert "https://app.skyrict.io" in s.CORS_ORIGINS
+        assert s.CORS_ORIGINS == ["https://app.skyrict.io"]
 
     # --- Check 4: BASE_DOMAIN required (tenant subdomain resolution) ---
 

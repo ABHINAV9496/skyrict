@@ -4,12 +4,12 @@ import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-acces
 import { PayrollAnomaliesClient } from "./payroll-anomalies";
 
 export const metadata: Metadata = {
-  title: "Payroll anomalies · HR",
+  title: "Payroll anomalies",
 };
 
 export default function PayrollAnomaliesPage() {
   return (
-    <ModuleAccessBoundary module="erp" permission="erp.hr.ai.read">
+    <ModuleAccessBoundary module="erp" permission="erp.payroll.ai.read">
       <PayrollAnomaliesClient />
     </ModuleAccessBoundary>
   );

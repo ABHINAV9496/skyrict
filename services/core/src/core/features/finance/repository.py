@@ -1561,3 +1561,64 @@ class FinanceRepository:
         )
         models = (await self.session.execute(stmt)).scalars().all()
         return [_ai_anomaly_from_orm(m) for m in models]
+
+    async def get_ai_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> AiFinanceAnomaly | None:
+        model = (
+            await self.session.execute(
+                select(AiFinanceAnomalyModel).where(
+                    AiFinanceAnomalyModel.tenant_id == tenant_id,
+                    AiFinanceAnomalyModel.id == anomaly_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return _ai_anomaly_from_orm(model) if model else None
+
+    async def get_invoice_by_id(
+        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> Invoice | None:
+        model = (
+            await self.session.execute(
+                select(ErpInvoiceModel).where(
+                    ErpInvoiceModel.tenant_id == tenant_id,
+                    ErpInvoiceModel.id == invoice_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if model is None:
+            return None
+        line_models = (
+            await self.session.execute(
+                select(ErpInvoiceLineModel).where(
+                    ErpInvoiceLineModel.invoice_id == model.id
+                )
+            )
+        ).scalars().all()
+        lines = [_invoice_line_from_orm(lm) for lm in line_models]
+        return _invoice_from_orm(model, lines)
+
+    async def list_invoices_overdue(self, tenant_id: uuid.UUID) -> Sequence[Invoice]:
+        from datetime import date as _date
+
+        stmt = (
+            select(ErpInvoiceModel)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]),
+                ErpInvoiceModel.due_date < _date.today(),
+            )
+            .order_by(ErpInvoiceModel.due_date.asc())
+        )
+        models = (await self.session.execute(stmt)).scalars().all()
+        invoices = []
+        for model in models:
+            line_models = (
+                await self.session.execute(
+                    select(ErpInvoiceLineModel).where(
+                        ErpInvoiceLineModel.invoice_id == model.id
+                    )
+                )
+            ).scalars().all()
+            invoices.append(_invoice_from_orm(model, [_invoice_line_from_orm(lm) for lm in line_models]))
+        return invoices

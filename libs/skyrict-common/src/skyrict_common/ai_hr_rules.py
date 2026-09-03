@@ -690,7 +690,7 @@ def detect_compliance_findings(
                     evidence={
                         "doc_type": "certification",
                         "document_id": str(cert.document_id),
-                        "expiry_date": cert.expiry_date.isoformat(),
+                        "expiry_date": cert.expiry_date.isoformat(),  # type: ignore[union-attr]
                         "days_late": days_late,
                     },
                 )

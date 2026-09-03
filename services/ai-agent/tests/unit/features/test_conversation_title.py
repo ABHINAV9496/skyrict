@@ -174,7 +174,7 @@ class TestScheduleTitleGeneration:
                 conversation_id=uuid.uuid4(),
                 tenant_id=uuid.uuid4(),
                 llm_router=_FakeRouter(),
-                session_factory=MagicMock(),
+                store_factory=MagicMock(),
             )
 
             mock_create_task.assert_called_once()
@@ -206,31 +206,22 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        fake_session = AsyncMock()
+        fake_router = _FakeRouter("Stock Level Inquiry")
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_router = _FakeRouter("Stock Level Inquiry")
-            # Create a fake session factory that yields our mock session
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=fake_router,
+            store_factory=fake_store_factory,
+        )
 
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=fake_router,
-                session_factory=fake_session_factory,
-            )
-
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="Stock Level Inquiry",
-                finalize=True,
-            )
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="Stock Level Inquiry",
+            finalize=True,
+        )
 
     @pytest.mark.asyncio
     async def test_greeting_skips_llm(self) -> None:
@@ -256,34 +247,25 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        fake_session = AsyncMock()
-
         fake_router = _FakeRouter("should not be called")
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=fake_router,
+            store_factory=fake_store_factory,
+        )
 
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=fake_router,
-                session_factory=fake_session_factory,
-            )
-
-            # LLM should NOT have been called; the greeting title must be
-            # non-finalizing so a later real question can replace it.
-            assert fake_router.call_count == 0
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title=GREETING_TITLE,
-                finalize=False,
-            )
+        # LLM should NOT have been called; the greeting title must be
+        # non-finalizing so a later real question can replace it.
+        assert fake_router.call_count == 0
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title=GREETING_TITLE,
+            finalize=False,
+        )
 
     @pytest.mark.asyncio
     async def test_idempotent_skips_if_already_generated(self) -> None:
@@ -303,28 +285,20 @@ class TestGenerateAndPersist:
         fake_repo = AsyncMock()
         fake_repo.get_conversation = AsyncMock(return_value=fake_conversation)
 
-        fake_session = AsyncMock()
         fake_router = _FakeRouter("should not be called")
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=fake_router,
+            store_factory=fake_store_factory,
+        )
 
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=fake_router,
-                session_factory=fake_session_factory,
-            )
-
-            # No messages fetched, no LLM call, no mark_title_generated
-            fake_repo.get_messages.assert_not_called()
-            assert fake_router.call_count == 0
-            fake_repo.mark_title_generated.assert_not_called()
+        # No messages fetched, no LLM call, no mark_title_generated
+        fake_repo.get_messages.assert_not_called()
+        assert fake_router.call_count == 0
+        fake_repo.mark_title_generated.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_failed_llm_does_not_crash(self) -> None:
@@ -350,34 +324,26 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        fake_session = AsyncMock()
         failing_router = _FailingRouter()
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        # Should NOT raise.
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=failing_router,
+            store_factory=fake_store_factory,
+        )
 
-            # Should NOT raise.
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=failing_router,
-                session_factory=fake_session_factory,
-            )
-
-            # The fallback is persisted (title never empty) but NOT finalized,
-            # so the next turn/page load retries and can replace it.
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="What's the stock level?",
-                finalize=False,
-            )
-            fake_session.commit.assert_awaited_once()
+        # The fallback is persisted (title never empty) but NOT finalized,
+        # so the next turn/page load retries and can replace it.
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="What's the stock level?",
+            finalize=False,
+        )
+        fake_repo.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_llm_failure_then_retry_succeeds(self) -> None:
@@ -403,47 +369,36 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        fake_session = AsyncMock()
+        # First attempt (simulating the failed background task).
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=_FailingRouter(),
+            store_factory=fake_store_factory,
+        )
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="What's the stock level?",
+            finalize=False,
+        )
 
-        def make_session_factory() -> MagicMock:
-            factory = MagicMock()
-            factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            factory.return_value.__aexit__ = AsyncMock(return_value=None)
-            return factory
-
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            # First attempt (simulating the failed background task).
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=_FailingRouter(),
-                session_factory=make_session_factory(),
-            )
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="What's the stock level?",
-                finalize=False,
-            )
-
-            # Second attempt (next turn / page load) succeeds and finalizes.
-            fake_repo.reset_mock()
-            fake_repo.mark_title_generated = AsyncMock(return_value=True)
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=_FakeRouter("Stock Level Inquiry"),
-                session_factory=make_session_factory(),
-            )
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="Stock Level Inquiry",
-                finalize=True,
-            )
+        # Second attempt (next turn / page load) succeeds and finalizes.
+        fake_repo.reset_mock()
+        fake_repo.mark_title_generated = AsyncMock(return_value=True)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=_FakeRouter("Stock Level Inquiry"),
+            store_factory=fake_store_factory,
+        )
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="Stock Level Inquiry",
+            finalize=True,
+        )
 
     @pytest.mark.asyncio
     async def test_blank_llm_output_falls_back_without_finalizing(self) -> None:
@@ -469,28 +424,20 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session = AsyncMock()
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=_FakeRouter("   "),
+            store_factory=fake_store_factory,
+        )
 
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=_FakeRouter("   "),
-                session_factory=fake_session_factory,
-            )
-
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="What's the stock level?",
-                finalize=False,
-            )
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="What's the stock level?",
+            finalize=False,
+        )
 
     @pytest.mark.asyncio
     async def test_greeting_then_substantive_titles_from_later_exchange(self) -> None:
@@ -518,32 +465,24 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session = AsyncMock()
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_router = _FakeRouter("Stock Level Inquiry")
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=fake_router,
+            store_factory=fake_store_factory,
+        )
 
-            fake_router = _FakeRouter("Stock Level Inquiry")
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=fake_router,
-                session_factory=fake_session_factory,
-            )
-
-            # The LLM was called once (not for the greeting pair) and the
-            # title was finalized from the substantive exchange.
-            assert fake_router.call_count == 1
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="Stock Level Inquiry",
-                finalize=True,
-            )
+        # The LLM was called once (not for the greeting pair) and the
+        # title was finalized from the substantive exchange.
+        assert fake_router.call_count == 1
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="Stock Level Inquiry",
+            finalize=True,
+        )
 
     @pytest.mark.asyncio
     async def test_legacy_placeholder_stays_retryable(self) -> None:
@@ -570,28 +509,20 @@ class TestGenerateAndPersist:
         fake_repo.get_messages = AsyncMock(return_value=fake_messages)
         fake_repo.mark_title_generated = AsyncMock(return_value=True)
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session = AsyncMock()
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=_FakeRouter("Q3 Headcount Planning"),
+            store_factory=fake_store_factory,
+        )
 
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=_FakeRouter("Q3 Headcount Planning"),
-                session_factory=fake_session_factory,
-            )
-
-            fake_repo.mark_title_generated.assert_called_once_with(
-                tenant_id=tenant_id,
-                conversation_id=conv_id,
-                title="Q3 Headcount Planning",
-                finalize=True,
-            )
+        fake_repo.mark_title_generated.assert_called_once_with(
+            tenant_id=tenant_id,
+            conversation_id=conv_id,
+            title="Q3 Headcount Planning",
+            finalize=True,
+        )
 
     @pytest.mark.asyncio
     async def test_conversation_not_found_does_not_crash(self) -> None:
@@ -604,24 +535,16 @@ class TestGenerateAndPersist:
         fake_repo = AsyncMock()
         fake_repo.get_conversation = AsyncMock(return_value=None)
 
-        fake_session = AsyncMock()
         fake_router = _FakeRouter()
 
-        with patch(
-            "ai_agent.db.conversation_repository.ConversationRepository",
-            return_value=fake_repo,
-        ):
-            fake_session_factory = MagicMock()
-            fake_session_factory.return_value.__aenter__ = AsyncMock(return_value=fake_session)
-            fake_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        # Should NOT raise
+        fake_store_factory = AsyncMock(return_value=fake_repo)
+        await _generate_and_persist(
+            conversation_id=conv_id,
+            tenant_id=tenant_id,
+            llm_router=fake_router,
+            store_factory=fake_store_factory,
+        )
 
-            # Should NOT raise
-            await _generate_and_persist(
-                conversation_id=conv_id,
-                tenant_id=tenant_id,
-                llm_router=fake_router,
-                session_factory=fake_session_factory,
-            )
-
-            fake_repo.get_messages.assert_not_called()
-            assert fake_router.call_count == 0
+        fake_repo.get_messages.assert_not_called()
+        assert fake_router.call_count == 0

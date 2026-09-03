@@ -24,16 +24,43 @@ real title.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
 from ai_agent.core.providers.base import LlmRequest
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from ai_agent.core.llm_router import LlmRouter
 
 logger = structlog.get_logger("ai_agent.title")
+
+
+class TitleStore(Protocol):
+    """DB persistence surface the title generator needs.
+
+    Lives here so ``features`` never imports ``ai_agent.db`` directly (the
+    import-linter contract "Only repositories touch the database layer" keeps
+    repository construction at the API/composition layer). The API router
+    adapts :class:`ConversationRepository` to this protocol.
+    """
+
+    async def get_conversation(
+        self, *, tenant_id: Any, conversation_id: Any
+    ) -> dict[str, Any] | None: ...
+
+    async def get_messages(
+        self, *, tenant_id: Any, conversation_id: Any
+    ) -> list[dict[str, Any]]: ...
+
+    async def mark_title_generated(
+        self, *, tenant_id: Any, conversation_id: Any, title: str, finalize: bool
+    ) -> bool: ...
+
+    async def commit(self) -> None: ...
+
 
 _TITLE_SYSTEM_PROMPT = """\
 You generate short, descriptive titles for chat conversations.
@@ -141,110 +168,109 @@ async def _generate_and_persist(
     conversation_id: Any,
     tenant_id: Any,
     llm_router: LlmRouter,
-    session_factory: Any,
+    store_factory: Callable[[], Awaitable[TitleStore]],
 ) -> None:
-    """Open a fresh DB session, generate the title, and persist it.
+    """Open a fresh persistence store, generate the title, and persist it.
 
     Runs entirely outside the request scope so it does not block the
-    response or participate in the request's transaction.
+    response or participate in the request's transaction. The caller supplies
+    ``store_factory`` (an API-layer adapter), so this feature module never
+    touches the database layer directly.
     """
     try:
-        async with session_factory() as session:
-            from ai_agent.db.conversation_repository import ConversationRepository
-
-            repo = ConversationRepository(session)
-            conversation = await repo.get_conversation(
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
+        store = await store_factory()
+        conversation = await store.get_conversation(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+        )
+        if conversation is None:
+            logger.warning(
+                "title_generation_conversation_not_found",
+                conversation_id=str(conversation_id),
             )
-            if conversation is None:
-                logger.warning(
-                    "title_generation_conversation_not_found",
-                    conversation_id=str(conversation_id),
-                )
+            return
+
+        # Idempotence: finalized substantive titles (and user renames)
+        # are never touched again. Only the legacy "New conversation"
+        # placeholder - a finalized row that predates this lifecycle -
+        # remains retryable.
+        if not is_conversation_title_retryable(
+            conversation["title"],
+            conversation["title_generated_at"],
+        ):
+            return
+
+        messages = await store.get_messages(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+        )
+
+        user_msg, assistant_msg = _select_substantive_exchange(messages)
+
+        if not user_msg or not assistant_msg:
+            # Greeting-only conversation (or the substantive question has
+            # no reply yet). Keep the deterministic title retryable so a
+            # real question later replaces "General greeting".
+            if conversation["title"] == GREETING_TITLE:
                 return
-
-            # Idempotence: finalized substantive titles (and user renames)
-            # are never touched again. Only the legacy "New conversation"
-            # placeholder - a finalized row that predates this lifecycle -
-            # remains retryable.
-            if not is_conversation_title_retryable(
-                conversation["title"],
-                conversation["title_generated_at"],
-            ):
-                return
-
-            messages = await repo.get_messages(
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
-            )
-
-            user_msg, assistant_msg = _select_substantive_exchange(messages)
-
-            if not user_msg or not assistant_msg:
-                # Greeting-only conversation (or the substantive question has
-                # no reply yet). Keep the deterministic title retryable so a
-                # real question later replaces "General greeting".
-                if conversation["title"] == GREETING_TITLE:
-                    return
-                title = GREETING_TITLE
-                finalized = False
-            else:
-                prompt = _build_title_prompt(user_msg, assistant_msg)
-                try:
-                    completion = await llm_router.complete(
-                        LlmRequest(
-                            system_prompt=_TITLE_SYSTEM_PROMPT,
-                            user_prompt=prompt,
-                            max_tokens=_TITLE_MAX_TOKENS,
-                            temperature=_TITLE_TEMPERATURE,
-                        )
+            title = GREETING_TITLE
+            finalized = False
+        else:
+            prompt = _build_title_prompt(user_msg, assistant_msg)
+            try:
+                completion = await llm_router.complete(
+                    LlmRequest(
+                        system_prompt=_TITLE_SYSTEM_PROMPT,
+                        user_prompt=prompt,
+                        max_tokens=_TITLE_MAX_TOKENS,
+                        temperature=_TITLE_TEMPERATURE,
                     )
-                    title = _normalize_title(completion.text)
-                    # Only a clean result is final; empty or over-long output
-                    # falls back WITHOUT finalizing so a retry can improve it.
-                    finalized = bool(title) and len(title) <= 60
-                    if not finalized:
-                        title = _fallback_title(user_msg)
-                except Exception as exc:
-                    # Transient provider/rate-limit failure: keep a readable
-                    # fallback, record why for operators, and leave the
-                    # conversation retryable (next turn or page load).
+                )
+                title = _normalize_title(completion.text)
+                # Only a clean result is final; empty or over-long output
+                # falls back WITHOUT finalizing so a retry can improve it.
+                finalized = bool(title) and len(title) <= 60
+                if not finalized:
                     title = _fallback_title(user_msg)
-                    finalized = False
-                    logger.warning(
-                        "title_generation_llm_failed",
-                        conversation_id=str(conversation_id),
-                        error=type(exc).__name__,
-                        exc_info=True,
-                    )
-
-            updated = await repo.mark_title_generated(
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
-                title=title,
-                finalize=finalized,
-            )
-            if updated:
-                await session.commit()
-                if finalized:
-                    logger.info(
-                        "title_generated",
-                        conversation_id=str(conversation_id),
-                        title=title,
-                    )
-                else:
-                    logger.info(
-                        "title_generation_deferred",
-                        conversation_id=str(conversation_id),
-                        title=title,
-                    )
-            else:
-                # A final title appeared while we were working - harmless.
-                logger.debug(
-                    "title_already_generated",
+            except Exception as exc:
+                # Transient provider/rate-limit failure: keep a readable
+                # fallback, record why for operators, and leave the
+                # conversation retryable (next turn or page load).
+                title = _fallback_title(user_msg)
+                finalized = False
+                logger.warning(
+                    "title_generation_llm_failed",
                     conversation_id=str(conversation_id),
+                    error=type(exc).__name__,
+                    exc_info=True,
                 )
+
+        updated = await store.mark_title_generated(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            title=title,
+            finalize=finalized,
+        )
+        if updated:
+            await store.commit()
+            if finalized:
+                logger.info(
+                    "title_generated",
+                    conversation_id=str(conversation_id),
+                    title=title,
+                )
+            else:
+                logger.info(
+                    "title_generation_deferred",
+                    conversation_id=str(conversation_id),
+                    title=title,
+                )
+        else:
+            # A final title appeared while we were working - harmless.
+            logger.debug(
+                "title_already_generated",
+                conversation_id=str(conversation_id),
+            )
     except Exception:
         logger.exception(
             "title_generation_failed",
@@ -258,7 +284,7 @@ def schedule_title_generation(
     conversation_id: Any,
     tenant_id: Any,
     llm_router: LlmRouter,
-    session_factory: Any,
+    store_factory: Callable[[], Awaitable[TitleStore]],
 ) -> None:
     """Fire-and-forget background title generation.
 
@@ -274,7 +300,7 @@ def schedule_title_generation(
             conversation_id=conversation_id,
             tenant_id=tenant_id,
             llm_router=llm_router,
-            session_factory=session_factory,
+            store_factory=store_factory,
         )
     )
     logger.debug(

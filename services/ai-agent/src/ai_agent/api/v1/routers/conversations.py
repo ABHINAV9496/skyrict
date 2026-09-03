@@ -16,11 +16,61 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_agent.api.deps import get_current_user, get_db
 from ai_agent.db.conversation_repository import ConversationRepository
 from ai_agent.features.supervisor.title import (
+    TitleStore,
     is_conversation_title_retryable,
     schedule_title_generation,
 )
 
 router = APIRouter(prefix="/ai/agents/conversations", tags=["ai-agent-conversations"])
+
+
+class _ConversationTitleStore:
+    """API-layer adapter from :class:`ConversationRepository` to TitleStore.
+
+    Owns the fresh background session (created by the store factory) and its
+    commit, so the ``features`` layer never imports ``ai_agent.db`` (import-
+    linter contract: only repositories touch the database layer).
+    """
+
+    def __init__(self, repo: ConversationRepository, session: AsyncSession) -> None:
+        self._repo = repo
+        self._session = session
+
+    async def get_conversation(
+        self, *, tenant_id: Any, conversation_id: Any
+    ) -> dict[str, Any] | None:
+        return await self._repo.get_conversation(
+            tenant_id=tenant_id, conversation_id=conversation_id
+        )
+
+    async def get_messages(self, *, tenant_id: Any, conversation_id: Any) -> list[dict[str, Any]]:
+        return await self._repo.get_messages(tenant_id=tenant_id, conversation_id=conversation_id)
+
+    async def mark_title_generated(
+        self,
+        *,
+        tenant_id: Any,
+        conversation_id: Any,
+        title: str,
+        finalize: bool,
+    ) -> bool:
+        return await self._repo.mark_title_generated(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            title=title,
+            finalize=finalize,
+        )
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
+
+async def _title_store_factory() -> TitleStore:
+    """Open a fresh session and bind it to a conversation title store."""
+    from ai_agent.db.session import async_session_factory
+
+    session = async_session_factory()
+    return _ConversationTitleStore(ConversationRepository(session), session)
 
 
 # ------------------------------------------------------------------
@@ -126,13 +176,11 @@ async def get_conversation(
         conversation["title"],
         conversation["title_generated_at"],
     ):
-        from ai_agent.db.session import async_session_factory
-
         schedule_title_generation(
             conversation_id=conversation_id,
             tenant_id=user["tenant_id"],
             llm_router=request.app.state.llm_router,
-            session_factory=async_session_factory,
+            store_factory=_title_store_factory,
         )
 
     return {"data": conversation}
@@ -184,13 +232,11 @@ async def append_message(
         conversation["title"],
         conversation["title_generated_at"],
     ):
-        from ai_agent.db.session import async_session_factory
-
         schedule_title_generation(
             conversation_id=conversation_id,
             tenant_id=user["tenant_id"],
             llm_router=request.app.state.llm_router,
-            session_factory=async_session_factory,
+            store_factory=_title_store_factory,
         )
 
     # Return the full conversation (with updated title) so the frontend

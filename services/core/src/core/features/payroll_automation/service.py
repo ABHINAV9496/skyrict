@@ -48,6 +48,11 @@ from core.features.payroll_automation.preflight import run_preflight
 logger = logging.getLogger(__name__)
 
 
+def _log_safe(value: object) -> str:
+    """Strip newline/control chars from a value before it enters a log entry."""
+    return str(value).replace("\r\n", "").replace("\n", "").replace("\r", "")
+
+
 class PermanentBatchItemError(Exception):
     """The item can never succeed; mark it failed without burning retries."""
 
@@ -258,7 +263,7 @@ class PayrollAutomationService:
             logger.info(
                 "aborted payroll automation batch %s for run %s: pre-flight blocked by %s",
                 batch.id,
-                run_id,
+                _log_safe(run_id),
                 preflight_result.blocks,
             )
             return EnqueueResult(batch=batch, employee_count=0)
@@ -290,7 +295,7 @@ class PayrollAutomationService:
         logger.info(
             "enqueued payroll automation batch %s for run %s (%d employees, dry_run=%s)",
             batch.id,
-            run_id,
+            _log_safe(run_id),
             len(employee_ids),
             dry_run,
         )
@@ -502,7 +507,7 @@ class PayrollAutomationService:
                     skipped=skipped,
                 )
         except Exception as exc:  # run refused the transition — explicit failure
-            logger.warning("finalize_compute refused for run %s: %s", run_id, exc)
+            logger.warning("finalize_compute refused for run %s: %s", _log_safe(run_id), exc)
             status = BATCH_FAILED
         else:
             status = BATCH_COMPLETED

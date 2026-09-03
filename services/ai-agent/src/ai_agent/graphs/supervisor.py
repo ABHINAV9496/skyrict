@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ai_agent.db.agent_registry_repository import AgentRegistryRepository
+from ai_agent.db.conversation_repository import ConversationRepository
 from ai_agent.features.supervisor.schemas import (
     AGENT_CRM,
     AGENT_FINANCE,
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from ai_agent.api.v1.schemas.chat import AttachmentData
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
@@ -77,12 +79,20 @@ class SupervisorRuntime:
         self,
         *,
         query: str,
+        attachments: list[AttachmentData] | None = None,
+        conversation_id: uuid.UUID | None = None,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[SupervisorEvent]:
         """Stream one full turn; registry provisioned-state is read per turn."""
         service = await self._build_service()
-        async for event in service.stream_answer(query=query, tenant_id=tenant_id, user_id=user_id):
+        async for event in service.stream_answer(
+            query=query,
+            attachments=attachments,
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        ):
             yield event
 
     async def _build_service(self) -> SupervisorService:
@@ -97,6 +107,7 @@ class SupervisorRuntime:
             finance_gateway_factory=self._finance_gateway_factory,
             memory_service=self._memory_service,
             forecast=self._forecast,
+            conversation_history=ConversationRepository(self._session),
             provisioned=provisioned,
             confidence_threshold=self._confidence_threshold,
         )

@@ -20,7 +20,10 @@ LLM stream — no orphaned generation runs server-side.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import uuid
+from asyncio import CancelledError
 from typing import TYPE_CHECKING, Annotated, Any
 
 import structlog
@@ -29,7 +32,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
-from ai_agent.api.v1.schemas.chat import ChatStreamRequest
+from ai_agent.api.v1.schemas.chat import AttachmentData, ChatStreamRequest
 from ai_agent.core.audit_service import AuditService
 from ai_agent.core.config import settings
 from ai_agent.core.embedding import build_embedding_provider
@@ -202,6 +205,8 @@ async def stream_chat(
         _event_stream(
             runtime=runtime,
             message=body.message,
+            attachments=body.attachments,
+            conversation_id=body.conversation_id,
             tenant_id=user["tenant_id"],
             user_id=user["user_id"],
         ),
@@ -218,30 +223,50 @@ async def _event_stream(
     *,
     runtime: SupervisorRuntime,
     message: str,
+    attachments: list[AttachmentData] | None = None,
+    conversation_id: uuid.UUID | None = None,
     tenant_id: Any,
     user_id: Any,
 ) -> AsyncIterator[str]:
-    """Map supervisor events to SSE frames; sanitized failure frames only."""
+    """Map supervisor events to SSE frames; sanitized failure frames only.
+
+    Lifecycle guarantees:
+      - A ``done`` event is ALWAYS the last frame, even when the generator
+        is cancelled (client disconnect) or the upstream LLM fails.
+      - ``CancelledError`` (client disconnect) is caught explicitly because
+        it inherits from ``BaseException`` in Python 3.9+ and would bypass
+        ``except Exception``.
+    """
     done_sent = False
     try:
         async for event in runtime.stream_answer(
-            query=message, tenant_id=tenant_id, user_id=user_id
+            query=message,
+            attachments=attachments,
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
         ):
             name, payload = _to_sse(event)
             if name == EVENT_DONE:
                 done_sent = True
             yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+    except CancelledError:
+        # Client disconnected — the ASGI server cancelled this task.
+        # Do NOT yield here; the generator is being torn down.
+        logger.info("chat.stream_cancelled")
     except AiUnavailableError as exc:
         logger.warning("chat.stream_unavailable", error=str(exc))
-        yield _error_frame("ai_unavailable")
+        yield _error_frame("The AI service is temporarily unavailable. Please try again.")
     except Exception:
         logger.exception("chat.stream_failed")
-        yield _error_frame("internal_error")
+        yield _error_frame("An unexpected error occurred. Please try again.")
     finally:
         # Safety net: always send a done event so the client never stays
         # stuck on loading dots if the generator exits without one.
+        # On CancelledError the client is already gone, so we skip the yield.
         if not done_sent:
-            yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
+            with contextlib.suppress(GeneratorExit):
+                yield f"event: {EVENT_DONE}\ndata: {json.dumps({'agents': []})}\n\n"
 
 
 def _to_sse(event: SupervisorEvent) -> tuple[str, dict[str, object]]:

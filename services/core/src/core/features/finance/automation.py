@@ -196,8 +196,6 @@ class FinanceAutomationService:
             raise NotFoundError(f"Journal entry {entry_id} not found")
         if entry.status.value != "posted":
             raise NotFoundError("Only posted journal entries can be reversed")
-        if entry.reversal_entry_id is not None:
-            raise NotFoundError("Journal entry has already been reversed")
         reversed_entry = await self.repo.reverse_journal_entry(
             entry_id,
             tenant_id,
@@ -211,7 +209,6 @@ class FinanceAutomationService:
             user_id=user_id,
             action=FINANCE_JOURNAL_ENTRY_REVERSED,
             target=f"journal_entry:{entry_id}",
-            details={"reversal_entry_id": str(reversed_entry.reversal_entry_id)},
         )
         return reversed_entry
 

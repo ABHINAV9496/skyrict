@@ -2,7 +2,6 @@ import { Users } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
-import { CrmSectionTabs } from "@/components/dashboard/erp/crm/crm-section-tabs";
 import { CustomersTable } from "@/components/dashboard/erp/crm/customers-table";
 
 export default function CrmCustomersPage() {
@@ -14,7 +13,6 @@ export default function CrmCustomersPage() {
           description="Every account your business sells to, including the ones created from won opportunities."
           icon={Users}
         />
-        <CrmSectionTabs />
         <CustomersTable />
       </div>
     </RequirePermission>

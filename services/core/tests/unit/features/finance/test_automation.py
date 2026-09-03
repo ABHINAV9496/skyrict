@@ -136,7 +136,7 @@ async def test_reverse_requires_posted_entry() -> None:
 
 async def test_reverse_rejects_already_reversed() -> None:
     repo = StubRepo()
-    repo.journal_entry = _entry(EntryStatus.POSTED, reversal_entry_id=object())
+    repo.journal_entry = _entry(EntryStatus.REVERSED)
     svc = FinanceAutomationService(repo=repo, audit=RecordingAudit())
     with pytest.raises(NotFoundError):
         await svc.reverse_journal_entry(tenant_id=object(), user_id=object(), entry_id=object())

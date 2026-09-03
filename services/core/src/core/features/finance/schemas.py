@@ -108,6 +108,7 @@ class JournalEntryResponse(BaseModel):
     posted_at: datetime | None
     posted_by_user_id: uuid.UUID | None
     voided_at: datetime | None
+    reversal_entry_id: uuid.UUID | None = None
     created_at: datetime | None
     updated_at: datetime | None
 

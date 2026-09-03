@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     )
     from core.features.inventory.service import InventoryService
     from core.features.payroll.service import PayrollService
+    from core.features.reporting.service import DashboardService
     from core.features.sales.service import SalesService
 
 logger = get_logger("core.deps")
@@ -725,3 +726,19 @@ def get_sales_service(
         timeline=crm_repo,
         cogs=finance,
     )
+
+
+# --- Reporting / dashboard deps ---
+
+
+def get_dashboard_service(db: AsyncSession = Depends(get_db)) -> DashboardService:
+    """Composition root for the dashboard layout feature.
+
+    Keeps the ``core.db`` session import in the api layer so
+    ``core.features.reporting.router`` never touches the database layer
+    directly (import-linter: "Only repositories touch the database layer").
+    """
+    from core.features.reporting.repository import DashboardRepository
+    from core.features.reporting.service import DashboardService
+
+    return DashboardService(DashboardRepository(db))

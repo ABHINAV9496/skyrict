@@ -448,7 +448,7 @@ export function CloseChecklistWidget({
         <ul className="space-y-2">
           {list?.items.map((item) => (
             <li key={item.label} className="flex items-start gap-2.5 text-sm">
-              {item.status === "pass" ? (
+              {item.status === "ok" ? (
                 <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-500" />
               ) : (
                 <CircleX aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-red-500" />

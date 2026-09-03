@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
 
@@ -40,6 +40,7 @@ from core.core.permissions import (
     ERP_PAYROLL_AI_READ,
     ERP_PAYROLL_AI_RUN,
 )
+from core.features.payroll_automation.domain import PayrollSchedule
 from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
 from core.features.payroll_automation.schedules import PayrollSchedulerService
 from core.features.payroll_automation.service import PayrollAutomationService
@@ -52,9 +53,9 @@ _require_payroll_ai_run = require_permission(ERP_PAYROLL_AI_RUN)
 _require_payroll_ai_notify = require_permission(ERP_PAYROLL_AI_NOTIFY)
 
 
-def _schedule_out(schedule: object) -> PayrollScheduleOut:
+def _schedule_out(schedule: PayrollSchedule) -> PayrollScheduleOut:
     return PayrollScheduleOut(
-        schedule_id=schedule.id,
+        schedule_id=schedule.id,  # type: ignore[arg-type]  # id is always populated post-persist
         tenant_id=schedule.tenant_id,
         name=schedule.name,
         cron_expression=schedule.cron_expression,
@@ -86,7 +87,7 @@ async def enqueue_batch(
         raise_from_service_error(exc)
     status = result.batch.status
     if status == "aborted":
-        blocks = (result.batch.preflight or {}).get("blocks", [])
+        blocks = cast("list[str]", (result.batch.preflight or {}).get("blocks", []))
         message = f"Payroll batch blocked by pre-flight checks: {', '.join(blocks)}"
     else:
         message = f"Enqueued payroll batch for {result.employee_count} employees"

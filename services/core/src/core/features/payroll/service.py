@@ -670,7 +670,7 @@ class PayrollService:
         settings = await self._repo.get_settings(tenant_id)
         entries = await self._repo.list_entries(run_id, tenant_id=tenant_id)
         if entries:
-            total_gross, total_net = PayrollCompute.compute_totals(entries)
+            total_gross, total_net = PayrollCompute.compute_totals(list(entries))
         else:
             currency = settings.default_currency if settings is not None else "USD"
             total_gross = Money(Decimal("0"), currency)

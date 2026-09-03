@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -102,7 +103,7 @@ def render_payslip_pdf(
         bottomMargin=20 * mm,
     )
 
-    story: list = []
+    story: list[Any] = []
 
     story.append(Paragraph("Payslip", _HEADER_STYLE))
     story.append(

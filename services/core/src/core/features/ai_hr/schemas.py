@@ -585,7 +585,7 @@ class PayrollAnomalyDispositionWrite(BaseModel):
 
 def payroll_anomaly_to_out(a: PayrollAnomaly) -> PayrollAnomalyOut:
     return PayrollAnomalyOut(
-        anomaly_id=a.anomaly_id,
+        anomaly_id=a.anomaly_id,  # type: ignore[arg-type]  # DB PK is always present at runtime
         run_id=a.run_id,
         run_code=a.run_code,
         period_start=a.period_start,

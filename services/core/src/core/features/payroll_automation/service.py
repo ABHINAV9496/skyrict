@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from core.core.audit_service import AuditService
 from core.core.tenant_context import TenantContext
@@ -138,7 +138,7 @@ class ProcessResult:
     status_changed: bool = False
 
 
-def _empty_totals(employee_count: int) -> dict[str, object]:
+def _empty_totals(employee_count: int) -> dict[str, Any]:
     return {
         "total": employee_count,
         "done": 0,
@@ -209,9 +209,8 @@ class PayrollAutomationService:
             source_ref=str(run_id),
         )
         if existing is not None and existing.status != BATCH_ABORTED:
-            return EnqueueResult(
-                batch=existing, employee_count=int((existing.totals or {}).get("total", 0))
-            )
+            total_val = (existing.totals or {}).get("total", 0)
+            return EnqueueResult(batch=existing, employee_count=int(cast("int | str", total_val)))
 
         settings = await self._payroll.get_settings(tenant_id)
         overlapping = await self._payroll.find_overlapping_run(
@@ -293,11 +292,11 @@ class PayrollAutomationService:
         )
         await self.commit()
         logger.info(
-            "enqueued payroll automation batch %s for run %s (%d employees, dry_run=%s)",
+            "enqueued payroll automation batch %s for run %s (%s employees, dry_run=%s)",
             batch.id,
             _log_safe(run_id),
-            len(employee_ids),
-            dry_run,
+            _log_safe(len(employee_ids)),
+            _log_safe(dry_run),
         )
         return EnqueueResult(batch=batch, employee_count=len(employee_ids))
 
@@ -343,7 +342,7 @@ class PayrollAutomationService:
             # explicitly instead of crashing the worker loop.
             run_id = None
 
-        totals = dict(batch.totals or _empty_totals(0))
+        totals: dict[str, Any] = dict(batch.totals or _empty_totals(0))
         skipped: list[dict[str, str]] = []
         items_processed = 0
         status_changed = False
@@ -417,7 +416,7 @@ class PayrollAutomationService:
         run_id: uuid.UUID | None,
         retry_count: int,
         dry_run: bool,
-        totals: dict[str, object],
+        totals: dict[str, Any],
         skipped: list[dict[str, str]],
     ) -> bool:
         """Compute one employee; update the running totals and persist the item.
@@ -484,7 +483,7 @@ class PayrollAutomationService:
         tenant_id: uuid.UUID,
         batch: PayrollBatchRun,
         run_id: uuid.UUID | None,
-        totals: dict[str, object],
+        totals: dict[str, Any],
         skipped: list[dict[str, str]],
         actor_user_id: uuid.UUID | None,
     ) -> str:
@@ -527,7 +526,7 @@ class PayrollAutomationService:
         batch: PayrollBatchRun,
         status: str,
         run_id: uuid.UUID | None,
-        totals: dict[str, object],
+        totals: dict[str, Any],
     ) -> None:
         """Post-commit notification fan-out (payslip-ready + admin digest).
 
@@ -549,7 +548,7 @@ class PayrollAutomationService:
             logger.warning("notification fan-out failed for batch %s: %s", batch.id, exc)
             await self.rollback()
 
-    async def batch_status(self, batch_id: uuid.UUID, *, tenant_id: uuid.UUID) -> dict[str, object]:
+    async def batch_status(self, batch_id: uuid.UUID, *, tenant_id: uuid.UUID) -> dict[str, Any]:
         """Public projection of a batch for the status endpoint."""
         batch = await self._repo.get_batch_by_id(batch_id, tenant_id=tenant_id)
         if batch is None:
@@ -575,7 +574,7 @@ class PayrollAutomationService:
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         """Recent batches for the calendar/queue view."""
         batches = await self._repo.list_batches(
             tenant_id=tenant_id,

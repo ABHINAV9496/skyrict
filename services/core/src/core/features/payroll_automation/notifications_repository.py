@@ -157,7 +157,7 @@ class PostgresPayrollNotificationRepository:
                     )
                     .where(
                         CoreUserRoleModel.tenant_id == tenant_id,
-                        CoreRoleModel.permissions.any(permission),
+                        CoreRoleModel.permissions.any(permission),  # type: ignore[arg-type]
                     )
                     .order_by(CoreUserRoleModel.user_id)
                     .distinct()
@@ -302,7 +302,7 @@ class PostgresPayrollNotificationRepository:
             )
         )
         result = await self._session.execute(stmt)
-        return int(result.rowcount)
+        return int(result.rowcount)  # type: ignore[attr-defined]  # DML returns CursorResult
 
     async def list_notifications(
         self,

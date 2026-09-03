@@ -124,7 +124,7 @@ class PostgresPayrollScheduleRepository:
                 ScheduleModel.id == schedule_id,
             )
         )
-        if result.rowcount == 0:
+        if result.rowcount == 0:  # type: ignore[attr-defined]  # DML returns CursorResult
             raise ValueError(f"payroll schedule {schedule_id} not found")
 
     async def mark_fired(

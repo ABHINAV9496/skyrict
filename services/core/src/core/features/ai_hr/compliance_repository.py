@@ -238,7 +238,7 @@ class AiHrComplianceRepository:
             return None
         return await self.get_finding(tenant_id, check_id)
 
-    def _read_stmt(self, tenant_id: uuid.UUID):
+    def _read_stmt(self, tenant_id: uuid.UUID) -> Any:
         return (
             select(
                 ComplianceCheckModel.id,

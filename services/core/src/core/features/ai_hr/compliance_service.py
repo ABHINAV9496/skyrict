@@ -21,7 +21,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 from core.core.audit_events import (
     HR_AI_COMPLIANCE_ACKNOWLEDGED,
@@ -89,7 +89,7 @@ class ComplianceService:
         self,
         repository: AiHrComplianceRepositoryPort,
         refresh_days: int = 7,
-        audit=None,
+        audit: Any = None,
     ) -> None:
         self._repository = repository
         self._refresh_days = refresh_days

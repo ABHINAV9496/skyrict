@@ -205,6 +205,8 @@ class PayrollSchedulerService:
         return fired
 
     async def _fire_schedule(self, schedule: PayrollSchedule, *, now: datetime) -> None:
+        if schedule.id is None:
+            return
         tenant_id = schedule.tenant_id
         period_start, period_end = _most_recent_elapsed_month(now)
         existing = await self._payroll.find_overlapping_run(
@@ -231,6 +233,8 @@ class PayrollSchedulerService:
             except PayrollPeriodConflictError as exc:
                 logger.info("payroll schedule %s blocked: %s", schedule.id, exc)
                 return
+        if run.id is None:
+            return
         await self._batches.enqueue(run_id=run.id, tenant_id=tenant_id)
         schedule_cron = parse_cron(schedule.cron_expression)
         await self._repo.mark_fired(

@@ -95,7 +95,7 @@ class AiHrPayrollAnomalyRepository:
         # seeds PR-2026-05 that way). Keep only runs that actually hold payroll
         # entries so the newest payable run is "latest" and its predecessor is
         # the comparison baseline.
-        runs_with_rows: list = []
+        runs_with_rows: list[Any] = []
         for run_row in runs:
             has_rows = (
                 await self.session.execute(
@@ -298,7 +298,7 @@ class AiHrPayrollAnomalyRepository:
             return None
         return await self.get_anomaly(tenant_id, anomaly_id)
 
-    def _read_stmt(self, tenant_id: uuid.UUID):
+    def _read_stmt(self, tenant_id: uuid.UUID) -> Any:
         run = PayrollRunModel
         return (
             select(

@@ -46,9 +46,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from core.core.constants import EmploymentStatus
+from core.core.constants import EmploymentStatus, PayrollRunStatus
 from core.domain.entities import BenefitElection, Employee, PayrollRun, PayrollSettings
-from core.features.payroll.models.payroll_run import PayrollRunStatus
 
 PREFLIGHT_VERSION = 2
 

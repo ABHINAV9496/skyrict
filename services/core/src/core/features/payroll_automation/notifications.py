@@ -25,10 +25,11 @@ import logging
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from core.core.audit_events import PAYROLL_AUTO_NOTIFICATIONS_SENT
 from core.core.audit_service import AuditService
+from core.core.permissions import ERP_PAYROLL_AI_READ
 from core.features.payroll_automation.constants import (
     BATCH_COMPLETED,
     BATCH_FAILED,
@@ -61,7 +62,7 @@ class PayrollNotificationRepositoryPort(Protocol):
     ) -> dict[uuid.UUID, PayrollNotificationPref]: ...
 
     async def user_ids_with_permission(
-        self, tenant_id: uuid.UUID, *, permission: str
+        self, tenant_id: uuid.UUID, *, permission: str = ERP_PAYROLL_AI_READ
     ) -> list[uuid.UUID]: ...
 
     async def failed_item_errors(
@@ -118,7 +119,7 @@ class PayrollNotificationOrchestrator:
         batch: PayrollBatchRun,
         status: str,
         run_id: uuid.UUID | None,
-        totals: dict[str, object],
+        totals: dict[str, Any],
     ) -> int:
         """Record every notification a terminal batch warrants.
 
@@ -219,7 +220,7 @@ class PayrollNotificationOrchestrator:
         batch_id: uuid.UUID,
         run_id: uuid.UUID | None,
         status: str,
-        totals: dict[str, object],
+        totals: dict[str, Any],
     ) -> int:
         admins = await self._repo.user_ids_with_permission(tenant_id)
         if not admins:
@@ -270,7 +271,7 @@ class PayrollNotificationOrchestrator:
         after: datetime | None = None,
         before: datetime | None = None,
         limit: int = 50,
-    ) -> list[dict[str, object]]:
+    ) -> list[dict[str, Any]]:
         """Public projections of the notification rows (inbox / calendar view)."""
         rows = await self._repo.list_notifications(
             tenant_id=tenant_id,
@@ -297,7 +298,7 @@ class PayrollNotificationOrchestrator:
             for row in rows
         ]
 
-    async def get_pref(self, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
+    async def get_pref(self, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         pref = await self._repo.get_pref(tenant_id, user_id)
         return {
             "user_id": str(pref.user_id),
@@ -312,7 +313,7 @@ class PayrollNotificationOrchestrator:
         user_id: uuid.UUID,
         in_app_on: bool,
         email_on: bool,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         pref = await self._repo.upsert_pref(
             tenant_id=tenant_id,
             user_id=user_id,

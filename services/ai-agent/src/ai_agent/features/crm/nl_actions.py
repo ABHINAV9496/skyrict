@@ -1,7 +1,7 @@
-"""Deterministic CRM NL action handlers (SKY-61 Part 11 — C9).
+"""Deterministic CRM NL action handlers (SKY-61 Part 11 - C9).
 
 Aggregation queries that answer natural-language questions about the CRM
-pipeline. These are pure functions over the CRM gateway data — no LLM, no raw
+pipeline. These are pure functions over the CRM gateway data - no LLM, no raw
 SQL. The CRM Assistant agent (C11) dispatches to these handlers after the
 user's question is classified.
 
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -131,25 +132,46 @@ async def value_by_stage(
 ) -> CrmActionResult:
     """Total pipeline value grouped by stage.
 
-    Note: this iterates all opportunities to compute sums. The gateway's
-    ``has_amount`` boolean is all we have without fetching full payloads; for
-    v1 we report the count of deals with known amounts per stage. A future
-    enhancement can surface actual amounts if the gateway exposes them.
+    Uses the real deal ``amount``/``currency`` values the gateway carries for
+    ``erp.crm.read`` holders. Deals without a recorded value are reported in a
+    running count so the total is still transparent.
     """
     opportunities = await gateway.list_opportunities()
+    stage_value: dict[str, Decimal] = {}
     stage_counts: dict[str, int] = {}
+    missing_value = 0
+    currency: str | None = None
     for opp in opportunities:
         stage_counts[opp.stage] = stage_counts.get(opp.stage, 0) + 1
+        if opp.amount is None:
+            missing_value += 1
+            continue
+        currency = currency or opp.currency
+        stage_value[opp.stage] = stage_value.get(opp.stage, Decimal("0")) + opp.amount
 
-    lines = [
-        f"- {stage}: {count} {'deal' if count == 1 else 'deals'}"
-        for stage, count in sorted(stage_counts.items())
-    ]
-    answer = "Pipeline by stage:\n" + "\n".join(lines) if lines else "No deals in the pipeline."
+    currency_label = f" {currency}" if currency else ""
+    lines = []
+    for stage, total in sorted(stage_value.items()):
+        lines.append(f"- {stage}: {total}{currency_label} ({stage_counts[stage]} deal(s))")
+    # Stages present but with no recorded amount still appear so the count is honest.
+    for stage, count in sorted(stage_counts.items()):
+        if stage not in stage_value:
+            lines.append(f"- {stage}: no recorded value ({count} deal(s))")
+
+    answer = (
+        "Pipeline value by stage:\n" + "\n".join(lines) if lines else "No deals in the pipeline."
+    )
+    if missing_value:
+        answer += f"\nNote: {missing_value} deal(s) have no recorded amount."
 
     return CrmActionResult(
         answer=answer,
-        data={"stages": stage_counts},
+        data={
+            "stage_value": {k: str(v) for k, v in stage_value.items()},
+            "stages": stage_counts,
+            "missing_value_count": missing_value,
+            "currency": currency,
+        },
     )
 
 
@@ -160,7 +182,7 @@ async def at_risk(
 ) -> CrmActionResult:
     """List opportunities with stale activity (no activity > 14 days).
 
-    This is a lightweight subset of deal health — it flags deals without
+    This is a lightweight subset of deal health - it flags deals without
     running the full health engine (which needs core's opportunity signals).
     """
     clock = now or datetime.now(UTC)

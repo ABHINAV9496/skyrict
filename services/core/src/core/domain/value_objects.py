@@ -83,12 +83,14 @@ class EntryStatus(StrEnum):
     """Native PostgreSQL enum backing ``erp_journal_entries.status``.
 
     An entry is not real money until ``posted``. ``voided`` is pre-post
-    cancellation only in v1 (reversal entries arrive in v1.1).
+    cancellation; ``reversed`` marks a posted entry that has been reversed
+    (a reversal entry posts the inverse before this flag is set).
     """
 
     DRAFT = "draft"
     POSTED = "posted"
     VOIDED = "voided"
+    REVERSED = "reversed"
 
 
 class InvoiceStatus(StrEnum):

@@ -63,7 +63,7 @@ class RateLimiter:
         """Raise RateLimitExceededError when the key exceeds the limit."""
         if not await self.is_allowed(key=key, limit=limit, window_seconds=window_seconds):
             # Generic message shared by every guarded endpoint (register,
-            # login, ...) — never names the endpoint or the key, so it cannot
+            # login, ...) - never names the endpoint or the key, so it cannot
             # hint at what the caller was doing or which account was targeted.
             raise RateLimitExceededError("Too many attempts. Try again later.")
 

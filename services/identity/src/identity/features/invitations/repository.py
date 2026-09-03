@@ -1,4 +1,4 @@
-"""Invitation repository — DB operations for the invitations table."""
+"""Invitation repository - DB operations for the invitations table."""
 
 from __future__ import annotations
 

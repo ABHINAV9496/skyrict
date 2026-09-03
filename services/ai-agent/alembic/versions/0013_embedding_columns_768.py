@@ -84,7 +84,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # NOTE: only safe when no 768-dim rows exist — casting a 768-dim vector to
+    # NOTE: only safe when no 768-dim rows exist - casting a 768-dim vector to
     # vector(512) raises a "different vector dimensions" error from pgvector.
     _drop_indexes()
     _resize(512)

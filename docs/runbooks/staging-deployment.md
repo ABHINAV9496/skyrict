@@ -1,4 +1,4 @@
-# Runbook: Staging deployment — wildcard DNS + TLS + identity service
+# Runbook: Staging deployment - wildcard DNS + TLS + identity service
 
 Staging is `*.staging.skyrict.com`, deployed to an existing Kubernetes cluster
 by `.github/workflows/cd-staging.yml`. TLS is a Let's Encrypt wildcard
@@ -13,7 +13,7 @@ TLS certificate**, resolved from an external network.
 
 ## 1. Cluster prerequisites (one-time, manual)
 
-1. A Kubernetes cluster (any provider — the manifests are provider-neutral).
+1. A Kubernetes cluster (any provider - the manifests are provider-neutral).
 2. **ingress-nginx** installed (the Ingress resources use
    `ingressClassName: nginx`):
 
@@ -28,7 +28,7 @@ TLS certificate**, resolved from an external network.
    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml
    ```
 
-   cert-manager installs into the `cert-manager` namespace — the CD pipeline
+   cert-manager installs into the `cert-manager` namespace - the CD pipeline
    puts the Route 53 credentials secret there (required for `ClusterIssuer`s).
 
 ## 2. GitHub secrets (one-time, manual)
@@ -68,7 +68,7 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
-(The bucket name is an example — use the same name in `TF_STATE_BUCKET`.)
+(The bucket name is an example - use the same name in `TF_STATE_BUCKET`.)
 
 ## 4. DNS zone + delegation (first bootstrap only)
 
@@ -90,7 +90,7 @@ registrar / parent DNS provider). The zone must be resolvable before
 cert-manager can complete DNS-01 challenges.
 
 After delegation is live, set `create_zone = false` in
-`terraform.tfvars` (or pass `-var="create_zone=false"`) — all later applies
+`terraform.tfvars` (or pass `-var="create_zone=false"`) - all later applies
 look the zone up by name.
 
 ## 5. Cluster secrets (one-time, manual)
@@ -103,7 +103,7 @@ look the zone up by name.
 #     -> paths inside the container where the JWT keys are mounted. Provision
 #        staging keys from a secret manager; NEVER reuse the dev/test fixtures.
 #   IDENTITY_JWKS_ISSUER / IDENTITY_JWKS_AUDIENCE
-#   IDENTITY_CORS_ORIGINS (explicit list — never '*')
+#   IDENTITY_CORS_ORIGINS (explicit list - never '*')
 kubectl create namespace skyrict-staging  # (the overlay also creates it)
 kubectl create secret generic identity-secrets-staging \
   --namespace skyrict-staging \
@@ -117,7 +117,7 @@ kubectl create secret generic identity-secrets-staging \
 ```
 
 > `IDENTITY_BASE_DOMAIN`, `ENVIRONMENT`, `LOG_*` are already set in the
-> deployment manifest — only the secret-required values above belong in the
+> deployment manifest - only the secret-required values above belong in the
 > secret. The identity service **refuses to start** if any required value is
 > missing (fail-fast config).
 
@@ -141,7 +141,7 @@ staging acceptance criteria.
 2. GitHub secrets (§2) + TF backend (§3)
 3. Zone creation + NS delegation (§4)
 4. Cluster secrets (§5)
-5. CD pipeline (§6) — applies the overlay, cert-manager issues the wildcard
+5. CD pipeline (§6) - applies the overlay, cert-manager issues the wildcard
    cert (DNS-01 into the delegated zone), the DNS job points
    `*.staging.skyrict.com` at the ingress load balancer, verify checks the
    endpoint.
@@ -164,7 +164,7 @@ staging acceptance criteria.
   ```
 
 - **DNS drift**: re-run `terraform plan` in `infra/terraform/environments/staging`
-  (with backend flags from §4) — the CD `dns` job does this on every deploy.
+  (with backend flags from §4) - the CD `dns` job does this on every deploy.
 
 ## 8. Troubleshooting
 
@@ -180,6 +180,6 @@ staging acceptance criteria.
 ## References
 
 - ADR-003 (`docs/architecture/adr/003-staging-wildcard-dns-tls.md`)
-- `infra/terraform/` — DNS modules + staging environment
-- `infra/k8s/overlays/staging/` — namespace, deployment, ingresses, cert-manager
-- `.github/workflows/cd-staging.yml` — the pipeline
+- `infra/terraform/` - DNS modules + staging environment
+- `infra/k8s/overlays/staging/` - namespace, deployment, ingresses, cert-manager
+- `.github/workflows/cd-staging.yml` - the pipeline

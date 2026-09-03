@@ -24,7 +24,7 @@ SOURCE_REF = "products/00000000-0000-0000-0000-000000000001"
 
 
 class _FakeSession:
-    """Records adds, deletes, and the flush call — no real SQL."""
+    """Records adds, deletes, and the flush call - no real SQL."""
 
     def __init__(self) -> None:
         self.added: list[object] = []

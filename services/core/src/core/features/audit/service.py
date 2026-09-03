@@ -1,4 +1,4 @@
-"""Audit service — log all security-relevant ERP actions.
+"""Audit service - log all security-relevant ERP actions.
 
 All persistence goes through the ``AuditRepositoryPort``; no ORM models or
 sessions are touched here. Mirrors ``identity.features.audit.service``.
@@ -36,7 +36,7 @@ class AuditService:
         ``target`` is a ``"<type>:<id>"`` string (e.g. ``"stock_movement:..."``)
         so the audit log stays a single source of truth for what changed.
 
-        ``tenant_id`` overrides the resolved request tenant — used by flows
+        ``tenant_id`` overrides the resolved request tenant - used by flows
         that run without a routed tenant.
         """
         resolved_tenant = tenant_id or TenantContext.get_optional()

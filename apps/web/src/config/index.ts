@@ -2,7 +2,7 @@ export const site = {
   name: "Skyrict",
   tagline: "AI Business Operating System",
   description:
-    "Skyrict connects what's happening inside your business with what's happening in the market — and lets AI agents act on the synthesis.",
+    "Skyrict connects what's happening inside your business with what's happening in the market - and lets AI agents act on the synthesis.",
   url: "https://skyrict.com",
 };
 
@@ -63,13 +63,13 @@ export const pillars = [
     index: "01",
     name: "Internal truth",
     description:
-      "A deliberately scoped ERP slice — inventory, sales, cash, orders — capturing what's actually happening inside your company. Not a bloated SAP replacement; the ~20% of operations that 80% of SMBs actually use.",
+      "A deliberately scoped ERP slice - inventory, sales, cash, orders - capturing what's actually happening inside your company. Not a bloated SAP replacement; the ~20% of operations that 80% of SMBs actually use.",
   },
   {
     index: "02",
     name: "External truth",
     description:
-      "A global market intelligence engine pulling demand signals, competitor moves, and trends from five real sources — Trends, YouTube, Reddit, GitHub, and news — continuously.",
+      "A global market intelligence engine pulling demand signals, competitor moves, and trends from five real sources - Trends, YouTube, Reddit, GitHub, and news - continuously.",
   },
   {
     index: "03",

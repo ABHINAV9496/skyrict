@@ -7,7 +7,7 @@ import { plans } from "@/config/onboarding";
 
 export const metadata: Metadata = {
   title: "Your organization",
-  description: "Step 5 of 5 — connect your business details.",
+  description: "Step 5 of 5 - connect your business details.",
 };
 
 export default async function OrganizationPage({

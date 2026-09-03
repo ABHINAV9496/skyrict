@@ -1,4 +1,4 @@
-"""Inventory HTTP API integration tests — real Postgres, full app stack.
+"""Inventory HTTP API integration tests - real Postgres, full app stack.
 
 End-to-end coverage of INV-BE-002 §8 over the FastAPI app: response envelopes
 and pagination, DB-resolved permission enforcement (401/403), business-rule

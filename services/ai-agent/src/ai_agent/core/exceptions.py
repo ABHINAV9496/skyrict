@@ -10,7 +10,7 @@ Tenant error mapping (mirrors core):
   unknown tenant slug -> 404 tenant-not-found
   disabled tenant -> 403 tenant-disabled
 
-AI error contract (SKY-57) — deterministic and typed so callers (the core
+AI error contract (SKY-57) - deterministic and typed so callers (the core
 monolith proxy and the frontend mock-fallback policy) can react safely:
   all configured providers unavailable -> 503 ai-unavailable
   every provider returned unparseable output -> 502 ai-invalid-response
@@ -79,7 +79,7 @@ class StartupError(RuntimeError):
 
     Raised from the application lifespan so the process refuses to boot
     (fail-fast) instead of serving traffic with a dead database or an unusable
-    JWT public key. NOT a SkyrictError — it is never mapped to an HTTP
+    JWT public key. NOT a SkyrictError - it is never mapped to an HTTP
     response; the orchestrator sees the non-zero exit and restarts the pod.
     """
 
@@ -89,7 +89,7 @@ class StartupError(RuntimeError):
 #
 # Every AI failure mode maps to ONE typed exception with a stable problem type
 # so the frontend can distinguish: successful result, low-confidence abstention
-# (not an error — a normal response), provider failure, invalid provider
+# (not an error - a normal response), provider failure, invalid provider
 # response, permission failure, rate-limit failure.
 # ---------------------------------------------------------------------------
 
@@ -97,7 +97,7 @@ class StartupError(RuntimeError):
 class AiUnavailableError(SkyrictError):
     """All configured providers failed or no provider is configured (503).
 
-    ``detail`` names the failure MODE, never provider internals — safe to
+    ``detail`` names the failure MODE, never provider internals - safe to
     return to clients. The frontend mock-fallback policy keys off this type.
     """
 
@@ -115,7 +115,7 @@ class AiInvalidResponseError(SkyrictError):
 class AiRateLimitError(SkyrictError):
     """A configured AI rate limit was exceeded (429)."""
 
-    message = "AI rate limit exceeded — retry shortly"
+    message = "AI rate limit exceeded - retry shortly"
     code = "AI_RATE_LIMITED"
 
 
@@ -224,7 +224,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions — NEVER leak internals.
+    """Catch-all for unhandled exceptions - NEVER leak internals.
 
     Logs full traceback for debugging, returns sanitized 500 to the client.
     """

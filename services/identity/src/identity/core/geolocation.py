@@ -3,10 +3,10 @@
 A thin, defensive wrapper around ``geoip2``:
 
 * Lazy-loads ``GeoLite2-City.mmdb`` once and caches the reader.
-* Never raises — missing DB, unknown/private/reserved IPs and corrupt records
+* Never raises - missing DB, unknown/private/reserved IPs and corrupt records
   all resolve to ``None`` so login and alert flows degrade gracefully.
 * ``mask_ip`` returns a display-safe IP (kept on the server, never sent to
-  MaxMind — the DB is local and lookup is offline).
+  MaxMind - the DB is local and lookup is offline).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""HR/Payroll integration tests (HR-DATA-001) — real Postgres, real migrations.
+"""HR/Payroll integration tests (HR-DATA-001) - real Postgres, real migrations.
 
 Covers what a model test cannot:
 
@@ -81,7 +81,7 @@ def erp_world(migrated_schema: None) -> dict[str, str]:
                 ]
             )
             await session.flush()
-            # Same employee number in both tenants — uniqueness is per-tenant.
+            # Same employee number in both tenants - uniqueness is per-tenant.
             session.add_all(
                 [
                     EmployeeModel(
@@ -103,7 +103,7 @@ def erp_world(migrated_schema: None) -> dict[str, str]:
                         hire_date=date(2025, 1, 1),
                     ),
                     # Annual leave type in BOTH tenants, so FK tests differ only
-                    # by tenant — never by a missing catalogue entry.
+                    # by tenant - never by a missing catalogue entry.
                     LeaveTypeModel(
                         tenant_id=uuid.UUID(tenant_a),
                         id=uuid.uuid4(),
@@ -276,7 +276,7 @@ class TestErpCompositeFkConvention:
         # The table owner bypasses RLS, so this can ONLY be stopped by the
         # composite FK (tenant_b, employee_a) -> erp_employees(tenant_b, id):
         # employee_a belongs to tenant A, so the composite key doesn't exist.
-        # The annual leave type DOES exist in tenant B — so the employee FK is
+        # The annual leave type DOES exist in tenant B - so the employee FK is
         # the only constraint that can fire, keeping the assertion deterministic.
         async with engine.connect() as conn:
             with pytest.raises(Exception) as excinfo:
@@ -342,7 +342,7 @@ class TestErpConstraints:
         self, migrated_schema: None, erp_world: dict[str, str]
     ) -> None:
         async with engine.connect() as conn:
-            # First run for the period — ok.
+            # First run for the period - ok.
             await conn.execute(
                 text(
                     "INSERT INTO erp_payroll_runs "
@@ -352,7 +352,7 @@ class TestErpConstraints:
                 ),
                 {"tid": uuid.UUID(erp_world["tenant_a"])},
             )
-            # Second non-void run for the same period — blocked by the partial
+            # Second non-void run for the same period - blocked by the partial
             # unique index (WHERE status <> 'void').
             with pytest.raises(Exception) as excinfo:
                 await conn.execute(
@@ -369,7 +369,7 @@ class TestErpConstraints:
             # Roll back the aborted transaction before continuing.
             await conn.rollback()
 
-            # A VOID run may overlap — the index excludes voided rows.
+            # A VOID run may overlap - the index excludes voided rows.
             await conn.execute(
                 text(
                     "INSERT INTO erp_payroll_runs "

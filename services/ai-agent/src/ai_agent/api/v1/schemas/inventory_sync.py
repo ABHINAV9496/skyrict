@@ -2,7 +2,7 @@
 
 Payload contract between core's post-commit product-change dispatch and the
 AI agent's snapshot writer. Core sends exactly the fields the snapshot embeds
-(sku, name, category, unit) — never money or PII (spec §5.5). ``removes``
+(sku, name, category, unit) - never money or PII (spec §5.5). ``removes``
 never need vectors, so they apply even when no embedding provider is
 configured (``skipped=true`` marks upserts that could not be embedded).
 """

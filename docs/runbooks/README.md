@@ -47,6 +47,6 @@ Examples:
 ## Adding a Runbook
 
 1. Create a new `.md` file following the template above
-2. Fill in all sections — leave no section empty
+2. Fill in all sections - leave no section empty
 3. Test the diagnosis steps yourself before marking as complete
 4. Link the runbook from the relevant Grafana alert rule

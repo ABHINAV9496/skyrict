@@ -5,7 +5,7 @@ Two responsibilities, both rooted in the ERP database:
 - :meth:`build_feature_vectors` projects **anonymous numeric risk features**
   from existing ERP tables (``erp_employees``, ``erp_compensation``,
   ``erp_attendance_records``, ``erp_leave_movements``). No employee name,
-  email, phone or employee number is ever selected here — only the id +
+  email, phone or employee number is ever selected here - only the id +
   ``department_id`` + four numbers, which is what core relays to ai-agent.
 - :meth:`list_scores` / :meth:`get_score` / :meth:`upsert_scores` persist and
   read the resulting ``ai_hr_attrition_scores`` rows idempotently per
@@ -64,7 +64,7 @@ class ScoredRisk:
 
     ``first_name``/``last_name``/``employee_number``/``department_name`` are
     populated only by :meth:`list_scores`/:meth:`get_score` for the L2
-    individual shape. L1 aggregation must never serialize them — the L1
+    individual shape. L1 aggregation must never serialize them - the L1
     path only reads counts/band rows.
     """
 

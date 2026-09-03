@@ -1,15 +1,15 @@
-"""Inventory semantic + exact product search (SKY-70) — feature layer.
+"""Inventory semantic + exact product search (SKY-70) - feature layer.
 
 Hybrid pipeline: exact (ILIKE substring) hits ALWAYS rank above semantic
 (cosine vector) hits, merged and deduplicated by ``product_id``. The search
-degrades gracefully by design — a missing embedding provider, a provider
+degrades gracefully by design - a missing embedding provider, a provider
 failure, or a Redis blip never fails the request; each produces exact-only
 results surfaced as ``degraded=true`` on the response.
 
 Layering (import-linter "feature layer, no models/db"):
 - the embedding/exact store is a protocol implemented by the DB repository;
 - the inventory gateway (reads core) is consulted ONLY for the optional
-  warehouse filter and valuation enrichment — never for the search itself;
+  warehouse filter and valuation enrichment - never for the search itself;
 - Redis hot-cache and the rate limiter are foundations, reused from the RAG
   retrieval stack (distinct key prefix keeps the keyspaces separate).
 
@@ -263,7 +263,7 @@ class InventorySearchService:
                 )
                 semantic_items = [_semantic_item(hit) for hit in hits]
             except Exception as exc:
-                # Embedding/semantic failures degrade to exact-only — the
+                # Embedding/semantic failures degrade to exact-only - the
                 # catalog is still searchable, just without synonyms/fuzz.
                 logger.warning("inventory_search.semantic_degraded", error=str(exc))
                 degraded = True

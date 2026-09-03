@@ -1,4 +1,4 @@
-name: CI — Core Service
+name: CI - Core Service
 
 on:
   push:

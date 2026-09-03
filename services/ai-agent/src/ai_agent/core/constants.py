@@ -1,4 +1,4 @@
-"""Application-wide constants — single source of truth for magic values."""
+"""Application-wide constants - single source of truth for magic values."""
 
 from __future__ import annotations
 
@@ -34,14 +34,14 @@ PROBLEM_VALIDATION_ERROR = f"{PROBLEM_BASE_URL}/validation-error"
 PROBLEM_INTERNAL_ERROR = f"{PROBLEM_BASE_URL}/internal-error"
 
 # AI-specific problem types (SKY-57 error contract). The frontend mock-fallback
-# policy keys off ``ai_unavailable`` — keep the string stable.
+# policy keys off ``ai_unavailable`` - keep the string stable.
 PROBLEM_AI_UNAVAILABLE = f"{PROBLEM_BASE_URL}/ai-unavailable"
 PROBLEM_AI_INVALID_RESPONSE = f"{PROBLEM_BASE_URL}/ai-invalid-response"
 PROBLEM_AI_RATE_LIMITED = f"{PROBLEM_BASE_URL}/ai-rate-limited"
 PROBLEM_AI_DATA_RESIDENCY = f"{PROBLEM_BASE_URL}/ai-data-residency"
 
 # ---------------------------------------------------------------------------
-# Skip-auth paths (middleware bypass) — real mounted paths under /api/v1.
+# Skip-auth paths (middleware bypass) - real mounted paths under /api/v1.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {

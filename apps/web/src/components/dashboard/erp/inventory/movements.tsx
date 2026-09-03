@@ -283,7 +283,7 @@ export function MovementsClient() {
                                                         {movement.refType}
                                                     </span>
                                                 ) : (
-                                                    "—"
+                                                    "-"
                                                 )}
                                             </td>
                                         </tr>

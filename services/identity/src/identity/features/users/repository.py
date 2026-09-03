@@ -1,4 +1,4 @@
-"""User repository — DB operations for the users table.
+"""User repository - DB operations for the users table.
 
 All SQLAlchemy stays in this file. Repositories are the only layer allowed to
 touch ORM models; service-facing methods accept and return domain entities

@@ -3,10 +3,10 @@
 Lazy-on-read TTL scan (mirrors the quality/attrition services), then:
 
   - ``org_feed`` (L1, ``erp.hr.ai.read``): aggregate counts by alert type and
-    severity plus a deterministic narrative — never per-person data.
+    severity plus a deterministic narrative - never per-person data.
   - ``employee_alerts`` (L2, ``erp.hr.ai.individual``): one employee's alerts.
   - ``own_alerts`` (self-scoped, ``erp.leave.self``): the employee's own feed
-    for the portal surface — bound to the caller's linked employee record.
+    for the portal surface - bound to the caller's linked employee record.
 """
 
 from __future__ import annotations

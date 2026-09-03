@@ -4,15 +4,15 @@ Provider-agnostic AI infrastructure for the Skyrict platform (SKY-57).
 
 The ai-agent service owns:
 
-- **LLM routing** — configurable providers (OpenRouter, Groq, OpenAI-compatible,
+- **LLM routing** - configurable providers (OpenRouter, Groq, OpenAI-compatible,
   and others) behind one abstract interface, with a primary → fallback chain
   and a typed `ai_unavailable` error contract when every provider fails.
-- **Shared AI tables** — `ai_query_log`, `ai_suggestions`, `ai_anomalies`,
+- **Shared AI tables** - `ai_query_log`, `ai_suggestions`, `ai_anomalies`,
   `agent_registry`, `ai_audit_log` in the shared PostgreSQL database, migrated
   by this service under its own Alembic chain (`alembic_version_ai`).
-- **Inventory AI engines** — thin-but-real NL query parsing, restock
+- **Inventory AI engines** - thin-but-real NL query parsing, restock
   suggestions, and anomaly detection (RAG/LangGraph arrive in SKY-58/SKY-59).
-- **Audit logging** — every AI action recorded per the inventory AI spec,
+- **Audit logging** - every AI action recorded per the inventory AI spec,
   Appendix B.
 
 ## Architecture boundary
@@ -57,8 +57,8 @@ uv run --directory services/ai-agent ai-agent serve --reload
 Health probes:
 
 ```bash
-curl http://localhost:8002/api/v1/health   # liveness — {"status":"healthy","service":"ai-agent"}
-curl http://localhost:8002/api/v1/ready    # readiness — db_ok / redis_ok checks
+curl http://localhost:8002/api/v1/health   # liveness - {"status":"healthy","service":"ai-agent"}
+curl http://localhost:8002/api/v1/ready    # readiness - db_ok / redis_ok checks
 ```
 
 Dev tenant routing uses the `X-Tenant-Slug` header (injected by nginx in the

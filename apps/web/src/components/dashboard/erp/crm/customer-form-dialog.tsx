@@ -189,10 +189,10 @@ export function CustomerFormDialog({
                   <SelectValue placeholder="USD" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USD">USD — US dollar</SelectItem>
-                  <SelectItem value="EUR">EUR — Euro</SelectItem>
-                  <SelectItem value="GBP">GBP — British pound</SelectItem>
-                  <SelectItem value="INR">INR — Indian rupee</SelectItem>
+                  <SelectItem value="USD">USD - US dollar</SelectItem>
+                  <SelectItem value="EUR">EUR - Euro</SelectItem>
+                  <SelectItem value="GBP">GBP - British pound</SelectItem>
+                  <SelectItem value="INR">INR - Indian rupee</SelectItem>
                 </SelectContent>
               </Select>
             </div>

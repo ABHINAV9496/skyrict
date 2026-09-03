@@ -1,4 +1,4 @@
-"""Exception-to-status mapping tests — the RFC 7807 tenant error contract.
+"""Exception-to-status mapping tests - the RFC 7807 tenant error contract.
 
 Tenant error mapping (ERP-FND-001):
   missing tenant context -> 400 tenant-context-missing

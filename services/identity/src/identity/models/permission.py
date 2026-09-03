@@ -1,4 +1,4 @@
-"""Permission ORM model — platform-fixed permission catalog."""
+"""Permission ORM model - platform-fixed permission catalog."""
 
 from __future__ import annotations
 

@@ -1,15 +1,15 @@
-"""graph_checkpoints + graph_checkpoint_writes — LangGraph persistence (SKY-59).
+"""graph_checkpoints + graph_checkpoint_writes - LangGraph persistence (SKY-59).
 
 ORM views over the orchestration runtime's storage (migration 0008):
 
-- ``graph_checkpoints`` — one row per LangGraph checkpoint, per tenant and
+- ``graph_checkpoints`` - one row per LangGraph checkpoint, per tenant and
   graph run. ``state`` holds the typed serialization envelope
   (``{"type": "json"|"msgpack", "data": ...}``) written by
   ``ai_agent.graphs.checkpointer.SqlAlchemyCheckpointSaver``; ``metadata`` is
   the LangGraph checkpoint metadata (source/step/parents + runtime extras)
   with JSON-safe scalar values. ``step``/``updated_at`` mirror the runtime
   metadata so list and sweep queries never decode blobs.
-- ``graph_checkpoint_writes`` — pending task writes LangGraph needs to
+- ``graph_checkpoint_writes`` - pending task writes LangGraph needs to
   continue a paused graph after resume, the same role as the stock Postgres
   checkpointer's second table (channel, task_id, task_path, idx, value
   envelope; task ``idx`` is negative for special writes: error/interrupt/

@@ -2,8 +2,8 @@
 
 The onboarding wizard needs to track two lifecycle markers:
 
-* ``users.onboarding_dismissed_at`` — set when a user dismisses the wizard.
-* ``tenants.onboarding_completed_at`` — set when the organization finishes
+* ``users.onboarding_dismissed_at`` - set when a user dismisses the wizard.
+* ``tenants.onboarding_completed_at`` - set when the organization finishes
   the wizard (idempotent: the repository only stamps it once).
 
 Revision ID: 0013

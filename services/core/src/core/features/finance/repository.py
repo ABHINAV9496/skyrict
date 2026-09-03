@@ -1,4 +1,4 @@
-"""Finance repository — DB operations for the money side of the ERP.
+"""Finance repository - DB operations for the money side of the ERP.
 
 The finance module's only DB-touching code. Implements
 :class:`core.features.finance.ports.FinanceRepositoryPort` and stays inside the
@@ -11,7 +11,7 @@ Guarantees this layer owns:
 - **Idempotency**: the ``UNIQUE (tenant_id, source, source_ref)`` constraints on
   journal entries / invoices / payments are the durable lock. Re-creating a
   stamped document raises a unique violation, which is translated to a 409
-  ``ConflictError`` here — a replayed handoff can never double-book.
+  ``ConflictError`` here - a replayed handoff can never double-book.
 - **Atomic document creation**: header + lines are flushed in one transaction;
   a failed line rolls the whole document back.
 - **Numbering**: nextval on the global ``seq_erp_invoice_number`` /
@@ -800,7 +800,7 @@ class FinanceRepository:
         return _document_number(PAYMENT_PREFIX, year, seq)
 
     # ------------------------------------------------------------------
-    # Reports (aggregate POSTED lines on read — never stored)
+    # Reports (aggregate POSTED lines on read - never stored)
     # ------------------------------------------------------------------
 
     async def trial_balance(self, tenant_id: uuid.UUID, as_of: date) -> TrialBalance:
@@ -1186,7 +1186,7 @@ class FinanceRepository:
     async def suggest_account_code(
         self, tenant_id: uuid.UUID, description: str
     ) -> AccountCodeSuggestion:
-        """Deterministic keyword fallback — best-effort, honest no-match.
+        """Deterministic keyword fallback - best-effort, honest no-match.
 
         Returns an empty suggestion (no code/name, confidence 0) when no
         account scores above zero, so the UI never shows a misleading
@@ -1302,7 +1302,7 @@ class FinanceRepository:
         threshold = Decimal("1.5")
         balance = await self.balance_sheet(tenant_id, as_of)
         # ponytail: every ASSET is treated as current and every LIABILITY as
-        # current — no current/non-current split exists on the chart yet. Add
+        # current - no current/non-current split exists on the chart yet. Add
         # a sub-classification on the COA if the ratio needs to be precise.
         current_assets = sum((line.balance for line in balance.assets), Decimal("0"))
         current_liabilities = sum((line.balance for line in balance.liabilities), Decimal("0"))

@@ -78,7 +78,7 @@ export async function listFollowUps(): Promise<FollowUpItem[]> {
 
 /**
  * Apply a follow-up suggestion (one-click send).
- * Requires an activity_id — the UUID of the CRM activity created in core.
+ * Requires an activity_id - the UUID of the CRM activity created in core.
  */
 export async function applyFollowUp(
   followUpId: string,

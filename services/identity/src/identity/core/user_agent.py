@@ -1,4 +1,4 @@
-"""User-Agent parsing — turns a raw UA string into structured device facts.
+"""User-Agent parsing - turns a raw UA string into structured device facts.
 
 Backed by the ``user-agents`` library (ua-parser regexes) and optionally
 supplemented by ``Sec-CH-UA*`` Client Hints. Never raises: a missing or
@@ -7,16 +7,16 @@ records, security-alert emails) always get a renderable string.
 
 Classification is deliberately conservative:
 
-* ``service`` — obvious non-browser clients (curl, node, python-requests…),
+* ``service`` - obvious non-browser clients (curl, node, python-requests…),
   detected before ua-parser so they are never mislabeled as ``Desktop``.
-* ``bot`` — known crawlers already flagged by ua-parser.
-* ``mobile`` / ``tablet`` / ``desktop`` — derived from ua-parser device hints.
-* ``unknown`` — nothing reliable to say (e.g. a bare ``Mozilla/5.0``).
+* ``bot`` - known crawlers already flagged by ua-parser.
+* ``mobile`` / ``tablet`` / ``desktop`` - derived from ua-parser device hints.
+* ``unknown`` - nothing reliable to say (e.g. a bare ``Mozilla/5.0``).
 
 Windows 10 vs Windows 11 is only distinguished via
 ``Sec-CH-UA-Platform-Version`` (major >= 15 implies Windows 11); a bare
 ``Windows NT 10.0`` string is never enough to claim either. Device *models*
-are reported only when the parser yields a specific handset model — never
+are reported only when the parser yields a specific handset model - never
 invented.
 """
 
@@ -295,7 +295,7 @@ def parse_user_agent(
     """Parse a raw User-Agent header into a :class:`DeviceInfo`.
 
     Empty input and bot UAs produce ``DeviceInfo`` with ``Unknown`` fields and
-    an empty ``browser_version`` — never an exception. Programmatic clients
+    an empty ``browser_version`` - never an exception. Programmatic clients
     are classified as ``service``; everything else is classified
     conservatively and never claims a Windows 10/11 label without Client
     Hints evidence.

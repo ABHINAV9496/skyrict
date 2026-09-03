@@ -1,4 +1,4 @@
-"""Avatar storage — filesystem (local) and S3 backends behind one port.
+"""Avatar storage - filesystem (local) and S3 backends behind one port.
 
 Keys are always the tenant-scoped relative path ``{tenant_id}/{user_id}/{filename}``.
 Implementations reject any key that escapes their namespace.

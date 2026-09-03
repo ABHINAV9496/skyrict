@@ -1,6 +1,6 @@
 """Corrective migration: ``erp_leave_movements.ref_id`` as String(64), not UUID.
 
-Background — this revision heals a silent schema drift; it is not a design
+Background - this revision heals a silent schema drift; it is not a design
 change. Migration ``0005`` originally created ``erp_leave_movements.ref_id``
 as ``sa.Uuid()``. Before any new revision was added, the column's intent
 changed to a plain reference string (the annual-accrual ref is the leave
@@ -8,7 +8,7 @@ year, e.g. ``"2026"``; leave-request / manual-adjustment refs are request /
 adjustment ids) and the already-committed migration file was edited in place
 (commit ``8bfcc08``). The ORM model and the migration file now say
 ``String(64)``, but any database migrated with the original ``0005`` still
-has a ``uuid`` column while its alembic version table already reads head —
+has a ``uuid`` column while its alembic version table already reads head -
 so ``alembic upgrade`` never repairs it on its own.
 
 ``upgrade`` changes the column to ``String(64)``:
@@ -50,5 +50,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Irreversible by design — see the module docstring.
+    # Irreversible by design - see the module docstring.
     pass

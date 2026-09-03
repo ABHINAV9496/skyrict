@@ -295,7 +295,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
       {lastPayment ? (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-foreground">
-            Payment {lastPayment.payment_number} applied — {formatMoney(lastPayment.amount)} via{" "}
+            Payment {lastPayment.payment_number} applied - {formatMoney(lastPayment.amount)} via{" "}
             {lastPayment.method} on {formatDateTime(lastPayment.paid_at)}.
           </p>
         </div>

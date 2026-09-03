@@ -21,10 +21,10 @@ We will acknowledge receipt within 48 hours and aim to provide a resolution time
 
 ### What to expect
 
-- **Acknowledgment** — within 48 hours of your report
-- **Triage** — severity assessment and initial investigation within 7 business days
-- **Fix timeline** — communicated once triage is complete
-- **Disclosure** — coordinated disclosure after a fix is available. We request 90 days maximum before public disclosure.
+- **Acknowledgment** - within 48 hours of your report
+- **Triage** - severity assessment and initial investigation within 7 business days
+- **Fix timeline** - communicated once triage is complete
+- **Disclosure** - coordinated disclosure after a fix is available. We request 90 days maximum before public disclosure.
 
 ### Scope
 
@@ -51,7 +51,7 @@ Security researchers who report valid vulnerabilities will be credited in the re
 
 - Never deploy with default secrets. Generate unique keys for every environment.
 - Enable TLS termination at the load balancer or reverse proxy.
-- Use environment variables or a secrets manager (Vault, AWS Secrets Manager) — never commit secrets to source control.
+- Use environment variables or a secrets manager (Vault, AWS Secrets Manager) - never commit secrets to source control.
 - Enable database row-level security (RLS) for multi-tenant deployments.
 - Restrict Kafka broker access to internal networks only.
 - Rotate API keys and JWT signing keys on a regular schedule.

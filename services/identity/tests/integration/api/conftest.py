@@ -3,10 +3,10 @@
 The TenantContextMiddleware resolves the tenant by slug with a database lookup
 on every non-skipped request, so API integration tests need a reachable
 Postgres. When it is unavailable (local dev without Docker), the whole API
-integration suite is skipped — CI runs it against a provisioned database.
+integration suite is skipped - CI runs it against a provisioned database.
 
 The session-scoped ``migrated_schema`` fixture applies ``alembic upgrade head``
-once (real migrations — RLS policies, audit triggers, permission catalog — not
+once (real migrations - RLS policies, audit triggers, permission catalog - not
 ``create_all``). The autouse ``integration_db`` fixture then seeds the
 isolation fixtures (tenants olympus/globex/disabledco + user alice@acme.io) and
 removes only the rows it created.
@@ -87,7 +87,7 @@ def _fresh_rate_limiter_client() -> None:
     ``get_rate_limiter`` returns a module singleton whose lazy Redis client is
     created on the first test's event loop. pytest-asyncio gives every test its
     own loop, so a cached client crosses loops and its first command fails with
-    "Event loop is closed" — the limiter then fails OPEN, silently skipping one
+    "Event loop is closed" - the limiter then fails OPEN, silently skipping one
     count and making rate-limit tests flaky. Resetting the client each test
     forces a fresh connection on the current loop, the same treatment the DB
     engine gets in ``integration_db``.
@@ -101,7 +101,7 @@ def _fresh_rate_limiter_client() -> None:
 @pytest.fixture(autouse=True)
 async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str], None]:
     """Seed isolation fixtures after the schema exists; clean up only its rows."""
-    # Fresh context — no tenant can leak from a previous test into this one.
+    # Fresh context - no tenant can leak from a previous test into this one.
     TenantContext.reset()
 
     created_tenant_slugs: list[str] = []
@@ -157,7 +157,7 @@ async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str]
             "user_a_id": str(user_id),
         }
 
-    # Cleanup — only rows this fixture created.
+    # Cleanup - only rows this fixture created.
     async with async_session_factory() as session:
         if created_tenant_slugs:
             await session.execute(

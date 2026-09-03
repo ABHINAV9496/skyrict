@@ -1,7 +1,7 @@
-"""Payroll repository and integration ports — persistence + cross-feature contracts.
+"""Payroll repository and integration ports - persistence + cross-feature contracts.
 
 The consumer of leave data declares ``LeaveLedgerPort`` (docs/hr-payroll.md §6
-Step 3 — implemented by ``features/hr``, injected at the composition root in
+Step 3 - implemented by ``features/hr``, injected at the composition root in
 ``api/deps.py``). Neither feature imports the other's repository or models.
 Payroll reads the active-employee roster through ``PayrollRepositoryPort``
 (its one sanctioned cross-feature read, per the ERD: ``PayrollEntryModel.
@@ -20,7 +20,7 @@ from core.domain.value_objects import Money
 
 
 class LeaveLedgerPort(Protocol):
-    """Leave reads + annual accrual — implemented by ``features/hr``.
+    """Leave reads + annual accrual - implemented by ``features/hr``.
 
     Used by payroll to compute the unpaid-leave overlap for ``pay_days``
     proration (docs/hr-payroll.md §4.10, Rule 9) and to run the Rule 4 annual

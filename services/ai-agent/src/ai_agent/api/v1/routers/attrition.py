@@ -1,4 +1,4 @@
-"""/ai/hr/attrition endpoints — model scoring + factor explanations (spec §6).
+"""/ai/hr/attrition endpoints - model scoring + factor explanations (spec §6).
 
 Authn here (JWT re-verification); authz happens at the core proxy edge before
 this is ever reached. This endpoint is deliberately stateless: it accepts

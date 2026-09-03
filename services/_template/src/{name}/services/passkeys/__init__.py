@@ -12,7 +12,7 @@ class PasskeyService:
         self.user_repo = user_repo
 
     async def start_registration(self, user_id: uuid.UUID) -> dict:
-        """Initiate passkey registration — return challenge options."""
+        """Initiate passkey registration - return challenge options."""
         raise NotImplementedError
 
     async def complete_registration(self, user_id: uuid.UUID, credential: dict) -> dict:
@@ -20,7 +20,7 @@ class PasskeyService:
         raise NotImplementedError
 
     async def start_authentication(self, email: str) -> dict:
-        """Initiate passkey authentication — return challenge options."""
+        """Initiate passkey authentication - return challenge options."""
         raise NotImplementedError
 
     async def complete_authentication(self, credential: dict) -> dict:

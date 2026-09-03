@@ -1,4 +1,4 @@
-"""Sessions v2 — status lifecycle, token families, trusted devices.
+"""Sessions v2 - status lifecycle, token families, trusted devices.
 
 Replaces the boolean ``is_active`` with a ``status`` state machine
 (active -> revoked/expired), adds ``token_family_id`` for rotation/reuse

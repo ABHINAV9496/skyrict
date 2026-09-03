@@ -8,7 +8,7 @@ export default function ErpInventoryWarehousesPage() {
         <div className="space-y-6">
             <PageHeader
                 title="Warehouses"
-                description="Where stock lives — add and manage storage locations."
+                description="Where stock lives add and manage storage locations."
                 icon={Warehouse}
             />
             <WarehousesClient />

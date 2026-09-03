@@ -10,7 +10,7 @@ export default function CrmOpportunitiesPage() {
       <div className="space-y-6">
         <PageHeader
           title="Opportunities"
-          description="Deals move forward one stage at a time — winning one creates the customer automatically."
+          description="Deals move forward one stage at a time winning one creates the customer automatically."
           icon={TrendingUp}
         />
         <OpportunitiesBoard />

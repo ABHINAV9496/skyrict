@@ -33,7 +33,7 @@ from skyrict_common.exceptions import (
 
 
 class FakeUserRepo:
-    """UserRepositoryPort double — records MFA writes on the wrapped user."""
+    """UserRepositoryPort double - records MFA writes on the wrapped user."""
 
     def __init__(self, user: User) -> None:
         self.user = user
@@ -75,7 +75,7 @@ class FakeUserRepo:
 
 
 class FakeRoleRepo:
-    """RoleRepositoryPort double — returns a fixed role list for any user."""
+    """RoleRepositoryPort double - returns a fixed role list for any user."""
 
     def __init__(self, roles: list[str] | None = None) -> None:
         self.roles = roles or []
@@ -87,7 +87,7 @@ class FakeRoleRepo:
 
 
 class FakeAuditService:
-    """AuditService double — records every log() call, including details."""
+    """AuditService double - records every log() call, including details."""
 
     def __init__(self) -> None:
         self.events: list[dict[str, object]] = []
@@ -158,7 +158,7 @@ class TestBackupCodePrimitive:
         assert all(len(code) == 16 for code in codes)
         # The stored hashes ARE the output of the one backup-code primitive
         # (Argon2id, same as passwords), and redemption inverts it via the
-        # paired verify function — no other code path accepts a backup code.
+        # paired verify function - no other code path accepts a backup code.
         assert all(stored.startswith("$argon2id$") for stored in hashes)
         assert all(
             verify_backup_code(code, stored) for code, stored in zip(codes, hashes, strict=True)

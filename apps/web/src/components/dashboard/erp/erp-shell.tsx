@@ -16,7 +16,7 @@ const COLLAPSED_KEY = "skyrict:sidebar:collapsed";
 /**
  * The ERP "world": a conventional operations application. The sidebar shows the
  * ERP sub-modules (CRM, Sales, Inventory, Finance, HR, Reports) and each one is
- * a real page — not a card buried inside a single-page route.
+ * a real page - not a card buried inside a single-page route.
  */
 export function ErpShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);

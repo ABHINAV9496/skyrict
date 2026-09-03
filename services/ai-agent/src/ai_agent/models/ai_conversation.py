@@ -1,4 +1,4 @@
-"""ai_conversations — durable conversation storage for the Agents shell.
+"""ai_conversations - durable conversation storage for the Agents shell.
 
 Each row represents one chat session owned by a user within a tenant.
 Messages are stored in the separate ``ai_conversation_messages`` table
@@ -42,6 +42,9 @@ class AiConversation(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    title_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

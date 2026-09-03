@@ -1,4 +1,4 @@
-"""Middleware stack — TenantContext, request-id.
+"""Middleware stack - TenantContext, request-id.
 
 These run on EVERY request. Keep them lightweight and fast.
 """
@@ -35,7 +35,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 class TenantContextMiddleware(BaseHTTPMiddleware):
     """Extract tenant_id from verified JWT and set TenantContext.
 
-    Calls security.verify_jwt() — the ONE AND ONLY decode path.
+    Calls security.verify_jwt() - the ONE AND ONLY decode path.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:

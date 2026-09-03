@@ -44,7 +44,7 @@ function hashQuery(query: string): number {
 }
 
 const SUMMARIES = [
-  "Based on recent signals across Trends, Reddit, YouTube, GitHub, and news, momentum around this space is rising but fragmented — a handful of entrants are winning distribution while most niche plays remain underserved.",
+  "Based on recent signals across Trends, Reddit, YouTube, GitHub, and news, momentum around this space is rising but fragmented - a handful of entrants are winning distribution while most niche plays remain underserved.",
   "Cross-referencing five sources points to a market where demand is consolidating around quality and speed. Competitors are moving toward bundled offers, while winning products share a focus on automation and trust.",
   "Market signals show healthy but slowing growth in the broad category, with clear whitespace in specific niches. The strongest competitors are doubling down on verticals rather than horizontal reach.",
 ];
@@ -100,7 +100,7 @@ export function searchIntelligence(query: string): SearchResponse {
         description: `Products gaining share and traction in ${term}.`,
         results: [
           {
-            title: `${pick(["Fieldnote", "Stackline", "Breezeway", "Northbeam", "Cobalt"], hash)} — the ${term} product to watch`,
+            title: `${pick(["Fieldnote", "Stackline", "Breezeway", "Northbeam", "Cobalt"], hash)} - the ${term} product to watch`,
             source: "YouTube · 214k views",
             url: "#",
             snippet: `Reviewers consistently rank it highest for setup speed and accuracy. Adoption is accelerating among teams under 50 people.`,
@@ -119,7 +119,7 @@ export function searchIntelligence(query: string): SearchResponse {
             title: `${term} template packs and playbooks trend upward`,
             source: "Trends",
             url: "#",
-            snippet: `Interest in ${term} templates and starter kits is up 58% — a signal that buyers want to start fast, not build from scratch.`,
+            snippet: `Interest in ${term} templates and starter kits is up 58% - a signal that buyers want to start fast, not build from scratch.`,
             confidence: 0.81,
             timeframe: "Last month",
           },
@@ -134,7 +134,7 @@ export function searchIntelligence(query: string): SearchResponse {
             title: `${pick(["RegTech", "HealthTech", "EdTech", "PropTech", "LogTech"], hash)} + ${term}: a crowded idea with empty shelves`,
             source: "GitHub · discussion",
             url: "#",
-            snippet: `Open-source projects for ${term} in this vertical are sparse — most existing tools are horizontal. The few vertical attempts have strong early engagement.`,
+            snippet: `Open-source projects for ${term} in this vertical are sparse - most existing tools are horizontal. The few vertical attempts have strong early engagement.`,
             confidence: 0.88,
             timeframe: "Last quarter",
           },
@@ -181,7 +181,7 @@ export function searchIntelligence(query: string): SearchResponse {
             title: `${pick(["AI agents", "Embedded analytics", "API-first", "Self-serve"], hash)} reframes ${term} conversations`,
             source: "GitHub · trending topics",
             url: "#",
-            snippet: `Developer discourse now frames ${term} around composability and agents rather than monolithic suites — a meaningful shift in the ecosystem.`,
+            snippet: `Developer discourse now frames ${term} around composability and agents rather than monolithic suites - a meaningful shift in the ecosystem.`,
             confidence: 0.79,
             timeframe: "Last 6 months",
           },

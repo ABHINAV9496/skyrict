@@ -1,7 +1,7 @@
 """Real client IP extraction behind trusted reverse proxies.
 
 The identity service records a client IP for every session, rate-limit key,
-and audit event. That IP must be the *end user's* address — never a value the
+and audit event. That IP must be the *end user's* address - never a value the
 client itself supplied. Only peers listed in ``IDENTITY_TRUSTED_PROXIES`` may
 influence the result:
 

@@ -1,4 +1,4 @@
-"""widget_events — lightweight widget interaction telemetry.
+"""widget_events - lightweight widget interaction telemetry.
 
 Records open/hide events per user per widget for the AI-powered layout
 suggestion engine.  Events are append-only; TTL cleanup runs periodically.

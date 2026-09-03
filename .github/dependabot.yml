@@ -1,4 +1,4 @@
-# Dependabot — automated dependency updates
+# Dependabot - automated dependency updates
 # Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 #
 # Design notes (read before editing):
@@ -7,13 +7,13 @@
 # - Duplicate per-directory entries against a shared lockfile cause duplicate/near-duplicate PRs.
 # - Minor/patch bumps are grouped into a single weekly PR per ecosystem to avoid PR flooding.
 # - Major version bumps are intentionally left OUT of the group (update-types only matches
-#   minor/patch), so a breaking change always gets its own PR and real review — never silently
+#   minor/patch), so a breaking change always gets its own PR and real review - never silently
 #   bundled in with routine patch bumps.
 
 version: 2
 
 updates:
-  # ---------- Python (uv workspace — single root lockfile) ----------
+  # ---------- Python (uv workspace - single root lockfile) ----------
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -33,7 +33,7 @@ updates:
           - "minor"
           - "patch"
 
-  # ---------- npm (pnpm workspace — single root lockfile) ----------
+  # ---------- npm (pnpm workspace - single root lockfile) ----------
   - package-ecosystem: "npm"
     directory: "/"
     schedule:

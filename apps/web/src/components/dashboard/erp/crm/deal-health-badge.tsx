@@ -10,7 +10,7 @@ import { getDealHealth, type DealHealth } from "@/lib/api/crm-ai-api";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Health band styles — green | yellow | red
+// Health band styles - green | yellow | red
 // ---------------------------------------------------------------------------
 
 const HEALTH_STYLES: Record<string, string> = {

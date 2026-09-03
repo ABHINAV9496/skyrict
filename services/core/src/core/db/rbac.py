@@ -1,13 +1,13 @@
-"""ERP role/permission resolution — the DB-resolved authorization path.
+"""ERP role/permission resolution - the DB-resolved authorization path.
 
 ``require_permission`` (api/deps.py) resolves a user's grants from the database
-at request time through :class:`RbacRepository` — permissions are NEVER read
+at request time through :class:`RbacRepository` - permissions are NEVER read
 from JWT claims. Roles are tenant-scoped, so resolution is scoped to the
 request's tenant and the RLS policies (``app.current_tenant_id``) additionally
 bound every query to that tenant.
 
 Data scoping (OWNER/TEAM/ALL) follows the same discipline: a role name is
-mapped to a :class:`DataScope` here — the ONE place that mapping lives — and
+mapped to a :class:`DataScope` here - the ONE place that mapping lives - and
 feature repositories receive only the resolved scope plus the user/team ids.
 Repositories never hardcode role names, so a role change cannot silently
 broaden a query.
@@ -54,7 +54,7 @@ _SCOPE_RANK: dict[DataScope, int] = {
 def resolve_data_scope(role_name: str) -> DataScope:
     """Map a role name to the data scope it grants.
 
-    Unknown roles resolve to ``DataScope.OWNER`` (fail closed — a user can
+    Unknown roles resolve to ``DataScope.OWNER`` (fail closed - a user can
     never see MORE than their role grants).
     """
     return _SCOPE_BY_ROLE.get(role_name, DataScope.OWNER)

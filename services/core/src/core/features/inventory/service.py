@@ -1,4 +1,4 @@
-"""Inventory service — §4 business rules + §5.4 reservation port.
+"""Inventory service - §4 business rules + §5.4 reservation port.
 
 The service owns the transaction lifecycle. Every mutating method runs its
 checks and ledger writes inside ONE transaction, calls ``inventory_repo.commit()``,
@@ -7,15 +7,15 @@ produce a phantom audit/event, and a committed mutation stays observable even if
 the audit write fails afterwards (at-least-once, matching identity's audit flow).
 
 Rules implemented (see docs/modules/inventory-warehouse.md §4):
-  Rule 1 — stock is a ledger: every change writes exactly one (or one pair of)
+  Rule 1 - stock is a ledger: every change writes exactly one (or one pair of)
            immutable movement rows; ``qty_on_hand`` is recomputed from the
            ledger inside the same transaction.
-  Rule 2 — no negative stock: the service pre-checks ``before + qty >= 0`` and
+  Rule 2 - no negative stock: the service pre-checks ``before + qty >= 0`` and
            raises ``InsufficientStockError`` (409); the DB CHECK is the backstop
            that serializes concurrent writers.
-  Rule 3 — transfers are atomic: two movements (source ``-qty``, destination
-           ``+qty``) share one ``ref_id`` in a single transaction — or none.
-  Rule 4 — reorder alerts fire ONCE per breach crossing: only when the level
+  Rule 3 - transfers are atomic: two movements (source ``-qty``, destination
+           ``+qty``) share one ``ref_id`` in a single transaction - or none.
+  Rule 4 - reorder alerts fire ONCE per breach crossing: only when the level
            transitions from ``> reorder_point`` to ``<= reorder_point``.
 
 Idempotency (spec §10.2) is probe-based: ``(ref_type, ref_id, warehouse_id)``
@@ -97,7 +97,7 @@ def _step_ref(ref_id: str, step: str) -> str:
 class InventoryService:
     """Implements :class:`InventoryServicePort` and :class:`StockReservationPort`.
 
-    Single class implements both ports — CRM calls reservation methods on the
+    Single class implements both ports - CRM calls reservation methods on the
     same service object the HTTP router consumes (spec §5.4: "same service
     object or an injected port").
     """
@@ -203,7 +203,7 @@ class InventoryService:
         before: Decimal,
         after: Decimal,
     ) -> None:
-        """Rule 4 — broadcast the level change; fire the alert only on a crossing."""
+        """Rule 4 - broadcast the level change; fire the alert only on a crossing."""
         assert product.id is not None
         breach_crossed = before > product.reorder_point and after <= product.reorder_point
         await emit_stock_level_changed(
@@ -411,7 +411,7 @@ class InventoryService:
 
         ERP archive semantics: plain on-hand quantity does NOT block archiving
         (it stays on the books and is written off via an adjustment on the
-        archived item), but any reserved quantity — an open commitment — does.
+        archived item), but any reserved quantity - an open commitment - does.
         """
         tid = _as_uuid(tenant_id)
         product = await self._require_product(product_id, tid)
@@ -516,7 +516,7 @@ class InventoryService:
         return reactivated
 
     # ------------------------------------------------------------------
-    # Rule 2 — stock adjustments
+    # Rule 2 - stock adjustments
     # ------------------------------------------------------------------
 
     async def adjust_stock(
@@ -536,7 +536,7 @@ class InventoryService:
         if not reason or not reason.strip():
             raise ValidationError("Adjustment requires a reason")
 
-        # §14.3 — large adjustments need approval (enforced here, decided by the
+        # §14.3 - large adjustments need approval (enforced here, decided by the
         # router via erp.inventory.adjust.approve).
         if abs(qty) > self.approve_threshold and not approved:
             raise PermissionDeniedError(
@@ -587,7 +587,7 @@ class InventoryService:
         return created
 
     # ------------------------------------------------------------------
-    # Rule 3 — atomic transfers
+    # Rule 3 - atomic transfers
     # ------------------------------------------------------------------
 
     async def transfer_stock(
@@ -671,7 +671,7 @@ class InventoryService:
         return out_movement, in_movement
 
     # ------------------------------------------------------------------
-    # §5.4 — reservation lifecycle (CRM port)
+    # §5.4 - reservation lifecycle (CRM port)
     # ------------------------------------------------------------------
 
     async def reserve_stock(
@@ -770,7 +770,7 @@ class InventoryService:
         await self._require_active_warehouse(warehouse_id, tid)
         before = await self._current_on_hand(product_id, warehouse_id, tid)
 
-        # Consume the reservation atomically — serializes concurrent fulfils.
+        # Consume the reservation atomically - serializes concurrent fulfils.
         if not await self.inventory_repo.apply_consume_qty(product_id, warehouse_id, qty, tid):
             raise InsufficientStockError()
 
@@ -813,7 +813,7 @@ class InventoryService:
         return level
 
     # ------------------------------------------------------------------
-    # §5.4 — whole-order reservation lifecycle (bulk, single-commit)
+    # §5.4 - whole-order reservation lifecycle (bulk, single-commit)
     #
     # The per-line methods above commit after EVERY line, which breaks
     # all-or-nothing atomicity for a multi-line order sharing one request
@@ -964,7 +964,7 @@ class InventoryService:
         return cost_data
 
     # ------------------------------------------------------------------
-    # Reads (thin forwards — the router owns response shaping)
+    # Reads (thin forwards - the router owns response shaping)
     # ------------------------------------------------------------------
 
     async def list_products(

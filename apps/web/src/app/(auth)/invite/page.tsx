@@ -167,7 +167,7 @@ export default async function InvitePage({
           <StateCard
             icon={<CircleAlert aria-hidden="true" className="size-5 text-primary" />}
             title="Invitation not found"
-            body="This invitation link isn&apos;t valid. It may be mistyped or the link may be broken — ask the person who invited you to resend it."
+            body="This invitation link isn&apos;t valid. It may be mistyped or the link may be broken ask the person who invited you to resend it."
             actionLabel="Return to sign in"
             actionHref="/signin"
           />

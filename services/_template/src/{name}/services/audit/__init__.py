@@ -1,4 +1,4 @@
-"""Audit service package — log all security-relevant actions."""
+"""Audit service package - log all security-relevant actions."""
 
 from __future__ import annotations
 

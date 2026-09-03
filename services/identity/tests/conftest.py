@@ -1,4 +1,4 @@
-"""Test fixtures — ephemeral RSA keys, database sessions, test client.
+"""Test fixtures - ephemeral RSA keys, database sessions, test client.
 
 This conftest.py is loaded by pytest before any test module. It generates a
 fresh RSA key pair in a temporary directory (never committed to the repo),
@@ -111,7 +111,7 @@ async def client():
     Runs the REAL application lifespan (startup dependency verification +
     graceful shutdown) so integration tests exercise the lifecycle SKY-11
     implements. Skips the test when the identity application cannot be built
-    OR when startup verification fails (database or Redis unreachable) —
+    OR when startup verification fails (database or Redis unreachable) -
     mirroring how the ``migrated_schema`` fixture skips when Postgres is
     down. CI runs against the provisioned compose stack (postgres + redis),
     where startup succeeds.

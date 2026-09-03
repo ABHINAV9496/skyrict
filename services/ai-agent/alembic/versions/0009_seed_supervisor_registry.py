@@ -3,25 +3,25 @@
 The ``agent_registry`` now serves TWO purposes (documented here so operators
 can tell them apart):
 
-1. LangGraph module agents — rows the checkpointed runtime invokes
+1. LangGraph module agents - rows the checkpointed runtime invokes
    (``restock_advisor``, etc.). ``module`` must expose ``build_graph(deps)``.
-2. Streaming chat agents — supervisor leaves. ``enabled`` gates provisioning:
+2. Streaming chat agents - supervisor leaves. ``enabled`` gates provisioning:
    the supervisor's ``stream_answer`` reads ``get_enabled(name)`` per turn and
    streams a clean "not provisioned yet" abstention for disabled rows
    (Q&A decision #6). ``module`` records the owning feature package for
    operator visibility; these agents are never invoked through the
    checkpointed runtime.
 
-Seeds (all ``ON CONFLICT (name) DO NOTHING`` — operator edits win):
+Seeds (all ``ON CONFLICT (name) DO NOTHING`` - operator edits win):
 
-- ``supervisor``             enabled  — the routing facade itself.
-- ``inventory_monitor``      enabled  — delegates via nl_query gateway +
+- ``supervisor``             enabled  - the routing facade itself.
+- ``inventory_monitor``      enabled  - delegates via nl_query gateway +
   forecast + RAG (backends exist).
-- ``hr_copilot``             enabled  — delegates through the grounded HR
+- ``hr_copilot``             enabled  - delegates through the grounded HR
   Copilot service (backends exist).
-- ``crm_assistant``          disabled — leaves stream the provisioned
+- ``crm_assistant``          disabled - leaves stream the provisioned
   abstention until the CRM backend lands (migration flips ``enabled``).
-- ``finance_assistant``      disabled — same slot-based rollout.
+- ``finance_assistant``      disabled - same slot-based rollout.
 
 Revision ID: 0009
 Revises: 0008

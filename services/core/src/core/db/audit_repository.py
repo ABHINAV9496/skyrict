@@ -1,8 +1,8 @@
-"""Audit repository — DB operations for the tenant-scoped core audit trail.
+"""Audit repository - DB operations for the tenant-scoped core audit trail.
 
 ``hash`` / ``prev_hash`` are filled by the DB trigger ``core_audit_logs_set_hash``
 at INSERT time; the append-only trigger blocks later UPDATE / DELETE. Writes
-only — there is no update or delete path.
+only - there is no update or delete path.
 """
 
 from __future__ import annotations

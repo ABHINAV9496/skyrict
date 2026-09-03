@@ -236,7 +236,7 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
               <dd className="font-medium text-foreground tabular-nums">
                 {opportunity.amount
                   ? formatMoney(opportunity.amount, opportunity.currency ?? "USD")
-                  : "—"}
+                  : "-"}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -254,7 +254,7 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
                 Expected close
               </dt>
               <dd className="font-medium text-foreground">
-                {opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "—"}
+                {opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "-"}
               </dd>
             </div>
             {opportunity.wonAt ? (
@@ -272,13 +272,13 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Created</dt>
               <dd className="font-medium text-foreground">
-                {opportunity.createdAt ? formatDate(opportunity.createdAt) : "—"}
+                {opportunity.createdAt ? formatDate(opportunity.createdAt) : "-"}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Updated</dt>
               <dd className="font-medium text-foreground">
-                {opportunity.updatedAt ? formatDate(opportunity.updatedAt) : "—"}
+                {opportunity.updatedAt ? formatDate(opportunity.updatedAt) : "-"}
               </dd>
             </div>
           </dl>
@@ -292,7 +292,7 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
           {isTerminalStage(opportunity.stage) ? (
             <p className="mt-5 rounded-lg border border-muted bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               This deal is {OPPORTUNITY_STAGE_LABELS[opportunity.stage].toLowerCase()}. Terminal
-              stages cannot be changed on this page — use the pipeline board if you need to
+              stages cannot be changed on this page - use the pipeline board if you need to
               revisit the outcome.
             </p>
           ) : null}

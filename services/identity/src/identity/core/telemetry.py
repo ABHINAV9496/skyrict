@@ -1,4 +1,4 @@
-"""Lightweight telemetry helpers — metrics and timing over structlog.
+"""Lightweight telemetry helpers - metrics and timing over structlog.
 
 Foundational plumbing: emits metric records through the already-configured
 structlog pipeline (JSON in production), so operational signals need no extra

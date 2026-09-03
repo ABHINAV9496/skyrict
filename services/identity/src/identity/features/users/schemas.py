@@ -1,4 +1,4 @@
-"""User schemas — requests and responses."""
+"""User schemas - requests and responses."""
 
 from __future__ import annotations
 

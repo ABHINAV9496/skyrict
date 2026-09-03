@@ -1,7 +1,7 @@
 """Canonical audit event keys for the ERP core domain.
 
 Single source of truth for the free-form ``action`` strings written to the
-shared ``audit_logs`` table (append-only, hash-chained — owned by identity's
+shared ``audit_logs`` table (append-only, hash-chained - owned by identity's
 migration, reused by core). Services must reference these constants instead of
 hardcoding strings so the event vocabulary stays greppable and drift-checked
 against the catalog grouping below.

@@ -1,7 +1,7 @@
-"""``/api/v1/ai/*`` proxy routes — permission checks BEFORE forwarding.
+"""``/api/v1/ai/*`` proxy routes - permission checks BEFORE forwarding.
 
 Permission matrix (ticket SKY-68, spec 6.3): every AI call needs
-``erp.ai.invoke`` AND the module key for the touched domain —
+``erp.ai.invoke`` AND the module key for the touched domain -
 ``erp.inventory.read`` for reads, ``erp.inventory.write`` for anomaly
 dispositions, ``erp.inventory.ai.approve`` for suggestion scan/approve/reject.
 
@@ -9,7 +9,7 @@ The JWT is forwarded verbatim; ai-agent re-verifies it against the
 relayed tenant slug (spec 1.4: AI is a proxy, not an auth bypass).
 
 Path ids are typed ``uuid.UUID`` so FastAPI rejects anything else with
-422 before the handler runs — the forwarded URL only ever embeds the
+422 before the handler runs - the forwarded URL only ever embeds the
 canonical hyphenated form (no ``/``, ``?`` or traversal sequences can
 reach the upstream request target).
 """
@@ -264,7 +264,7 @@ async def proxy_escalate_anomaly(
 
 # The narrator gate needs the request-scoped session (its own dependency),
 # so these routes use the client directly rather than the shared _InvokeDep
-# set — the combined narrator deps already enforce invoke + all module reads.
+# set - the combined narrator deps already enforce invoke + all module reads.
 
 
 @router.get("/narrator/digest")

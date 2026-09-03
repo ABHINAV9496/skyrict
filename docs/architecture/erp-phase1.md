@@ -1,18 +1,18 @@
-# ERP Phase 1 — Core Modules (Architecture & Module Documentation)
+# ERP Phase 1 - Core Modules (Architecture & Module Documentation)
 
 ## Status
 
-Draft — approved scope. Targets the `core` service and the `starter` plan. Depends on the identity service (JWT verification, permissions, tenant context) and the billing gating work (SKY-32..36).
+Draft - approved scope. Targets the `core` service and the `starter` plan. Depends on the identity service (JWT verification, permissions, tenant context) and the billing gating work (SKY-32..36).
 
 ## Goal
 
 Ship the "internal truth" half of the Skyrict Business Operating System as a **single backend service (`services/core`)** exposing five Phase-1 modules to the workspace:
 
-1. **Finance & Accounting** — chart of accounts, journal entries, invoices (accounts receivable)
-2. **Sales & CRM** — leads, opportunities, customers, sales orders
-3. **Inventory & Warehouse** — products/items, stock levels, adjustments, transfers, reorder alerts
-4. **HR & Payroll** — employees, leave, timesheets, payroll runs
-5. **Reporting & Analytics** — cross-module dashboards, exports, scheduled snapshots
+1. **Finance & Accounting** - chart of accounts, journal entries, invoices (accounts receivable)
+2. **Sales & CRM** - leads, opportunities, customers, sales orders
+3. **Inventory & Warehouse** - products/items, stock levels, adjustments, transfers, reorder alerts
+4. **HR & Payroll** - employees, leave, timesheets, payroll runs
+5. **Reporting & Analytics** - cross-module dashboards, exports, scheduled snapshots
 
 Every module is tenant-scoped, permission-gated, event-capable, and exposed through the same REST + BFF pattern the workspace already uses.
 
@@ -21,13 +21,13 @@ Every module is tenant-scoped, permission-gated, event-capable, and exposed thro
 - Procurement / purchasing (depends on the same stock/order primitives; deferred)
 - Production/manufacturing, multi-currency, consolidations, statutory filing
 - Payroll *processing* (net-of-tax computation is external; we record pay runs and emit to a ledger)
-- Replacing identity — `services/core` consumes, never re-implements, auth
+- Replacing identity - `services/core` consumes, never re-implements, auth
 - Kafka as a hard runtime dependency in Phase 1 (see "Events", below)
 
 ## Positioning
 
 - `docs/architecture/readme.md` already slots ERP behind identity. This doc defines exactly what "ERP" means in Phase 1.
-- The marketing pillars define the slice as "a deliberately scoped ERP slice — inventory, sales, cash, orders — … the ~20% of operations that 80% of SMBs actually use" (`apps/web/src/config/index.ts`). Phase 1 must stay in that band.
+- The marketing pillars define the slice as "a deliberately scoped ERP slice - inventory, sales, cash, orders - … the ~20% of operations that 80% of SMBs actually use" (`apps/web/src/config/index.ts`). Phase 1 must stay in that band.
 - `apps/web/src/config/onboarding.ts` already gates a **"Core ERP slice (inventory, sales, cash, orders)"** to the `starter` plan. Phase 1 maps the four named domains plus Finance/HR and Reporting as the Phase-1 module set.
 
 ## Architecture
@@ -36,7 +36,7 @@ Every module is tenant-scoped, permission-gated, event-capable, and exposed thro
 
 - New Python FastAPI service at **`services/core`**, added to the **uv workspace** (`pyproject.toml` workspace member) so it reuses `libs/skyrict-common`, `libs/skyrict-logging`, `libs/skyrict-events`.
 - Name chosen for breadth: later modules (procurement, production, billing) land in the same service as new feature packages, not as new services. Spin off a service only when ownership, scaling, or event-boundary evidence demands it (see "Future").
-- Mirror the **identity service's feature-based layout** (`services/identity/src/identity`) — not the `_template` scaffold. Each module is a self-contained **feature package**, with the framework wiring held once at the top level. Stack: Python 3.12, FastAPI, async SQLAlchemy 2, Alembic, pytest + factory-boy.
+- Mirror the **identity service's feature-based layout** (`services/identity/src/identity`) - not the `_template` scaffold. Each module is a self-contained **feature package**, with the framework wiring held once at the top level. Stack: Python 3.12, FastAPI, async SQLAlchemy 2, Alembic, pytest + factory-boy.
 
 ```
 services/core/
@@ -79,12 +79,12 @@ services/core/
 
 Every module in `features/<module>/` follows the identity convention:
 
-- `router.py` — FastAPI router with the feature's endpoints (mounted at `/api/v1/<module>` via `api/v1/router.py`); thin, delegates to the service.
-- `schemas.py` — Pydantic request/response schemas (the API boundary).
-- `service.py` — business rules; never touches SQLAlchemy directly, uses the repository + ports.
-- `ports.py` — interfaces for dependencies the feature needs (e.g. finance posting, stock reservation, report queries); implementations live in the module or are injected.
-- `repository.py` — SQLAlchemy data access; the **only** layer that queries/writes models. Holds the RLS/tenant scoping enforcement.
-- `__init__.py` — optional feature exports/dependencies (mirrors `features/dependencies.py` pattern when features share deps).
+- `router.py` - FastAPI router with the feature's endpoints (mounted at `/api/v1/<module>` via `api/v1/router.py`); thin, delegates to the service.
+- `schemas.py` - Pydantic request/response schemas (the API boundary).
+- `service.py` - business rules; never touches SQLAlchemy directly, uses the repository + ports.
+- `ports.py` - interfaces for dependencies the feature needs (e.g. finance posting, stock reservation, report queries); implementations live in the module or are injected.
+- `repository.py` - SQLAlchemy data access; the **only** layer that queries/writes models. Holds the RLS/tenant scoping enforcement.
+- `__init__.py` - optional feature exports/dependencies (mirrors `features/dependencies.py` pattern when features share deps).
 
 ### Layering contract (must hold)
 
@@ -92,12 +92,12 @@ Every module in `features/<module>/` follows the identity convention:
 - **No direct DB access from API or event handlers.**
 - Tenant scoping is enforced in the **repository layer** (see RLS), never trusted to caller discipline.
 - `domain/entities.py` + `domain/value_objects.py` mirror identity's `domain/`; models implement domain shapes with SQLAlchemy, schemas are the API boundary.
-- Money is a domain **value object** (`Money(amount: Decimal, currency: str)`) — never `float`.
+- Money is a domain **value object** (`Money(amount: Decimal, currency: str)`) - never `float`.
 
 ### Configuration
 
 - `src/core/core/config.py` mirrors identity's `core/config.py` pydantic-settings pattern (env prefix `CORE_`), reading from the shared `.env`.
-- Required settings: `DATABASE_URL`, `JWT_PUBLIC_KEY`/`JWT_ISSUER` (same issuer as identity), `REDIS_URL` (optional in Phase 1 — used for lightweight caching/rate limiting), `KAFKA_BROKERS` (optional, see Events), `TENANT_HEADER` (default `X-Tenant-Slug`), `DEFAULT_CURRENCY` (`USD`).
+- Required settings: `DATABASE_URL`, `JWT_PUBLIC_KEY`/`JWT_ISSUER` (same issuer as identity), `REDIS_URL` (optional in Phase 1 - used for lightweight caching/rate limiting), `KAFKA_BROKERS` (optional, see Events), `TENANT_HEADER` (default `X-Tenant-Slug`), `DEFAULT_CURRENCY` (`USD`).
 - Versioned into the app via `app.state.settings` at lifespan, same pattern as identity.
 
 ### Multi-tenancy & isolation
@@ -121,7 +121,7 @@ Every module in `features/<module>/` follows the identity convention:
 | Sales & CRM | `erp.sales.read` | `erp.sales.write` | `erp.sales.approve` |
 | Inventory & Warehouse | `erp.inventory.read` | `erp.inventory.write` | `erp.inventory.approve` |
 | HR & Payroll | `erp.hr.read` | `erp.hr.write` | `erp.hr.payroll.run` |
-| Reporting & Analytics | `erp.reports.read` | — | — |
+| Reporting & Analytics | `erp.reports.read` | - | - |
 
 - **Role → permission mapping (proposed seed):** `tenant_owner` / `organization_admin` get all ERP permissions; `department_manager` gets `erp.inventory.*`, `erp.sales.*`, `erp.hr.read`; `standard_user` gets `erp.*.read`; `auditor` gets `erp.*.read` + `erp.reports.read`. Fine-grained per-user grants are configured in identity (Members) and enforced here.
 - Every ERP mutation is **audited** via the identity audit integration (module `core`, action, resource id, actor, tenant).
@@ -152,13 +152,13 @@ Every module in `features/<module>/` follows the identity convention:
 
 - Alembic under `services/core/alembic/`. Migration `0001_initial` creates all Phase-1 tables + indexes + **RLS policies**; subsequent migrations are per-feature.
 - RLS policies and `tenant_id` columns are part of the schema, reviewed in the same PR as the models.
-- Seed (`src/core/seed.py`, same position as identity's `seed.py`): reference data only (`erp_currencies`, `erp_countries`, a starter chart-of-accounts template, payment terms). No tenant data in seeds — fixtures cover that.
+- Seed (`src/core/seed.py`, same position as identity's `seed.py`): reference data only (`erp_currencies`, `erp_countries`, a starter chart-of-accounts template, payment terms). No tenant data in seeds - fixtures cover that.
 
 ## Module Deep-Dives
 
 Each module is a feature package under `src/core/features/<module>/` (`router.py`, `schemas.py`, `service.py`, `ports.py`, `repository.py`) with its model files in `features/<module>/models/` (one file per table) and event producers in `src/core/events/producers/`. All endpoints are prefixed `/api/v1/<module>`, require a valid access JWT + tenant context, and check the listed permissions server-side.
 
-### M-FIN — Finance & Accounting
+### M-FIN - Finance & Accounting
 
 **Purpose.** The books of record: chart of accounts, double-entry journal entries, and accounts receivable. Feeds every reporting view; is the downstream of sales orders and payroll runs.
 
@@ -179,7 +179,7 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 **Acceptance criteria.** Balanced-only posting enforced; RLS isolates tenants; idempotent approval; payment reduces invoice balance and emits the entry event; audit rows written for approve/pay.
 
-### M-CRM — Sales & CRM
+### M-CRM - Sales & CRM
 
 **Purpose.** Pipeline and customer relationships: leads → opportunities → customers, plus the sales orders that hand off to inventory and finance.
 
@@ -200,14 +200,14 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 **Acceptance criteria.** Pipeline metrics computed from staged opportunities; order confirmation is idempotent and produces exactly one invoice + stock effect; owner scoping enforced server-side.
 
-### M-INV — Inventory & Warehouse
+### M-INV - Inventory & Warehouse
 
 **Purpose.** Stock as operational truth: products, current quantity, movements, and reorder alerts. The named "inventory" pillar of the marketing slice.
 
 **Entities.** `erp_products` (sku, name, category, unit, cost_price, sell_price, reorder_point, is_active), `erp_warehouses` (name, location, is_active), `erp_stock_levels` (product_id, warehouse_id, qty_on_hand, qty_reserved), `erp_stock_movements` (product_id, warehouse_id, type: receive/adjust/transfer/sale/return, qty, ref_type, ref_id, occurred_at, reason).
 
 **Rules.**
-- Stock is a **ledger**, not a stored mutable counter: every change is an `erp_stock_movements` row; `qty_on_hand` is the derived sum (materialized in `erp_stock_levels` for reads, recomputed on movement, or via materialized view — decision recorded in ADR-000 core, default to recompute-on-write for Phase 1).
+- Stock is a **ledger**, not a stored mutable counter: every change is an `erp_stock_movements` row; `qty_on_hand` is the derived sum (materialized in `erp_stock_levels` for reads, recomputed on movement, or via materialized view - decision recorded in ADR-000 core, default to recompute-on-write for Phase 1).
 - `qty_on_hand` never goes negative; transfers are two movements (source −, destination +) in one transaction.
 - Sale/order fulfilment and returns hook here; adjustment requires a `reason` and `erp.inventory.approve` when the delta exceeds a threshold (configurable).
 - Reorder alert when `qty_on_hand ≤ reorder_point` → emits `inventory.stock.level_changed` and surfaces in Reporting.
@@ -222,7 +222,7 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 **Acceptance criteria.** No negative stock; movements immutable; transfer is atomic; reorder alerts fire once per breach crossing; per-warehouse isolation and tenant isolation verified.
 
-### M-HR — HR & Payroll
+### M-HR - HR & Payroll
 
 **Purpose.** People truth: employees, leave, timesheets, and the pay-run records that hand to Finance. Payroll here is **records + approval**, not tax computation.
 
@@ -243,7 +243,7 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 **Acceptance criteria.** Leave balance never over-drawn; payroll run is idempotent and posts exactly one journal entry; terminated employees cannot be included in a new run; PII fields never appear in list payloads by default.
 
-### M-RPT — Reporting & Analytics
+### M-RPT - Reporting & Analytics
 
 **Purpose.** The cross-module synthesis the workspace is built around: dashboards, exports, and scheduled snapshots consumed by the agent layer and the workspace UI.
 
@@ -287,7 +287,7 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 ### Frontend integration (workspace)
 
-- Sidebar group **ERP** at `apps/web/src/app/(workspace)/dashboard/erp` with per-module sections (Finance, Sales, CRM, Inventory, HR, Reports). Sidebar filter keys: `erp.finance.read`, `erp.sales.read`, `erp.inventory.read`, `erp.hr.read`, `erp.reports.read` — UI only; all enforcement is server-side.
+- Sidebar group **ERP** at `apps/web/src/app/(workspace)/dashboard/erp` with per-module sections (Finance, Sales, CRM, Inventory, HR, Reports). Sidebar filter keys: `erp.finance.read`, `erp.sales.read`, `erp.inventory.read`, `erp.hr.read`, `erp.reports.read` - UI only; all enforcement is server-side.
 - Generated client: add `services/core` OpenAPI schema to the API-client codegen (same pipeline as identity). BFF route handlers in the web app proxy `/api/erp/*` same-origin, origin-checked, `no-store`, mirroring the existing auth BFF discipline.
 - Plan gating: module visibility for a tenant comes from billing state (`starter` → Core ERP slice). BFF merges `permissions` (JWT) × `enabled_modules` (billing) before responding.
 
@@ -307,12 +307,12 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 Phase 1 ERP is **blocked by** (tracked in Jira):
 
-- **SKY-30 / SKY-31** — identity service hardening + workspace routing that the BFF/tenant/session story depends on.
-- **SKY-32 … SKY-36** — onboarding/billing gating: without `enabled_modules`, plan-based visibility of ERP modules cannot be enforced server-side.
+- **SKY-30 / SKY-31** - identity service hardening + workspace routing that the BFF/tenant/session story depends on.
+- **SKY-32 … SKY-36** - onboarding/billing gating: without `enabled_modules`, plan-based visibility of ERP modules cannot be enforced server-side.
 
 Internal sequencing (single track, after the above):
 
-1. **M3 skeleton** — `services/core` scaffold, RLS migration, tenant/JWT deps, permission catalog, contract tests. (ADR for RLS-ledger decision + money value object.)
+1. **M3 skeleton** - `services/core` scaffold, RLS migration, tenant/JWT deps, permission catalog, contract tests. (ADR for RLS-ledger decision + money value object.)
 2. **M-INV** first (highest operational value; the "inventory" pillar).
 3. **M-CRM** (sales orders reference products).
 4. **M-FIN** (invoices consume sales orders; AR pays).
@@ -324,7 +324,7 @@ Internal sequencing (single track, after the above):
 ## Future (explicitly out of Phase 1)
 
 - Procurement & purchasing (reuses stock/order primitives; `erp.purchase.approve` key already exists in identity).
-- Hard Kafka async boundary — adopt when reporting/agent consumers require real decoupling; until then, in-process + outbox/background job is the contract.
+- Hard Kafka async boundary - adopt when reporting/agent consumers require real decoupling; until then, in-process + outbox/background job is the contract.
 - Billing service extraction if invoice lifecycles outgrow `core`; new modules join `core` as feature packages first.
 - The agent layer consumes ERP events + report snapshots (Phase-2+ bridge, out of this doc).
 

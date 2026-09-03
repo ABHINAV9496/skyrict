@@ -1,4 +1,4 @@
-"""Extended restock calculator tests — 4-factor confidence scoring."""
+"""Extended restock calculator tests - 4-factor confidence scoring."""
 
 from __future__ import annotations
 

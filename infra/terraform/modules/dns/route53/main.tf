@@ -7,7 +7,7 @@ locals {
 }
 
 # Look up a pre-existing hosted zone (the common path once an environment is
-# bootstrapped — the zone was created and delegated in a previous apply).
+# bootstrapped - the zone was created and delegated in a previous apply).
 data "aws_route53_zone" "existing" {
   count        = var.create_zone ? 0 : 1
   name         = var.zone_name

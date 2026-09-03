@@ -76,7 +76,7 @@ def upgrade() -> None:
         sa.Column("reversal_entry_id", sa.Uuid(), nullable=True),
     )
 
-    # erp_tenant_settings — generic KV config store
+    # erp_tenant_settings - generic KV config store
     op.create_table(
         "erp_tenant_settings",
         *_tenant_scoped_pk(),
@@ -87,7 +87,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "key", name="uq_erp_tenant_settings_tenant_key"),
     )
 
-    # ai_finance_anomalies — persisted anomaly detections
+    # ai_finance_anomalies - persisted anomaly detections
     op.create_table(
         "ai_finance_anomalies",
         *_tenant_scoped_pk(),
@@ -115,7 +115,7 @@ def upgrade() -> None:
         ),
     )
 
-    # ai_finance_suggestions — persisted account-code suggestions
+    # ai_finance_suggestions - persisted account-code suggestions
     op.create_table(
         "ai_finance_suggestions",
         *_tenant_scoped_pk(),

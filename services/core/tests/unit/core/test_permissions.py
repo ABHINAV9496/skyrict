@@ -1,4 +1,4 @@
-"""Permission catalog consistency tests — CATALOG vs PERMISSION_MODULES."""
+"""Permission catalog consistency tests - CATALOG vs PERMISSION_MODULES."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class TestCatalog:
 
     def test_reuses_identity_invoice_keys(self) -> None:
         # identity seeds erp.invoice.read / erp.invoice.approve and
-        # erp.purchase.approve — the SAME strings, so role grants stay portable.
+        # erp.purchase.approve - the SAME strings, so role grants stay portable.
         assert ERP_INVOICE_READ == "erp.invoice.read"
         assert ERP_INVOICE_APPROVE == "erp.invoice.approve"
         assert ERP_PURCHASE_APPROVE == "erp.purchase.approve"
@@ -51,7 +51,7 @@ class TestCatalog:
             assert key in CATALOG
 
     def test_reuses_identity_crm_and_sales_approve_keys(self) -> None:
-        # identity seeds erp.crm.read / erp.crm.write / erp.sales.approve —
+        # identity seeds erp.crm.read / erp.crm.write / erp.sales.approve -
         # the SAME strings (services/identity/src/identity/core/permissions.py),
         # so role grants stay portable. Migration 0003 seeds exactly these
         # three (0001 already seeded erp.sales.read/write).

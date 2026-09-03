@@ -1,4 +1,4 @@
-"""erp_crm_leads — inbound inquiries before they have pipeline value.
+"""erp_crm_leads - inbound inquiries before they have pipeline value.
 
 Tenant-scoped, RLS-protected, composite primary key ``(tenant_id, id)``
 following the 0001 convention. ``owner_id`` / ``team_id`` are plain UUIDs with

@@ -4,7 +4,7 @@ FIN-BE-002. Builds on the 0004 finance schema:
 
 - seeds the three ``erp.finance.{read,write,approve}`` permission keys into
   ``core_permissions`` (the runtime catalog that ``require_permission``
-  resolves against — see core/core/permissions.py); the legacy ``erp.invoice.*``
+  resolves against - see core/core/permissions.py); the legacy ``erp.invoice.*``
   keys stay untouched so existing role grants remain portable;
 - adds ``erp_invoices.source`` / ``erp_invoices.source_ref`` and
   ``UNIQUE (tenant_id, source, source_ref)`` = the idempotency lock for
@@ -57,7 +57,7 @@ def upgrade() -> None:
     )
     op.execute(
         # ``permission_rows`` is built solely from the compile-time literal
-        # ``FINANCE_PERMISSION_CATALOG`` above — no user input, so this f-string
+        # ``FINANCE_PERMISSION_CATALOG`` above - no user input, so this f-string
         # SQL is not an injection vector.
         "INSERT INTO core_permissions (key, description) VALUES "
         f"{permission_rows} ON CONFLICT (key) DO NOTHING"  # nosec B608

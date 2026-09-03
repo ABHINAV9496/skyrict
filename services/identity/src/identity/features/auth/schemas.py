@@ -1,4 +1,4 @@
-"""Authentication schemas — requests, responses, and token payloads."""
+"""Authentication schemas - requests, responses, and token payloads."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class TokenPayloadSchema(BaseModel):
 
 
 class TokenIntrospectionResponse(BaseModel):
-    """POST /auth/introspect — token introspection."""
+    """POST /auth/introspect - token introspection."""
 
     active: bool
     sub: str | None = None
@@ -78,7 +78,7 @@ class AuthResponse(BaseModel):
     )
     next_step: str | None = Field(
         default=None,
-        description='Required next step when mfa_required — "mfa.setup" or "mfa.verify"',
+        description='Required next step when mfa_required - "mfa.setup" or "mfa.verify"',
     )
     user: UserResponse | None = None
 
@@ -138,7 +138,7 @@ class VerifyCodeRequest(_CamelModel):
 
 
 class VerifyCodeResponse(_CamelModel):
-    """Result of an OTP check — never reveals whether the email has an account."""
+    """Result of an OTP check - never reveals whether the email has an account."""
 
     status: Literal["ok", "invalid", "expired"]
     verification_token: str | None = Field(default=None, description="Opaque single-use token")
@@ -161,7 +161,7 @@ class SetPasswordResponse(_CamelModel):
 
 
 class CaptchaResponse(_CamelModel):
-    """GET /auth/signup/captcha — a text CAPTCHA challenge.
+    """GET /auth/signup/captcha - a text CAPTCHA challenge.
 
     ``answer`` is the plaintext code exposed ONLY in test so integration
     tests can drive the wizard; every other environment returns ``None`` and
@@ -210,7 +210,7 @@ class BillingAddress(_CamelModel):
 
 
 class CreateOrganizationRequest(_CamelModel):
-    """POST /auth/signup/organization — final wizard step, provisions the tenant."""
+    """POST /auth/signup/organization - final wizard step, provisions the tenant."""
 
     email: EmailStr
     verification_token: str
@@ -225,7 +225,7 @@ class CreateOrganizationRequest(_CamelModel):
 
 
 class CreateOrganizationResponse(_CamelModel):
-    """Response after the organization is provisioned — MFA setup is mandatory."""
+    """Response after the organization is provisioned - MFA setup is mandatory."""
 
     status: Literal["ok"] = "ok"
     mfa_required: bool = True

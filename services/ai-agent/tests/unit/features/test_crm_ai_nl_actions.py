@@ -1,6 +1,6 @@
 """Unit tests for the deterministic CRM NL action handlers (SKY-61 C9).
 
-Each handler is a pure async function over a fake gateway — tests construct
+Each handler is a pure async function over a fake gateway - tests construct
 fixed data and assert exact answer strings and data payloads.
 """
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from ai_agent.features.crm.gateway import ActivityRef, LeadRef, OpportunityRef
 from ai_agent.features.crm.nl_actions import (
@@ -26,17 +27,21 @@ def _opp(
     stage: str = "negotiation",
     days_ago: int = 20,
     display_name: str | None = "Deal A",
+    amount: Decimal | None = None,
+    currency: str | None = None,
 ) -> OpportunityRef:
     return OpportunityRef(
         id=uuid.uuid4(),
         stage=stage,
         probability=60,
-        has_amount=True,
+        has_amount=amount is not None,
         created_at=NOW - timedelta(days=days_ago),
         owner_id=OWNER_ID,
         last_stage_change_at=NOW - timedelta(days=days_ago),
         expected_close_date=None,
         display_name=display_name,
+        amount=amount,
+        currency=currency,
     )
 
 
@@ -125,18 +130,35 @@ class TestCountDeals:
 
 
 class TestValueByStage:
-    async def test_groups_by_stage(self) -> None:
+    async def test_groups_by_stage_and_sums_amounts(self) -> None:
+        gw = FakeGateway(
+            opportunities=[
+                _opp(stage="lead", amount=Decimal("1000.0000"), currency="USD"),
+                _opp(stage="lead", amount=Decimal("500.0000"), currency="USD"),
+                _opp(stage="negotiation", amount=Decimal("2500.0000"), currency="USD"),
+            ]
+        )
+        result = await value_by_stage(gateway=gw)
+        assert "- lead: 1500.0000 USD (2 deal(s))" in result.answer
+        assert "- negotiation: 2500.0000 USD (1 deal(s))" in result.answer
+        assert result.data["stages"]["lead"] == 2
+        assert result.data["stage_value"]["lead"] == "1500.0000"
+        assert result.data["missing_value_count"] == 0
+        assert result.data["currency"] == "USD"
+
+    async def test_stages_without_amount_are_reported_honestly(self) -> None:
         gw = FakeGateway(
             opportunities=[
                 _opp(stage="lead"),
                 _opp(stage="lead"),
-                _opp(stage="negotiation"),
+                _opp(stage="negotiation", amount=Decimal("100.0000"), currency="EUR"),
             ]
         )
         result = await value_by_stage(gateway=gw)
-        assert "lead: 2" in result.answer
-        assert "negotiation: 1" in result.answer
-        assert result.data["stages"]["lead"] == 2
+        assert "- lead: no recorded value (2 deal(s))" in result.answer
+        assert "- negotiation: 100.0000 EUR (1 deal(s))" in result.answer
+        assert "2 deal(s) have no recorded amount" in result.answer
+        assert result.data["missing_value_count"] == 2
 
     async def test_empty_pipeline(self) -> None:
         gw = FakeGateway(opportunities=[])

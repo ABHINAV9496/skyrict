@@ -1,7 +1,7 @@
 """Data-quality scoring service (HR-AI-002, 8.1.3).
 
-Computes the weighted per-employee quality score — mandatory 0.50, contact
-0.25, document 0.25 — converts it to an A-F grade, persists one run
+Computes the weighted per-employee quality score - mandatory 0.50, contact
+0.25, document 0.25 - converts it to an A-F grade, persists one run
 idempotently, and exposes:
 
   - ``org_kpi`` (L1, ``erp.hr.ai.read``): tenant/department aggregates and a
@@ -133,7 +133,7 @@ class QualityService:
     async def recalculate(self, tenant_id: uuid.UUID, *, force: bool = True) -> int:
         """Re-score the tenant's data quality; returns the number of rows scored.
 
-        ``force=True`` always rebuilds regardless of the 7-day TTL — the ops
+        ``force=True`` always rebuilds regardless of the 7-day TTL - the ops
         hook for the weekly recalc cron. ``force=False`` falls back to the lazy
         ``_ensure_recalc`` TTL so read paths keep their behavior unchanged.
         """

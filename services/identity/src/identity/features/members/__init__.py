@@ -1,4 +1,4 @@
-"""Member management feature — list, re-role, and remove workspace members.
+"""Member management feature - list, re-role, and remove workspace members.
 
 Sits above the users, memberships, roles, and sessions features: it composes
 their repositories/services to expose the member-management surface used by

@@ -1,4 +1,4 @@
-"""ai_conversation_messages — ordered message log per conversation.
+"""ai_conversation_messages - ordered message log per conversation.
 
 Each row is one user or agent message within a conversation.  Messages
 cascade-delete when the parent conversation is removed.
@@ -21,7 +21,7 @@ class AiConversationMessage(Base):
 
     __tablename__ = "ai_conversation_messages"
     __table_args__ = (
-        # Parent PK is composite (tenant_id, id) — the FK must be composite
+        # Parent PK is composite (tenant_id, id) - the FK must be composite
         # too; a single-column FK to id alone would fail DDL on Postgres.
         ForeignKeyConstraint(
             ["tenant_id", "conversation_id"],

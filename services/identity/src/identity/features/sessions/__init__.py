@@ -1,1 +1,1 @@
-"""Sessions feature — list and revoke user sessions."""
+"""Sessions feature - list and revoke user sessions."""

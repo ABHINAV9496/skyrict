@@ -16,7 +16,7 @@ import { ErpReportsKpis } from "@/components/dashboard/erp/erp-reports-kpis";
 import { ModuleQuickLinks } from "@/components/dashboard/erp/module-quick-links";
 
 export interface WidgetDefinition {
-  /** Unique identifier — matches the layout JSONB `id` field. */
+  /** Unique identifier - matches the layout JSONB `id` field. */
   id: string;
   /** Display title shown in the customize panel. */
   title: string;

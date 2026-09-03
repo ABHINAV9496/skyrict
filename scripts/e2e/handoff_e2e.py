@@ -2,7 +2,7 @@
 
 Seeds a fresh tenant + user in the docker Postgres (reachable at 5433),
 then drives the real frontend BFF + backend on localhost:3000 / localhost:8000
-exactly like a browser would — including the cross-origin handoff form POST
+exactly like a browser would - including the cross-origin handoff form POST
 that previously bounced users back to signin under third-party cookie blocking.
 
 Prerequisites (all running):

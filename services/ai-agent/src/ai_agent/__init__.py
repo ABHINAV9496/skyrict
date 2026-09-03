@@ -1,4 +1,4 @@
-"""Skyrict AI agent service — provider-agnostic AI infrastructure boundary.
+"""Skyrict AI agent service - provider-agnostic AI infrastructure boundary.
 
 The service owns:
   - provider-agnostic LLM routing (configurable providers, fallback chain)
@@ -10,7 +10,7 @@ The service owns:
 
 It is reached through the core monolith proxy at ``/api/v1/ai/*``, which
 enforces authentication and permissions BEFORE forwarding. AI is a controlled
-proxy — never an authorization bypass.
+proxy - never an authorization bypass.
 """
 
 from __future__ import annotations

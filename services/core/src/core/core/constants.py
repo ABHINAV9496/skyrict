@@ -1,4 +1,4 @@
-"""Application-wide constants — single source of truth for magic values."""
+"""Application-wide constants - single source of truth for magic values."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import enum
 #
 # The ORM models define their own native StrEnums (backing the Postgres enum
 # types created by migration 0005). These domain copies are the values the
-# service layer reasons about — identical string values, so repository mapping
+# service layer reasons about - identical string values, so repository mapping
 # between entity.status (here) and model.status (models) is value-safe. Shared
 # via constants.py per the HR/Payroll spec §2.1 ("enums, problem URIs,
 # defaults").
@@ -17,7 +17,7 @@ import enum
 
 
 class EmploymentStatus(enum.StrEnum):
-    """Employment lifecycle — mirrors ``erp_employment_status``."""
+    """Employment lifecycle - mirrors ``erp_employment_status``."""
 
     ACTIVE = "active"
     ON_LEAVE = "on_leave"
@@ -25,7 +25,7 @@ class EmploymentStatus(enum.StrEnum):
 
 
 class LeaveRequestStatus(enum.StrEnum):
-    """Leave request lifecycle — mirrors ``erp_leave_request_status``."""
+    """Leave request lifecycle - mirrors ``erp_leave_request_status``."""
 
     PENDING = "pending"
     APPROVED = "approved"
@@ -34,7 +34,7 @@ class LeaveRequestStatus(enum.StrEnum):
 
 
 class PayrollRunStatus(enum.StrEnum):
-    """Payroll run lifecycle — mirrors ``erp_payroll_run_status``."""
+    """Payroll run lifecycle - mirrors ``erp_payroll_run_status``."""
 
     DRAFT = "draft"
     COMPUTED = "computed"
@@ -44,7 +44,7 @@ class PayrollRunStatus(enum.StrEnum):
 
 
 class PayrollRounding(enum.StrEnum):
-    """Net rounding mode — mirrors ``erp_payroll_rounding``."""
+    """Net rounding mode - mirrors ``erp_payroll_rounding``."""
 
     NEAREST = "nearest"
     UP = "up"
@@ -52,7 +52,7 @@ class PayrollRounding(enum.StrEnum):
 
 
 class AttendanceStatus(enum.StrEnum):
-    """Daily attendance outcome — mirrors ``erp_attendance_status``."""
+    """Daily attendance outcome - mirrors ``erp_attendance_status``."""
 
     ON_TIME = "on_time"
     LATE = "late"
@@ -103,13 +103,13 @@ PROBLEM_VALIDATION_ERROR = f"{PROBLEM_BASE_URL}/validation-error"
 PROBLEM_INTERNAL_ERROR = f"{PROBLEM_BASE_URL}/internal-error"
 
 # ---------------------------------------------------------------------------
-# Finance — document numbering
+# Finance - document numbering
 # ---------------------------------------------------------------------------
 INVOICE_PREFIX = "INV"
 PAYMENT_PREFIX = "PMT"
 
 # ---------------------------------------------------------------------------
-# Finance — standard account codes for auto-generated entries.
+# Finance - standard account codes for auto-generated entries.
 # Fixed platform defaults (user-editable COA entries still override at runtime).
 # ---------------------------------------------------------------------------
 AR_ACCOUNT_CODE = "1100"
@@ -120,7 +120,7 @@ COGS_ACCOUNT_CODE = "5000"
 INVENTORY_ASSET_ACCOUNT_CODE = "1300"
 
 # ---------------------------------------------------------------------------
-# Finance — journal entry and invoice provenance (idempotency source keys).
+# Finance - journal entry and invoice provenance (idempotency source keys).
 # ---------------------------------------------------------------------------
 JOURNAL_SOURCE_MANUAL = "manual"
 JOURNAL_SOURCE_INVOICE = "invoice"
@@ -131,7 +131,7 @@ INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"
 
 # ---------------------------------------------------------------------------
-# Skip-auth paths (middleware bypass) — real mounted paths under /api/v1.
+# Skip-auth paths (middleware bypass) - real mounted paths under /api/v1.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {

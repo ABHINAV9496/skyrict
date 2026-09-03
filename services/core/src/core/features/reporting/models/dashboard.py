@@ -1,4 +1,4 @@
-"""erp_dashboards — tenant-level default dashboard layouts.
+"""erp_dashboards - tenant-level default dashboard layouts.
 
 Stores the default widget layout for each tenant.  The ``layout`` column holds
 a JSONB array of widget descriptors:

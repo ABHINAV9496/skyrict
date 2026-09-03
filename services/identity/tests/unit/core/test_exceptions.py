@@ -27,7 +27,7 @@ from skyrict_common.exceptions import MFAVerificationError, SessionNotFoundError
 
 
 class TeamNotFoundError(NotFoundError):
-    """Not in the status map on purpose — must resolve via MRO to NotFoundError."""
+    """Not in the status map on purpose - must resolve via MRO to NotFoundError."""
 
     message = "Team not found"
     code = "TEAM_NOT_FOUND"

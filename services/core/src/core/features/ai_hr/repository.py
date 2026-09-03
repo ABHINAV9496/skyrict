@@ -2,7 +2,7 @@
 
 All methods here are SQL ``GROUP BY``/aggregate over existing ERP tables
 (``erp_employees``, ``erp_departments``). **No employee row is ever selected
-and serialized** — the guarantee behind the L1 data-scope level (spec §5). The
+and serialized** - the guarantee behind the L1 data-scope level (spec §5). The
 only identifiers that may appear are department ids; employee ids, names, email,
 phones and employee numbers are never projected.
 """
@@ -50,7 +50,7 @@ class TenureBand:
 
 @dataclass(frozen=True, slots=True)
 class Overview:
-    """The L1 headcount/tenure overview — aggregate rows only."""
+    """The L1 headcount/tenure overview - aggregate rows only."""
 
     total_headcount: int
     trend: list[HeadcountPoint] = field(default_factory=list)

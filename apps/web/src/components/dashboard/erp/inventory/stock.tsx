@@ -223,7 +223,7 @@ export function StockClient() {
             {levels.length === 0 ? (
                 <InventoryEmpty
                     title="No stock levels yet"
-                    description="Stock levels appear once a product has a movement in a warehouse — adjust or transfer to get started."
+                    description="Stock levels appear once a product has a movement in a warehouse - adjust or transfer to get started."
                     icon={Layers}
                     action={
                         canAdjust ? (
@@ -361,7 +361,7 @@ export function StockClient() {
                                                 {onHand - reserved}
                                             </td>
                                             <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                                                {product?.reorderPoint ?? "—"}
+                                                {product?.reorderPoint ?? "-"}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {statusFlag === "low" ? (

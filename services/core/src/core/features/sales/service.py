@@ -1,15 +1,15 @@
-"""Sales service — sales orders and their lifecycle (CRM-BE-002 / sales-crm.md).
+"""Sales service - sales orders and their lifecycle (CRM-BE-002 / sales-crm.md).
 
 The service owns the business rules; the repository persists. Rules
 implemented here (docs/modules/sales-crm.md §3, §4):
 
 - **Server-side money**: every write recomputes line totals and the header
-  (``subtotal - discount + tax``) from persisted line snapshots — clients
+  (``subtotal - discount + tax``) from persisted line snapshots - clients
   never supply money columns.
 - **Line snapshots**: ``product_name`` / ``sku`` / ``unit_price`` are copied
   from the product catalog at write time so history stays stable.
 - **Order numbering**: ``SO-{year}-{seq:05d}``, strictly per-tenant sequential
-  via the injected sequence callable (row-locking counter — race-safe).
+  via the injected sequence callable (row-locking counter - race-safe).
 - **State machine**: ``draft -> confirmed -> fulfilled`` (``cancelled``
   terminal from draft or confirmed). Each transition is an atomic guard in the
   repository; exactly one concurrent caller wins.
@@ -85,7 +85,7 @@ _FINANCE_DUE_DAYS = 30
 
 @dataclass(frozen=True)
 class OrderLineInput:
-    """One client-supplied order line — only the product and the quantity.
+    """One client-supplied order line - only the product and the quantity.
 
     ``unit_price`` and the snapshot fields come from the product catalog
     server-side (never trusted from clients); money columns are derived.
@@ -135,7 +135,7 @@ class SalesService:
         customer_id: uuid.UUID,
         lines: Sequence[OrderLineInput],
     ) -> SalesOrder:
-        """Create a DRAFT order — validates the customer and snapshots products."""
+        """Create a DRAFT order - validates the customer and snapshots products."""
         customer = await self._require_customer(customer_id, tenant_id=tenant_id)
         if not customer.is_active:
             raise ValidationError(f"Customer {customer_id} is deactivated")
@@ -246,7 +246,7 @@ class SalesService:
         customer_id: uuid.UUID | None = None,
         lines: Sequence[OrderLineInput] | None = None,
     ) -> SalesOrder:
-        """PATCH a DRAFT order — swap the customer and/or replace the lines."""
+        """PATCH a DRAFT order - swap the customer and/or replace the lines."""
         if customer_id is not None:
             customer = await self._require_customer(customer_id, tenant_id=tenant_id)
             if not customer.is_active:
@@ -460,7 +460,7 @@ class SalesService:
         if cancelled is None:
             current = await self._repo.get_order(order_id, tenant_id=tenant_id)
             if current is not None and current.status is OrderStatus.CANCELLED:
-                return current  # replay — the winning caller did the side effects
+                return current  # replay - the winning caller did the side effects
             raise IllegalStateTransitionError("Order was already transitioning")
         assert cancelled.id is not None
 
@@ -504,7 +504,7 @@ class SalesService:
     ) -> tuple[list[SalesOrderLine], str]:
         """Validate client lines and build snapshotted order lines.
 
-        ``unit_price`` comes from the product catalog (``sell_price``) — the
+        ``unit_price`` comes from the product catalog (``sell_price``) - the
         client only supplies ``product_id`` and ``quantity``.
         """
         if not lines:
@@ -579,7 +579,7 @@ class SalesService:
 def _totals(lines: list[SalesOrderLine]) -> tuple[Decimal, Decimal, Decimal, Decimal]:
     """Recompute (subtotal, discount, tax, total) from the line projections.
 
-    Total is derived — never trusted from clients; every money column is
+    Total is derived - never trusted from clients; every money column is
     quantized to the ERP money quantum (2 dp).
     """
     subtotal = sum((line.line_total for line in lines), Decimal("0"))

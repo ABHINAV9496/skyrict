@@ -1,4 +1,4 @@
-"""Alembic env.py — async migration runner."""
+"""Alembic env.py - async migration runner."""
 
 from __future__ import annotations
 

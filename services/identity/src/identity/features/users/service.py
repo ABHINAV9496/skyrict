@@ -1,4 +1,4 @@
-"""User service — profile and credential management.
+"""User service - profile and credential management.
 
 Owns the business rules (password verification, not-found handling). All
 persistence goes through the ``UserRepositoryPort``; no ORM models or sessions

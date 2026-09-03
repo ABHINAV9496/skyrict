@@ -3,7 +3,7 @@
 ``agent_registry`` is a global (non-tenant) table listing deployable AI agent
 modules. The narrator registers a system agent row on startup so the platform
 catalog reflects it; reads happen for the scheduled job to confirm the agent is
-enabled. SKY-59 adds :meth:`get_deployable` — the runtime resolves an agent's
+enabled. SKY-59 adds :meth:`get_deployable` - the runtime resolves an agent's
 module + tool allowlist here before any graph executes.
 """
 
@@ -37,7 +37,7 @@ class AgentRegistryRepository:
         """Return an enabled registry row, resolving ``module`` + ``tools``.
 
         Raises:
-            NotFoundError: The agent is not registered or is disabled — a
+            NotFoundError: The agent is not registered or is disabled - a
             disabled agent is rejected before any graph executes.
         """
         result = await self._session.execute(

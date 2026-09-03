@@ -10,7 +10,7 @@ export default function CrmActivitiesPage() {
       <div className="space-y-6">
         <PageHeader
           title="Activities"
-          description="Every call, meeting, email, and follow-up — filter by what needs attention today."
+          description="Every call, meeting, email, and follow-up filter by what needs attention today."
           icon={CalendarCheck2}
         />
         <ActivitiesTable />

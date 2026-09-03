@@ -93,7 +93,7 @@ export function ReleaseStockDialog({
         }
         if (qtyNumber > reserved) {
             setError(
-                `Cannot release ${qtyNumber} — only ${reserved} unit(s) are reserved.`,
+                `Cannot release ${qtyNumber} - only ${reserved} unit(s) are reserved.`,
             );
             return;
         }
@@ -150,7 +150,7 @@ export function ReleaseStockDialog({
                                         key={product.id}
                                         value={product.id}
                                     >
-                                        {product.sku} — {product.name}
+                                        {product.sku} - {product.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

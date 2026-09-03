@@ -2,7 +2,7 @@
 
 ``encode_typed``/``decode_typed`` are the only pieces of the checkpointer
 that touch serialization (the rest is DB I/O), so their round-trip behavior
-— including objects that are not JSON-native, like LangChain messages — is
+- including objects that are not JSON-native, like LangChain messages - is
 pinned here without needing a Postgres server.
 """
 

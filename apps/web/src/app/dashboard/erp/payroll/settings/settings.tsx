@@ -183,7 +183,7 @@ export function PayrollSettingsClient() {
                 onChange={(event) => setPfRate(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                As a decimal — 0.07 equals 7%.
+                As a decimal - 0.07 equals 7%.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -196,7 +196,7 @@ export function PayrollSettingsClient() {
                 onChange={(event) => setTaxRate(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                As a decimal — 0.12 equals 12%.
+                As a decimal - 0.12 equals 12%.
               </p>
             </div>
           </div>

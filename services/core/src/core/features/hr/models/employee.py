@@ -1,12 +1,12 @@
-"""erp_employees — the people records.
+"""erp_employees - the people records.
 
-``employment_status`` is the single source of employment truth — there is
+``employment_status`` is the single source of employment truth - there is
 deliberately NO separate ``is_active`` flag. ``termination_date`` is required
 when status is ``terminated`` (DB CHECK ``ck_erp_employees_termination_required``).
 
 Cascade policy: ``tenant_id -> tenants`` is CASCADE; ``department_id`` and every
 child FK elsewhere are NO ACTION, so an employee with any leave/payroll history
-can never be hard-deleted — only moved to ``terminated``.
+can never be hard-deleted - only moved to ``terminated``.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class EmployeeModel(Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    # Identity user link — plain UUID, no FK (identity lives in another service).
+    # Identity user link - plain UUID, no FK (identity lives in another service).
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     department_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     job_title: Mapped[str] = mapped_column(String(100), nullable=False)

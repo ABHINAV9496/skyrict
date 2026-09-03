@@ -1,4 +1,4 @@
-"""Unit tests for identity/core/logging.py — structured JSON logging.
+"""Unit tests for identity/core/logging.py - structured JSON logging.
 
 Verifies the acceptance criteria:
   - output is machine-readable JSON

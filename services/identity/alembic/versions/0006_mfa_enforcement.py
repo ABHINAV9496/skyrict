@@ -2,9 +2,9 @@
 
 - Widen ``users.mfa_secret`` to VARCHAR(512) so TOTP secrets encrypted with
   Fernet (base64 tokens, ~120 chars) fit the column.
-- Add ``users.mfa_backup_codes`` (TEXT[]) — ten Argon2id hashes; a consumed
+- Add ``users.mfa_backup_codes`` (TEXT[]) - ten Argon2id hashes; a consumed
   slot is set to NULL so the array keeps its position on regeneration.
-- Add ``tenants.mfa_required_for_all_members`` — tenant-configurable MFA
+- Add ``tenants.mfa_required_for_all_members`` - tenant-configurable MFA
   enforcement for all members (tenant owners are always forced).
 
 Revision ID: 0006

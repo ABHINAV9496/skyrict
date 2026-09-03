@@ -1,4 +1,4 @@
-"""Sales API schemas — request bodies and response models (CRM-BE-002).
+"""Sales API schemas - request bodies and response models (CRM-BE-002).
 
 Request models validate client input; response models validate domain entities
 (``from_attributes``) so the router stays a thin translation layer. Money

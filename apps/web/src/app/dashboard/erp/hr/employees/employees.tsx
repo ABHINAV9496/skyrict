@@ -39,7 +39,7 @@ type PageStatus =
 
 type Notice = { tone: "success" | "error"; text: string };
 
-/** "All statuses" on the active view excludes terminated employees —
+/** "All statuses" on the active view excludes terminated employees -
  * they live in their own read-only list under the Terminated tab. */
 const ACTIVE_STATUS_OPTIONS: { value: "all" | Exclude<EmployeeStatus, "terminated">; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -298,7 +298,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
             label: "Department",
             render: (employee) => (
               <span className="text-muted-foreground">
-                {departmentName(employee.departmentId) ?? "—"}
+                {departmentName(employee.departmentId) ?? "-"}
               </span>
             ),
           },
@@ -318,7 +318,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
                       employee.activeCompensation.amount,
                       employee.activeCompensation.currency,
                     )
-                  : "—"}
+                  : "-"}
               </span>
             ),
           },
@@ -365,7 +365,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
             label: "Department",
             render: (employee) => (
               <span className="text-muted-foreground">
-                {departmentName(employee.departmentId) ?? "—"}
+                {departmentName(employee.departmentId) ?? "-"}
               </span>
             ),
           },
@@ -381,7 +381,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
             label: "Terminated",
             render: (employee) => (
               <span className="text-muted-foreground">
-                {employee.terminationDate ? formatDate(employee.terminationDate) : "—"}
+                {employee.terminationDate ? formatDate(employee.terminationDate) : "-"}
               </span>
             ),
           },
@@ -404,8 +404,8 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
           title="Employees"
           description={
             view === "terminated"
-              ? "Former team members — a historical record of terminated employment."
-              : "Everyone currently on the team — hire, edit, and manage employment."
+              ? "Former team members - a historical record of terminated employment."
+              : "Everyone currently on the team - hire, edit, and manage employment."
           }
           icon={UserRound}
         />

@@ -1,4 +1,4 @@
-"""User repository port — the persistence contract the users service depends on.
+"""User repository port - the persistence contract the users service depends on.
 
 Ports abstract persistence only (never business rules). Methods accept and
 return domain entities; SQLAlchemy lives in the concrete implementation

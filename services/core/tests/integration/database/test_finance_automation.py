@@ -1,13 +1,13 @@
-"""Finance automation repo regression tests — verified against REAL Postgres.
+"""Finance automation repo regression tests - verified against REAL Postgres.
 
 Covers the SKY-56/SKY-64 wave-1 read-models that live in
 :class:`core.features.finance.repository.FinanceRepository`:
 
-- close_checklist (B2) — prior-period / posted-entries / balanced-TB gates;
-- duplicates (B10) — grouped by memo + entry date;
+- close_checklist (B2) - prior-period / posted-entries / balanced-TB gates;
+- duplicates (B10) - grouped by memo + entry date;
 - tenant settings KV round-trip;
 - ai anomaly/suggestion upsert dedupe;
-- journal entry reversal (B8) — flips debit/credit and stamps reversal_entry_id.
+- journal entry reversal (B8) - flips debit/credit and stamps reversal_entry_id.
 """
 
 from __future__ import annotations

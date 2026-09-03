@@ -6,11 +6,21 @@ read through core's existing HTTP API (the "AI is a proxy, not a bypass" rule).
 :class:`CrmGatewayPort` is what engines depend on; tests fake it, production
 binds :class:`HttpCrmGateway`.
 
+Security guarantee: every read forwards the CALLER's JWT + tenant slug. Core
+re-enforces ``erp.crm.read``/``erp.crm.write`` permissions, tenant isolation
+(RLS + explicit tenant filter), and CRM owner/team/ALL row-scoping on each
+endpoint. The AI therefore receives exactly the leads/opportunities the acting
+user may see in the web UI - a ``standard_user`` sees only their own records, an
+admin sees the whole tenant. Raw contact fields (email/phone/company) and deal
+amounts are surfaced because callers with ``erp.crm.read`` can already view them
+in the UI; the agent is a proxy, never a bypass.
+
 Adapter notes (verified against core's routers):
 - base path ``/api/v1/crm``; list responses use the shared envelope with a
   ``meta.total_pages`` pagination field, single responses wrap data in
   ``ResponseEnvelope``;
-- timestamps arrive as ISO-8601 strings (tolera a trailing ``Z``);
+- timestamps arrive as ISO-8601 strings (tolerate a trailing ``Z``); money
+  arrives as a ``[amount-string, currency]`` tuple (core's ``MoneyOutput``);
 - entity types for activities are lowercase enums (``lead``, ``opportunity``…).
 """
 
@@ -19,6 +29,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Protocol, cast
 
 import httpx
@@ -36,25 +47,40 @@ _CATALOG_PAGE_SIZE = 100
 
 @dataclass(frozen=True, slots=True)
 class LeadRef:
-    """The lead fields the scoring engine needs (verified against LeadResponse)."""
+    """A lead plus the contact fields core returns for ``erp.crm.read`` holders.
+
+    ``has_name``/``has_email`` remain for the deterministic scoring engine (it
+    needs presence signals, not PII); the raw values are also carried so the
+    agent can answer with the same detail a permitted UI user can see.
+    """
 
     id: uuid.UUID
     status: str
     source: str | None
     created_at: datetime
     owner_id: uuid.UUID | None
-    # Contact-presence signals used by the ``fit`` sub-score (no PII beyond
-    # booleans ever leaves the gateway; raw values stay in core).
+    # Contact-presence signals used by the ``fit`` sub-score.
     has_name: bool
     has_email: bool
-    # Human-facing label for the follow-up draft (scan path only — the
-    # scoring engine never reads PII).
+    # Raw contact fields core returns to ``erp.crm.read`` holders (never used
+    # by the scoring engine; surfaced by the agent's conversational context).
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company: str | None = None
+    # Human-facing label for the follow-up draft (scan path only).
     display_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class OpportunityRef:
-    """The deal fields the deal-health engine needs (verified in the router)."""
+    """A deal plus the monetary fields core returns for ``erp.crm.read`` holders.
+
+    ``has_amount`` remains for the deal-health engine (presence signal only);
+    ``amount``/``currency`` carry the real value so the agent can report
+    pipeline value like a permitted UI user can.
+    """
 
     id: uuid.UUID
     stage: str
@@ -66,6 +92,10 @@ class OpportunityRef:
     # proxy for when the deal last moved stage (no cross-service timeline parse).
     last_stage_change_at: datetime
     expected_close_date: date | None
+    # Real deal value (None when core omits it). Decimal(19,4) semantics are
+    # preserved; never a float.
+    amount: Decimal | None = None
+    currency: str | None = None
     # Human-facing label for the follow-up draft (scan path only).
     display_name: str | None = None
 
@@ -90,6 +120,15 @@ class CrmGatewayPort(Protocol):
     ) -> list[ActivityRef]: ...
     async def list_leads(self, *, page: int = 1) -> list[LeadRef]: ...
     async def list_opportunities(self, *, page: int = 1) -> list[OpportunityRef]: ...
+
+    async def query(
+        self,
+        *,
+        resource: str,
+        filters: dict[str, str] | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> dict[str, object]: ...
 
 
 class HttpCrmGateway:
@@ -116,35 +155,11 @@ class HttpCrmGateway:
 
     async def get_lead(self, *, lead_id: uuid.UUID) -> LeadRef:
         payload = await self._get_single(f"/leads/{lead_id}")
-        created_at = _parse_datetime(payload["created_at"])
-        first_name = payload.get("first_name")
-        last_name = payload.get("last_name")
-        email = payload.get("email")
-        return LeadRef(
-            id=lead_id,
-            status=str(payload["status"]),
-            source=None if payload.get("source") is None else str(payload["source"]),
-            created_at=created_at,
-            owner_id=_parse_optional_uuid(payload.get("owner_id")),
-            has_name=bool(first_name) or bool(last_name),
-            has_email=bool(email),
-        )
+        return _parse_lead(payload)
 
     async def get_opportunity(self, *, opportunity_id: uuid.UUID) -> OpportunityRef:
         payload = await self._get_single(f"/opportunities/{opportunity_id}")
-        expected_raw = payload.get("expected_close_date")
-        return OpportunityRef(
-            id=opportunity_id,
-            stage=str(payload["stage"]),
-            probability=int(str(payload["probability"])),
-            has_amount=payload.get("amount") is not None,
-            created_at=_parse_datetime(payload["created_at"]),
-            owner_id=_parse_optional_uuid(payload.get("owner_id")),
-            last_stage_change_at=_parse_datetime(payload["updated_at"]),
-            expected_close_date=(
-                None if expected_raw is None else date.fromisoformat(str(expected_raw))
-            ),
-        )
+        return _parse_opportunity(payload)
 
     async def list_activities_for_entity(
         self, *, entity_type: str, entity_id: uuid.UUID
@@ -177,6 +192,48 @@ class HttpCrmGateway:
             if page_no >= payload.total_pages:
                 break
         return items
+
+    async def query(
+        self,
+        *,
+        resource: str,
+        filters: dict[str, str] | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> dict[str, object]:
+        """Generic read of one CRM list resource through the scoped endpoint.
+
+        ``resource`` is a validated slug (e.g. ``leads``, ``opportunities``) -
+        never a full path, so no traversal/query injection can reach core. The
+        caller's JWT + tenant slug are forwarded, so core still enforces
+        ``erp.crm.read``, tenant isolation, and owner/team row-scoping.
+        """
+        if not resource or "/" in resource or resource.startswith("."):
+            raise AiUnavailableError("CRM resource name is invalid")
+        params = {"page": str(page), "page_size": str(_CATALOG_PAGE_SIZE)}
+        if resource != "activities":
+            params["page_size"] = str(page_size)
+        for key, value in (filters or {}).items():
+            params[key] = value
+        try:
+            async with self._create_client() as client:
+                response = await client.get(
+                    f"{self._base_url}/api/v1/crm/{resource}",
+                    params=params,
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("crm_gateway_query_unreachable", resource=resource)
+            raise AiUnavailableError("CRM service is temporarily unavailable") from exc
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            logger.warning("crm_gateway_query_bad_body", resource=resource)
+            raise AiUnavailableError("CRM service returned an unusable response") from exc
+        if not isinstance(payload, dict):
+            raise AiUnavailableError("CRM service returned an unusable response")
+        return cast("dict[str, object]", payload)
 
     def _create_client(self) -> httpx.AsyncClient:
         """Create the per-call HTTP client (overridable seam for tests)."""
@@ -276,12 +333,18 @@ def _parse_lead(item: dict[str, object]) -> LeadRef:
         owner_id=_parse_optional_uuid(item.get("owner_id")),
         has_name=bool(first_name) or bool(last_name),
         has_email=bool(email),
+        first_name=None if first_name is None else str(first_name),
+        last_name=None if last_name is None else str(last_name),
+        email=None if email is None else str(email),
+        phone=None if item.get("phone") is None else str(item["phone"]),
+        company=None if company is None else str(company),
         display_name=display,
     )
 
 
 def _parse_opportunity(item: dict[str, object]) -> OpportunityRef:
     expected_raw = item.get("expected_close_date")
+    amount, currency = _parse_money(item.get("amount"), item.get("currency"))
     return OpportunityRef(
         id=uuid.UUID(str(item["id"])),
         stage=str(item["stage"]),
@@ -293,8 +356,31 @@ def _parse_opportunity(item: dict[str, object]) -> OpportunityRef:
         expected_close_date=(
             None if expected_raw is None else date.fromisoformat(str(expected_raw))
         ),
+        amount=amount,
+        currency=currency,
         display_name=None if item.get("name") is None else str(item["name"]),
     )
+
+
+def _parse_money(raw: object, currency_raw: object) -> tuple[Decimal | None, str | None]:
+    """Parse core's ``[amount-string, currency]`` money tuple into Decimal/currency.
+
+    Core serializes money as a two-element tuple; a plain number is also
+    tolerated (single-currency legacy payloads). Returns ``(None, None)`` when
+    ``raw`` is absent so callers can distinguish "no value" from "zero".
+    """
+    currency = None if currency_raw is None else str(currency_raw)
+    if isinstance(raw, list | tuple) and len(raw) >= 1:
+        try:
+            return Decimal(str(raw[0])), currency
+        except (TypeError, ValueError, ArithmeticError):
+            return None, currency
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        try:
+            return Decimal(str(raw)), currency
+        except (TypeError, ValueError, ArithmeticError):
+            return None, currency
+    return None, currency
 
 
 def _build_lead_display(first_name: object, last_name: object, company: object) -> str | None:

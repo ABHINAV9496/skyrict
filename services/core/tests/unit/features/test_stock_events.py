@@ -1,4 +1,4 @@
-"""Stock level change producer tests — the Rule 4 reorder-alert event.
+"""Stock level change producer tests - the Rule 4 reorder-alert event.
 
 Verifies the envelope shape (event_type + §9.3 metadata) and that
 ``emit_stock_level_changed`` publishes through the process-wide producer

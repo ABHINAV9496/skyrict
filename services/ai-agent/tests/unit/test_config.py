@@ -28,7 +28,7 @@ def test_settings_load_with_minimal_env(monkeypatch, tmp_path) -> None:
     # Provider-agnostic boot: no providers configured, no crash.
     assert settings.PROVIDER is None
     assert settings.FALLBACK_PROVIDER is None
-    # 0.75 is exactly representable as a float — plain equality is safe.
+    # 0.75 is exactly representable as a float - plain equality is safe.
     assert settings.CONFIDENCE_THRESHOLD == 0.75
     assert settings.RATE_LIMIT_NL_QUERY_PER_MIN == 30
     assert settings.RATE_LIMIT_TENANT_PER_MIN == 100

@@ -21,7 +21,7 @@ async def me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[s
     """Return the current authenticated user's identity.
 
     Exercises the full auth chain: JWT verification, token-vs-routed-tenant
-    cross-check, and tenant context population. Intentionally minimal — it is
+    cross-check, and tenant context population. Intentionally minimal - it is
     a dependency smoke route, not a feature.
     """
     return {

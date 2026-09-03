@@ -2,7 +2,7 @@
 
 Read/write access to ``ai_hr_public_holidays`` and
 ``ai_hr_leave_blackout_periods`` (migration 0024). These are lookup/config
-rows — the write endpoints are gated by ``erp.hr.write`` and the engines read
+rows - the write endpoints are gated by ``erp.hr.write`` and the engines read
 them server-side under tenant context. ``department_id`` NULL means org-wide;
 engines treat a row as active for an employee when it is org-wide or matches
 the employee's department.

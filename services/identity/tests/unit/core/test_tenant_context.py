@@ -1,4 +1,4 @@
-"""Unit tests for TenantContext — ContextVar isolation and lifecycle.
+"""Unit tests for TenantContext - ContextVar isolation and lifecycle.
 
 Proves the request-scoped contract:
   - get() raises when the context is not set (never silently defaults)
@@ -95,7 +95,7 @@ class TestTenantContextIsolation:
         assert TenantContext.get() == "tenant-a"
         TenantContext.reset()
 
-        # Request 2 — must NOT see request 1's tenant
+        # Request 2 - must NOT see request 1's tenant
         with pytest.raises(TenantContextMissingError):
             TenantContext.get()
 

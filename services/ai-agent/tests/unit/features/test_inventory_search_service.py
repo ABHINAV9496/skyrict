@@ -1,6 +1,6 @@
 """Unit tests for the hybrid inventory search service (SKY-70).
 
-Feature-layer orchestration with fake adapters (no models/db imports —
+Feature-layer orchestration with fake adapters (no models/db imports -
 import-linter contract): exact-above-semantic merge + dedupe by product,
 degradation to exact-only when no embedding provider or on provider failure,
 cache-hit short-circuit, warehouse scoping, valuation enrichment, query-log

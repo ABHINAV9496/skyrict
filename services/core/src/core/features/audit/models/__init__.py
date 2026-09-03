@@ -1,4 +1,4 @@
-"""Audit ORM models — registered on ``Base.metadata``.
+"""Audit ORM models - registered on ``Base.metadata``.
 
 ``audit_logs`` is created by identity's migration 0001 in the SHARED database
 (no core migration). The model is a read/write mapping of that table so core's

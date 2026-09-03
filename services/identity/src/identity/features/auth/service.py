@@ -1,4 +1,4 @@
-"""Authentication feature services — login/register and the token lifecycle.
+"""Authentication feature services - login/register and the token lifecycle.
 
 ``AuthenticationService`` authenticates users, self-service provisions new
 tenants, and verifies emails; ``TokenService`` owns the JWT lifecycle (create,
@@ -6,7 +6,7 @@ refresh, revoke, introspect). Both live in this feature because they model the
 same domain.
 
 The tenant is resolved ONCE by the middleware (Host subdomain in production,
-X-Tenant-Slug in dev) and consumed from TenantContext — except self-service
+X-Tenant-Slug in dev) and consumed from TenantContext - except self-service
 registration, which runs without a routed tenant (the request bypasses tenant
 resolution via SKIP_AUTH_PATHS) and provisions its own.
 """
@@ -84,7 +84,7 @@ _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A valid Argon2id hash of a throwaway value, verified against on the
 # unknown-email path so response TIME is indistinguishable from the
 # wrong-password path (anti-enumeration via the timing side-channel).
-# Computed once at import — the one-time cost is paid at process start.
+# Computed once at import - the one-time cost is paid at process start.
 _DUMMY_PASSWORD_HASH = hash_password("anti-enumeration-timing-dummy")
 
 
@@ -152,7 +152,7 @@ class AuthenticationService:
         attempts are audited for brute-force / credential-stuffing monitoring.
 
         Raises:
-            AuthenticationError: For any failed authentication — unknown
+            AuthenticationError: For any failed authentication - unknown
                 email, disabled or unverified account, or wrong password.
         """
         tenant_id = TenantContext.get()
@@ -184,7 +184,7 @@ class AuthenticationService:
             raise AuthenticationError(LOGIN_FAILED_MESSAGE)
 
         # Account-state gates run AFTER password verification so every failure
-        # path costs exactly one Argon2id — no state oracle via timing either.
+        # path costs exactly one Argon2id - no state oracle via timing either.
         if not user.is_active:
             await self._log_login_failure(
                 email=request.email,
@@ -360,7 +360,7 @@ class AuthenticationService:
 
         Unknown emails are targeted as ``email:<address>`` (no user row
         exists); known accounts as ``user:<id>``. The attempted email is the
-        point of the event — it is what an incident response would search on.
+        point of the event - it is what an incident response would search on.
         """
         await self.audit_service.log(
             action="auth.login.failed",
@@ -577,7 +577,7 @@ class AuthenticationService:
 
 
 class TokenService:
-    """Manages JWT token lifecycle — creation, refresh, revocation.
+    """Manages JWT token lifecycle - creation, refresh, revocation.
 
     Session lifecycle (family tracking, expiry materialization, revocation)
     is delegated to ``SessionService``; this service owns only token mechanics.
@@ -617,7 +617,7 @@ class TokenService:
 
         session = await self.session_service.get_session(session_id) if session_id else None
 
-        # A terminal session was already handled when it died — a client
+        # A terminal session was already handled when it died - a client
         # retrying that refresh token is rejected quietly so the reuse handler
         # (family revoke + audit log) is not re-armed on every retry.
         if session is not None and session.status is not SessionStatus.ACTIVE:
@@ -689,12 +689,12 @@ class TokenService:
         session_id = payload.get("session_id")
         session = await self.session_service.get_session(session_id) if session_id else None
         if session is not None and session.id is not None and session.user_id == uuid.UUID(user_id):
-            # Idempotent logout — already-revoked sessions are fine.
+            # Idempotent logout - already-revoked sessions are fine.
             with suppress(SessionNotFoundError):
                 await self.session_service.revoke_session(user_id, session.id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
-        """Introspect a token — return its claims if valid."""
+        """Introspect a token - return its claims if valid."""
         try:
             payload = verify_jwt(token)
             return {

@@ -1,4 +1,4 @@
-"""Organization (tenant) schemas — requests and responses."""
+"""Organization (tenant) schemas - requests and responses."""
 
 from __future__ import annotations
 

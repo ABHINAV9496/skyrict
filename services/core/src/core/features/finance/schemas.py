@@ -1,4 +1,4 @@
-"""Finance API schemas — request bodies and response models.
+"""Finance API schemas - request bodies and response models.
 
 Response models validate domain entities directly (``from_attributes``) so the
 router stays a thin translation layer. Enums (status / account_type) serialize

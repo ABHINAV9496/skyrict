@@ -83,7 +83,7 @@ class TestOwnerMfaFlow:
             assert verify.status_code == 200
             assert verify.json()["data"]["method"] == "totp"
 
-            # Re-login: MFA is now satisfied — no gate, no next step.
+            # Re-login: MFA is now satisfied - no gate, no next step.
             relogin = await _verify_and_login(client, data)
             assert relogin["mfa_required"] is True
             assert relogin["next_step"] == "mfa.verify"
@@ -203,7 +203,7 @@ class TestMemberMfaPolicy:
             }
             assert (await client.get("/api/v1/users/me", headers=member_headers)).status_code == 200
 
-            # Owner-assisted reset clears the member's MFA — forced again.
+            # Owner-assisted reset clears the member's MFA - forced again.
             reset = await client.post(
                 "/api/v1/mfa/reset",
                 headers=owner_headers,
@@ -281,7 +281,7 @@ class TestBackupCodeRotation:
             assert redeemed["access_token"] is not None
             assert redeemed["mfa_token"] is None
 
-            # The TOTP secret is untouched — TOTP still signs in.
+            # The TOTP secret is untouched - TOTP still signs in.
             totp_redeemed = await mfa_challenge_login(
                 client,
                 slug=data["tenant_slug"],

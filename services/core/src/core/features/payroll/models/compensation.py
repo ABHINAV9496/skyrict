@@ -1,8 +1,8 @@
-"""erp_compensation — effective-dated salary history per employee.
+"""erp_compensation - effective-dated salary history per employee.
 
 One row per (employee, effective_from); the current salary is the latest
 effective row at any date. ``currency`` is a plain ISO code validated later
-against ``erp_currencies`` via the Money pattern (spec §3.2) — deliberately no
+against ``erp_currencies`` via the Money pattern (spec §3.2) - deliberately no
 FK here. ``monthly_salary`` is stored as Numeric(18,4), never a float.
 """
 

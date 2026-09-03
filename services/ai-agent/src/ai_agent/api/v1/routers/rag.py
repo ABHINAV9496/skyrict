@@ -1,4 +1,4 @@
-"""/ai/rag endpoints — semantic search + store status (SKY-58).
+"""/ai/rag endpoints - semantic search + store status (SKY-58).
 
 Mirrors the nl_query router composition style: authentication is enforced via
 ``get_current_user`` (JWT verified + tenant cross-check); authorization is
@@ -6,7 +6,7 @@ enforced upstream at the core monolith proxy (SKY-57 "AI is a proxy, not a
 bypass"). Each request wires the retrieval stack: the SHARED embedding
 provider, a repository bound to the request session, and the Redis hot cache.
 
-Simple retrieval (no generation call) needs no LLM provider — only an
+Simple retrieval (no generation call) needs no LLM provider - only an
 embedding provider; a missing one degrades to a typed 503 via
 ``AiUnavailableError`` exactly like the NL path degrades without an LLM.
 """

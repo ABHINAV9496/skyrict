@@ -2,13 +2,13 @@
 
 Adds two tenant-scoped tables to the core schema:
 
-- ``erp_sequences`` — a lightweight per-tenant monotonic counter store used by
+- ``erp_sequences`` - a lightweight per-tenant monotonic counter store used by
   ERP document numbering (invoice / payment / quote numbers). Each counter is
   a row keyed by ``(tenant_id, entity)``; services claim the next number with a
   row-locking ``UPDATE ... SET current_value = current_value + 1 RETURNING``,
   so consecutive numbers are race-safe and never reused.
 
-- ``core_audit_logs`` — a tamper-evident, append-only audit trail for core
+- ``core_audit_logs`` - a tamper-evident, append-only audit trail for core
   (ERP) actions. It mirrors identity's ``audit_logs`` (same physical database,
   same contract): a BEFORE INSERT trigger builds a SHA-256 hash chain over the
   previous hash plus the immutable row fields, and a second trigger forbids
@@ -19,7 +19,7 @@ Adds two tenant-scoped tables to the core schema:
   core's own chain is migrated alone (tests).
 
 Also seeds the six ERP permission keys defined in the HR & Payroll design doc
-(``docs/design/hr-payroll.md``) into ``core_permissions`` — the platform-fixed
+(``docs/design/hr-payroll.md``) into ``core_permissions`` - the platform-fixed
 catalog that identity's ``permissions`` mirrors and role grants reference
 (``erp.hr.*`` and ``erp.payroll.*``).
 
@@ -262,7 +262,7 @@ def upgrade() -> None:
     )
     op.execute(
         # ``permission_rows`` is built solely from the compile-time literal
-        # ``_PERMISSION_KEYS`` above — no user input, so this f-string SQL
+        # ``_PERMISSION_KEYS`` above - no user input, so this f-string SQL
         # is not an injection vector.
         "INSERT INTO core_permissions (key, description) VALUES "
         f"{permission_rows} ON CONFLICT (key) DO NOTHING"  # nosec B608
@@ -291,7 +291,7 @@ def downgrade() -> None:
     keys = ", ".join(f"'{key}'" for key, _ in _PERMISSION_KEYS)
     op.execute(
         # ``keys`` is built solely from the compile-time literal
-        # ``_PERMISSION_KEYS`` above — no user input, so this f-string SQL
+        # ``_PERMISSION_KEYS`` above - no user input, so this f-string SQL
         # is not an injection vector.
         f"DELETE FROM core_permissions WHERE key IN ({keys})"  # nosec B608
     )

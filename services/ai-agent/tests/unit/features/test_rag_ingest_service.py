@@ -1,7 +1,7 @@
 """Unit tests for the RAG ingestion orchestrator (SKY-58).
 
 The service chunks documents, embeds every child in ONE provider batch, and
-hands aligned parent/vector pairs to an injected repository — pure feature
+hands aligned parent/vector pairs to an injected repository - pure feature
 layer, no models/db imports (import-linter contract).
 """
 

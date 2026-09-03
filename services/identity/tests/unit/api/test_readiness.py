@@ -1,4 +1,4 @@
-"""Unit tests for identity/api/readiness.py — gate transitions and startup verification.
+"""Unit tests for identity/api/readiness.py - gate transitions and startup verification.
 
 Covers:
   - gate lifecycle: STARTING -> READY -> STOPPING, reset() for tests
@@ -19,13 +19,13 @@ from identity.core.exceptions import StartupError
 
 @pytest.fixture(autouse=True)
 def _reset_gate():
-    """The gate is module-global — reset it so tests are order-independent."""
+    """The gate is module-global - reset it so tests are order-independent."""
     readiness.reset()
     yield
 
 
 class TestReadinessGate:
-    """Gate state machine — closed until mark_ready()."""
+    """Gate state machine - closed until mark_ready()."""
 
     def test_initial_state_is_starting_and_not_ready(self):
         assert readiness.get_state() is ReadinessState.STARTING

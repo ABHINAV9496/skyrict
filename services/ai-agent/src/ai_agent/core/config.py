@@ -1,15 +1,15 @@
-"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
+"""Application configuration - pydantic-settings, env-driven, fail-fast on missing secrets.
 
 Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly — everything routes through the ``settings`` object.
+call os.getenv() directly - everything routes through the ``settings`` object.
 
 Prefix: ``AI_`` (set via .env or shell environment). CRITICAL vars (DATABASE_URL,
-REDIS_URL, JWT public key, JWKS issuer/audience) have NO defaults — the process
+REDIS_URL, JWT public key, JWKS issuer/audience) have NO defaults - the process
 refuses to start if they are missing.
 
 The service is provider-AGNOSTIC: provider credentials (AI_PROVIDER/AI_MODEL/
 AI_BASE_URL/AI_API_KEY and the AI_FALLBACK_* quartet) are optional at boot.
-With no providers configured, the service still starts and serves health —
+With no providers configured, the service still starts and serves health -
 AI requests then fail with a typed 503 ai_unavailable instead of crashing.
 ``INVENTORY_SERVICE_URL`` is accepted WITHOUT the prefix (compose contract
 from the AI infrastructure spec §6.4) via a validation alias.
@@ -26,7 +26,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
-    """Deployment environments — exactly four, no ad-hoc values."""
+    """Deployment environments - exactly four, no ad-hoc values."""
 
     DEV = "dev"
     TEST = "test"
@@ -52,30 +52,30 @@ class Settings(BaseSettings):
     )
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
-    # --- Database (CRITICAL — no default) ---
-    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
+    # --- Database (CRITICAL - no default) ---
+    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string - REQUIRED")
 
-    # --- Redis (CRITICAL — required for distributed rate limiting) ---
+    # --- Redis (CRITICAL - required for distributed rate limiting) ---
     REDIS_URL: str = Field(
         ...,
-        description="Redis connection URL used by the distributed rate limiter — REQUIRED",
+        description="Redis connection URL used by the distributed rate limiter - REQUIRED",
     )
 
-    # --- JWT verification (CRITICAL — all three required) ---
+    # --- JWT verification (CRITICAL - all three required) ---
     JWT_PUBLIC_KEY_PATH: Path = Field(
-        ..., description="path to RSA public key PEM for verifying identity tokens — REQUIRED"
+        ..., description="path to RSA public key PEM for verifying identity tokens - REQUIRED"
     )
     JWKS_ISSUER: str = Field(
-        ..., description="JWT issuer claim (iss) — REQUIRED, e.g. https://auth.skyrict.io"
+        ..., description="JWT issuer claim (iss) - REQUIRED, e.g. https://auth.skyrict.io"
     )
     JWKS_AUDIENCE: str = Field(
-        ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
+        ..., description="JWT audience claim (aud) - REQUIRED, e.g. api.skyrict.io"
     )
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default=[],
-        description="allowed CORS origins — must be explicit, never '*' in staging/production",
+        description="allowed CORS origins - must be explicit, never '*' in staging/production",
     )
 
     # --- Logging ---
@@ -86,14 +86,14 @@ class Settings(BaseSettings):
     BASE_DOMAIN: str = Field(
         default="",
         description=(
-            "production tenant base domain, e.g. 'skyrict.com' — the first "
+            "production tenant base domain, e.g. 'skyrict.com' - the first "
             "label of a Host like acme.skyrict.com is the tenant slug. Required "
             "in staging/production; ignored in dev/test which resolve tenants "
             "from the X-Tenant-Slug header injected by nginx."
         ),
     )
 
-    # --- Core (inventory) service — data plane for AI features ---
+    # --- Core (inventory) service - data plane for AI features ---
     INVENTORY_SERVICE_URL: str = Field(
         default="http://localhost:8001",
         validation_alias="INVENTORY_SERVICE_URL",
@@ -109,7 +109,7 @@ class Settings(BaseSettings):
         description="per-call timeout for core inventory reads",
     )
 
-    # --- Provider configuration (ALL optional — see module docstring) ---
+    # --- Provider configuration (ALL optional - see module docstring) ---
     PROVIDER: str | None = Field(
         default=None,
         description=(
@@ -128,7 +128,7 @@ class Settings(BaseSettings):
             "providers without a known preset (omniroute, agentrouter, generic)."
         ),
     )
-    API_KEY: str = Field(default="", description="primary provider API key — never logged")
+    API_KEY: str = Field(default="", description="primary provider API key - never logged")
     PROVIDER_LOCAL_ONLY: bool = Field(
         default=False,
         description=(
@@ -149,7 +149,7 @@ class Settings(BaseSettings):
         description="optional override of the fallback provider's API base URL",
     )
     FALLBACK_API_KEY: str = Field(
-        default="", description="fallback provider API key — never logged"
+        default="", description="fallback provider API key - never logged"
     )
     FALLBACK_LOCAL_ONLY: bool = Field(
         default=False,
@@ -178,7 +178,7 @@ class Settings(BaseSettings):
         default=768,
         gt=0,
         description=(
-            "output dimensions — must match the vector columns (768) for every "
+            "output dimensions - must match the vector columns (768) for every "
             "supported provider: text-embedding-3-small via Matryoshka "
             "(768/1536 of native, ~1.5x storage of 512 at slightly better "
             "quality), gemini-embedding-2 via output_dimensionality, or "
@@ -188,7 +188,7 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: str | None = Field(
         default=None,
         description=(
-            "base URL for embedding API — Ollama: http://localhost:11434/v1, "
+            "base URL for embedding API - Ollama: http://localhost:11434/v1, "
             "Gemini (free tier, OpenAI-compatible): "
             "https://generativelanguage.googleapis.com/v1beta/openai, "
             "OpenAI: None to use the default"
@@ -212,14 +212,14 @@ class Settings(BaseSettings):
         default="",
         description=(
             "bearer token used by the RAG ingestion CLI when pulling module "
-            "data from the core service — never logged"
+            "data from the core service - never logged"
         ),
     )
     INVENTORY_SYNC_TOKEN: str = Field(
         default="",
         description=(
             "shared secret that core's post-commit product-change dispatch "
-            "presents to POST /ai/inventory/embeddings/sync — must match core's "
+            "presents to POST /ai/inventory/embeddings/sync - must match core's "
             "CORE_AI_SYNC_TOKEN. Empty disables the sync endpoint (503). "
             "Machine-to-machine only; never logged."
         ),
@@ -286,7 +286,7 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         description=(
-            "abstention threshold — AI results below this confidence are returned "
+            "abstention threshold - AI results below this confidence are returned "
             "as low-confidence abstentions instead of answers"
         ),
     )
@@ -446,7 +446,7 @@ class Settings(BaseSettings):
         return [item.strip() for item in self.ANOMALY_NOTIFY_EMAILS.split(",") if item.strip()]
 
     # ------------------------------------------------------------------
-    # Validators — run in definition order (pydantic v2)
+    # Validators - run in definition order (pydantic v2)
     # ------------------------------------------------------------------
 
     @model_validator(mode="after")

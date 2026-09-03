@@ -1,9 +1,9 @@
-"""erp_attendance_records — one attendance row per employee per work day.
+"""erp_attendance_records - one attendance row per employee per work day.
 
 ``status`` is a REAL native enum (``erp_attendance_status``, created by
 migration 0017). ``pay_impact`` is derived by the service from the status
 (on_time -> full, late -> half, absent -> none) and CHECK-constrained in the
-database — never trusted from clients. One record per
+database - never trusted from clients. One record per
 ``(tenant_id, employee_id, work_date)``; corrections upsert the same day.
 """
 

@@ -1,4 +1,4 @@
-"""Event producers — Phase 1 uses a structlog stub; Kafka comes later.
+"""Event producers - Phase 1 uses a structlog stub; Kafka comes later.
 
 ``skyrict_events`` provides the ``BaseEvent`` envelope and a Kafka
 ``BaseProducer``. Core does NOT connect to Kafka in Phase 1: :class:`StubEventProducer`
@@ -28,7 +28,7 @@ class StubEventProducer:
     """Log-only producer implementing the BaseEvent publish contract.
 
     Phase 1 stand-in for Kafka: ``publish`` logs the fully-serialized event
-    (same envelope Kafka will carry) at INFO. No broker, no retries — this is
+    (same envelope Kafka will carry) at INFO. No broker, no retries - this is
     explicitly a stub until the platform Kafka ticket lands.
     """
 
@@ -53,11 +53,11 @@ class StubEventProducer:
         )
 
     async def apublish(self, topic: str, event: BaseEvent, *, key: str | None = None) -> None:
-        """Async variant of :meth:`publish` (stub — no IO in Phase 1)."""
+        """Async variant of :meth:`publish` (stub - no IO in Phase 1)."""
         self.publish(topic, event, key=key)
 
 
-# Module-level singleton — features depend on this, not on constructing
+# Module-level singleton - features depend on this, not on constructing
 # producers themselves, so swapping the stub for Kafka is a one-line change.
 _event_producer: StubEventProducer | None = None
 

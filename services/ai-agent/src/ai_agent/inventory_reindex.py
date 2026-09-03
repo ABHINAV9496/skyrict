@@ -1,4 +1,4 @@
-"""Inventory snapshot reindex runner — composition root for the ``inventory
+"""Inventory snapshot reindex runner - composition root for the ``inventory
 reindex`` CLI.
 
 Wires the pieces the feature layer may not import itself (repositories,

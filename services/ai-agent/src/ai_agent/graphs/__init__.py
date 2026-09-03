@@ -1,9 +1,9 @@
 """Agent graph orchestration package (AGT-001, SKY-59).
 
 Modules:
-- ``state`` — the canonical ``AgentState`` TypedDict every graph in this
+- ``state`` - the canonical ``AgentState`` TypedDict every graph in this
   service must use.
-- ``checkpointer`` — the async SQLAlchemy ``BaseCheckpointSaver`` that makes
+- ``checkpointer`` - the async SQLAlchemy ``BaseCheckpointSaver`` that makes
   LangGraph runs resumable across restarts.
 
 The registered graphs themselves live in ``ai_agent.features.<feature>`` and

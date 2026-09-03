@@ -226,7 +226,7 @@ export function LeadDetail({ leadId }: LeadDetailProps) {
                 Created
               </dt>
               <dd className="font-medium text-foreground">
-                {lead.createdAt ? formatDate(lead.createdAt) : "—"}
+                {lead.createdAt ? formatDate(lead.createdAt) : "-"}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -235,7 +235,7 @@ export function LeadDetail({ leadId }: LeadDetailProps) {
                 Updated
               </dt>
               <dd className="font-medium text-foreground">
-                {lead.updatedAt ? formatDate(lead.updatedAt) : "—"}
+                {lead.updatedAt ? formatDate(lead.updatedAt) : "-"}
               </dd>
             </div>
           </dl>

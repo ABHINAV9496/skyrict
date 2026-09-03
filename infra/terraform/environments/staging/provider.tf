@@ -1,4 +1,4 @@
-# AWS provider — Route 53 DNS for the staging environment.
+# AWS provider - Route 53 DNS for the staging environment.
 #
 # Credentials are never stored here. The CD pipeline provides them via GitHub
 # secrets (aws-actions/configure-aws-credentials); local runs use the standard

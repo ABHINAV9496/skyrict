@@ -1,4 +1,4 @@
-"""AuditLog ORM model — tamper-evident, hash-chained, append-only."""
+"""AuditLog ORM model - tamper-evident, hash-chained, append-only."""
 
 from __future__ import annotations
 

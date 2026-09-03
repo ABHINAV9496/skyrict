@@ -2,7 +2,7 @@
 
 The platform has no scheduler: retraining and export is an explicit human
 step. Running this fits a ``GradientBoostingClassifier`` (+ SHAP) on the
-bundled reference dataset — or on a CSV you supply — and writes the artifact
+bundled reference dataset - or on a CSV you supply - and writes the artifact
 that :func:`ai_agent.features.attrition.model.load_model` prefers at runtime.
 """
 

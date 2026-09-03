@@ -1,4 +1,4 @@
-# Remote state — S3 + DynamoDB locking.
+# Remote state - S3 + DynamoDB locking.
 #
 # The bucket and lock table are provisioned once out-of-band (see
 # docs/runbooks/staging-deployment.md). The values here are empty on purpose:

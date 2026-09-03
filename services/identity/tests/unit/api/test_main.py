@@ -1,4 +1,4 @@
-"""Unit tests for identity/main.py — application factory wiring.
+"""Unit tests for identity/main.py - application factory wiring.
 
 Covers the SKY-11 docs gating: interactive docs (Swagger UI / ReDoc /
 OpenAPI schema) are enabled outside production and disabled in production,

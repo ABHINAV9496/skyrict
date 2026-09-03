@@ -1,4 +1,4 @@
-"""/ai/finance/account-suggest endpoint — LLM account-code suggestion (SKY-56).
+"""/ai/finance/account-suggest endpoint - LLM account-code suggestion (SKY-56).
 
 Authentication happens here (JWT re-verification); authorization happens
 upstream at the core monolith proxy (``erp.finance.read``) before this is

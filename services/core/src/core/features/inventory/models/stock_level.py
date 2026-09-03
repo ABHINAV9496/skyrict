@@ -43,7 +43,7 @@ class ErpStockLevelModel(Base):
             name="ck_erp_stock_levels_reserved_range",
         ),
         # Composite-FK convention: a level can only reference a product and a
-        # warehouse in the SAME tenant — referential integrity agrees with RLS.
+        # warehouse in the SAME tenant - referential integrity agrees with RLS.
         ForeignKeyConstraint(
             ["tenant_id", "product_id"],
             ["erp_products.tenant_id", "erp_products.id"],

@@ -10,18 +10,18 @@ from identity.core.mfa_providers import PROVIDER_TOTP, available_provider_keys
 
 
 class MFASetupResponse(BaseModel):
-    """POST /mfa/setup — TOTP secret, otpauth URI, and one-time backup codes.
+    """POST /mfa/setup - TOTP secret, otpauth URI, and one-time backup codes.
 
     ``secret`` and ``backup_codes`` are shown once and never returned again.
     """
 
-    secret: str = Field(..., description="TOTP secret — encrypted at rest after this response")
+    secret: str = Field(..., description="TOTP secret - encrypted at rest after this response")
     provisioning_uri: str = Field(..., description="otpauth:// URI for QR code enrollment")
     backup_codes: list[str] = Field(..., description="10 one-time backup codes (shown once)")
 
 
 class MFAVerifyRequest(BaseModel):
-    """POST /mfa/verify — a 6-digit TOTP code or a one-time backup code."""
+    """POST /mfa/verify - a 6-digit TOTP code or a one-time backup code."""
 
     code: str = Field(..., min_length=6, max_length=32, description="TOTP code or backup code")
 
@@ -37,7 +37,7 @@ class MFAVerifyResponse(BaseModel):
 
 
 class MFABackupCodesResponse(BaseModel):
-    """POST /mfa/backup-codes — freshly generated one-time backup codes.
+    """POST /mfa/backup-codes - freshly generated one-time backup codes.
 
     Returned in plaintext exactly once; only Argon2id hashes are persisted.
     Generating a new set invalidates every previously issued code.
@@ -50,12 +50,12 @@ class MFABackupCodesResponse(BaseModel):
 
 
 class MFADisableRequest(BaseModel):
-    """POST /mfa/disable — password confirmation required."""
+    """POST /mfa/disable - password confirmation required."""
 
     password: str = Field(..., min_length=1, description="Current password")
 
 
 class MFAResetRequest(BaseModel):
-    """POST /mfa/reset — owner-assisted reset for a locked-out user."""
+    """POST /mfa/reset - owner-assisted reset for a locked-out user."""
 
     user_id: UUID = Field(..., description="Target user whose MFA is reset")

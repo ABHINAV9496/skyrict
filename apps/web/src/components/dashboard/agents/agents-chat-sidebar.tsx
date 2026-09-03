@@ -41,6 +41,7 @@ import {
   setConversationPinned,
 } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
+import { CONVERSATION_LIST_CHANGED_EVENT } from "@/lib/chat/conversation-list-events";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/api/agents-api";
 
@@ -214,6 +215,16 @@ export function AgentsChatSidebar({
   useEffect(() => {
     if (status === "authenticated") load();
   }, [pathname, load, status]);
+
+  // Refetch when a conversation's metadata changes server-side (e.g. the AI
+  // title lands a moment after a turn completes) so titles update live
+  // without a manual refresh.
+  useEffect(() => {
+    const onConversationListChanged = () => load();
+    window.addEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
+    return () =>
+      window.removeEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
+  }, [load]);
 
   const handleRename = useCallback(
     (conversation: Conversation) => {

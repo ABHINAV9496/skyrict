@@ -1,4 +1,4 @@
-"""Scheduled anomaly detection — per-tenant background scan (spec §4.3).
+"""Scheduled anomaly detection - per-tenant background scan (spec §4.3).
 
 Detects anomalies every 15 minutes for every active tenant and dispatches the
 critical-only admin email introduced in the INV-AI-002 slice. Lives under
@@ -14,7 +14,7 @@ in core and setting it here.
 
 Isolation: tenant enumeration runs against the permissive ``tenants_readable``
 policy with no GUC set, then each tenant's pass opens its OWN session and sets
-``TenantContext`` before the first query — the transaction-local
+``TenantContext`` before the first query - the transaction-local
 ``set_config`` (db/session.py) then scopes every RLS-guarded row. One tenant's
 failure never aborts the pass for the others.
 """

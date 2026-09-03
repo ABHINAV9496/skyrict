@@ -1,4 +1,4 @@
-"""Role endpoints — custom role CRUD and scoped assignment (tenant-scoped)."""
+"""Role endpoints - custom role CRUD and scoped assignment (tenant-scoped)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ _require_roles_read = require_permission("roles:read")
 
 
 class RoleUpdateRequest(BaseModel):
-    """PATCH /roles/{id} — update a custom role's name and/or permissions."""
+    """PATCH /roles/{id} - update a custom role's name and/or permissions."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9_-]+$")
     permission_keys: list[str] | None = None
@@ -44,7 +44,7 @@ class RoleUpdateRequest(BaseModel):
 
 
 class RoleAssignRequest(BaseModel):
-    """POST /roles/{id}/assign — grant a role to a user within a scope."""
+    """POST /roles/{id}/assign - grant a role to a user within a scope."""
 
     user_id: UUID
     scope_type: ScopeType = ScopeType.TENANT

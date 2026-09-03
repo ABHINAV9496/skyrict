@@ -308,7 +308,7 @@ function FinanceAccounts() {
       <div className="space-y-6">
         <PageHeader
           title="Accounts"
-          description="Chart of accounts — the ledger categories the business posts to."
+          description="Chart of accounts - the ledger categories the business posts to."
           icon={BookOpen}
         />
         <TableSkeleton rows={6} />
@@ -321,7 +321,7 @@ function FinanceAccounts() {
       <div className="space-y-6">
         <PageHeader
           title="Accounts"
-          description="Chart of accounts — the ledger categories the business posts to."
+          description="Chart of accounts - the ledger categories the business posts to."
           icon={BookOpen}
         />
         <FinanceErrorState message={status.message} onRetry={() => void load()} />
@@ -343,7 +343,7 @@ function FinanceAccounts() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <PageHeader
           title="Accounts"
-          description="Chart of accounts — the ledger categories the business posts to."
+          description="Chart of accounts - the ledger categories the business posts to."
           icon={BookOpen}
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -444,7 +444,7 @@ function FinanceAccounts() {
                                 <td className="px-4 py-3 text-right tabular-nums text-foreground">
                                   {balanceLoading ? "…" : (() => {
                                     const row = tbByAccount.get(account.id);
-                                    if (!row) return "—";
+                                    if (!row) return "-";
                                     const balance = isDebitNormal(account.account_type)
                                       ? row.debit - row.credit
                                       : row.credit - row.debit;

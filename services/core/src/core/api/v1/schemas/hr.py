@@ -159,7 +159,7 @@ class LeaveTypeOut(BaseModel):
 
 
 class PortalLeaveRequestCreate(BaseModel):
-    """Self-service submit — ``employee_id`` is forced server-side."""
+    """Self-service submit - ``employee_id`` is forced server-side."""
 
     leave_type: str = Field(..., min_length=1, max_length=50)
     start_date: date

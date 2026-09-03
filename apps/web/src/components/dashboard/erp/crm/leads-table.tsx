@@ -164,7 +164,7 @@ export function LeadsTable() {
       label: "Contact info",
       render: (lead) => (
         <div className="min-w-0">
-          <p className="truncate text-foreground">{lead.email || "—"}</p>
+          <p className="truncate text-foreground">{lead.email || "-"}</p>
           <p className="truncate text-xs text-muted-foreground">{lead.phone || ""}</p>
         </div>
       ),
@@ -172,7 +172,7 @@ export function LeadsTable() {
     {
       key: "source",
       label: "Source",
-      render: (lead) => <span className="text-foreground">{lead.source || "—"}</span>,
+      render: (lead) => <span className="text-foreground">{lead.source || "-"}</span>,
     },
     {
       key: "status",
@@ -378,14 +378,14 @@ export function LeadsTable() {
         }}
       />
 
-      {/* Qualify dialog — optional enrichment for the opportunity being created. */}
+      {/* Qualify dialog - optional enrichment for the opportunity being created. */}
       <Dialog open={qualifying !== null} onOpenChange={(open) => !open && setQualifying(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Qualify {qualifying ? leadName(qualifying) : "lead"}?</DialogTitle>
             <DialogDescription>
               Qualifying creates an opportunity at the prospecting stage. Add deal details below
-              (optional — you can edit them later).
+              (optional - you can edit them later).
             </DialogDescription>
           </DialogHeader>
           <QualifyForm
@@ -397,7 +397,7 @@ export function LeadsTable() {
         </DialogContent>
       </Dialog>
 
-      {/* Disqualify confirm — terminal dead end for the lead. */}
+      {/* Disqualify confirm - terminal dead end for the lead. */}
       <Dialog
         open={disqualifying !== null}
         onOpenChange={(open) => !open && setDisqualifying(null)}

@@ -1,11 +1,11 @@
-"""Async TTL cache — small in-memory store with per-key expiry.
+"""Async TTL cache - small in-memory store with per-key expiry.
 
 Foundational plumbing for per-tenant caches (JWKS keys, permission lookups).
 The interface (``set``/``get``/``delete``/``get_or_set``) mirrors what a
 Redis-backed cache should expose so a distributed implementation can drop in
 without touching call sites.
 
-Not safe for multi-process consistency — use for short-lived, per-process
+Not safe for multi-process consistency - use for short-lived, per-process
 derived data only. For shared state across replicas, introduce a Redis-backed
 cache with the same interface instead.
 """
@@ -59,7 +59,7 @@ class TTLCache[T]:
     ) -> T:
         """Return the cached value or populate it via ``factory``.
 
-        Concurrent callers may both compute the value (no locking) — safe for
+        Concurrent callers may both compute the value (no locking) - safe for
         idempotent factories such as loading an RSA public key.
         """
         cached = self.get(key)

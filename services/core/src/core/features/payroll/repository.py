@@ -1,18 +1,18 @@
-"""Payroll repository — DB operations for runs, entries, settings & compensation.
+"""Payroll repository - DB operations for runs, entries, settings & compensation.
 
 Runs are the money-sensitive state machine: ``transition_run_status`` is an
 atomic conditional UPDATE (``WHERE status = from_status`` RETURNING), so a
-concurrent approval/void can never double-flip a run — it returns ``None`` and
+concurrent approval/void can never double-flip a run - it returns ``None`` and
 the service raises ``IllegalStateTransitionError``. ``upsert_entries`` is a
 bulk INSERT ... ON CONFLICT so recomputing a draft/computed run overwrites the
 frozen snapshot entries in one statement (Rule 8: approved/paid runs are
-immutable at the service layer — the repo never deletes).
+immutable at the service layer - the repo never deletes).
 
 Runs and entries have no currency column: amounts are reconstructed as
 ``Money`` in the tenant's settings ``default_currency``, resolved once per repo
 instance (settings are seeded before payroll exists, so the cache is stable).
 ``next_run_code`` uses the shared tenant-scoped sequence "payroll_run" via the
-injected ``next_sequence`` callable — this feature never imports ``core.db``.
+injected ``next_sequence`` callable - this feature never imports ``core.db``.
 ``list_active_employees`` is the one sanctioned cross-feature read
 (``erp_employees``), matching the ERD edge ``PayrollEntryModel.employee_id
 -> erp_employees``.
@@ -309,7 +309,7 @@ class PayrollRepository:
         total_net: Money | None = None,
         skipped_employees: list[dict[str, str]] | None = None,
     ) -> ent.PayrollRun | None:
-        """Atomic conditional transition (CAS) — ``None`` if not in ``from_status``."""
+        """Atomic conditional transition (CAS) - ``None`` if not in ``from_status``."""
         values: dict[str, object] = {
             "status": PayrollRunStatusModel(to_status),
             "updated_at": func.now(),
@@ -354,13 +354,13 @@ class PayrollRepository:
         return await self._next_sequence(tenant_id, "payroll_run")
 
     # ------------------------------------------------------------------
-    # Entries (Rule 8: immutable after approved — the repo only upserts)
+    # Entries (Rule 8: immutable after approved - the repo only upserts)
     # ------------------------------------------------------------------
 
     async def upsert_entries(
         self, entries: Sequence[ent.PayrollEntry], *, tenant_id: uuid.UUID
     ) -> None:
-        """Bulk upsert the run snapshot — one statement, atomic with the run.
+        """Bulk upsert the run snapshot - one statement, atomic with the run.
 
         Recompute overwrites every ``(tenant_id, run_id, employee_id)`` row so
         the snapshot always reflects the latest computation; on-conflict keeps
@@ -447,7 +447,7 @@ class PayrollRepository:
         # Rule 8 defense-in-depth (gap #9): never mutate an entry whose run is
         # already approved/paid, even if a caller bypasses the service layer.
         # Atomic guarded UPDATE: the immutability predicate lives in the WHERE
-        # clause itself — an approved/paid/void run's entries never match the
+        # clause itself - an approved/paid/void run's entries never match the
         # subquery, so a run flipping status between a prior SELECT and this
         # statement (TOCTOU) can still never be edited. Zero rows matched means
         # the entry is missing OR its run is no longer mutable.
@@ -513,7 +513,7 @@ class PayrollRepository:
         Returns the number of deleted rows.
 
         Rule 8 defense-in-depth (mirrors ``update_entry``): the immutability
-        predicate lives in the DELETE's WHERE clause itself — entries of an
+        predicate lives in the DELETE's WHERE clause itself - entries of an
         approved/paid/voided run never match the run-status subquery, so a
         caller bypassing the service layer still cannot mutate an immutable
         run's snapshot. When zero rows were deleted we re-read the run status

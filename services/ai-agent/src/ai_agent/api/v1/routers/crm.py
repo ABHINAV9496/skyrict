@@ -1,8 +1,8 @@
-"""CRM AI endpoints — lead score badge, deal health badge, follow-up management (SKY-61).
+"""CRM AI endpoints - lead score badge, deal health badge, follow-up management (SKY-61).
 
 Routes mount at ``/api/v1/ai/crm`` and expose the deterministic engines built
 in C4-C7. The gateway is bound to the *caller's* JWT so core enforces the
-existing CRM read permissions — the AI service never bypasses authorization.
+existing CRM read permissions - the AI service never bypasses authorization.
 
 Rate limits (C8):
 - ``/score`` and ``/health`` use ``RATE_LIMIT_CRM_PER_MIN`` (15/min/user).
@@ -61,7 +61,7 @@ def _follow_up_to_item(row: Any) -> FollowUpItem:
 
 
 def _get_crm_gateway(request: Request) -> HttpCrmGateway:
-    """CRM gateway bound to THIS request's identity — never service credentials."""
+    """CRM gateway bound to THIS request's identity - never service credentials."""
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.removeprefix("Bearer ").strip()
     return HttpCrmGateway(
@@ -202,7 +202,7 @@ async def apply_follow_up(
 ) -> FollowUpItem:
     """Apply a pending follow-up suggestion (one-click send).
 
-    The request body must contain ``activity_id`` — the UUID of the CRM
+    The request body must contain ``activity_id`` - the UUID of the CRM
     activity created in core by the caller.
     """
     await limiter.enforce(

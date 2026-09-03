@@ -1,4 +1,4 @@
-"""Audit repository — DB operations for the audit_logs table.
+"""Audit repository - DB operations for the audit_logs table.
 
 All SQLAlchemy stays in this file. Service-facing methods accept and return
 domain entities (``identity.domain.entities.AuditLog``).

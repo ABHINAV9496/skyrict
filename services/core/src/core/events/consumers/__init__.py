@@ -1,4 +1,4 @@
-"""Event consumers — route inbound ``skyrict_events`` envelopes to handlers.
+"""Event consumers - route inbound ``skyrict_events`` envelopes to handlers.
 
 Phase 1: Kafka is NOT wired (see ``core.events.producers`` for the stub
 producer). There is therefore no broker consumer loop yet; ``handle_event``
@@ -27,7 +27,7 @@ async def handle_event(payload: dict[str, Any]) -> RbacProvisionResult | None:
     """Dispatch one serialized event envelope to its handler (idempotent).
 
     Returns the provisioning result when the event was handled, ``None`` for
-    unknown event types (logged, not an error — the bus may carry events core
+    unknown event types (logged, not an error - the bus may carry events core
     does not care about).
     """
     event_type = payload.get("event_type")

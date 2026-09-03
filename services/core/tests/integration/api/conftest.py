@@ -123,7 +123,7 @@ async def integration_db(migrated_schema: None) -> AsyncGenerator[dict[str, str]
 async def seeded_hr_defaults(integration_db: dict[str, str]) -> None:
     """Seed the olympus tenant's HR/Payroll defaults (leave types + settings).
 
-    Idempotent — safe to re-run across tests sharing the tenant.
+    Idempotent - safe to re-run across tests sharing the tenant.
     """
     from core.seed import seed_tenant_hr_defaults
 
@@ -139,7 +139,7 @@ async def seeded_test_rbac(integration_db: dict[str, str]) -> None:
     ``erp.hr.*`` / ``erp.payroll.*`` keys), and creates the identity ``users``
     rows backing every deterministic test sub so shared ``audit_logs`` writes
     (FK ``actor_user_id -> users(id)``) never violate the constraint.
-    Idempotent — the grant uses ``ON CONFLICT DO NOTHING`` on the composite
+    Idempotent - the grant uses ``ON CONFLICT DO NOTHING`` on the composite
     key. The "nobody" subs are intentionally NOT granted so 403 tests use a
     distinct ungranted identity instead of mutating a granted one mid-suite.
     """
@@ -178,11 +178,11 @@ async def seeded_test_rbac(integration_db: dict[str, str]) -> None:
 def tenant_headers(
     integration_db: dict[str, str], rsa_private_key: str
 ) -> Callable[[str], dict[str, str]]:
-    """Headers factory — signed JWT bound to a tenant's UUID + its slug header.
+    """Headers factory - signed JWT bound to a tenant's UUID + its slug header.
 
     Returns a stable admin identity (pre-granted all six ERP keys by
     ``seeded_test_rbac``). Pass ``unprivileged=True`` for a deliberately
-    ungranted identity — the token is valid but resolves zero permissions, so
+    ungranted identity - the token is valid but resolves zero permissions, so
     permission-gated endpoints return 403 without disturbing the admin grant.
     """
     from .helpers import make_tenant_headers

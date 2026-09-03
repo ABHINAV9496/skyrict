@@ -65,7 +65,7 @@ async def skyrict_error_handler(request: Request, exc: SkyrictError) -> JSONResp
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions — NEVER leak internals."""
+    """Catch-all for unhandled exceptions - NEVER leak internals."""
     request_id = getattr(request.state, "request_id", "unknown")
     logger.error(
         "unhandled_exception",

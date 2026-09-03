@@ -1,4 +1,4 @@
-"""Sales HTTP API integration tests — real Postgres, full app stack.
+"""Sales HTTP API integration tests - real Postgres, full app stack.
 
 End-to-end coverage of CRM-BE-002 over the FastAPI app: the draft order
 lifecycle (create with server-side totals, PATCH while draft), the

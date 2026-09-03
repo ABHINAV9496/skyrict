@@ -11,12 +11,12 @@ through the injected :class:`EmailService`. Dispatch is gated by
 (1) addresses being configured, (2) the injected ``notify_enabled``
 predicate (per-tenant ``email_alerts_enabled``, evaluated by the router's
 composition root) and (3) severity == ``critical``. Delivery failures are
-logged, never raised — audit events stay the source of truth.
+logged, never raised - audit events stay the source of truth.
 
 Rule stats feedback (spec §4.5): every NEW detection bumps the finding
 counter and every dismissal bumps the false-positive counter of the
 :class:`RuleStatsRecorder` (implemented by AnomalyRuleStatsRepository at
-the composition root — the feature layer never imports DB modules). These
+the composition root - the feature layer never imports DB modules). These
 counters drive the per-rule FP-rate tuning loop.
 """
 

@@ -4,7 +4,7 @@ Ticket SKY-57 ([AI-INFRA-001], docs/modules/skyrict-ai/
 inventory-ai-features.md §6.3): core checks ``erp.ai.invoke`` BEFORE
 proxying any ``/api/v1/ai/*`` request to the ai-agent microservice, so a
 permissionless call is rejected 403 at the monolith and never reaches the
-AI service. Granted to organization_admin only — tenant admins opt in to
+AI service. Granted to organization_admin only - tenant admins opt in to
 the AI assistant for their users via custom roles.
 
 Revision ID: 0018

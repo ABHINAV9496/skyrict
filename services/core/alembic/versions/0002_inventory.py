@@ -14,10 +14,10 @@
   on write (repository layer). Its CHECK constraints are the DB-level security
   boundary for the whole inventory module: ``qty_on_hand >= 0`` (no negative
   stock) and ``qty_reserved >= 0 AND qty_reserved <= qty_on_hand`` (no
-  over-reservation) — enforced by Postgres regardless of application logic.
+  over-reservation) - enforced by Postgres regardless of application logic.
 - ``erp_products`` FKs ``cost_currency_code`` / ``sell_currency_code`` to the
   global ``erp_currencies`` catalog seeded by 0001 (not recreated here).
-- Money/quantities are ``Numeric(18,4)`` everywhere — no float columns.
+- Money/quantities are ``Numeric(18,4)`` everywhere - no float columns.
 
 DEPENDS ON identity's migration 0001 (``tenants`` + ``current_tenant_id()``)
 and core's 0001 (``erp_currencies``), both of which are applied first by
@@ -191,7 +191,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         # Composite-FK convention: a level only ever references a product and a
-        # warehouse in the SAME tenant — referential integrity agrees with RLS.
+        # warehouse in the SAME tenant - referential integrity agrees with RLS.
         sa.ForeignKeyConstraint(
             ["tenant_id", "product_id"],
             ["erp_products.tenant_id", "erp_products.id"],

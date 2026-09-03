@@ -3,7 +3,7 @@
 Adds the self-service portal permission to the platform catalog and backfills
 the ``employee_self_service`` role for every existing tenant (new tenants get
 it automatically via provisioning from ``SYSTEM_ROLE_DEFINITIONS``). The role
-deliberately holds ONLY ``erp.leave.self`` — holders get the /leave portal and
+deliberately holds ONLY ``erp.leave.self`` - holders get the /leave portal and
 nothing else; the login redirect routes sole holders away from /dashboard.
 
 Revision ID: 0019

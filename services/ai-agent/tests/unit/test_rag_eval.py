@@ -1,8 +1,8 @@
 """Unit tests for the RAGAS eval runner's pure logic (SKY-58).
 
 The ragas import is deliberately lazy (the nightly workflow installs it
-ephemerally), so everything testable without it — sample mapping, mean
-aggregation, threshold gating, Decimal coercion — lives here and is exercised
+ephemerally), so everything testable without it - sample mapping, mean
+aggregation, threshold gating, Decimal coercion - lives here and is exercised
 by regular CI.
 """
 

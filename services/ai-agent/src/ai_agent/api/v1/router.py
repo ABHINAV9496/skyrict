@@ -1,4 +1,4 @@
-"""V1 API router — aggregates all v1 endpoint modules.
+"""V1 API router - aggregates all v1 endpoint modules.
 
 The scaffold ships health/readiness; the AI routers (query, suggestions,
 anomalies, forecast, abc) mount here as their commits land (SKY-57, SKY-68).

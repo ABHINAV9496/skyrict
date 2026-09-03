@@ -89,6 +89,7 @@ class EntryStatus(StrEnum):
     DRAFT = "draft"
     POSTED = "posted"
     VOIDED = "voided"
+    REVERSED = "reversed"
 
 
 class InvoiceStatus(StrEnum):

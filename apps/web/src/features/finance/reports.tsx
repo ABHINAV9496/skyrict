@@ -846,8 +846,9 @@ function AutomationView() {
     const [agingError, setAgingError] = useState<string | null>(null);
     const [projError, setProjError] = useState<string | null>(null);
 
-    // Backdate one full year for the prior period.
+    // Backdate one full year for the prior period; end at last day of prior year.
     const priorFrom = dateYearsAgo(1);
+    const priorTo = dateYearsAgo(0).slice(0, 4) + "-01-01";
     const currentFrom = dateYearsAgo(0).slice(0, 4) + "-01-01";
 
     const loadAging = useCallback(async () => {
@@ -876,14 +877,14 @@ function AutomationView() {
         setCompError(null);
         try {
             setComparative(
-                await getComparativePnl(currentFrom, todayStr, priorFrom, todayStr),
+                await getComparativePnl(currentFrom, todayStr, priorFrom, priorTo),
             );
         } catch (err) {
             setCompError(errorMessage(err, "Could not load the comparative P&L."));
         } finally {
             setCompLoading(false);
         }
-    }, [currentFrom, priorFrom, todayStr]);
+    }, [currentFrom, priorFrom, priorTo, todayStr]);
 
     useEffect(() => {
         void loadAging();

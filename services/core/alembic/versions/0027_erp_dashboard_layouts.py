@@ -11,8 +11,8 @@ may override it with a personal layout stored in ``user_dashboard_layouts``.
 Widget open/hide events are recorded in ``widget_events`` for the AI-powered
 layout suggestion engine.
 
-Revision ID: 0026
-Revises: 0025
+Revision ID: 0027
+Revises: 0026
 Create Date: 2026-09-01
 """
 
@@ -21,8 +21,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0026"
-down_revision = "0025"
+revision = "0027"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 

@@ -13,11 +13,8 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.api.deps import get_current_user
-from core.db.session import get_db
-from core.features.reporting.repository import DashboardRepository
+from core.api.deps import get_current_user, get_dashboard_service
 from core.features.reporting.schemas import (
     DashboardUpdate,
     UserDashboardLayoutRead,
@@ -25,11 +22,11 @@ from core.features.reporting.schemas import (
 )
 from core.features.reporting.service import DashboardService
 
-router = APIRouter(prefix="/api/v1/dashboards", tags=["dashboards"])
+router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
-
-def _get_service(session: AsyncSession = Depends(get_db)) -> DashboardService:
-    return DashboardService(DashboardRepository(session))
+# Keep one dependency symbol for route wiring and unit-test overrides while the
+# actual database composition remains in the API dependency layer.
+_get_service = get_dashboard_service
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:

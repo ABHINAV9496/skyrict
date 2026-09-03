@@ -35,6 +35,10 @@ class SuggestResponse(BaseModel):
     confidence: float
     reasoning: str
     model_used: str
+    amount: float | None = None
+    side: str = "debit"
+    contra_code: str = ""
+    contra_name: str = ""
 
 
 router = APIRouter(prefix="/ai/finance/account-suggest", tags=["ai-finance"])
@@ -62,4 +66,8 @@ async def suggest_account_code(
         confidence=result.confidence,
         reasoning=result.reasoning,
         model_used=result.model_used,
+        amount=result.amount,
+        side=result.side,
+        contra_code=result.contra_code,
+        contra_name=result.contra_name,
     )

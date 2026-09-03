@@ -301,12 +301,6 @@ export const erpNavGroups: NavGroup[] = [
                         permission: "erp.hr.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/payroll-anomalies",
-                        label: "Payroll anomalies",
-                        icon: AlertTriangle,
-                        permission: "erp.hr.ai.read",
-                    },
-                    {
                         href: "/dashboard/erp/hr/compliance",
                         label: "Compliance",
                         icon: ShieldCheck,
@@ -388,6 +382,12 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/dashboard/erp/payroll/automation",
                         label: "Automation",
                         icon: CalendarClock,
+                        permission: "erp.payroll.ai.read",
+                    },
+                    {
+                        href: "/dashboard/erp/payroll/anomalies",
+                        label: "Payroll anomalies",
+                        icon: AlertTriangle,
                         permission: "erp.payroll.ai.read",
                     },
                 ],

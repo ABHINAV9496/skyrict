@@ -88,6 +88,7 @@ def _user_id(current_user: dict[str, Any]) -> uuid.UUID:
 
 
 AiSuggester = Callable[[str, Sequence[ChartOfAccount]], Awaitable[AccountCodeSuggestion | None]]
+AiDrafter = Callable[[str, Sequence[ChartOfAccount]], Awaitable[DraftEntry | None]]
 
 
 @dataclass
@@ -97,6 +98,7 @@ class FinanceAutomationService:
     repo: FinanceRepositoryPort
     audit: AuditSink
     ai_suggest: AiSuggester | None = field(default=None)
+    ai_draft: AiDrafter | None = field(default=None)
 
     async def close_checklist(self, tenant_id: uuid.UUID, period_id: uuid.UUID) -> Any:
         return await self.repo.close_checklist(tenant_id, period_id)
@@ -228,12 +230,20 @@ class FinanceAutomationService:
         self, tenant_id: uuid.UUID, description: str
     ) -> DraftEntry:
         accounts = await self.repo.list_accounts(tenant_id)
-        if self.ai_suggest is not None and accounts:
-            # Use the same ai_suggest callable but wrapped for draft
-            # The core ai_suggester module has a separate draft function
-            # We need the HTTP client — it's wired in the deps factory
-            # For now, fall back to deterministic suggestion
-            pass
+        if self.ai_draft is not None and accounts:
+            try:
+                ai = await self.ai_draft(description, accounts)
+            except AiServiceUnavailableError:
+                ai = None
+            if ai is not None:
+                await self.audit.log(
+                    tenant_id=tenant_id,
+                    user_id=None,
+                    action=FINANCE_AI_DRAFT_GENERATED,
+                    target="finance:draft",
+                    details={"description": description, "model_used": ai.model_used},
+                )
+                return ai
         # Deterministic fallback: suggest debit + contra credit
         suggestion = await self.repo.suggest_account_code(tenant_id, description)
         from decimal import Decimal

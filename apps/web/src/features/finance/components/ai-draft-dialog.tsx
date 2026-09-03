@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { draftJournalEntry, type DraftEntry } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { toMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 
 export interface AppliedDraftLine {
@@ -54,8 +55,8 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
     if (!draft) return;
     const lines: AppliedDraftLine[] = draft.lines.map((line) =>
       line.side === "credit"
-        ? { account_code: line.account_code, credit: line.amount }
-        : { account_code: line.account_code, debit: line.amount },
+        ? { account_code: line.account_code, credit: toMoney(line.amount) }
+        : { account_code: line.account_code, debit: toMoney(line.amount) },
     );
     onApply(lines, description.trim());
     onOpenChange(false);
@@ -63,8 +64,8 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
     setDescription("");
   }
 
-  const debitTotal = draft?.lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0) ?? 0;
-  const creditTotal = draft?.lines.filter((l) => l.side === "credit").reduce((s, l) => s + l.amount, 0) ?? 0;
+  const debitTotal = draft?.lines.filter((l) => l.side === "debit").reduce((s, l) => s + toMoney(l.amount), 0) ?? 0;
+  const creditTotal = draft?.lines.filter((l) => l.side === "credit").reduce((s, l) => s + toMoney(l.amount), 0) ?? 0;
   const balanced = Math.abs(debitTotal - creditTotal) < 0.005;
   const confidencePct = draft ? Math.round(draft.confidence * 100) : 0;
 
@@ -160,7 +161,7 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
                               : "bg-blue-100 text-blue-700",
                           )}
                         >
-                          {line.side === "debit" ? "Dr" : "Cr"} {line.amount.toFixed(2)}
+                          {line.side === "debit" ? "Dr" : "Cr"} {toMoney(line.amount).toFixed(2)}
                         </span>
                       </div>
                     </div>

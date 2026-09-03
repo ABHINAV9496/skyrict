@@ -269,7 +269,7 @@ function CreateJournalEntryDialog({
       }
       initialValuesAppliedRef.current = true;
     }
-  }, [open, initialValues, setValue, fields.length]);
+  }, [open, initialValues, setValue, fields.length, reset]);
 
   useEffect(() => {
     if (!open || !initialValuesAppliedRef.current || fields.length < 2) return;

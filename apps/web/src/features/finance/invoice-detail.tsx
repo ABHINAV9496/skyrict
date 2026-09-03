@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, Banknote, LoaderCircle, ReceiptText } from "lucide-react";
+import { ArrowLeft, Banknote, CircleCheck, Copy, LoaderCircle, Mail, ReceiptText } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
   applyPayment,
   approveInvoice,
+  generateReminder,
   getInvoice,
   issueInvoice,
   listAccounts,
@@ -32,6 +33,7 @@ import {
   type Account,
   type Invoice,
   type Payment,
+  type ReminderDraft,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/finance/format";
@@ -185,6 +187,39 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [lastPayment, setLastPayment] = useState<Payment | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reminder, setReminder] = useState<ReminderDraft | null>(null);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function loadReminder() {
+    setReminderLoading(true);
+    setReminderError(null);
+    try {
+      const result = await generateReminder(invoiceId);
+      setReminder(result);
+      setReminderOpen(true);
+    } catch (error) {
+      setReminderError(
+        error instanceof ApiError ? error.message : "Could not generate a reminder.",
+      );
+    } finally {
+      setReminderLoading(false);
+    }
+  }
+
+  async function copyReminder() {
+    if (!reminder) return;
+    const text = `Subject: ${reminder.subject}\n\n${reminder.body}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -257,6 +292,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const canApproveInvoice = invoice.status === "issued" && canApprove;
   const canVoid = (invoice.status === "draft" || invoice.status === "issued") && canWrite;
   const canApplyPayment = invoice.status === "approved" && canWrite;
+  const isOverdue =
+    (invoice.status === "issued" || invoice.status === "approved") &&
+    new Date(invoice.due_date) < new Date();
 
   const columns: FinanceColumn<Invoice["lines"][number]>[] = [
     { label: "Line", render: (line) => <span className="tabular-nums">{line.line_no}</span> },
@@ -334,6 +372,21 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                 }}
               />
             ) : null}
+            {isOverdue ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reminderLoading || status.busy !== null}
+                onClick={() => void loadReminder()}
+              >
+                {reminderLoading ? (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Mail aria-hidden="true" className="size-4" />
+                )}
+                Generate Reminder
+              </Button>
+            ) : null}
             {canVoid ? (
               <Button type="button" variant="outline" disabled={status.busy !== null} onClick={() => void runAction("void")}>
                 {status.busy === "void" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
@@ -407,6 +460,44 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
           }
         />
       </div>
+
+      {reminderError ? (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+          {reminderError}
+        </p>
+      ) : null}
+
+      <Dialog open={reminderOpen} onOpenChange={setReminderOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payment reminder — {reminder?.invoice_number}</DialogTitle>
+            <DialogDescription>
+              Tone: {reminder?.tone} · {reminder?.days_overdue} days overdue
+            </DialogDescription>
+          </DialogHeader>
+          {reminder ? (
+            <div className="grid gap-3">
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-sm font-medium text-foreground">{reminder.subject}</p>
+              </div>
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-3 font-sans text-sm text-muted-foreground">
+                {reminder.body}
+              </pre>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Generating reminder…</p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => void copyReminder()}>
+              {copied ? <CircleCheck aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <Button type="button" onClick={() => setReminderOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

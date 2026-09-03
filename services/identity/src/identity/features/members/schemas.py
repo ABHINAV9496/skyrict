@@ -1,4 +1,4 @@
-"""Member management schemas — requests and responses."""
+"""Member management schemas - requests and responses."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Middleware stack — request-id and tenant context.
+"""Middleware stack - request-id and tenant context.
 
 TenantContextMiddleware is the SINGLE source of truth for tenant resolution:
 it derives the tenant slug via the centralized ``TenantResolver``, verifies
@@ -7,7 +7,7 @@ and populates TenantContext. Downstream code consumes TenantContext instead
 of re-reading headers or parsing the Host again.
 
 Exceptions raised here are converted to RFC 7807 problem+json responses via
-skyrict_error_handler — exceptions thrown inside Starlette middleware do NOT
+skyrict_error_handler - exceptions thrown inside Starlette middleware do NOT
 reach the route-level ExceptionMiddleware handlers.
 """
 
@@ -62,15 +62,15 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 class TenantContextMiddleware(BaseHTTPMiddleware):
     """Resolve the routed tenant, cross-check the JWT, populate TenantContext.
 
-    Flow (single source of truth — no other layer re-resolves the tenant):
+    Flow (single source of truth - no other layer re-resolves the tenant):
       1. Skip health/ready/docs (no tenant context needed).
       2. Derive the tenant slug from the routing layer (Host / X-Tenant-Slug).
          The core proxy forwards the original headers, so resolution behaves
          identically whether called directly or through the monolith.
-      3. Look up the tenant by slug — unknown -> TenantNotFoundError,
+      3. Look up the tenant by slug - unknown -> TenantNotFoundError,
          disabled -> TenantDisabledError.
-      4. If a Bearer token is present, verify it via verify_jwt() — the ONE AND
-         ONLY decode path — and cross-check its tenant claim against the routed
+      4. If a Bearer token is present, verify it via verify_jwt() - the ONE AND
+         ONLY decode path - and cross-check its tenant claim against the routed
          tenant; mismatch -> TenantMismatchError (401) and processing stops.
       5. Populate TenantContext (tenant_id, user_id) and bind structlog vars.
       6. After the response, clear the context and structlog vars so no tenant

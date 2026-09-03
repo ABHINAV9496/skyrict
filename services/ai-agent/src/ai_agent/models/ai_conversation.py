@@ -1,4 +1,4 @@
-"""ai_conversations — durable conversation storage for the Agents shell.
+"""ai_conversations - durable conversation storage for the Agents shell.
 
 Each row represents one chat session owned by a user within a tenant.
 Messages are stored in the separate ``ai_conversation_messages`` table

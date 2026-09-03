@@ -22,7 +22,7 @@ Design notes:
   a run is reproducible and the recorded numbers are comparable across weeks.
 - Precision below the documented 0.70 threshold WARNS (exit code 0) instead of
   failing: an eval regression is an operator alert, not a hard deploy gate.
-- Anomaly seed rows carry dates + magnitudes only — never employee PII.
+- Anomaly seed rows carry dates + magnitudes only - never employee PII.
 """
 
 from __future__ import annotations

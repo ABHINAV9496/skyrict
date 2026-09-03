@@ -1,10 +1,10 @@
-"""CRM service — leads, opportunities, customers (CRM-BE-002 / sales-crm.md).
+"""CRM service - leads, opportunities, customers (CRM-BE-002 / sales-crm.md).
 
 The service owns the business rules; the repository only persists. Rules
 implemented here (docs/modules/sales-crm.md §2, §4):
 
 - **Lead state machine**: ``new|contacted -> qualified | disqualified``.
-  ``qualified`` is terminal for the lead — it promotes to an opportunity
+  ``qualified`` is terminal for the lead - it promotes to an opportunity
   (qualify is the money moment, not a lead status); ``disqualified`` is the
   dead end.
 - **Opportunity pipeline**: ``prospecting -> qualified -> proposal ->
@@ -17,7 +17,7 @@ implemented here (docs/modules/sales-crm.md §2, §4):
   (``uq_erp_crm_opportunities_tenant_lead`` etc.) are the backstop that turns
   a lost race into a successful replay instead of a duplicate row.
 - **Soft dedupe**: a new lead whose email matches an existing NON-disqualified
-  lead in the tenant is refused (the DB has no unique email constraint — the
+  lead in the tenant is refused (the DB has no unique email constraint - the
   service decides).
 - **Ownership**: leads/opportunities are owner/team-scoped. The service only
   ever passes the request-resolved ``DataScope`` + the caller's ids through to
@@ -111,7 +111,7 @@ class CrmService:
         owner_id: uuid.UUID | None = None,
         team_id: uuid.UUID | None = None,
     ) -> Lead:
-        """Create a NEW lead — refuses an active duplicate by email (soft dedupe)."""
+        """Create a NEW lead - refuses an active duplicate by email (soft dedupe)."""
         if not any((email, phone, company, first_name, last_name)):
             raise ValidationError(
                 "A lead needs at least one contact channel (email, phone, company, or name)"
@@ -223,7 +223,7 @@ class CrmService:
         team_id: uuid.UUID | None,
         changes: dict[str, object],
     ) -> Lead:
-        """PATCH editable lead fields (never ``status`` — use qualify/disqualify)."""
+        """PATCH editable lead fields (never ``status`` - use qualify/disqualify)."""
         if not changes:
             return await self.get_lead(
                 lead_id, tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
@@ -323,7 +323,7 @@ class CrmService:
         try:
             created = await self._repo.create_opportunity(opportunity)
         except ValueError:
-            # Lost the UNIQUE (tenant_id, lead_id) race — the other caller won;
+            # Lost the UNIQUE (tenant_id, lead_id) race - the other caller won;
             # the replay probe resolves it.
             raced = await self._repo.get_opportunity_by_lead(lead_id, tenant_id=tenant_id)
             if raced is None:
@@ -515,7 +515,7 @@ class CrmService:
         team_id: uuid.UUID | None,
         changes: dict[str, object],
     ) -> Opportunity:
-        """PATCH editable fields (never ``stage`` — use change_stage)."""
+        """PATCH editable fields (never ``stage`` - use change_stage)."""
         if "probability" in changes and changes["probability"] is not None:
             probability = changes["probability"]
             if not isinstance(probability, int) or not 0 <= probability <= 100:
@@ -939,7 +939,7 @@ def _audit_details_from_changes(changes: dict[str, object]) -> dict[str, object]
     """Serialize normalized PATCH changes for the JSONB audit trail.
 
     The normalization step replaces the API's ``amount``/``currency`` pair with
-    a single :class:`Money` value object, which is not JSON-serializable —
+    a single :class:`Money` value object, which is not JSON-serializable -
     flatten it back to the pair so audit ``details`` is always plain JSON.
     """
     details: dict[str, object] = {}

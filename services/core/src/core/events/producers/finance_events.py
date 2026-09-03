@@ -8,7 +8,7 @@ envelope (``skyrict_events``). Topic == ``event_type`` following the
 after the request transaction commits. This matters: ``get_db`` commits in
 dependency teardown, so a publish at emit-time would fire BEFORE the money
 actually persisted. The publisher registers a session ``after_commit`` listener
-(attached to the sync session backing the request's ``AsyncSession`` — the same
+(attached to the sync session backing the request's ``AsyncSession`` - the same
 pattern as the RLS ``after_begin`` listener in ``core.db.session``) and drains
 there. Consumers therefore never observe money that did not commit.
 """
@@ -80,7 +80,7 @@ class FinanceEventPublisher:
     """Buffers finance events and publishes them after the request commits.
 
     Implements (structurally) the ``FinanceEventSink`` port in
-    ``core.features.finance.ports`` without importing it — core.events may not
+    ``core.features.finance.ports`` without importing it - core.events may not
     depend on feature modules (import-linter), and the service depends on the
     Protocol, so the duck-typed boundary keeps both contracts intact.
     """

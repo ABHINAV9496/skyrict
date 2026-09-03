@@ -1,4 +1,4 @@
-"""seed_core_roles_for_tenant unit tests — fake session factory, no database."""
+"""seed_core_roles_for_tenant unit tests - fake session factory, no database."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
-name: RAGAS — Nightly RAG Evaluation
+name: RAGAS - Nightly RAG Evaluation
 
 # RAG quality gate (SKY-58). Runs nightly against the real production
-# retrieval pipeline — same embedding provider, same vector search, same
-# parent fetch — over the curated eval cases (RAG_EVAL_CASES) and stores the
+# retrieval pipeline - same embedding provider, same vector search, same
+# parent fetch - over the curated eval cases (RAG_EVAL_CASES) and stores the
 # run in ai_eval_runs. The `ai-agent eval` CLI exits nonzero when any metric
 # drops below its threshold, which fails this workflow: a silently degraded
 # RAG system (stale ingestion, broken embedding provider, bad chunking) shows
@@ -12,11 +12,11 @@ name: RAGAS — Nightly RAG Evaluation
 # respecting row-level security).
 #
 # Secrets required:
-#   OPENAI_API_KEY         — embedding + answer generation + RAGAS judge LLM
+#   OPENAI_API_KEY         - embedding + answer generation + RAGAS judge LLM
 # Repo variables (all optional):
-#   AI_EVAL_TENANT_SLUG    — tenant to evaluate (default 'acme')
-#   AI_EVAL_MODEL          — LLM for generated answers + judge (default gpt-4o-mini)
-#   AI_EVAL_MODULE         — restrict to one corpus module (default: all)
+#   AI_EVAL_TENANT_SLUG    - tenant to evaluate (default 'acme')
+#   AI_EVAL_MODEL          - LLM for generated answers + judge (default gpt-4o-mini)
+#   AI_EVAL_MODULE         - restrict to one corpus module (default: all)
 
 on:
   schedule:

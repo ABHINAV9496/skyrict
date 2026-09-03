@@ -1,5 +1,5 @@
 # =============================================================================
-# Skyrict AI Agent Service — Dev Dockerfile
+# Skyrict AI Agent Service - Dev Dockerfile
 #
 # Local development: dev dependencies, tests, and uvicorn live reload.
 # Used by docker-compose.dev.yml (the `ai-agent` service build).
@@ -24,7 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Copy every workspace member pyproject.toml file (for dependency resolution).
-# The workspace glob is services/* and libs/* — uv --frozen refuses to resolve
+# The workspace glob is services/* and libs/* - uv --frozen refuses to resolve
 # if a member manifest is missing. READMEs too: hatchling requires the `readme`
 # file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
@@ -40,7 +40,7 @@ COPY libs/skyrict-events/README.md libs/skyrict-events/
 COPY libs/skyrict-testing/pyproject.toml libs/skyrict-testing/
 COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 
-# Install all deps (dev group included — pytest, mypy, ruff)
+# Install all deps (dev group included - pytest, mypy, ruff)
 RUN uv sync --frozen --directory services/ai-agent
 
 # Make venv entry points (alembic, uvicorn, ai-agent, etc.) available on PATH
@@ -54,7 +54,7 @@ COPY services/ai-agent/alembic.ini services/ai-agent/
 COPY services/ai-agent/alembic services/ai-agent/alembic
 COPY libs/skyrict-common/src libs/skyrict-common/src
 
-# Copy tests (dev only — never reaches production)
+# Copy tests (dev only - never reaches production)
 COPY services/ai-agent/tests services/ai-agent/tests
 
 EXPOSE 8000

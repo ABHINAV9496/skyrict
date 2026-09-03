@@ -104,7 +104,7 @@ _TENANT_FK_TABLES = (
     "ai_audit_log",
     "ai_restock_settings",
     "ai_anomaly_rule_stats",
-    # SKY-58 tenant-scoped RAG tables (ai_eval_runs is global — no RLS)
+    # SKY-58 tenant-scoped RAG tables (ai_eval_runs is global - no RLS)
     "ai_rag_parents",
     "ai_rag_chunks",
     "ai_episodic_memory",
@@ -281,7 +281,7 @@ async def _collect_downgrade_state(dsn: str) -> tuple[set[str], int]:
 
 async def _probe_active_tenant_enumeration(dsn: str) -> bool:
     """Insert one tenant and prove ``is_active`` rows are visible with NO GUC
-    set — the premise of the scheduled anomaly scan, which enumerates active
+    set - the premise of the scheduled anomaly scan, which enumerates active
     tenants before any request tenant context exists (permissive
     ``tenants_readable`` policy from identity 0001)."""
     slug = f"sched-probe-{uuid.uuid4().hex[:8]}"

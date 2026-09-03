@@ -1,4 +1,4 @@
-"""Conversation repository — CRUD for agent-shell conversations.
+"""Conversation repository - CRUD for agent-shell conversations.
 
 Handles creating, listing, updating, and deleting conversations and their
 messages.  All methods are tenant-scoped via ``tenant_id``.
@@ -269,7 +269,7 @@ class ConversationRepository:
         """Persist the AI title, optionally recording the generation time.
 
         Idempotent: the write only applies while the conversation title is
-        still retryable — no final title exists yet, or the row still holds
+        still retryable - no final title exists yet, or the row still holds
         the legacy ``New conversation`` placeholder (rows that predate the
         non-finalizing greeting title). ``finalize=False`` is used for
         greeting-only titles and LLM-failure fallbacks: the readable title is

@@ -8,7 +8,7 @@ Lands the Postgres storage for the AGT-001 orchestration runtime:
 - ``graph_checkpoints`` - one row per LangGraph checkpoint, keyed per tenant
   + graph run. ``state`` holds the serialized checkpoint (a typed envelope
   ``{"type": "json"|"msgpack", "data": ...}`` written by the async SQLAlchemy
-  checkpointer — no psycopg/msgpack sidecar). ``step`` and ``updated_at``
+  checkpointer - no psycopg/msgpack sidecar). ``step`` and ``updated_at``
   mirror the runtime metadata for cheap list/sweep queries.
 - ``graph_checkpoint_writes`` - pending task writes LangGraph needs to
   continue a paused graph after resume (the same role as the stock Postgres

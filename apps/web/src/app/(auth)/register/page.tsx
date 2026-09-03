@@ -4,7 +4,7 @@ import { AccountStep } from "@/features/onboarding/account-step";
 
 export const metadata: Metadata = {
   title: "Create your workspace",
-  description: "Step 1 of 5 — enter your work email to start.",
+  description: "Step 1 of 5 - enter your work email to start.",
 };
 
 export default async function RegisterPage({

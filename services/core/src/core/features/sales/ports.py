@@ -1,11 +1,11 @@
-"""Sales ports — persistence contract for the sales feature.
+"""Sales ports - persistence contract for the sales feature.
 
 Declares what the repository must offer so the future service depends on a
 Protocol (hexagonal "ports") rather than the concrete SQLAlchemy
 implementation. The repository lives in the same feature package, so there is
 no import-linter violation.
 
-Orders have no owner/team columns (locked SKY-43 decision) — they are
+Orders have no owner/team columns (locked SKY-43 decision) - they are
 tenant-scoped only, and RLS bounds the tenant. The side-effecting state
 transitions (confirm/fulfil/cancel) are atomic state guards in the repository
 (conditional UPDATE on the current status); exactly one concurrent caller
@@ -76,7 +76,7 @@ class SalesRepositoryPort(Protocol):
         totals: tuple[Money, Money, Money, Money] | None = None,
     ) -> SalesOrder | None: ...
 
-    # --- State transitions (atomic guards — return None when the guard loses) ---
+    # --- State transitions (atomic guards - return None when the guard loses) ---
     async def confirm_order(
         self,
         order_id: uuid.UUID,
@@ -102,12 +102,12 @@ class SalesRepositoryPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Cross-module ports (seams the sales service calls — no feature imports)
+# Cross-module ports (seams the sales service calls - no feature imports)
 # ---------------------------------------------------------------------------
 
 
 class CustomerPort(Protocol):
-    """CRM customer lookup — implemented structurally by the CRM repository."""
+    """CRM customer lookup - implemented structurally by the CRM repository."""
 
     async def get_customer(
         self, customer_id: uuid.UUID, *, tenant_id: uuid.UUID
@@ -134,7 +134,7 @@ class WarehouseResolverPort(Protocol):
 
 
 class OrderStockPort(Protocol):
-    """Whole-order stock reservation lifecycle — implemented structurally by
+    """Whole-order stock reservation lifecycle - implemented structurally by
     ``InventoryService``.
 
     Each method applies the SAME per-line semantics as inventory's per-line

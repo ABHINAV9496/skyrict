@@ -1,6 +1,6 @@
 """Deterministic token counting on the cl100k_base BPE encoding (tiktoken).
 
-Used by the chunker so chunk boundaries land on real token boundaries —
+Used by the chunker so chunk boundaries land on real token boundaries -
 word/char-count heuristics drift from every embedding tokenizer and produce
 ragged chunks. ``cl100k_base`` is the closest public approximation for both
 OpenAI ``text-embedding-3-small`` (cl100k family) and common OSS embedders.

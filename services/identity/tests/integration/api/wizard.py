@@ -2,7 +2,7 @@
 
 The wizard (SKY-30) replaced one-shot ``POST /auth/register`` with five steps
 that each run in the request session. These helpers drive the real HTTP
-contract — camelCase bodies, camelCase wizard responses — so integration tests
+contract - camelCase bodies, camelCase wizard responses - so integration tests
 exercise the exact wire format the web app sends.
 """
 

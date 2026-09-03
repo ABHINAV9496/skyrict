@@ -1,4 +1,4 @@
-"""Supervisor feature tests — classification + delegation + event streaming.
+"""Supervisor feature tests - classification + delegation + event streaming.
 
 Covers: LLM classification (happy path, low confidence, unparseable, provider
 outage → keyword fallback), event ordering per segment, multi-agent fan-out,

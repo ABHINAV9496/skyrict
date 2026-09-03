@@ -1,4 +1,4 @@
-"""Agent runtime — executes LangGraph agents with checkpointing + HITL (SKY-59).
+"""Agent runtime - executes LangGraph agents with checkpointing + HITL (SKY-59).
 
 Entry points (all tenant-scoped through the request session + RLS):
 
@@ -12,13 +12,13 @@ Entry points (all tenant-scoped through the request session + RLS):
 
   ``resume(...)``
       Answer a pending interrupt (approve/deny). The decision is recorded on
-      the ledger row FIRST (a decided row can never be decided twice — the
+      the ledger row FIRST (a decided row can never be decided twice - the
       double-approval hole), then the graph resumes through
       ``Command(resume={"decision": ...})``. A stale pending row is lazily
       auto-denied with an audit event (24h window, SKY-59 lazy expiry).
 
 Security posture:
-  - Delegation: the caller's JWT/tenant never travel as state — the graph is
+  - Delegation: the caller's JWT/tenant never travel as state - the graph is
     built from operator-managed registry data, and every tool decision flows
     through the ToolContext built from DB-resolved grants.
   - The interrupt value IS the tool contract: it declares the required
@@ -26,7 +26,7 @@ Security posture:
     anything and again before resuming (defense in depth on top of the core
     proxy edge).
   - Execution failures inside the graph are captured into a ``failed``
-    outcome — sanitized, never leaking provider/LLM internals.
+    outcome - sanitized, never leaking provider/LLM internals.
 
 Consistency note (decision-first ordering): recording the decision before the
 resume means a graph crash mid-apply leaves an approved ledger row the
@@ -89,10 +89,10 @@ class AgentDeps:
     """What a graph builder receives to wire its nodes for ONE run.
 
     ``suggestions``/``audit`` are the injected persistence ports the runtime
-    composes from the request session (RLS-tenanted) — feature slices must not
+    composes from the request session (RLS-tenanted) - feature slices must not
     import ``ai_agent.db`` directly (import-linter contract). The checkpointer
     sessions are independent by design (see checkpointer.py).
-    ``tenant_id``/``user_id`` are the run identity — READ ONLY inside nodes;
+    ``tenant_id``/``user_id`` are the run identity - READ ONLY inside nodes;
     authorization always flows through ``tool_context``, never state.
     """
 
@@ -262,7 +262,7 @@ class AgentRuntime:
         ledger = await self._interrupts.get_for_decision(
             tenant_id=tenant_id, interrupt_id=interrupt_id
         )
-        # The path agent must match the row's agent — belt on top of tenant RLS.
+        # The path agent must match the row's agent - belt on top of tenant RLS.
         if ledger.agent_name != agent_name:
             raise NotFoundError("Interrupt not found for this run")
         graph_run_id = ledger.graph_run_id
@@ -290,7 +290,7 @@ class AgentRuntime:
         # tool's required permission (defense in depth beyond the core edge).
         self._require_tool_access(request, context)
 
-        # Decision first — a decided row can never be decided twice.
+        # Decision first - a decided row can never be decided twice.
         await self._interrupts.record_decision(ledger, decision=decision, decided_by=decided_by)
         await self._audit.log(
             action=(

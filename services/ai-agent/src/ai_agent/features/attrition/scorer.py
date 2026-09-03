@@ -1,4 +1,4 @@
-"""Attrition scorer — risk score + confidence + top-3 factors (spec §6).
+"""Attrition scorer - risk score + confidence + top-3 factors (spec §6).
 
 Pure, deterministic, non-LLM. Given per-employee feature vectors, it returns a
 score (P(attrition)), a risk band, a confidence, and the top-3 SHAP-style

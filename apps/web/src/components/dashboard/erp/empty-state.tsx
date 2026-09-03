@@ -11,7 +11,7 @@ interface EmptyStateProps {
   action?: ReactNode;
 }
 
-/** A friendly empty state — only for genuinely empty lists, never for errors. */
+/** A friendly empty state - only for genuinely empty lists, never for errors. */
 export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-12 text-center">

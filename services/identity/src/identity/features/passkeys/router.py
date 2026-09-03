@@ -1,4 +1,4 @@
-"""Passkey (WebAuthn) endpoints — not yet implemented (explicit 501)."""
+"""Passkey (WebAuthn) endpoints - not yet implemented (explicit 501)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/passkeys", tags=["passkeys"])
 
 @router.post("/register/start")
 async def start_passkey_registration() -> None:
-    """Start passkey registration — returns WebAuthn creation options."""
+    """Start passkey registration - returns WebAuthn creation options."""
     raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")
 
 
@@ -21,7 +21,7 @@ async def complete_passkey_registration(credential: dict[str, object]) -> None:
 
 @router.post("/authenticate/start")
 async def start_passkey_authentication(email: str) -> None:
-    """Start passkey authentication — returns WebAuthn request options."""
+    """Start passkey authentication - returns WebAuthn request options."""
     raise HTTPException(status_code=501, detail="Passkeys are not yet implemented")
 
 

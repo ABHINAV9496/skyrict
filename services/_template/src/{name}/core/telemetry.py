@@ -1,4 +1,4 @@
-"""OpenTelemetry tracing and metrics — optional, env-gated.
+"""OpenTelemetry tracing and metrics - optional, env-gated.
 
 Set OTEL_ENABLED=true to activate. No-op by default.
 """
@@ -40,6 +40,6 @@ def init_telemetry() -> None:
     except ImportError:
         import logging
         logging.warning(
-            "opentelemetry not installed — telemetry disabled. "
+            "opentelemetry not installed - telemetry disabled. "
             "Install: pip install opentelemetry-sdk opentelemetry-exporter-otlp"
         )

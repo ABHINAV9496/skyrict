@@ -1,4 +1,4 @@
-"""user_dashboard_layouts — per-user dashboard layout overrides.
+"""user_dashboard_layouts - per-user dashboard layout overrides.
 
 Each user may store one custom layout per tenant.  The ``layout`` column has
 the same JSONB structure as ``erp_dashboards.layout``.

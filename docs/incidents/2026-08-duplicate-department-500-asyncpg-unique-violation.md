@@ -21,7 +21,7 @@ violation was detected, but not translated to the domain error the service was
 clearly trying to raise:
 
 ```python
-# service.py — create_department
+# service.py - create_department
 except Exception as exc:  # DB unique (tenant, name) violation surfaces here.
     if _is_unique_violation(exc):
         raise DuplicateRecordError(f"department {name!r} already exists") from exc
@@ -35,7 +35,7 @@ service re-raised the raw `IntegrityError`. Why:
 
 ```python
 def _is_unique_violation(exc: Exception) -> bool:
-    """True for PostgreSQL unique-violation (23505) — mirrors repo error handling."""
+    """True for PostgreSQL unique-violation (23505) - mirrors repo error handling."""
     return getattr(exc, "orig", None) is not None and "23505" in str(getattr(exc, "orig", ""))
 ```
 
@@ -43,8 +43,8 @@ The check scans the DBAPI exception's message text for the string `"23505"`.
 That works for **psycopg**, whose messages embed the SQLSTATE code, but the
 application's asyncpg driver does **not** include it:
 
-- psycopg: `duplicate key value violates unique constraint "..."\nDETAIL: ...` — message text carries no SQLSTATE either, actually; psycopg exposes it via `e.diag.sqlstate`.
-- asyncpg: the message is `duplicate key value violates unique constraint "uq_erp_departments_tenant_name"` — no `23505` anywhere. The code lives on the exception's `.sqlstate` attribute, which the string scan never looks at.
+- psycopg: `duplicate key value violates unique constraint "..."\nDETAIL: ...` - message text carries no SQLSTATE either, actually; psycopg exposes it via `e.diag.sqlstate`.
+- asyncpg: the message is `duplicate key value violates unique constraint "uq_erp_departments_tenant_name"` - no `23505` anywhere. The code lives on the exception's `.sqlstate` attribute, which the string scan never looks at.
 
 So the unique-violation translation was effectively dead code on asyncpg: every
 duplicate department/employee/leave-type create became a 500.
@@ -116,7 +116,7 @@ confirmed the **documented** Rule 3 Phase-1 caveat (docs/modules/hr-payroll.md
 service-side balance check and both commit negative movements, leaving the
 materialized balance stale and the ledger negative. This is an accepted Phase-1
 risk (tracked for the concurrency-hardening ticket), so the test is marked
-`xfail` with a reference to that section — it will XPASS and fail loudly when
+`xfail` with a reference to that section - it will XPASS and fail loudly when
 the hardening lands.
 
 ## References

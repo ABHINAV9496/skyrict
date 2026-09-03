@@ -1,1 +1,1 @@
-"""Users feature — profile, updates, password change."""
+"""Users feature - profile, updates, password change."""

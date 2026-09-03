@@ -1,9 +1,9 @@
-"""HR/Payroll AI ORM models (HR-AI-001, Commit 2) — metadata contract checks.
+"""HR/Payroll AI ORM models (HR-AI-001, Commit 2) - metadata contract checks.
 
 Pure unit tests (no database). They pin the model metadata that migration 0020
 and the integration tests rely on: table names, the ``(tenant_id, id)``
 composite-PK convention, tenant scoping, and the native ``erp_document_type``
-enum usage (``create_type=False`` — the type is created by the migration, never
+enum usage (``create_type=False`` - the type is created by the migration, never
 by the model).
 """
 

@@ -29,7 +29,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=f"Skyrict {SERVICE_NAME.replace('-', ' ').title()} Service",
         description=(
-            "Provider-agnostic AI agent service — LLM routing with fallback, "
+            "Provider-agnostic AI agent service - LLM routing with fallback, "
             "inventory AI features, shared AI tables, and audit logging"
         ),
         version=SERVICE_VERSION,

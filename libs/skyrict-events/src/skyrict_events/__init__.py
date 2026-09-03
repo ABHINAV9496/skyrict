@@ -1,4 +1,4 @@
-"""Skyrict Events — shared Kafka event schemas and producer/consumer base classes."""
+"""Skyrict Events - shared Kafka event schemas and producer/consumer base classes."""
 
 from skyrict_events.base import BaseConsumer, BaseEvent, BaseProducer
 

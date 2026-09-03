@@ -1,4 +1,4 @@
-"""Finance API routes — thin wrappers over :class:`FinanceService`.
+"""Finance API routes - thin wrappers over :class:`FinanceService`.
 
 Authorization uses the ``erp.finance.*`` keys resolved at request time:
 ``read`` for reads, ``write`` for mutations, ``approve`` for the money-moment

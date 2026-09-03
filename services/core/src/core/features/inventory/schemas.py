@@ -1,4 +1,4 @@
-"""Inventory schemas — the API boundary (requests and responses).
+"""Inventory schemas - the API boundary (requests and responses).
 
 Money is a pure-domain value object (``core.domain.value_objects.Money``), so
 the HTTP boundary carries it as a ``(amount, currency)`` tuple. Inputs keep
@@ -21,7 +21,7 @@ from core.domain.value_objects import Money, StockMovementType
 
 # Request money shape: (amount, currency) e.g. ``[12.50, "USD"]``.
 type MoneyInput = tuple[Decimal, str]
-# Response money shape: (amount-as-string, currency) — exact decimals.
+# Response money shape: (amount-as-string, currency) - exact decimals.
 type MoneyOutput = tuple[str, str]
 
 
@@ -44,7 +44,7 @@ def money_output(value: Money) -> MoneyOutput:
 
 
 class ProductCreate(BaseModel):
-    """POST /inventory/products — create a product.
+    """POST /inventory/products - create a product.
 
     ``ref_id`` is deliberately NOT here: product creation is not a ledger
     mutation, so it needs no idempotency probe.
@@ -60,7 +60,7 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    """PATCH /inventory/products/{id} — partial update of a product.
+    """PATCH /inventory/products/{id} - partial update of a product.
 
     Every field is optional; only the fields present in the body are applied.
     ``sku``, when provided, must stay unique within the tenant (excluding the
@@ -116,14 +116,14 @@ class ProductResponse(BaseModel):
 
 
 class WarehouseCreate(BaseModel):
-    """POST /inventory/warehouses — create a warehouse."""
+    """POST /inventory/warehouses - create a warehouse."""
 
     name: str = Field(..., min_length=1, max_length=100)
     location: str | None = Field(default=None, max_length=255)
 
 
 class WarehouseUpdate(BaseModel):
-    """PATCH /inventory/warehouses/{id} — partial update of a warehouse."""
+    """PATCH /inventory/warehouses/{id} - partial update of a warehouse."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     location: str | None = Field(default=None, max_length=255)
@@ -159,7 +159,7 @@ class WarehouseResponse(BaseModel):
 
 
 class StockAdjustmentCreate(BaseModel):
-    """POST /inventory/stock/adjustments — record a signed stock adjustment.
+    """POST /inventory/stock/adjustments - record a signed stock adjustment.
 
     ``qty`` is signed (+ receive, - issue). ``reason`` is required (service-
     enforced). ``ref_id`` is the idempotency key: replaying the same
@@ -174,7 +174,7 @@ class StockAdjustmentCreate(BaseModel):
 
 
 class StockTransferCreate(BaseModel):
-    """POST /inventory/stock/transfers — move stock between two warehouses.
+    """POST /inventory/stock/transfers - move stock between two warehouses.
 
     ``ref_id`` is shared by the source (negative) and destination (positive)
     movement pair, so the atomic transfer is replay-safe.
@@ -188,7 +188,7 @@ class StockTransferCreate(BaseModel):
 
 
 class StockReserveCreate(BaseModel):
-    """POST /inventory/stock/reservations — reserve stock for a pending order.
+    """POST /inventory/stock/reservations - reserve stock for a pending order.
 
     ``qty`` must be positive and cannot exceed available (on-hand minus already
     reserved).  The caller-supplied ``ref_id`` is replay-safe.
@@ -201,7 +201,7 @@ class StockReserveCreate(BaseModel):
 
 
 class StockReleaseCreate(BaseModel):
-    """POST /inventory/stock/releases — release previously reserved stock.
+    """POST /inventory/stock/releases - release previously reserved stock.
 
     ``qty`` must be positive and cannot exceed the currently reserved quantity.
     """
@@ -263,7 +263,7 @@ class StockMovementResponse(BaseModel):
 
 
 class TransferResponse(BaseModel):
-    """The atomic transfer pair — both movements or none."""
+    """The atomic transfer pair - both movements or none."""
 
     from_movement: StockMovementResponse
     to_movement: StockMovementResponse

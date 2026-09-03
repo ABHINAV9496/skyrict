@@ -43,7 +43,7 @@ export default function IntelligencePage() {
             Search the market
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Real-time research across news, social, code, and trends — competitors,
+            Real-time research across news, social, code, and trends competitors,
             winning products, underserved niches, and what&apos;s shifting next.
           </p>
         </div>

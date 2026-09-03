@@ -1,4 +1,4 @@
-"""TenantResolver tests — Host-subdomain (prod) and X-Tenant-Slug (dev) routing."""
+"""TenantResolver tests - Host-subdomain (prod) and X-Tenant-Slug (dev) routing."""
 
 from __future__ import annotations
 

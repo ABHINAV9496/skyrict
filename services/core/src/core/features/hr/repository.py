@@ -1,11 +1,11 @@
-"""HR repository — DB operations for departments, employees, leave ledger & balances.
+"""HR repository - DB operations for departments, employees, leave ledger & balances.
 
 The leave ledger mirrors the inventory stock ledger: movements are immutable
 append-only rows, and balances are recomputed from the ledger and materialized
 into ``erp_leave_balances`` in the SAME transaction. The balance CHECK
 (``balance >= 0``) is evaluated by the database when the materialized row is
-written, so a negative-balance write fails the whole transaction — including
-the movement insert — independent of service logic (docs §4.2, Rule 2).
+written, so a negative-balance write fails the whole transaction - including
+the movement insert - independent of service logic (docs §4.2, Rule 2).
 
 ``accrue_leave_movement`` is idempotent per ``(tenant_id, employee_id,
 leave_type, ref_type='annual_accrual', ref_id=<leave_year>)`` (docs §4.4,
@@ -17,8 +17,8 @@ separately (``hire`` / ``accrue`` rely on this repository to do so).
 All probes are tenant-scoped: lookups take an explicit ``tenant_id`` and every
 session is additionally bound by RLS (``app.current_tenant_id``), so a tenant
 can never read or write another tenant's rows at either layer. This repository
-also implements the payroll ``LeaveLedgerPort.approved_unpaid_days`` read — the
-one sanctioned cross-feature read — so it can be injected as the leave ledger
+also implements the payroll ``LeaveLedgerPort.approved_unpaid_days`` read - the
+one sanctioned cross-feature read - so it can be injected as the leave ledger
 at the composition root.
 """
 
@@ -577,7 +577,7 @@ class HrRepository:
         await self.lock_leave_balance(
             movement.employee_id, movement.leave_type, tenant_id=movement.tenant_id
         )
-        # Re-probe UNDER the lock: the first probe above was TOCTOU — a racing
+        # Re-probe UNDER the lock: the first probe above was TOCTOU - a racing
         # first grant could have committed while we waited on the row lock. This
         # is a FRESH query against the committed ledger (never a value cached
         # from the pre-lock probe) and returns None when the racing grant won.
@@ -613,7 +613,7 @@ class HrRepository:
         Row-level lock on ``erp_leave_balances`` keyed by
         ``(tenant_id, employee_id, leave_type)`` (docs §4.3, Rule 3). The row is
         FIRST seeded with ``INSERT ... ON CONFLICT DO NOTHING`` (balance 0)
-        because ``SELECT ... FOR UPDATE`` on a NON-EXISTENT row locks nothing —
+        because ``SELECT ... FOR UPDATE`` on a NON-EXISTENT row locks nothing -
         the phantom-lock gap: the materialized row is otherwise only created by
         ``upsert_balance`` after a movement write, so a first-grant accrual or a
         pre-grant approve would race straight through an unlocked read. Seeding
@@ -621,8 +621,8 @@ class HrRepository:
         ``balance = 0`` is only ever committed in a bucket whose ledger is empty
         (a non-empty ledger always has a materialized row), where it is correct.
 
-        LOCK-ORDERING CONTRACT (load-bearing): multi-row callers — payroll
-        ``compute_run``'s accrual loop — must iterate in a stable total order so
+        LOCK-ORDERING CONTRACT (load-bearing): multi-row callers - payroll
+        ``compute_run``'s accrual loop - must iterate in a stable total order so
         aggregate lock acquisition is a total order; single-row callers
         (``approve``, ``cancel``) take exactly one lock and can never complete a
         deadlock cycle. See the comment at ``compute_run``'s accrual call site.
@@ -658,7 +658,7 @@ class HrRepository:
     async def recompute_balance(
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> int:
-        """Read-side ledger sum — does NOT materialize (Rule 1/§4.1)."""
+        """Read-side ledger sum - does NOT materialize (Rule 1/§4.1)."""
         stmt = select(func.coalesce(func.sum(LeaveMovementModel.qty), 0)).where(
             LeaveMovementModel.tenant_id == tenant_id,
             LeaveMovementModel.employee_id == employee_id,
@@ -738,7 +738,7 @@ class HrRepository:
         approved_by: uuid.UUID | None = None,
         approved_at: object | None = None,
     ) -> ent.LeaveRequest | None:
-        """Atomic conditional transition (CAS) — ``None`` if not in ``from_status``.
+        """Atomic conditional transition (CAS) - ``None`` if not in ``from_status``.
 
         Guards the balance-relevant approve/cancel flows so a concurrent
         duplicate request can never flip the row twice (docs §4.3, §4.5).
@@ -927,7 +927,7 @@ class HrRepository:
         ]
 
     # ------------------------------------------------------------------
-    # LeaveLedgerPort (implemented for payroll — one sanctioned cross-feature read)
+    # LeaveLedgerPort (implemented for payroll - one sanctioned cross-feature read)
     # ------------------------------------------------------------------
 
     async def approved_unpaid_days(

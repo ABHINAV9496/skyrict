@@ -181,7 +181,7 @@ class CrmAiService:
 
         Marks the suggestion as ``sent`` and records the created CRM activity
         ID for the audit trail. The caller is responsible for actually creating
-        the CRM activity in core — this method only transitions the suggestion
+        the CRM activity in core - this method only transitions the suggestion
         status.
         """
         row = await self._repo.get_for_apply(

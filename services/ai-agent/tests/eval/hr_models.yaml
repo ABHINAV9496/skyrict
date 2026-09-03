@@ -2,7 +2,7 @@
 #
 # Each model lists one metric per precision check plus a labeled seed set the
 # ai-agent eval harness (ai_agent/eval/harness.py) runs through the DEPLOYED
-# scorer. Precision below the documented 0.70 minimum WARNS (exit 0) — an eval
+# scorer. Precision below the documented 0.70 minimum WARNS (exit 0) - an eval
 # regression is an operator alert, not a hard deploy gate. Rows are recorded in
 # core's hr_eval_runs (POST /api/v1/ai/hr/eval-runs) for the historical log.
 #
@@ -11,7 +11,7 @@
 #
 # Label semantics for anomaly: each case is one engineered team (team_size
 # members m1..m5) fed to skyrict_common.ai_hr_rules.detect_leave_pattern_anomalies
-# — the literal engine core's inbox uses. `expected` is the exact set of
+# - the literal engine core's inbox uses. `expected` is the exact set of
 # (employee, anomaly_type) findings that must be predicted. Combined across the
 # cases below, `anomaly_precision` is TP/(TP+FP) and recall TP/(TP+FN):
 # cases 1-2 are recall probes for short_notice_monday_friday and

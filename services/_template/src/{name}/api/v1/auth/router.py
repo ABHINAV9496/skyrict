@@ -1,4 +1,4 @@
-"""Auth endpoints — login, register, refresh, logout."""
+"""Auth endpoints - login, register, refresh, logout."""
 
 from __future__ import annotations
 
@@ -57,5 +57,5 @@ async def logout(
 async def introspect_token(
     body: TokenRefreshRequest,
 ) -> ResponseEnvelope[dict]:
-    """Introspect a token — return its claims if active."""
+    """Introspect a token - return its claims if active."""
     raise NotImplementedError("Inject TokenService via deps")

@@ -1,15 +1,15 @@
-"""Persistence for ai_query_cache — the cold layer of the two-tier RAG cache.
+"""Persistence for ai_query_cache - the cold layer of the two-tier RAG cache.
 
 Redis is the hot path (sub-50ms identical queries); this table is the durable
 layer: it records the normalized query text, hash, and JSON response with a
 1-hour expiry, and keeps a hit counter for analytics. The write-through path
-upserts on the tenant-scoped unique ``(tenant_id, query_hash)`` index — a
+upserts on the tenant-scoped unique ``(tenant_id, query_hash)`` index - a
 second identical query from the SAME tenant increments ``hit_count`` instead
 of inserting a duplicate row (migration 0003 fixed 0002's global-unique bug
 so this conflict target exists).
 
 Expired rows are purged by ``delete_expired`` (``ai-agent sweep-caches`` in
-the nightly workflow) — the same TTL-sweep pattern as ai_episodic_memory.
+the nightly workflow) - the same TTL-sweep pattern as ai_episodic_memory.
 Reads never serve from the DB: a Redis miss falls through to a fresh
 retrieval, then writes through BOTH layers.
 """
@@ -89,7 +89,7 @@ class QueryCacheRepository:
             delete(AiQueryCacheModel).where(AiQueryCacheModel.expires_at <= func.now())
         )
         # rowcount only exists on CursorResult (DML executions), not the base
-        # Result type — narrow instead of suppressing the type check.
+        # Result type - narrow instead of suppressing the type check.
         if isinstance(result, CursorResult):
             return result.rowcount or 0
         return 0

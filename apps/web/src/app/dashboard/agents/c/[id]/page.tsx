@@ -39,7 +39,7 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
  * The live conversation view. The first prompt (arriving from the New Chat
  * suggestion) is answered automatically by streaming one real supervisor turn;
  * every subsequent send streams too. Conversations remain in the mock store
- * for navigation/history — SKY-60 replaces SIMULATED ANSWERS with real ones,
+ * for navigation/history - SKY-60 replaces SIMULATED ANSWERS with real ones,
  * not the sidebar.
  */
 function ConversationView({ conversation }: { conversation: Conversation }) {
@@ -88,7 +88,7 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
     // remount on the first commit; the synthetic unmount runs useAgentChat's
     // cleanup, which aborts any in-flight stream. If we called send() here
     // synchronously, that first auto-start stream would be cancelled before it
-    // could produce a response — leaving only the persisted user message with
+    // could produce a response - leaving only the persisted user message with
     // no assistant bubble. Deferring (and not setting autoStarted until the
     // timer actually fires) lets the strict double-invoke complete first so the
     // stream starts exactly once on the surviving mount and is never aborted.
@@ -140,7 +140,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }, [params]);
 
   // Reflect server-side metadata changes (e.g. the AI title landing right
-  // after a turn) by refreshing ONLY the header fields — the live message
+  // after a turn) by refreshing ONLY the header fields - the live message
   // list stays untouched so streaming is never disrupted.
   useEffect(() => {
     let cancelled = false;

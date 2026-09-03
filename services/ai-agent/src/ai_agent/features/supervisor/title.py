@@ -7,7 +7,7 @@ Title lifecycle (set-once for real titles, retryable until then):
 
 - The FIRST substantive exchange (the first non-greeting user message and
   its reply) is titled, regardless of which module path produced the reply
-  — supervisor, module agent, greeting or abstention all get a title.
+  - supervisor, module agent, greeting or abstention all get a title.
 - A clean LLM result is FINAL and recorded via ``title_generated_at``.
 - Pure-greeting conversations get the deterministic "General greeting"
   title WITHOUT finalizing, so a later real question still replaces it.
@@ -56,7 +56,7 @@ LEGACY_PLACEHOLDER_TITLE = "New conversation"
 # finalized: a later substantive question replaces it.
 GREETING_TITLE = "General greeting"
 
-# Common greetings — fast-path to avoid an LLM call. The pattern is
+# Common greetings - fast-path to avoid an LLM call. The pattern is
 # permissive on purpose: trailing repeated letters and punctuation ("heyy",
 # "hello!" , "hi ?") are still greetings, while ", what's ..." is not.
 _GREETING_RE = re.compile(
@@ -98,8 +98,8 @@ def is_conversation_title_retryable(title: str, title_generated_at: str | None) 
     """True when the AI title generator may still improve this title.
 
     Substantive AI titles and user renames are final (timestamp present);
-    every other state — empty title, greeting-only title, raw fallback, and
-    the legacy "New conversation" placeholder — stays retryable.
+    every other state - empty title, greeting-only title, raw fallback, and
+    the legacy "New conversation" placeholder - stays retryable.
     """
     return title_generated_at is None or title == LEGACY_PLACEHOLDER_TITLE
 
@@ -166,7 +166,7 @@ async def _generate_and_persist(
 
             # Idempotence: finalized substantive titles (and user renames)
             # are never touched again. Only the legacy "New conversation"
-            # placeholder — a finalized row that predates this lifecycle —
+            # placeholder - a finalized row that predates this lifecycle -
             # remains retryable.
             if not is_conversation_title_retryable(
                 conversation["title"],
@@ -240,7 +240,7 @@ async def _generate_and_persist(
                         title=title,
                     )
             else:
-                # A final title appeared while we were working — harmless.
+                # A final title appeared while we were working - harmless.
                 logger.debug(
                     "title_already_generated",
                     conversation_id=str(conversation_id),

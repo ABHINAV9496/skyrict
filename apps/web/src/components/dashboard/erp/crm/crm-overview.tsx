@@ -84,7 +84,7 @@ const TIMELINE_SOURCE_ICON: Record<string, ComponentType<{ className?: string }>
 // ---------------------------------------------------------------------------
 
 function multiCurrency(buckets: MoneyBucket[]): string {
-  if (buckets.length === 0) return "—";
+  if (buckets.length === 0) return "-";
   return buckets.map((b) => formatMoney(b.amount, b.currency)).join("  ");
 }
 
@@ -175,7 +175,7 @@ function InlineEmpty({
 }
 
 // ---------------------------------------------------------------------------
-// Section header — no bottom border, lighter weight
+// Section header - no bottom border, lighter weight
 // ---------------------------------------------------------------------------
 
 function SectionHeader({
@@ -253,7 +253,7 @@ export function CrmOverview() {
   return (
     <div className="space-y-5">
       {/* ================================================================ */}
-      {/* ROW 1 — KPI summary                                              */}
+      {/* ROW 1 - KPI summary                                              */}
       {/* ================================================================ */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {/* Open Pipeline */}
@@ -460,10 +460,10 @@ export function CrmOverview() {
       </section>
 
       {/* ================================================================ */}
-      {/* ROW 2 — Pipeline hero + Follow-ups                               */}
+      {/* ROW 2 - Pipeline hero + Follow-ups                               */}
       {/* ================================================================ */}
       <section className="grid gap-5 lg:grid-cols-5">
-        {/* Pipeline by stage — hero element */}
+        {/* Pipeline by stage - hero element */}
         <div className="rounded-xl border border-primary/15 bg-card lg:col-span-3">
           <SectionHeader
             title="Pipeline"
@@ -656,10 +656,10 @@ export function CrmOverview() {
       </section>
 
       {/* ================================================================ */}
-      {/* ROW 3 — Top opportunities + Recent wins (independent cards)      */}
+      {/* ROW 3 - Top opportunities + Recent wins (independent cards)      */}
       {/* ================================================================ */}
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Top opportunities — 2 cols */}
+        {/* Top opportunities - 2 cols */}
         <div className="rounded-lg border border-border bg-card lg:col-span-2">
           <SectionHeader
             title="Top opportunities"
@@ -683,7 +683,7 @@ export function CrmOverview() {
           </div>
         </div>
 
-        {/* Recent wins — 1 col */}
+        {/* Recent wins - 1 col */}
         <div className="rounded-lg border border-border bg-card">
           <SectionHeader
             title="Recent wins"
@@ -709,10 +709,10 @@ export function CrmOverview() {
       </div>
 
       {/* ================================================================ */}
-      {/* ROW 4 — Customers + Recent activity (independent cards)          */}
+      {/* ROW 4 - Customers + Recent activity (independent cards)          */}
       {/* ================================================================ */}
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Customers — 1 col */}
+        {/* Customers - 1 col */}
         <div className="rounded-lg border border-border bg-card">
           <SectionHeader
             title="Customers"
@@ -760,13 +760,13 @@ export function CrmOverview() {
             )}
             {customers.total === 0 && (
               <p className="mt-3 text-[11px] text-muted-foreground">
-                No customers yet — win a deal to create one.
+                No customers yet - win a deal to create one.
               </p>
             )}
           </div>
         </div>
 
-        {/* Recent activity — 2 cols */}
+        {/* Recent activity - 2 cols */}
         <div className="rounded-lg border border-border bg-card lg:col-span-2">
           <SectionHeader
             title="Recent activity"

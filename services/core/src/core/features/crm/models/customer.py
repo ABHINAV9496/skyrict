@@ -1,7 +1,7 @@
-"""erp_crm_customers — accounts we do business with, tenant-scoped with RLS.
+"""erp_crm_customers - accounts we do business with, tenant-scoped with RLS.
 
 Tenant-scoped, composite primary key ``(tenant_id, id)``, soft-deleted via
-``is_active`` (the ERP convention — there is NO customer status enum; locked
+``is_active`` (the ERP convention - there is NO customer status enum; locked
 SKY-43 decision). ``customer_code`` is unique per tenant and is the stable
 external key the API accepts. A NULL ``credit_limit`` means "no limit" (the
 confirm-time credit check passes); ``currency_code`` is only meaningful
@@ -62,7 +62,7 @@ class ErpCrmCustomerModel(Base):
     customer_code: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     # source_opportunity_id: soft link to the won opportunity this customer was
-    # promoted from (plain UUID, NO FK — migration 0015, UNIQUE
+    # promoted from (plain UUID, NO FK - migration 0015, UNIQUE
     # (tenant_id, source_opportunity_id)).
     source_opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True

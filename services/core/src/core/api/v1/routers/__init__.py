@@ -1,1 +1,1 @@
-"""V1 feature routers — HR & payroll (HR-BE-002)."""
+"""V1 feature routers - HR & payroll (HR-BE-002)."""

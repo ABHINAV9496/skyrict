@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thank you for reporting a bug. Please fill out the sections below.
-        For security vulnerabilities, see [SECURITY.md](https://github.com/skyrict/skyrict/blob/main/SECURITY.md) — do not open a public issue.
+        For security vulnerabilities, see [SECURITY.md](https://github.com/skyrict/skyrict/blob/main/SECURITY.md) - do not open a public issue.
 
   - type: textarea
     id: description

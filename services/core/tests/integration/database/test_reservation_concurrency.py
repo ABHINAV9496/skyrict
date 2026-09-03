@@ -1,10 +1,10 @@
-"""Concurrent reservation integration tests — REAL Postgres, race-proof.
+"""Concurrent reservation integration tests - REAL Postgres, race-proof.
 
 Proves the §5.4 capacity invariant (``qty_reserved <= qty_on_hand``) holds under
 concurrency: two simultaneous ``reserve_stock`` calls racing for the same stock
 level serialize on the row lock (``apply_reservation_qty``'s conditional
 UPDATE), so exactly ONE can take the last units and the other fails with
-``InsufficientStockError`` (409) — never a double-reservation or a CHECK
+``InsufficientStockError`` (409) - never a double-reservation or a CHECK
 violation surfacing as an IntegrityError.
 
 Each ``_reserve_once`` coroutine runs its own session on its own connection, so
@@ -35,7 +35,7 @@ pytestmark = pytest.mark.integration
 
 
 class _NoopAuditService:
-    """Duck-typed audit port — reservation calls never log, so a no-op suffices."""
+    """Duck-typed audit port - reservation calls never log, so a no-op suffices."""
 
     async def log(self, **kwargs: object) -> None:
         return None

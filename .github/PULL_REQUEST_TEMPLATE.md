@@ -8,14 +8,14 @@ Closes #
 
 <!-- Check one. -->
 
-- [ ] `feat` — New feature
-- [ ] `fix` — Bug fix
-- [ ] `refactor` — Code restructuring (no behavior change)
-- [ ] `docs` — Documentation only
-- [ ] `test` — Adding or updating tests
-- [ ] `chore` — Build, CI, dependencies, tooling
-- [ ] `perf` — Performance improvement
-- [ ] `ci` — CI/CD changes
+- [ ] `feat` - New feature
+- [ ] `fix` - Bug fix
+- [ ] `refactor` - Code restructuring (no behavior change)
+- [ ] `docs` - Documentation only
+- [ ] `test` - Adding or updating tests
+- [ ] `chore` - Build, CI, dependencies, tooling
+- [ ] `perf` - Performance improvement
+- [ ] `ci` - CI/CD changes
 
 ## What Changed
 

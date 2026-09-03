@@ -20,7 +20,7 @@ The product handbook describes AuthN, AuthZ, Token, User, Session, and Audit as 
 
 ## Decision
 
-Build **one `identity` service** using a feature-first layout — each domain owns its router, schemas, service, and repository:
+Build **one `identity` service** using a feature-first layout - each domain owns its router, schemas, service, and repository:
 
 ```
 services/identity/src/identity/
@@ -37,9 +37,9 @@ services/identity/src/identity/
     ├── sessions/       # Session tracking
     ├── roles/          # RBAC / authorization
     ├── audit/          # Audit logging
-    ├── mfa/            # Multi-factor auth (not yet implemented — 501)
-    ├── passkeys/       # WebAuthn (not yet implemented — 501)
-    └── sso/            # SAML/OIDC (not yet implemented — 501)
+    ├── mfa/            # Multi-factor auth (not yet implemented - 501)
+    ├── passkeys/       # WebAuthn (not yet implemented - 501)
+    └── sso/            # SAML/OIDC (not yet implemented - 501)
 ```
 
 Each implemented feature is layared `schemas -> service -> ports -> repository`:
@@ -80,6 +80,6 @@ These contracts check direct imports, so the sanctioned `api.deps` composition-r
 ### Mitigations
 
 - Clear internal module boundaries make future extraction straightforward
-- Each feature owns a repository that adapts domain entities to the ORM — DB access is already isolated behind ports, so a future split keeps services database-agnostic
+- Each feature owns a repository that adapts domain entities to the ORM - DB access is already isolated behind ports, so a future split keeps services database-agnostic
 - Services are unit-tested against fake repository ports (no database required)
 - Event emission from each service layer means we can split on event consumers later

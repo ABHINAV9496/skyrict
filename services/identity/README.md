@@ -42,7 +42,7 @@ Tenant resolution is strict and happens **once per request** in middleware.
 In staging/production the tenant slug is derived from the `Host` subdomain
 (`acme.skyrict.com` → `acme`) and `IDENTITY_BASE_DOMAIN` is required
 (fail-fast if missing). In dev/test the slug comes from the `X-Tenant-Slug`
-header that nginx injects — there is no bypass path in any environment. The
+header that nginx injects - there is no bypass path in any environment. The
 resolved tenant is stored in `TenantContext`, and every authenticated request
 cross-checks it against the JWT `tenant_id` claim (mismatch → 401
 `application/problem+json`). Unknown tenants → 404, disabled tenants → 403.

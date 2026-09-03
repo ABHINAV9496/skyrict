@@ -1,4 +1,4 @@
-"""erp_crm_notes — persistent free-form notes on CRM entities.
+"""erp_crm_notes - persistent free-form notes on CRM entities.
 
 Tenant-scoped with RLS and the composite ``(tenant_id, id)`` primary key.
 ``author_id`` records the writer (plain UUID, no FK). ``entity_type`` /

@@ -108,7 +108,7 @@ export function ForecastChart() {
                 )}
                 {activeProducts.map((product) => (
                   <SelectItem key={product.id} value={product.id}>
-                    {product.sku} — {product.name}
+                    {product.sku} - {product.name}
                   </SelectItem>
                 ))}
               </SelectContent>

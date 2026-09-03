@@ -23,7 +23,7 @@ class AttachmentData(BaseModel):
 
 
 class ChatStreamRequest(BaseModel):
-    """POST /ai/agents/chat/stream body — one turn for the supervisor."""
+    """POST /ai/agents/chat/stream body - one turn for the supervisor."""
 
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: uuid.UUID | None = None

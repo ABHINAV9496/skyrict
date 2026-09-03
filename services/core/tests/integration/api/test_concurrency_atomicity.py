@@ -3,7 +3,7 @@
 Closes the two integration gaps the 0007 review flagged: the DoD's "concurrent
 approve → one guard wins; concurrent compute → one wins; failed approval leaves
 request pending and no movement" row, and the "events emitted only after commit
-(failed transaction → no event)" row — both of which had no test at all.
+(failed transaction → no event)" row - both of which had no test at all.
 
 The event half works by swapping ``core.events.producers._event_producer`` for a
 recording producer (the phase-1 stub reads that module global on every publish),
@@ -11,29 +11,29 @@ so "emitted events" become observable instead of a structlog log line.
 
 Why each test is shaped this way:
 
-- ``test_concurrent_approve_single_request`` — the CAS guard
+- ``test_concurrent_approve_single_request`` - the CAS guard
   (``transition_leave_status`` conditional UPDATE) must make exactly one of two
   racing approves win: one movement, one audit row, one ``hr.leave.approved``
   event; the loser emits nothing.
-- ``test_concurrent_compute_idempotent`` — the run-status CAS
+- ``test_concurrent_compute_idempotent`` - the run-status CAS
   (``transition_run_status`` conditional UPDATE) lets only one racing compute
   win the DRAFT→COMPUTED flip; the loser 409s instead of overwriting the
   winner. Entries stay exactly one per employee (``upsert_entries`` is
   ``ON CONFLICT (tenant, run, employee) DO UPDATE``), the run stays computed.
-- ``test_approve_beyond_balance_no_event`` — the service-level Rule 2 breach
+- ``test_approve_beyond_balance_no_event`` - the service-level Rule 2 breach
   raises BEFORE any write; the request stays pending, no movement, no event.
-- ``test_duplicate_department_no_event`` — a DB unique violation surfaces at
+- ``test_duplicate_department_no_event`` - a DB unique violation surfaces at
   flush inside the service call, before the emit; no event for the loser.
-- ``test_hire_with_cross_tenant_department_no_event`` — a composite-FK
+- ``test_hire_with_cross_tenant_department_no_event`` - a composite-FK
   violation at flush (the first write) aborts the whole service call before any
   event; proves the "failed transaction → no event" invariant through a real
   DB failure, not a mock.
-- ``test_concurrent_approve_cross_requests_invariant`` — the coupling invariant
+- ``test_concurrent_approve_cross_requests_invariant`` - the coupling invariant
   across concurrent approvals of DIFFERENT requests for the same employee:
   approved requests == approval movements == emitted events, and materialized
   balance == ledger sum. The balance-row lock (docs §4.3) serializes the writes,
   so when two requests together exceed the balance exactly one approves and the
-  invariant holds deterministically — no longer an xfail.
+  invariant holds deterministically - no longer an xfail.
 """
 
 from __future__ import annotations
@@ -255,7 +255,7 @@ class TestConcurrentApprove:
         assert [r.status_code for r in results] == [200, 200]
 
         assert await _leave_request_status(tenant_id, request_id) == "approved"
-        # Exactly one approval movement, one audit row, one event — the loser
+        # Exactly one approval movement, one audit row, one event - the loser
         # of the CAS guard wrote nothing and emitted nothing.
         assert await _approval_movement_count(tenant_id, request_id) == 1
         assert (
@@ -289,7 +289,7 @@ class TestConcurrentApprove:
         balance-row lock (docs §4.3) must let exactly one approve through: the
         loser re-reads the committed ledger under the lock and the Rule 2 check
         rejects it (422). The coupled counters agree and the materialized
-        balance never drifts from the ledger — deterministically, not by timing.
+        balance never drifts from the ledger - deterministically, not by timing.
         """
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
@@ -340,7 +340,7 @@ class TestConcurrentApprove:
         recorded_events: list[_RecordedEvent],
     ) -> None:
         """10 racing approvals (5 days each) against a 20-day balance: exactly
-        4 win and 6 are rejected — if any pair raced incorrectly the ledger
+        4 win and 6 are rejected - if any pair raced incorrectly the ledger
         would go negative. The row lock serializes every approve, so the final
         materialized balance must equal SUM(ledger) == 0 EXACTLY (not just "no
         error raised"), and movements == events == approvals."""
@@ -413,7 +413,7 @@ class TestConcurrentCompute:
         )
         # The run-status CAS means only one racing compute wins the DRAFT->
         # COMPUTED flip; the loser 409s. Under serialized scheduling both may
-        # return 200 (a computed->computed recompute) — either way the run
+        # return 200 (a computed->computed recompute) - either way the run
         # must end computed with exactly one entry per employee.
         assert [r.status_code for r in results] in ([200, 200], [200, 409], [409, 200])
 
@@ -445,7 +445,7 @@ class TestConcurrentCompute:
         Single-row lock holders can never complete a cycle, and compute's lock
         acquisition is a stable total order (LOCK-ORDERING CONTRACT, see
         compute_run and HrRepository.lock_leave_balance), so no deadlock is
-        possible — this test proves it end to end.
+        possible - this test proves it end to end.
         """
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
@@ -563,7 +563,7 @@ class TestNoEventOnFailedTransaction:
         integration_db: dict[str, str],
         recorded_events: list[_RecordedEvent],
     ) -> None:
-        """Rule 2 service breach: rejected before any write — pending, no movement, no event."""
+        """Rule 2 service breach: rejected before any write - pending, no movement, no event."""
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
         employee = await _hire(client, headers)
@@ -646,7 +646,7 @@ class TestNoEventOnFailedTransaction:
 
 class TestPostEmitPreCommitFailure:
     """An event that was ALREADY buffered (emit succeeded) must still vanish
-    if the transaction fails at COMMIT — the after_rollback listener discards
+    if the transaction fails at COMMIT - the after_rollback listener discards
     the buffer, so a failed write can never be observed through an event."""
 
     async def test_buffered_event_discarded_when_commit_fails(

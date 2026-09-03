@@ -139,7 +139,7 @@ modules = [
 # 1. Every feature router consumes the api composition root (get_current_user,
 #    get_db, service factories). api.deps is the sole wiring point; features
 #    never import one another's services directly.
-# 2. The auth feature embeds the user profile in its response schema — a pure
+# 2. The auth feature embeds the user profile in its response schema - a pure
 #    pydantic model cross-reference (data contract), not a behavioral coupling.
 ignore_imports = [
     "identity.features.**.router -> identity.api.deps",
@@ -201,7 +201,7 @@ check_untyped_defs = true
 exclude = ['services/_template/', '(^|/)tests/']
 
 [[tool.mypy.overrides]]
-# Third-party packages without type stubs — treat as Any.
+# Third-party packages without type stubs - treat as Any.
 module = [
     "typer",
     "kafka",
@@ -229,7 +229,7 @@ module = ["shap", "sklearn", "sklearn.*", "numba", "numba.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# factory_boy ships py.typed but is only partially typed — treat as Any.
+# factory_boy ships py.typed but is only partially typed - treat as Any.
 module = ["factory"]
 follow_imports = "skip"
 

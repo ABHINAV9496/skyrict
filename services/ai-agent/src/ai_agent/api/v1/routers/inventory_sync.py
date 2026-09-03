@@ -1,4 +1,4 @@
-"""/ai/inventory/embeddings/sync — machine-to-machine snapshot sync (SKY-70).
+"""/ai/inventory/embeddings/sync - machine-to-machine snapshot sync (SKY-70).
 
 Core's post-commit product-change dispatch calls this endpoint for every
 ``inventory.product.upserted`` / ``.removed`` event. Unlike user-facing
@@ -10,7 +10,7 @@ by the shared secret ``AI_INVENTORY_SYNC_TOKEN`` (which must match core's
 Authorization happened upstream (core emitted the events after the product
 mutations committed); this endpoint only persists the snapshot mirror. A
 missing/mismatched token is a 401, an unconfigured endpoint is a 503, and a
-failed embed is a typed 503 the core dispatch loop logs and absorbs — sync is
+failed embed is a typed 503 the core dispatch loop logs and absorbs - sync is
 best-effort by design, so the committed request never waits on it.
 """
 

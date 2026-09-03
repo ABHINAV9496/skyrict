@@ -1,4 +1,4 @@
-"""ai_finance_anomalies — persisted finance anomaly detections.
+"""ai_finance_anomalies - persisted finance anomaly detections.
 
 Rows are upserted by the automation scan (deduped on tenant + entity +
 anomaly_type) and reviewed later by humans (SKY-66)."""

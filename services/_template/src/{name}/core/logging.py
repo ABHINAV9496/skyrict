@@ -1,4 +1,4 @@
-"""Structured JSON logging — re-exports skyrict_common.logging with context injection."""
+"""Structured JSON logging - re-exports skyrict_common.logging with context injection."""
 
 from __future__ import annotations
 

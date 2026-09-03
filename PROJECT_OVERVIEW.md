@@ -1,8 +1,8 @@
-# Skyrict Identity Service — Project Overview
+# Skyrict Identity Service - Project Overview
 
 A beginner-friendly, complete guide to what was built, how it works, which files do what, and why it all matters.
 
-> **Read this if:** you want to understand the Identity service end-to-end — from a brand-new user creating an account, to every locked-down API request behind it.
+> **Read this if:** you want to understand the Identity service end-to-end - from a brand-new user creating an account, to every locked-down API request behind it.
 
 ---
 
@@ -14,15 +14,15 @@ This work completed three security features:
 
 | Feature | Ticket | Plain meaning |
 |---|---|---|
-| **RBAC** | AUTH-TASK-030 | Role-based access control — you can only do what your role allows |
+| **RBAC** | AUTH-TASK-030 | Role-based access control - you can only do what your role allows |
 | **Role builder** | AUTH-TASK-032 | Admins can create their own custom roles from a fixed menu of permissions |
-| **MFA** | AUTH-TASK-035 | Multi-factor authentication — TOTP app codes + single-use backup codes |
+| **MFA** | AUTH-TASK-035 | Multi-factor authentication - TOTP app codes + single-use backup codes |
 
 **Tech stack:** Python · FastAPI · PostgreSQL · Redis · SQLAlchemy (async) · PyJWT (RS256) · Argon2id (passwords) · pyotp (TOTP) · Fernet (secret encryption) · Docker · Postman/Newman (manual testing).
 
 ---
 
-## 2. Big picture — how the pieces fit together
+## 2. Big picture - how the pieces fit together
 
 ```
         FRONTEND (Next.js)  /  Postman Runner
@@ -77,13 +77,13 @@ Every protected request must pass **four gates**, in order. Failing any gate sto
 | ③ MFA mandatory but not enrolled | **403** | 035.3 (GET /users/me before MFA) |
 | ④ Missing permission key | **403** | 030.7 (member tries POST /roles) |
 
-> **Why 404 for wrong tenant?** If you could get a 403, you'd learn "this other tenant exists". 404 hides that entirely — one more layer of isolation.
+> **Why 404 for wrong tenant?** If you could get a 403, you'd learn "this other tenant exists". 404 hides that entirely - one more layer of isolation.
 
 ---
 
-## 4. The full user journey — from zero to fully secured
+## 4. The full user journey - from zero to fully secured
 
-### Stage 1 — Register an organization + owner (S1)
+### Stage 1 - Register an organization + owner (S1)
 
 The very first step. A person signs up with their organization's name and their own credentials.
 
@@ -103,7 +103,7 @@ The very first step. A person signs up with their organization's name and their 
      │        auditor             → see audit logs & sessions
      │
      ├─ 4. CREATE the owner user with an Argon2id password hash
-     │        (one-way, salted, slow — a leaked hash is useless to an attacker)
+     │        (one-way, salted, slow - a leaked hash is useless to an attacker)
      │
      ├─ 5. GRANT the "tenant_owner" role to this user
      │
@@ -117,17 +117,17 @@ The very first step. A person signs up with their organization's name and their 
 
 > Important: the account is **not verified yet**, and no login tokens are issued. That happens next.
 
-### Stage 2 — Verify the email (S2)
+### Stage 2 - Verify the email (S2)
 
 ```
   POST verify { token }
      ├─ verify_jwt: signature + expiry + must be an "email_verify" token
-     └─ mark user.is_verified = true   (idempotent — safe to retry)
+     └─ mark user.is_verified = true   (idempotent - safe to retry)
 
   Until verified: login is BLOCKED (prevents fake-email signups)
 ```
 
-### Stage 3 — First login — owner is forced to set up MFA (S3)
+### Stage 3 - First login - owner is forced to set up MFA (S3)
 
 ```
   POST /auth/login { email, password }
@@ -146,9 +146,9 @@ The very first step. A person signs up with their organization's name and their 
         Response: { access_token, refresh_token, mfa_required=true, next_step="mfa.setup" }
 ```
 
-**Clever bit:** the token IS issued — but the **MFA gate** (gate ③) blocks every other endpoint with 403 until MFA is done. So the owner literally cannot skip it.
+**Clever bit:** the token IS issued - but the **MFA gate** (gate ③) blocks every other endpoint with 403 until MFA is done. So the owner literally cannot skip it.
 
-### Stage 4 — MFA setup (S4)
+### Stage 4 - MFA setup (S4)
 
 ```
   POST /mfa/setup   (this endpoint is EXEMPT from the MFA gate so enrollment can finish)
@@ -163,7 +163,7 @@ The very first step. A person signs up with their organization's name and their 
   Response (shown ONCE): { secret, provisioning_uri, backup_codes[10] }
 ```
 
-### Stage 5 — Verify the first code (S5)
+### Stage 5 - Verify the first code (S5)
 
 ```
   POST /mfa/verify { code }
@@ -174,14 +174,14 @@ The very first step. A person signs up with their organization's name and their 
   Reusing a backup code later → 403  (test 035.15 proves this)
 ```
 
-### Stage 6 — Re-login, now enrolled (S6)
+### Stage 6 - Re-login, now enrolled (S6)
 
 ```
   login → mfa_is_required = False  →  mfa_required=false, next_step=null
   Token now unlocks EVERY route   (GET /users/me → 200)
 ```
 
-### Stage 7–9 — Adding a member (S7, S8, S9)
+### Stage 7–9 - Adding a member (S7, S8, S9)
 
 ```
  S7  Owner invites:  POST /invitations { email, role }
@@ -189,16 +189,16 @@ The very first step. A person signs up with their organization's name and their 
 
  S8  Member accepts: POST /invitations/accept { token, email, password, full_name }
      ├─ validate: token exists · not expired · not used · email matches the invite
-     ├─ create user  (verified immediately — no email step needed)
+     ├─ create user  (verified immediately - no email step needed)
      ├─ grant the default invite role ("viewer") if it exists
      └─ mark invitation used
 
  S9  Member logs in
-     ├─ policy OFF ──► mfa_required=false   (member not forced — test 035.8)
+     ├─ policy OFF ──► mfa_required=false   (member not forced - test 035.8)
      └─ policy ON  ──► mfa_required=true    → 403 gate until member enrolls (035.2→035.6)
 ```
 
-### Stage 10 — Every request afterwards
+### Stage 10 - Every request afterwards
 
 Back to **section 3**: 401 → 404 → 403(MFA) → 403(RBAC) → handler → service → repository → database.
 
@@ -219,7 +219,7 @@ Back to **section 3**: 401 → 404 → 403(MFA) → 403(RBAC) → handler → se
             (e.g. tenant_owner → ["*"])
 
  user_roles: user_id · role_id · tenant_id · scope_type · scope_id
-            (join table — a user can have several roles)
+            (join table - a user can have several roles)
 
  sessions:  id · user_id · refresh_token_hash · expires_at · is_active
 
@@ -244,29 +244,29 @@ Back to **section 3**: 401 → 404 → 403(MFA) → 403(RBAC) → handler → se
 
 ## 6. File-by-file guide (simple words)
 
-### 6.1 Core — the shared security foundation
+### 6.1 Core - the shared security foundation
 
 | File | What it does | Why it matters |
 |---|---|---|
 | `src/identity/core/config.py` | Loads all settings from env vars; validates them | New `MFA_ENCRYPTION_KEY` (must be a valid Fernet key) + "production safety" guards that refuse to boot with `DEBUG=true`, wildcard CORS, missing domain, or committed test keys |
 | `src/identity/core/security.py` | The "safe" of the whole service: JWT sign/verify (RS256), Argon2id password hashing, Fernet MFA-secret encryption, and the `mfa_is_required()` rule | Single verification path → no accidental weak spots; MFA secrets are unreadable in the DB; the "who is forced to enroll" rule lives here so login and the request gate can never disagree |
-| `src/identity/core/permissions.py` | The fixed menu of permission keys (`users:write`, `erp.invoice.approve`, … = 19 keys, 10 groups) | The **only** source of truth for what permissions exist — custom roles can't invent keys |
+| `src/identity/core/permissions.py` | The fixed menu of permission keys (`users:write`, `erp.invoice.approve`, … = 19 keys, 10 groups) | The **only** source of truth for what permissions exist - custom roles can't invent keys |
 | `src/identity/core/constants.py` | Magic values: system role definitions, reserved slugs/emails, token expiries, problem-type URIs | One place to change a default without hunting through code |
 
-### 6.2 API layer — the doors into the service
+### 6.2 API layer - the doors into the service
 
 | File | What it does | Why it matters |
 |---|---|---|
-| `src/identity/api/deps.py` | Dependency injection: `get_current_user` (JWT + tenant + MFA gate), `require_permission(...)` (RBAC gate), all repository/service factories | **One place** enforces auth/MFA/RBAC on every route — a new endpoint is secure by default |
+| `src/identity/api/deps.py` | Dependency injection: `get_current_user` (JWT + tenant + MFA gate), `require_permission(...)` (RBAC gate), all repository/service factories | **One place** enforces auth/MFA/RBAC on every route - a new endpoint is secure by default |
 | `src/identity/api/readiness.py` | Startup check: database, Redis, JWT keys, MFA key | Fails fast at boot instead of breaking in production |
 | `src/identity/api/v1/router.py` | Wires every feature's router into `/api/v1` | The single "directory" of all endpoints |
 
-### 6.3 Features — the business logic
+### 6.3 Features - the business logic
 
 **auth/** (login, register, email verify, tokens)
 | File | What it does | Why it matters |
 |---|---|---|
-| `service.py` | `AuthenticationService.login` (checks password, computes `mfa_required`/`next_step`), `register` (creates tenant + 5 roles + owner), `verify_email`; `TokenService` (create/refresh/revoke tokens) | The heart of the whole flow — every user journey starts here; refresh-token **rotation + reuse detection** kills stolen tokens |
+| `service.py` | `AuthenticationService.login` (checks password, computes `mfa_required`/`next_step`), `register` (creates tenant + 5 roles + owner), `verify_email`; `TokenService` (create/refresh/revoke tokens) | The heart of the whole flow - every user journey starts here; refresh-token **rotation + reuse detection** kills stolen tokens |
 | `schemas.py` | The login/register request & response shapes | Adds `mfa_required`/`next_step` to the login response contract |
 
 **mfa/** (the new feature)
@@ -301,24 +301,24 @@ Back to **section 3**: 401 → 404 → 403(MFA) → 403(RBAC) → handler → se
 |---|---|
 | `models/user.py` | SQLAlchemy User model + new `mfa_enabled`, `mfa_secret`, `mfa_backup_codes` |
 | `models/tenant.py` | Tenant model + new `mfa_required_for_all_members` |
-| `domain/entities.py` | Plain-Python domain objects (User, Tenant, Role) — models map to these |
+| `domain/entities.py` | Plain-Python domain objects (User, Tenant, Role) - models map to these |
 | `alembic/versions/0005_mfa_enforcement.py` | Schema migration adding the MFA columns |
 
 ### 6.5 Tests
 
 | File | What it proves |
 |---|---|
-| `tests/unit/features/test_mfa_service.py` | TOTP + backup-code unit tests — including the DoD test that generation and redemption use **one identical hashing function** |
+| `tests/unit/features/test_mfa_service.py` | TOTP + backup-code unit tests - including the DoD test that generation and redemption use **one identical hashing function** |
 | `tests/integration/api/test_mfa.py` | End-to-end MFA: owner forced, policy forces members, gate blocks, backup code single-use, owner reset |
 | `tests/integration/api/mfa_helpers.py` | `enroll_mfa_if_required` helper used by many tests |
 | `tests/unit/features/test_permissions_api.py`, `test_auth_service.py` | Catalog + login posture coverage |
-| `tests/conftest.py` | Test setup: fresh temp RSA keys, `IDENTITY_DEBUG=false` — makes tests hermetic (the 4 "failed" tests now pass) |
+| `tests/conftest.py` | Test setup: fresh temp RSA keys, `IDENTITY_DEBUG=false` - makes tests hermetic (the 4 "failed" tests now pass) |
 
 ### 6.6 Infra / packaging
 
 | File | What it does |
 |---|---|
-| `pyproject.toml` + `uv.lock` | Dependencies — added `pyotp` and `argon2-cffi` for MFA |
+| `pyproject.toml` + `uv.lock` | Dependencies - added `pyotp` and `argon2-cffi` for MFA |
 | `.env.example` | Documents the new env vars (`IDENTITY_MFA_ENCRYPTION_KEY`, …) |
 
 ### 6.7 Postman (the manual test deliverable)
@@ -336,7 +336,7 @@ Back to **section 3**: 401 → 404 → 403(MFA) → 403(RBAC) → handler → se
 - **Fail-closed authorization.** Unknown role, unknown permission, inactive user → **deny**. The dangerous opposite (fail-open) causes privilege escalation.
 - **Multi-tenant isolation.** Permissions and data are scoped per tenant; wrong tenant → 404, so you can't even probe other organizations.
 - **The permission catalog stops sprawl.** Only sanctioned permission keys exist, so custom roles can't escalate by typo.
-- **Compliance.** SOC 2, PCI-DSS, GDPR, and NIST SP 800-63B all require or strongly encourage MFA, access control, encryption at rest, and audit trails — all present here.
+- **Compliance.** SOC 2, PCI-DSS, GDPR, and NIST SP 800-63B all require or strongly encourage MFA, access control, encryption at rest, and audit trails - all present here.
 - **Supporting hardening:** RS256-only JWTs (blocks `alg:none` / algorithm-confusion attacks), Argon2id passwords, Fernet-encrypted secrets, refresh-token rotation + reuse detection, rate limiting, audit logging on every sensitive action, and fail-fast startup verification.
 
 ---
@@ -359,7 +359,7 @@ docker exec -w /app/services/identity skyrict-identity \
 
 ---
 
-## Appendix — credentials & secrets cheat sheet
+## Appendix - credentials & secrets cheat sheet
 
 | Secret | Where it lives | Protected by |
 |---|---|---|

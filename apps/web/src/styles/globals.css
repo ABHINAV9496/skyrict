@@ -560,7 +560,7 @@
   margin: 0.4em 0;
 }
 
-/* Was p-only before — a reply that starts/ends with a heading or list
+/* Was p-only before - a reply that starts/ends with a heading or list
    still had extra top/bottom air. Apply to any direct block child. */
 .chat-markdown > *:first-child {
   margin-top: 0;

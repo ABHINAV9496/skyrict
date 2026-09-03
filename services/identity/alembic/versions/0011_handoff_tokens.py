@@ -1,4 +1,4 @@
-"""Handoff tokens — single-use onboarding state carriers.
+"""Handoff tokens - single-use onboarding state carriers.
 
 Adds the ``handoff_tokens`` table: only the SHA-256 hash of each token is
 stored (raw value returned once at issue), redemption is atomic via

@@ -11,7 +11,7 @@ CRM-DATA-001 (SKY-43). Follows the composite-FK RLS convention established by
   reference is impossible at the constraint level (referential integrity
   agrees with RLS);
 - **hard product FK**: ``erp_sales_order_lines.product_id`` is a REAL composite
-  FK to inventory's ``erp_products`` (RESTRICT) — a line can only reference a
+  FK to inventory's ``erp_products`` (RESTRICT) - a line can only reference a
   product in the same tenant, and products are never hard-deleted. This was a
   locked decision for SKY-43 (the module doc's earlier "no hard FK" note is
   superseded by the approved ticket);
@@ -22,10 +22,10 @@ CRM-DATA-001 (SKY-43). Follows the composite-FK RLS convention established by
   ``confirmed_at`` CHECK; ``erp_sales_order_lines`` carries denormalized
   ``product_name`` / ``sku`` snapshots so order history stays stable even if
   the catalog changes;
-- ``erp_crm_leads`` gets a NON-unique ``(tenant_id, email)`` index — email
+- ``erp_crm_leads`` gets a NON-unique ``(tenant_id, email)`` index - email
   dedupe is a soft service-layer probe, never a uniqueness constraint;
 - money is ``Numeric(18,4)`` with ``String(3)`` currency codes FK'd to the
-  global ``erp_currencies`` catalog seeded by 0001 — no float columns;
+  global ``erp_currencies`` catalog seeded by 0001 - no float columns;
 - ``owner_id`` / ``team_id`` are plain UUIDs with NO FK: they reference
   identity users (and a teams table that does not exist yet) in the shared
   database but are owned by another service's schema/RLS; validated via ports
@@ -38,7 +38,7 @@ NUMBERING NOTE: the ticket calls this "0003" (original plan 0001 -> 0002 ->
 0003_crm_sales). 0003 never landed and 0005/0004/0006 merged instead, so the
 chain is currently 0001 -> 0002 -> 0005 -> 0004 -> 0006. Following the 0004
 precedent ("To honour the ticket's number while keeping a single linear
-chain"), this migration is revision "0003" with down_revision "0006" — the
+chain"), this migration is revision "0003" with down_revision "0006" - the
 chain becomes 0001 -> 0002 -> 0005 -> 0004 -> 0006 -> 0003 (chain order, not
 numeric order). Do not rewire 0005; its comment predates 0004/0006 landing.
 
@@ -130,7 +130,7 @@ def upgrade() -> None:
         sa.Column("phone", sa.String(32), nullable=True),
         sa.Column("company", sa.String(255), nullable=True),
         # owner_id / team_id: plain UUIDs, NO FK (identity users / teams model
-        # that does not exist yet — same convention as HR's user_id columns).
+        # that does not exist yet - same convention as HR's user_id columns).
         sa.Column("owner_id", sa.Uuid(), nullable=True),
         sa.Column("team_id", sa.Uuid(), nullable=True),
         sa.Column(
@@ -153,7 +153,7 @@ def upgrade() -> None:
             name="ck_erp_crm_leads_contact_present",
         ),
     )
-    # NON-unique dedupe probe index — email dedupe is a soft service-layer
+    # NON-unique dedupe probe index - email dedupe is a soft service-layer
     # operation, never a uniqueness constraint (locked SKY-43 decision).
     op.create_index(
         "ix_erp_crm_leads_tenant_email",
@@ -276,7 +276,7 @@ def upgrade() -> None:
             sa.ForeignKey("erp_currencies.code"),
             nullable=True,
         ),
-        # Soft delete convention (matches erp_products / erp_warehouses) —
+        # Soft delete convention (matches erp_products / erp_warehouses) -
         # there is NO customer status enum (locked SKY-43 decision).
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column(
@@ -333,7 +333,7 @@ def upgrade() -> None:
             server_default=sa.text("'pending'"),
         ),
         # Totals are a cached projection: the service recomputes them from the
-        # lines on every write (CRM-BE-002) — never trusted from clients.
+        # lines on every write (CRM-BE-002) - never trusted from clients.
         sa.Column("subtotal", sa.Numeric(18, 4), nullable=False, server_default=sa.text("0")),
         sa.Column("discount", sa.Numeric(18, 4), nullable=False, server_default=sa.text("0")),
         sa.Column("tax", sa.Numeric(18, 4), nullable=False, server_default=sa.text("0")),
@@ -423,7 +423,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         # Composite-FK convention; CASCADE for order lines (a line lives and
-        # dies with its order — the finance invoice-line precedent).
+        # dies with its order - the finance invoice-line precedent).
         sa.ForeignKeyConstraint(
             ["tenant_id", "order_id"],
             ["erp_sales_orders.tenant_id", "erp_sales_orders.id"],
@@ -475,7 +475,7 @@ def upgrade() -> None:
     )
     op.execute(
         # ``permission_rows`` is built solely from the compile-time literal
-        # ``CRM_SALES_PERMISSION_CATALOG`` above — no user input, so this
+        # ``CRM_SALES_PERMISSION_CATALOG`` above - no user input, so this
         # f-string SQL is not an injection vector.
         "INSERT INTO core_permissions (key, description) VALUES "
         f"{permission_rows} ON CONFLICT (key) DO NOTHING"  # nosec B608

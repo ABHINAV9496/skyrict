@@ -1,5 +1,5 @@
 # =============================================================================
-# Skyrict Core Service — Production Dockerfile
+# Skyrict Core Service - Production Dockerfile
 #
 # Stages:
 #   base        Shared deps install (uv sync --no-dev)
@@ -10,7 +10,7 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage: base — shared dependency install
+# Stage: base - shared dependency install
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS base
 
@@ -29,7 +29,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Copy every workspace member pyproject.toml file (for dependency resolution).
-# The workspace glob is services/* and libs/* — uv --frozen refuses to resolve
+# The workspace glob is services/* and libs/* - uv --frozen refuses to resolve
 # if a member manifest is missing. READMEs too: hatchling requires the `readme`
 # file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
@@ -47,7 +47,7 @@ COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 RUN uv sync --frozen --no-dev --directory services/core
 
 # ---------------------------------------------------------------------------
-# Stage: production — minimal final image, non-root
+# Stage: production - minimal final image, non-root
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS production
 

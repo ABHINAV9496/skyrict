@@ -1,7 +1,7 @@
-"""erp_departments — organizational units.
+"""erp_departments - organizational units.
 
 ``manager_employee_id`` is a self-referential composite FK to ``erp_employees``
-(created in the migration via ALTER after that table exists — the two tables
+(created in the migration via ALTER after that table exists - the two tables
 reference each other). NO ACTION: a department whose rows are referenced can
 never be hard-deleted, only soft-disabled via ``is_active``.
 """

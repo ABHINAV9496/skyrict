@@ -4,8 +4,8 @@ Kept out of health.py (request handlers must never re-run the one-time
 startup verification) and out of lifespan.py (so the probe logic is
 unit-testable). The lifespan:
 
-  1. runs :func:`verify_startup_dependencies` once — database, Redis and JWT
-     public key — and raises :class:`StartupError` on any failure so the
+  1. runs :func:`verify_startup_dependencies` once - database, Redis and JWT
+     public key - and raises :class:`StartupError` on any failure so the
      process refuses to boot (fail-fast);
   2. opens the gate with :func:`mark_ready` only after every check passed.
 
@@ -14,7 +14,7 @@ verification succeeded, then the handler runs the lightweight live probes
 (:func:`check_database`, :func:`check_redis`) before reporting 200.
 
 AI providers are deliberately NOT startup-verified: provider credentials are
-optional by design (provider-agnostic architecture) — an unconfigured or
+optional by design (provider-agnostic architecture) - an unconfigured or
 unreachable provider degrades AI endpoints to typed 503 ai_unavailable, it
 never prevents boot. Provider reachability surfaces via /ready once the
 provider layer lands (SKY-57 commit 3).
@@ -47,7 +47,7 @@ _state: ReadinessState = ReadinessState.STARTING
 
 
 def reset() -> None:
-    """Reset the gate to STARTING — test fixtures only.
+    """Reset the gate to STARTING - test fixtures only.
 
     The gate is module-global, so unit tests that exercise the closed-gate
     path must reset it to keep tests order-independent.
@@ -81,7 +81,7 @@ def get_state() -> ReadinessState:
 async def check_database() -> None:
     """Probe Postgres with a trivial round-trip (SELECT 1).
 
-    Raises on any failure — the caller decides whether that means a 503.
+    Raises on any failure - the caller decides whether that means a 503.
     """
     from ai_agent.db.session import engine
 
@@ -92,7 +92,7 @@ async def check_database() -> None:
 async def check_redis() -> None:
     """Probe Redis with a trivial round-trip (PING).
 
-    Raises on any failure — the caller decides whether that means a 503.
+    Raises on any failure - the caller decides whether that means a 503.
     """
     from ai_agent.core.redis import redis_client
 

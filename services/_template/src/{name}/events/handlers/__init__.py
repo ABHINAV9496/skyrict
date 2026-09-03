@@ -1,4 +1,4 @@
-"""Event handlers — map domain events to service calls."""
+"""Event handlers - map domain events to service calls."""
 
 from __future__ import annotations
 

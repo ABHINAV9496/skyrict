@@ -1,4 +1,4 @@
-"""Memory repository — CRUD for episodic and semantic memory.
+"""Memory repository - CRUD for episodic and semantic memory.
 
 Handles storing and retrieving conversation memories for the CRM Assistant.
 Episodic memories are full query-response pairs; semantic memories are
@@ -117,7 +117,7 @@ class MemoryRepository:
                     for r in rows
                 ]
         except Exception:
-            pass  # pg_trgm not available — fall through to recency.
+            pass  # pg_trgm not available - fall through to recency.
 
         # Fallback: most recent.
         result = await self._session.execute(

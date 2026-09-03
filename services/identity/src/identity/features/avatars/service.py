@@ -1,8 +1,8 @@
-"""Avatar service — orchestrates image processing, blob storage, and DB state.
+"""Avatar service - orchestrates image processing, blob storage, and DB state.
 
 No ORM or storage internals live here; persistence goes through the
 ``UserRepositoryPort`` and blobs through ``AvatarStoragePort``. ``avatar_url``
-is stored as the relative path ``{user_id}/{filename}`` — the filename is a
+is stored as the relative path ``{user_id}/{filename}`` - the filename is a
 random 32-hex WebP name, so paths are unguessable and the serving route can
 validate them with a strict regex.
 """

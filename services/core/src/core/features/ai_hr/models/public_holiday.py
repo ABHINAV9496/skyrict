@@ -1,11 +1,11 @@
-"""ai_hr_public_holidays — the per-tenant public-holiday calendar (8.2.1).
+"""ai_hr_public_holidays - the per-tenant public-holiday calendar (8.2.1).
 
 Input data for the ``pre_holiday_spike`` leave-pattern anomaly, so the detector
 can tell "leave adjacent to a public holiday" apart from ordinary long
 weekends. Tenant-scoped config (like ``erp_leave_types``): every tenant owns
 its own holiday rows. ``department_id`` NULL means the holiday is org-wide; a
 row stamped to one department lets a specific team shadow an org date (both
-rows may coexist — the unique key is ``(tenant, department, date)``).
+rows may coexist - the unique key is ``(tenant, department, date)``).
 """
 
 from __future__ import annotations

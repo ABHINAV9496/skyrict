@@ -132,7 +132,7 @@ export function ReserveStockDialog({
                                         key={product.id}
                                         value={product.id}
                                     >
-                                        {product.sku} — {product.name}
+                                        {product.sku} - {product.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

@@ -2,9 +2,9 @@
 
 Pure presentation: takes a fully-resolved :class:`SecurityAlert` and renders
 table-based, inline-styled, responsive HTML (GitHub/Stripe/Google style) plus a
-plaintext fallback. No I/O, no imports from features — safe to render anywhere.
+plaintext fallback. No I/O, no imports from features - safe to render anywhere.
 
-Brand: Skyrict — dark teal ``#0a2f3e`` text, sky gradient ``#aedef1 -> #4cb6e1``
+Brand: Skyrict - dark teal ``#0a2f3e`` text, sky gradient ``#aedef1 -> #4cb6e1``
 accents. All dynamic values are HTML-escaped before substitution.
 """
 
@@ -234,7 +234,7 @@ _TEMPLATE = Template(
             <tr>
               <td style="padding:20px 32px 24px;">
                 <div style="border-top:1px solid #eef3f6;padding-top:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#8798a5;">
-                  This is an automated security notification — please don't reply to this email. Questions? Contact <a href="mailto:${support_email}" style="color:#14708f;text-decoration:none;font-weight:600;">${support_email}</a>.
+                  This is an automated security notification - please don't reply to this email. Questions? Contact <a href="mailto:${support_email}" style="color:#14708f;text-decoration:none;font-weight:600;">${support_email}</a>.
                 </div>
               </td>
             </tr>

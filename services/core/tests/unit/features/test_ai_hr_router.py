@@ -222,7 +222,7 @@ def test_attrition_without_individual_returns_403_with_l1_aggregate_body() -> No
 
     resp = client.get("/api/v1/ai/hr/attrition", headers={"authorization": "Bearer tok"})
 
-    # Gherkin: 403 with aggregates-only body — never empty, never L2 PII.
+    # Gherkin: 403 with aggregates-only body - never empty, never L2 PII.
     assert resp.status_code == 403
     body = resp.json()["data"]
     assert body["high_risk_count"] == 1

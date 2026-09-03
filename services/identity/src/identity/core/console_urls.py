@@ -1,18 +1,18 @@
-"""Console/signin URL derivation for transactional email — tenant + environment aware.
+"""Console/signin URL derivation for transactional email - tenant + environment aware.
 
 The workspace surface lives on ``{tenant_slug}.{apex}`` and the signin surface
 on ``{tenant_slug}.signin.{apex}``, so links in email must resolve to the
 *tenant's* surfaces, not a shared one. Resolution order (see
 ``Settings.SECURITY_CONSOLE_BASE_URL``):
 
-1. Explicit override — a literal base, or one containing a ``{slug}``
+1. Explicit override - a literal base, or one containing a ``{slug}``
    placeholder that is substituted with the tenant slug (console only).
 2. Staging/production: ``https://{slug}.{BASE_DOMAIN}`` (console) /
    ``https://{slug}.signin.{BASE_DOMAIN}`` (signin).
 3. Dev/test: ``http://{slug}.localhost:{SECURITY_CONSOLE_DEV_PORT}`` (and
    ``http://{slug}.signin.localhost:{port}`` for signin).
 
-Returns ``None`` when no tenant slug or base can be resolved — callers then
+Returns ``None`` when no tenant slug or base can be resolved - callers then
 omit the action buttons rather than emit a dead link.
 """
 

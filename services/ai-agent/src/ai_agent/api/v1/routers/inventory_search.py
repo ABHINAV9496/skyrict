@@ -1,8 +1,8 @@
-"""/ai/inventory/search — hybrid product search (SKY-70).
+"""/ai/inventory/search - hybrid product search (SKY-70).
 
 Authentication happens here (JWT verified + tenant cross-check); authorization
 happened upstream at the core monolith's proxy (erp.inventory.read checked
-before forwarding — the SKY-57 "AI is a proxy, not a bypass" rule). The core
+before forwarding - the SKY-57 "AI is a proxy, not a bypass" rule). The core
 proxy also decides whether this caller may see valuation data: it forwards
 ``X-AI-Valuation-Disclosed: 1`` ONLY when the caller holds
 ``erp.inventory.valuation``, and this router attaches cost prices only when

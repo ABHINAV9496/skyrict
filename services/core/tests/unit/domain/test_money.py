@@ -1,4 +1,4 @@
-"""Money value object tests — Decimal-only arithmetic, currency validation."""
+"""Money value object tests - Decimal-only arithmetic, currency validation."""
 
 from __future__ import annotations
 

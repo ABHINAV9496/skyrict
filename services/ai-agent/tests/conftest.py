@@ -1,4 +1,4 @@
-"""Test fixtures — ephemeral RSA keys, environment bootstrap.
+"""Test fixtures - ephemeral RSA keys, environment bootstrap.
 
 This conftest.py is loaded by pytest before any test module. It generates a
 fresh RSA key pair in a temporary directory (never committed to the repo),
@@ -50,7 +50,7 @@ os.environ.setdefault("AI_JWKS_AUDIENCE", "api.test.skyrict.io")
 os.environ["AI_ENVIRONMENT"] = "test"
 os.environ["AI_DEBUG"] = "false"
 os.environ["AI_LOG_JSON"] = "false"
-# No providers configured in tests by default — the provider-agnostic boot
+# No providers configured in tests by default - the provider-agnostic boot
 # contract means the service starts anyway; individual tests opt in by
 # setting AI_PROVIDER/AI_MODEL before importing config.
 #

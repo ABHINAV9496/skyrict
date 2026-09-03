@@ -1,8 +1,8 @@
-"""Sales order event producers — structured domain events for the sales feature.
+"""Sales order event producers - structured domain events for the sales feature.
 
 Follows the CRM/HR event pattern (docs/modules/sales-crm.md §2.5): each
 ``emit_*`` function builds the shared ``skyrict_events.BaseEvent`` envelope and
-publishes it via ``apublish`` — buffered while a request transaction is open
+publishes it via ``apublish`` - buffered while a request transaction is open
 and drained on the session's ``after_commit`` hook (core/db/session.py), so a
 consumer can never observe order state that did not actually commit.
 

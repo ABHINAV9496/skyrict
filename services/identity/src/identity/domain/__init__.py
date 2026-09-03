@@ -1,1 +1,1 @@
-"""Domain layer — entities and value objects, free of framework concerns."""
+"""Domain layer - entities and value objects, free of framework concerns."""

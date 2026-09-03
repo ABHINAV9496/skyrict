@@ -1,4 +1,4 @@
-"""erp_tenant_settings — generic tenant key-value configuration store.
+"""erp_tenant_settings - generic tenant key-value configuration store.
 
 Stores automation thresholds, toggles, and feature flags per tenant.
  ``(tenant_id, key)`` is unique; ``value`` is always TEXT (JSON booleans

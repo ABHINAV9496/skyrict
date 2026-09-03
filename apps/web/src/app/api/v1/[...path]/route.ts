@@ -17,7 +17,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * The browser talks to these same-origin handlers instead of the backend:
  * (a) the tenant slug is always derived server-side from the Host header (the
  * client's X-Tenant-Slug is ignored), (b) the client's Bearer access token is
- * forwarded when present — on the workspace origin it is absent on first load,
+ * forwarded when present - on the workspace origin it is absent on first load,
  * so the backend answers 401 and the client's single-flight silent refresh
  * (/api/auth/refresh, driven by the httpOnly session cookie) retries once,
  * and (c) state-changing methods must pass the Origin/Referer CSRF gate.

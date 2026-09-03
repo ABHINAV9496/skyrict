@@ -3,7 +3,7 @@
  *
  * Mirrors hr-api.ts conventions: calls go through the same-origin /api/v1/*
  * BFF proxy, payloads are mapped from snake_case to camelCase here, and every
- * failure surfaces an `ApiError`. Deliberately separate from hr-api — the
+ * failure surfaces an `ApiError`. Deliberately separate from hr-api - the
  * portal reads its own /portal/* endpoints, never HR's admin surface.
  */
 
@@ -196,7 +196,7 @@ export interface SubmitLeaveInput {
   reason?: string;
 }
 
-/** Submit an own leave request — employee_id is forced server-side. */
+/** Submit an own leave request - employee_id is forced server-side. */
 export async function submitLeaveRequest(input: SubmitLeaveInput): Promise<PortalLeaveRequest> {
   const raw = await apiPost<PortalLeaveRequestPayload | null>(
     "/api/v1/portal/leave/requests",
@@ -219,7 +219,7 @@ export async function getLeaveSuggestions(): Promise<PortalLeaveSuggestion[]> {
 }
 
 /**
- * Mark one suggestion as used — records the prefill so the chip stops being
+ * Mark one suggestion as used - records the prefill so the chip stops being
  * suggested. Never submits a leave request by itself.
  */
 export async function markSuggestionUsed(

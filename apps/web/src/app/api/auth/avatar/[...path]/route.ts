@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * TenantResolver), and proxies the bytes. The filenames are server-generated
  * UUIDs and the storage is tenant-scoped, so the URL itself is not guessable
  * outside its tenant. The generic /api/v1 proxy cannot be used here because it
- * wraps responses in JSON — this route passes the binary body straight through.
+ * wraps responses in JSON - this route passes the binary body straight through.
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FILENAME_RE = /^[a-f0-9]{32}\.webp$/;

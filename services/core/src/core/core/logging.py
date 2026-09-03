@@ -1,4 +1,4 @@
-"""Structured logging — thin wrapper over skyrict_common (no skyrict-logging lib).
+"""Structured logging - thin wrapper over skyrict_common (no skyrict-logging lib).
 
 Every log entry automatically includes request_id and tenant_id when the
 structlog contextvars are bound by the middleware.

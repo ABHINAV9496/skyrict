@@ -26,9 +26,9 @@ observability/
 |------|---------|
 | `otel-collector-config.yaml` | OTel Collector: receives traces/metrics/logs from services, exports to backends |
 | `prometheus.yml` | Prometheus: scrape targets, recording rules, alert rules |
-| `grafana/dashboards/*.json` | Grafana dashboards as JSON — committed to git, auto-provisioned |
+| `grafana/dashboards/*.json` | Grafana dashboards as JSON - committed to git, auto-provisioned |
 | `grafana/provisioning/` | Tells Grafana where to find dashboards and datasources |
-| `alerts/*.yml` | Prometheus alert rules — fire PagerDuty/Slack when thresholds breach |
+| `alerts/*.yml` | Prometheus alert rules - fire PagerDuty/Slack when thresholds breach |
 
 ## Adding a New Service Dashboard
 

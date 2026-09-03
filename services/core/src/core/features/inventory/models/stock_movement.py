@@ -1,4 +1,4 @@
-"""Immutable tenant-scoped stock movement ORM model — the inventory ledger.
+"""Immutable tenant-scoped stock movement ORM model - the inventory ledger.
 
 Every row is an insert-only fact: there is no ``updated_at`` column and the
 repository exposes no update/delete path, so the ledger can never be silently

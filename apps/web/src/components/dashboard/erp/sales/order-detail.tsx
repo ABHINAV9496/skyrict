@@ -136,7 +136,7 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
       label: "Product",
       render: (line) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-foreground">{line.productName || "—"}</p>
+          <p className="truncate font-medium text-foreground">{line.productName || "-"}</p>
           <p className="truncate text-xs text-muted-foreground">{line.sku}</p>
         </div>
       ),

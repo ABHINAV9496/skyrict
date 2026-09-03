@@ -1,4 +1,4 @@
-"""ai-agent eval harness recording (HR-AI-002, SKY-72) — unit contract checks.
+"""ai-agent eval harness recording (HR-AI-002, SKY-72) - unit contract checks.
 
 No database. Pins the pieces the eval-write path depends on outside the ORM:
 the ``erp.hr.ai.eval`` permission is catalogued (so ``require_permission`` can

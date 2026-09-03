@@ -1,4 +1,4 @@
-"""Event topic constants — single source of truth for Kafka topic names.
+"""Event topic constants - single source of truth for Kafka topic names.
 
 Topics follow the ``{domain}.{entity}.{action}`` convention. Phase 1 emits
 these via the structlog stub producer (``core.events.producers``); Kafka wiring

@@ -1,9 +1,9 @@
-"""core_audit_logs — tenant-scoped, tamper-evident, append-only audit trail.
+"""core_audit_logs - tenant-scoped, tamper-evident, append-only audit trail.
 
 Mirrors identity's ``audit_logs`` (same shared database, same contract): a
 BEFORE INSERT trigger builds a SHA-256 hash chain over the previous hash plus
 the immutable row fields, and a second trigger forbids direct UPDATE / DELETE.
-Writes only — never update or delete through the ORM.
+Writes only - never update or delete through the ORM.
 
 ``actor_user_id`` is a plain UUID with NO FK: it references identity users in
 the same shared database but is owned by another service's schema/RLS; validated

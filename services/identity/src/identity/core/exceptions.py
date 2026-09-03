@@ -94,7 +94,7 @@ class StartupError(RuntimeError):
 
     Raised from the application lifespan so the process refuses to boot
     (fail-fast) instead of serving traffic with a dead database, an
-    unreachable Redis, or unusable JWT keys. NOT a SkyrictError — it is
+    unreachable Redis, or unusable JWT keys. NOT a SkyrictError - it is
     never mapped to an HTTP response; the orchestrator sees the non-zero
     exit and restarts the pod.
     """
@@ -208,7 +208,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions — NEVER leak internals.
+    """Catch-all for unhandled exceptions - NEVER leak internals.
 
     Logs full traceback for debugging, returns sanitized 500 to the client.
     """

@@ -1,4 +1,4 @@
-"""agent_interrupts ledger — create, list, decide, lazy-expire (SKY-59).
+"""agent_interrupts ledger - create, list, decide, lazy-expire (SKY-59).
 
 Mirrors the ``ai_suggestions`` review flow (db/suggestion_repository.py) but
 with LAZY expiry: any read/resume/approval that touches an expired pending row
@@ -66,7 +66,7 @@ class InterruptRepository:
     async def list_pending(
         self, *, tenant_id: uuid.UUID, limit: int = 100
     ) -> list[AgentInterruptModel]:
-        """Pending rows (oldest expiry first) — the review queue order."""
+        """Pending rows (oldest expiry first) - the review queue order."""
         result = await self._session.execute(
             select(AgentInterruptModel)
             .where(
@@ -98,7 +98,7 @@ class InterruptRepository:
 
         Returns True when a transition to ``denied`` was just computed; the
         caller then audits ``ai.agent.interrupt.expired``. ``decided_by`` stays
-        NULL — no human decided; the clock did.
+        NULL - no human decided; the clock did.
         """
         if row.status != "pending" or row.expires_at > _utcnow():
             return False

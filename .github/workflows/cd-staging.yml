@@ -1,5 +1,5 @@
 # =============================================================================
-# CD — Staging
+# CD - Staging
 #
 # Deploys the identity service to the staging Kubernetes cluster and
 # provisions/reconciles the wildcard DNS + TLS:
@@ -16,7 +16,7 @@
 #      https://acme-test.staging.skyrict.com/health returns 200 with a valid
 #      TLS certificate
 #
-# Cluster / cloud credentials never live in the repository — they are GitHub
+# Cluster / cloud credentials never live in the repository - they are GitHub
 # secrets on the `staging` environment (see docs/runbooks/staging-deployment.md
 # for the full secret list and bootstrap procedure).
 #
@@ -26,7 +26,7 @@
 # triggers only run the build-and-push-identity job.
 # =============================================================================
 
-name: CD — Staging
+name: CD - Staging
 
 on:
   push:

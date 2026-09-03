@@ -1,4 +1,4 @@
-"""Redis-backed caching layer — TTL-based, serialization-agnostic.
+"""Redis-backed caching layer - TTL-based, serialization-agnostic.
 
 Provides a simple async cache interface backed by Redis.
 """
@@ -30,7 +30,7 @@ class CacheService:
                     decode_responses=True,
                 )
             except ImportError:
-                logger.warning("aioredis not installed — cache disabled")
+                logger.warning("aioredis not installed - cache disabled")
                 return None
         return self._client
 

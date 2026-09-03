@@ -3,7 +3,7 @@
 Covers the documented Gherkin forfeit case (18 unused days / 55 remaining ->
 warning with projected forfeiture of 18), severity mapping, negative-accrual
 detection, the L1 aggregate, and the lazy-on-read TTL scan. Pure unit tests
-with a fake repository — no database.
+with a fake repository - no database.
 """
 
 from __future__ import annotations

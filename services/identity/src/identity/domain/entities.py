@@ -1,4 +1,4 @@
-"""Domain entities — pure Python dataclasses, no framework dependencies.
+"""Domain entities - pure Python dataclasses, no framework dependencies.
 
 These represent the core business objects of the identity domain.
 Services operate on these, not on ORM models directly.
@@ -47,7 +47,7 @@ class SessionStatus(Enum):
 
 @dataclass
 class Membership:
-    """Membership entity — a user's relationship with a tenant.
+    """Membership entity - a user's relationship with a tenant.
 
     ``user_id`` is NULL while the membership is INVITED (no placeholder users:
     invitations carry the pending relationship, users materialize on accept).
@@ -122,7 +122,7 @@ class Session:
     ``token_family_id`` groups every refresh rotation of one login so reuse
     detection can revoke the whole family. ``is_trusted`` marks a recognized
     device (surfaces the SESSION_TRUSTED flow). ``is_active`` is derived and
-    does not consider expiry — expiry is enforced explicitly by queries and
+    does not consider expiry - expiry is enforced explicitly by queries and
     the refresh path.
     """
 
@@ -185,7 +185,7 @@ class UserRole:
 
 @dataclass
 class Invitation:
-    """Invitation entity — single-use, expiring invite token.
+    """Invitation entity - single-use, expiring invite token.
 
     ``membership_id`` links the invitation to its INVITED membership, which
     owns the pending relationship; the user materializes on accept.
@@ -206,7 +206,7 @@ class Invitation:
 
 @dataclass
 class AuditLog:
-    """Audit log entry entity — hash-chained, append-only."""
+    """Audit log entry entity - hash-chained, append-only."""
 
     tenant_id: UUID
     action: str
@@ -223,7 +223,7 @@ class AuditLog:
 
 @dataclass
 class Handoff:
-    """Handoff token entity — single-use, expiring, carries in-flight payload.
+    """Handoff token entity - single-use, expiring, carries in-flight payload.
 
     Lets the onboarding wizard and BFF pass control across requests while
     resuming the exact step: the raw token is returned once on issue, only its

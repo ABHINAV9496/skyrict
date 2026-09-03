@@ -105,18 +105,18 @@ class SessionListResponse(BaseModel):
 
 
 class SessionRevokeRequest(BaseModel):
-    """POST /sessions/{id}/revoke — revoke a specific session."""
+    """POST /sessions/{id}/revoke - revoke a specific session."""
 
     reason: str | None = None
 
 
 class SessionRevokeAllRequest(BaseModel):
-    """POST /sessions/revoke-all — revoke all sessions except current."""
+    """POST /sessions/revoke-all - revoke all sessions except current."""
 
     except_current: bool = True
 
 
 class SessionTrustRequest(BaseModel):
-    """PATCH /sessions/{session_id}/trusted — mark a device as recognized."""
+    """PATCH /sessions/{session_id}/trusted - mark a device as recognized."""
 
     is_trusted: bool

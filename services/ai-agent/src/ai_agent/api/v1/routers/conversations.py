@@ -1,4 +1,4 @@
-"""/ai/agents/conversations — CRUD for agent-shell conversation persistence.
+"""/ai/agents/conversations - CRUD for agent-shell conversation persistence.
 
 Replaces the in-memory mock store with PostgreSQL-backed storage so
 conversations survive server restarts (SKY-60 durability fix).

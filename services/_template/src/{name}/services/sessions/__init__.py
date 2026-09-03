@@ -1,4 +1,4 @@
-"""Session service package — track, list, revoke user sessions."""
+"""Session service package - track, list, revoke user sessions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import uuid
 
 
 class SessionService:
-    """Manages user sessions — creation, listing, revocation."""
+    """Manages user sessions - creation, listing, revocation."""
 
     def __init__(self, session_repo) -> None:
         self.session_repo = session_repo

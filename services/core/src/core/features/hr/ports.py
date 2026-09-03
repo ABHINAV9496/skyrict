@@ -1,4 +1,4 @@
-"""HR repository and integration ports — persistence + cross-feature contracts.
+"""HR repository and integration ports - persistence + cross-feature contracts.
 
 Declares what the repository must offer so services depend on this Protocol
 (hexagonal "port") rather than the concrete SQLAlchemy implementation. Also
@@ -19,7 +19,7 @@ from core.domain import entities as ent
 
 
 class IdentityUserPort(Protocol):
-    """Identity integration — validates that a user exists in the routed tenant.
+    """Identity integration - validates that a user exists in the routed tenant.
 
     Deliberately validate-only: this port never creates users. The concrete
     implementation calls the identity service (in-process or HTTP) and is wired

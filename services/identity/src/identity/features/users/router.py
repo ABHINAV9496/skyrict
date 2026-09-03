@@ -1,4 +1,4 @@
-"""User endpoints — profile, update, password change."""
+"""User endpoints - profile, update, password change."""
 
 from __future__ import annotations
 

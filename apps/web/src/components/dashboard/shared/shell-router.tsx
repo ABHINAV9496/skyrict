@@ -15,7 +15,7 @@ type ShellKey = "erp" | "agents" | "intelligence" | "portal";
 
 /**
  * Picks the world that wraps the current page. Each module renders inside its
- * own distinct chrome — chat for AI Agents, a conventional app for ERP, a
+ * own distinct chrome - chat for AI Agents, a conventional app for ERP, a
  * search engine for Intelligence, and a bare portal for self-service leave.
  * Everything else stays in the workspace shell.
  */
@@ -42,7 +42,7 @@ function detectModule(pathname: string): ShellKey | null {
   ) {
     return "intelligence";
   }
-  // Self-service leave portal — its own minimal chrome, no workspace nav.
+  // Self-service leave portal - its own minimal chrome, no workspace nav.
   if (normalized === "/dashboard/leave" || normalized.startsWith("/dashboard/leave/")) {
     return "portal";
   }

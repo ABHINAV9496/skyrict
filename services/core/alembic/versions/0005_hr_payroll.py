@@ -3,13 +3,13 @@
 HR-DATA-001 (ticket: migration 0005_hr_payroll). All tenant-scoped tables
 follow the composite-FK RLS convention established by 0001:
 
-- composite PRIMARY KEY ``(tenant_id, id)`` — ``tenant_id`` is both the RLS
+- composite PRIMARY KEY ``(tenant_id, id)`` - ``tenant_id`` is both the RLS
   column and a member of the key;
 - every child references its parent with a composite FK ``(tenant_id, ref) ->
   parent(tenant_id, id)`` so a cross-tenant reference is impossible at the
   constraint level (referential integrity agrees with RLS);
 - ``tenant_id -> tenants(id)`` uses ``ON DELETE CASCADE``; **all HR composite
-  child FKs use the default NO ACTION** — an employee/department/run/leave-type
+  child FKs use the default NO ACTION** - an employee/department/run/leave-type
   with any referencing rows can never be hard-deleted, only retired. For an
   audit-relevant HR system an employee with leave/payroll history is never
   deleted, only moved to ``terminated``. Do not "fix" this into a cascade.
@@ -28,7 +28,7 @@ NOTES:
   are plain UUIDs with NO FK: they reference identity users in the same shared
   database but are owned by another service's schema/RLS; validated via ports.
 - ``erp_currencies`` (global, 0001) is deliberately NOT FK'd from
-  ``erp_compensation.currency`` — currency is validated via Money at the
+  ``erp_compensation.currency`` - currency is validated via Money at the
   service layer (spec §3.2).
 
 NUMBERING GATE: 0002_inventory has landed; 0003_crm_sales / 0004_finance do
@@ -244,7 +244,7 @@ def upgrade() -> None:
         "ix_erp_leave_requests_tenant_employee", "erp_leave_requests", ["tenant_id", "employee_id"]
     )
 
-    # --- erp_leave_movements (immutable ledger — no updated_at) ---
+    # --- erp_leave_movements (immutable ledger - no updated_at) ---
     op.create_table(
         "erp_leave_movements",
         *_tenant_scoped_pk(),
@@ -371,7 +371,7 @@ def upgrade() -> None:
         postgresql_where=sa.text("status <> 'void'"),
     )
 
-    # --- erp_payroll_entries (immutable per-run entry — no updated_at) ---
+    # --- erp_payroll_entries (immutable per-run entry - no updated_at) ---
     op.create_table(
         "erp_payroll_entries",
         *_tenant_scoped_pk(),

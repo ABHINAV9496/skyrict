@@ -1,4 +1,4 @@
-"""Membership repository — DB operations for the memberships table."""
+"""Membership repository - DB operations for the memberships table."""
 
 from __future__ import annotations
 

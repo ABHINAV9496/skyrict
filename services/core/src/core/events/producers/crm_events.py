@@ -1,15 +1,15 @@
-"""CRM event producers — structured domain events for the CRM feature.
+"""CRM event producers - structured domain events for the CRM feature.
 
 Follows the HR event pattern (docs/modules/sales-crm.md §2.5): each
 ``emit_*`` function builds the shared ``skyrict_events.BaseEvent`` envelope
-and publishes it via ``apublish`` — which buffers the event while a request
+and publishes it via ``apublish`` - which buffers the event while a request
 transaction is open and drains it on the session's ``after_commit`` hook
 (core/db/session.py), so a consumer can never observe CRM state that did not
 actually commit.
 
 One event per transition (the catalog is exactly the topics in §2.5):
 ``won``/``lost`` are the terminal announcements and fire INSTEAD of
-``stage_changed`` for those transitions — ``stage_changed`` covers the
+``stage_changed`` for those transitions - ``stage_changed`` covers the
 non-terminal pipeline movement (``prospecting -> qualified -> proposal ->
 negotiation``).
 """

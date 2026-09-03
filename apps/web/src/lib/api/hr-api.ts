@@ -40,12 +40,12 @@ export interface Employee {
   createdAt: string;
 }
 
-/** "First Last" — the one canonical way to render an employee's name. */
+/** "First Last" - the one canonical way to render an employee's name. */
 export function employeeName(employee: Pick<Employee, "firstName" | "lastName">): string {
   return `${employee.firstName} ${employee.lastName}`;
 }
 
-/** Alphabetical by name — dropdown options read naturally regardless of list order. */
+/** Alphabetical by name - dropdown options read naturally regardless of list order. */
 export function byEmployeeName(
   a: Pick<Employee, "firstName" | "lastName">,
   b: Pick<Employee, "firstName" | "lastName">,
@@ -105,7 +105,7 @@ export interface AttendanceRecord {
   payImpact: PayImpact;
   note: string | null;
   createdAt: string;
-  /** Joined display fields — null on single-employee reads. */
+  /** Joined display fields - null on single-employee reads. */
   firstName: string | null;
   lastName: string | null;
   employeeNumber: string | null;
@@ -642,7 +642,7 @@ export async function upsertAttendance(input: {
 }
 
 // ---------------------------------------------------------------------------
-// HR AI — leave suggestions (per-employee, `erp.hr.ai.individual` gate)
+// HR AI - leave suggestions (per-employee, `erp.hr.ai.individual` gate)
 // ---------------------------------------------------------------------------
 
 export interface HrLeaveSuggestion {
@@ -688,7 +688,7 @@ export async function listEmployeeSuggestions(
 }
 
 // ---------------------------------------------------------------------------
-// HR AI — data quality (8.1.3): L1 org KPI + L2 per-employee drill-down
+// HR AI - data quality (8.1.3): L1 org KPI + L2 per-employee drill-down
 // ---------------------------------------------------------------------------
 
 export type QualityGrade = "A" | "B" | "C" | "D" | "F";

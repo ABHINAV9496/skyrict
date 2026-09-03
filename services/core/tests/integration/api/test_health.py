@@ -1,8 +1,8 @@
-"""Health/readiness integration tests — /health and /ready return 200.
+"""Health/readiness integration tests - /health and /ready return 200.
 
 The ``client`` fixture runs the real lifespan, which performs startup
 dependency verification (DB SELECT 1 + JWT public key check) and opens the
-readiness gate — so a green test proves the service boots end-to-end against
+readiness gate - so a green test proves the service boots end-to-end against
 real Postgres.
 """
 
@@ -35,7 +35,7 @@ class TestHealth:
         assert body["checks"]["database"] == "ok"
 
     async def test_health_does_not_require_tenant(self, client: AsyncClient) -> None:
-        # Liveness probes never carry a tenant — they must succeed without one.
+        # Liveness probes never carry a tenant - they must succeed without one.
         response = await client.get("/api/v1/health")
         assert response.status_code == 200
 

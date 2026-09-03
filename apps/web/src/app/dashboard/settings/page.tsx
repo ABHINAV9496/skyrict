@@ -223,17 +223,17 @@ export default function SettingsPage() {
         <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">
-              {user?.fullName || "—"}
+              {user?.fullName || "-"}
             </p>
             <p className="truncate text-sm text-muted-foreground">{user?.email}</p>
           </div>
         </div>
         <dl className="mt-3 divide-y divide-border">
-          <DetailRow label="Email" value={user?.email ?? "—"} />
+          <DetailRow label="Email" value={user?.email ?? "-"} />
           <DetailRow
             label="Member since"
             value={
-              user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"
+              user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"
             }
           />
         </dl>
@@ -275,7 +275,7 @@ export default function SettingsPage() {
           Integrations
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Billing and third-party integrations are on the way — check back soon.
+          Billing and third-party integrations are on the way - check back soon.
         </p>
       </section>
 

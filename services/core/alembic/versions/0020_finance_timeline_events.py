@@ -26,5 +26,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # PostgreSQL does not support removing individual enum values.
-    # A full downgrade would require recreating the type — out of scope for v1.
+    # A full downgrade would require recreating the type - out of scope for v1.
     pass

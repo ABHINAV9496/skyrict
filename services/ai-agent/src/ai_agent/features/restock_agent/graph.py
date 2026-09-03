@@ -1,4 +1,4 @@
-"""Restock Advisor — the SKY-59 HITL demo agent (module contract).
+"""Restock Advisor - the SKY-59 HITL demo agent (module contract).
 
 Module contract (see runtime.py): the module exposes ``build_graph(deps)``
 returning an UNCOMPILED ``StateGraph``; the runtime compiles it with the
@@ -12,7 +12,7 @@ Flow::
       -> draft_suggestion (deterministic formula; an LLM draft drops in here)
       -> apply_suggestion (interrupt; erased at resume with {"decision": ...})
 
-The run input carries the stock snapshot (self-contained demo — the ERP read
+The run input carries the stock snapshot (self-contained demo - the ERP read
 is simulated), but the READ GATE is real: ``query_stock`` refuses to run
 without ``erp.inventory.read`` on the caller's ToolContext. The WRITE gate is
 the runtime's: an approved interrupt requires ``erp.inventory.ai.approve`` at
@@ -21,7 +21,7 @@ row through the INJECTED suggestion repository (runtime-composed, RLS session)
 and audits ``ai.suggestion.created``; denied is a clean no-op.
 
 Consistency: the ledger decision commits FIRST (runtime), then this node
-runs once at resume. Write errors are captured into state — never raised —
+runs once at resume. Write errors are captured into state - never raised -
 so a mid-apply failure cannot roll back into an inconsistent checkpoint.
 """
 
@@ -61,7 +61,7 @@ class RestockState(TypedDict, total=False):
 def build_graph(deps: AgentDeps) -> StateGraph[RestockState]:
     """Build the demo's uncompiled state graph (runtime compiles it).
 
-    Nodes are bound to ``deps`` here via ``functools.partial`` — LangGraph
+    Nodes are bound to ``deps`` here via ``functools.partial`` - LangGraph
     does not inject extra kwargs into plain-function nodes (verified against
     the installed 0.6.x runtime), so the graph hands each node exactly the
     state it declares.
@@ -134,7 +134,7 @@ async def _apply_suggestion_node(state: RestockState, deps: AgentDeps) -> dict[s
 async def _persist_suggestion(deps: AgentDeps, state: RestockState) -> None:
     """Approve-side write: one ai_suggestions row + the created audit event.
 
-    Both ports are runtime-injected (AgentDeps) — the feature slice never
+    Both ports are runtime-injected (AgentDeps) - the feature slice never
     imports ``ai_agent.db`` (import-linter contract); the runtime's request
     session (RLS-tenanted) backs them.
     """

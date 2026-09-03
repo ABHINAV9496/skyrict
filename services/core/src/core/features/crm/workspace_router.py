@@ -1,12 +1,12 @@
-"""CRM workspace routes — contacts, activities, notes, timeline, overview, search.
+"""CRM workspace routes - contacts, activities, notes, timeline, overview, search.
 
 Thin wrappers over :class:`CrmWorkspaceService`. Reads use ``erp.crm.read``,
 mutations ``erp.crm.write``. Activities are owner/team/all-scoped (the request
--resolved :class:`DataScope` is passed straight through — the service can only
+-resolved :class:`DataScope` is passed straight through - the service can only
 narrow it); contacts, notes, and timeline rows are tenant-scoped like customers.
 
 The timeline endpoint is the ONE place the merged relationship timeline is
-read — it is assembled by the database (UNION ALL) before ordering/pagination,
+read - it is assembled by the database (UNION ALL) before ordering/pagination,
 never by three separately paged lists merged in the app. The audit trail is a
 separate concept and is never surfaced here.
 """

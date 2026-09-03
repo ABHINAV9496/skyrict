@@ -1,4 +1,4 @@
-"""Unit tests for identity/core/config.py — production safety guards.
+"""Unit tests for identity/core/config.py - production safety guards.
 
 Covers all four staging/production fail-fast checks:
   1. JWT key paths pointing at committed test fixtures

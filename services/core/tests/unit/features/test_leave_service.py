@@ -1,6 +1,6 @@
-"""LeaveService unit tests — rules 1-6, DB-free (docs/hr-payroll.md §4.2-§4.7).
+"""LeaveService unit tests - rules 1-6, DB-free (docs/hr-payroll.md §4.2-§4.7).
 
-Uses an in-memory ``FakeHrRepository`` (a port double) — concurrency and the
+Uses an in-memory ``FakeHrRepository`` (a port double) - concurrency and the
 DB CHECK backstop are integration-only by design.
 """
 
@@ -209,7 +209,7 @@ class FakeHrRepository:
     async def recompute_balance(
         self, employee_id: uuid.UUID, leave_type: str, *, tenant_id: uuid.UUID
     ) -> int:
-        # Pure read-side recompute — does NOT materialize. Only ``upsert_balance``
+        # Pure read-side recompute - does NOT materialize. Only ``upsert_balance``
         # writes the materialized row (mirrors the real repository contract).
         return sum(
             m.qty

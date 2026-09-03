@@ -6,7 +6,7 @@ import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
   title: "Verify your email",
-  description: "Step 2 of 5 — confirm your email address.",
+  description: "Step 2 of 5 - confirm your email address.",
 };
 
 export default async function VerifyPage({

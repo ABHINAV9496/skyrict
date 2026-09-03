@@ -1,4 +1,4 @@
-"""/ai/agents endpoints — run, review and resume orchestrated agents (SKY-59).
+"""/ai/agents endpoints - run, review and resume orchestrated agents (SKY-59).
 
 Authentication here (verified JWT + tenant cross-check); authorization is a
 double gate: the core monolith proxy edge checks ERP permissions before

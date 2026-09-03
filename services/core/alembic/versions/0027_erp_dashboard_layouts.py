@@ -1,4 +1,4 @@
-"""SKY-62 erp dashboards — per-user layout customization + widget telemetry.
+"""SKY-62 erp dashboards - per-user layout customization + widget telemetry.
 
 Adds the data layer for the ERP dashboard customizer:
 

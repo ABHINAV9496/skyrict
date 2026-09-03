@@ -1,4 +1,4 @@
-"""erp_invoice_lines — the line items of an invoice.
+"""erp_invoice_lines - the line items of an invoice.
 
 CASCADE on the invoice FK because a line has no life without its invoice;
 RESTRICT on the account FK because history is eternal (accounts are

@@ -106,7 +106,7 @@ export function PayrollOverview() {
           runs: formatListCount(runsResult.meta),
           draft: formatListCount(draftResult.meta),
           paid: formatListCount(paidResult.meta),
-          latestRun: latestRun ? formatMoney(latestRun.totalNet?.amount, currency) : "—",
+          latestRun: latestRun ? formatMoney(latestRun.totalNet?.amount, currency) : "-",
           latestHint: latestRun
             ? `${latestRun.runCode} · ${formatDate(latestRun.periodStart)} – ${formatDate(latestRun.periodEnd)}`
             : "No runs yet",
@@ -199,7 +199,7 @@ export function PayrollOverview() {
         <RecentActivityList
           title="Recent runs"
           items={data.recentRuns}
-          emptyMessage="No payroll runs yet — start your first run."
+          emptyMessage="No payroll runs yet start your first run."
         />
       </div>
     </div>

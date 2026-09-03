@@ -1,9 +1,9 @@
-name: Nightly — HR Model Eval
+name: Nightly - HR Model Eval
 
 # Regression eval of the deployed HR models against the labeled seed sets.
 # Runs every night and on demand. warn-not-fail by design: precision below the
 # documented 0.70 threshold (or a persistence hiccup) must NEVER block an
-# unrelated merge — the run prints WARN lines and stays green so the history
+# unrelated merge - the run prints WARN lines and stays green so the history
 # is inspected at leisure (services/ai-agent, `eval-hr-models`).
 
 on:

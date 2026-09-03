@@ -1,4 +1,4 @@
-"""Session repository — DB operations for the sessions table.
+"""Session repository - DB operations for the sessions table.
 
 All SQLAlchemy stays in this file. Service-facing methods accept and return
 domain entities (``identity.domain.entities.Session``).

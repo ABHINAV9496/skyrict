@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=f"Skyrict {SERVICE_NAME.title()} Service",
-        description="ERP foundations — tenant/RLS plumbing, RBAC, Money, and Phase-1 ERP modules",
+        description="ERP foundations - tenant/RLS plumbing, RBAC, Money, and Phase-1 ERP modules",
         version=SERVICE_VERSION,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

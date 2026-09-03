@@ -14,7 +14,7 @@ const OVERLAY_COLOR = "rgb(0 0 0 / 0.45)";
  * Dims the whole viewport except for a rounded "hole" around the highlighted
  * element. The hole is a transparent box whose huge box-shadow creates the
  * dim backdrop; the ring is drawn with a second shadow in the theme ring
- * color. Non-interactive — the tour tooltip handles all interaction.
+ * color. Non-interactive - the tour tooltip handles all interaction.
  */
 export function SpotlightOverlay({ active, rect }: SpotlightOverlayProps) {
   return (

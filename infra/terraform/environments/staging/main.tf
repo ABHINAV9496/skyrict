@@ -1,5 +1,5 @@
 # =============================================================================
-# Staging environment — wildcard DNS for *.staging.skyrict.com
+# Staging environment - wildcard DNS for *.staging.skyrict.com
 #
 # Responsibilities:
 #   1. Hosted zone staging.skyrict.com (created once, then looked up).
@@ -19,7 +19,7 @@ locals {
 
   # The ingress load balancer exposes either an IPv4 address (A record) or a
   # hostname (CNAME record). The module contract takes a typed record list, so
-  # compute the type here — the DNS module itself stays provider-agnostic.
+  # compute the type here - the DNS module itself stays provider-agnostic.
   wildcard_is_ip = can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", var.wildcard_target))
 
   records = var.wildcard_target == "" ? [] : [

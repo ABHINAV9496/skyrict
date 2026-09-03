@@ -165,7 +165,7 @@ export function ContactsTable() {
       label: "Contact info",
       render: (contact) => (
         <div className="min-w-0">
-          <p className="truncate text-foreground">{contact.email || "—"}</p>
+          <p className="truncate text-foreground">{contact.email || "-"}</p>
           <p className="truncate text-xs text-muted-foreground">{contact.phone || ""}</p>
         </div>
       ),
@@ -182,7 +182,7 @@ export function ContactsTable() {
             Primary
           </Badge>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">-</span>
         ),
     },
     {
@@ -340,7 +340,7 @@ export function ContactsTable() {
           description={
             query.trim() || customerFilter !== "all"
               ? "Try a different search or filter."
-              : "Contacts are people on a customer account — they also show up in the customer timeline."
+              : "Contacts are people on a customer account - they also show up in the customer timeline."
           }
           action={
             canWrite && !query.trim() && customerFilter === "all" ? (

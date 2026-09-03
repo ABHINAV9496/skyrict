@@ -1,7 +1,7 @@
 """The (only) LLM touch point for account-code suggestions.
 
 Turns a description + chart-of-accounts into a single best account. The LLM
-may ONLY pick from the provided list — it is told the code must equal one of
+may ONLY pick from the provided list - it is told the code must equal one of
 the codes it was given, so a fabricated or out-of-chart account is rejected.
 Unusable LLM output (invalid JSON, missing fields, out-of-list code, provider
 failure) maps to ``None`` (an abstention), never a hard error.
@@ -29,7 +29,7 @@ _SYSTEM_PROMPT = (
     "You are a bookkeeping assistant. Given a transaction description and a "
     "chart of accounts (list of {code, name}), choose the BEST pair of "
     "accounts for a double-entry journal entry: one debit and one credit. "
-    "Both codes MUST be from the provided chart — never invent codes. "
+    "Both codes MUST be from the provided chart - never invent codes. "
     "Also extract the transaction amount if mentioned (as a positive number, "
     "or null if not stated). Return ONLY strict JSON with the keys: "
     '"suggested_code" (the debit account code), "suggested_name" (the debit '

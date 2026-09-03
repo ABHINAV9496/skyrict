@@ -1,4 +1,4 @@
-"""Stock level change producer — the reorder-alert fire mechanism (Rule 4 / §9).
+"""Stock level change producer - the reorder-alert fire mechanism (Rule 4 / §9).
 
 Emits the ``inventory.stock.level_changed`` envelope through the process-wide
 producer (``core.events.producers``), which in Phase 1 is the structlog stub
@@ -22,7 +22,7 @@ class StockLevelChangedEvent(BaseEvent):
 
     Metadata follows §9.3: ``product_id``, ``warehouse_id``, ``qty_on_hand``,
     ``reorder_point`` and ``breach_crossed`` (true only when the level crossed
-    from above to at/below the reorder point — the single-fire alert trigger).
+    from above to at/below the reorder point - the single-fire alert trigger).
     """
 
     event_type: str = INVENTORY_STOCK_LEVEL_CHANGED

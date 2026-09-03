@@ -17,7 +17,7 @@ variable "create_zone" {
 }
 
 variable "wildcard_target" {
-  description = "Ingress load balancer address for *.staging.skyrict.com — an IPv4 address (A record) or hostname (CNAME record). Resolved from the cluster by the CD pipeline; empty means no wildcard record is managed yet."
+  description = "Ingress load balancer address for *.staging.skyrict.com - an IPv4 address (A record) or hostname (CNAME record). Resolved from the cluster by the CD pipeline; empty means no wildcard record is managed yet."
   type        = string
   default     = ""
 }

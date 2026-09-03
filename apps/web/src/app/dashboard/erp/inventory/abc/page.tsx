@@ -8,7 +8,7 @@ export default function AbcPage() {
         <div className="space-y-6">
             <PageHeader
                 title="ABC Classification"
-                description="Pareto analysis by revenue contribution — A (top 80%), B (next 15%), C (remaining 5%)."
+                description="Pareto analysis by revenue contribution A (top 80%), B (next 15%), C (remaining 5%)."
                 icon={BarChart3}
             />
             <AbcTable />

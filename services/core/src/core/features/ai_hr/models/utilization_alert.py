@@ -1,4 +1,4 @@
-"""ai_hr_utilization_alerts — forfeit-risk / negative-accrual findings (8.1.4).
+"""ai_hr_utilization_alerts - forfeit-risk / negative-accrual findings (8.1.4).
 
 Written by the utilization scan; exposed via the HR-facing
 ``/ai/hr/alerts/utilization`` feed (L1 aggregate / L2 per-employee under

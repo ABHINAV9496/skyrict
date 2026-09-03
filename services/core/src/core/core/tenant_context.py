@@ -1,9 +1,9 @@
-"""ContextVar-based TenantContext — request-scoped tenant isolation.
+"""ContextVar-based TenantContext - request-scoped tenant isolation.
 
 The middleware is the SINGLE source of truth for tenant resolution: it resolves
 the tenant once (Host subdomain in production, X-Tenant-Slug in local dev),
 verifies it against the JWT, and populates this context. Every downstream layer
-— services, repositories, route dependencies — consumes the tenant from here
+- services, repositories, route dependencies - consumes the tenant from here
 and never re-reads headers or parses the Host again.
 
 Uses ContextVar (not threading.local) so async tasks and event-loop workers are
@@ -68,7 +68,7 @@ class TenantContext:
         """Get the current tenant ID without raising. Use sparingly."""
         return _current_tenant_id.get()
 
-    # --- tenant slug (optional — needed to forward calls to ai-agent) ---
+    # --- tenant slug (optional - needed to forward calls to ai-agent) ---
 
     @staticmethod
     def set_tenant_slug(slug: str | None) -> None:
@@ -84,7 +84,7 @@ class TenantContext:
         """Get the routed tenant slug, or None when resolution skipped it."""
         return _current_tenant_slug.get()
 
-    # --- user_id (optional — set when a JWT was verified) ---
+    # --- user_id (optional - set when a JWT was verified) ---
 
     @staticmethod
     def set_user_id(user_id: str | None) -> None:
@@ -96,7 +96,7 @@ class TenantContext:
         """Get the authenticated user ID, or None for anonymous requests."""
         return _current_user_id.get()
 
-    # --- roles (optional — populated lazily) ---
+    # --- roles (optional - populated lazily) ---
 
     @staticmethod
     def set_roles(roles: list[str] | tuple[str, ...]) -> None:
@@ -108,7 +108,7 @@ class TenantContext:
         """Get the user's roles within the current tenant (possibly empty)."""
         return list(_current_roles.get())
 
-    # --- permissions (optional — populated lazily) ---
+    # --- permissions (optional - populated lazily) ---
 
     @staticmethod
     def set_permissions(permissions: list[str] | tuple[str, ...]) -> None:
@@ -124,7 +124,7 @@ class TenantContext:
 
     @staticmethod
     def reset() -> None:
-        """Clear the whole context — called by middleware at request end."""
+        """Clear the whole context - called by middleware at request end."""
         _current_tenant_id.set(None)
         _current_tenant_slug.set(None)
         _current_user_id.set(None)

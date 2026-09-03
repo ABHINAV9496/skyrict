@@ -5,7 +5,7 @@ Field contracts visible to the core proxy and the web app:
 - ``source`` is ``exact`` (ILIKE substring hit) or ``semantic`` (vector hit).
   Exact hits always rank above semantic and carry ``matched_fields`` (which
   catalog fields matched); semantic hits carry ``score`` (1 - cosine distance)
-  instead — a concatenated embedding cannot be attributed to one field.
+  instead - a concatenated embedding cannot be attributed to one field.
 - ``cost_price`` is a string money amount attached only when the core proxy
   forwarded ``X-AI-Valuation-Disclosed: 1`` (caller holds
   ``erp.inventory.valuation``); otherwise None.

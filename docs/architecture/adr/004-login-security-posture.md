@@ -1,4 +1,4 @@
-# ADR-004: Login security posture — anti-enumeration and rate limiting
+# ADR-004: Login security posture - anti-enumeration and rate limiting
 
 ## Status
 
@@ -17,7 +17,7 @@ identity service's login surface and found two gaps:
    errors per failure mode: `UserNotFoundError` (404), `UserDisabledError`
    (403), `EmailNotVerifiedError` (403), and `InvalidPasswordError` (401).
    A caller could therefore learn whether an email is registered, disabled, or
-   unverified purely from the HTTP status code and problem-type URI — an
+   unverified purely from the HTTP status code and problem-type URI - an
    account-existence oracle that enables targeted phishing and account
    enumeration at scale.
 2. **No rate limiting on `POST /auth/login`.** The endpoint was the only
@@ -29,14 +29,14 @@ identity service's login surface and found two gaps:
 
 ### Uniform login failure response
 
-Every login failure — unknown email, wrong password, disabled account,
-unverified account — raises the **same** `AuthenticationError` with the same
+Every login failure - unknown email, wrong password, disabled account,
+unverified account - raises the **same** `AuthenticationError` with the same
 message (`"Invalid email or password."`), mapped by the existing handler to a
 single 401 `authentication-error` problem+json response. No failure branch
 produces a different status code, problem type, or detail.
 
 To close the timing side-channel (a known account with a wrong password costs
-one Argon2id verification; an unknown email costs only a DB lookup — a
+one Argon2id verification; an unknown email costs only a DB lookup - a
 measurable difference), every attempt performs exactly one Argon2id
 verification:
 
@@ -53,7 +53,7 @@ from account-level state (SKY-21), never from backend error semantics.
 ### Login rate limiting
 
 `POST /auth/login` is rate-limited with the existing Redis fixed-window
-limiter (fail-open on infra errors), keyed per `(source IP, account)` —
+limiter (fail-open on infra errors), keyed per `(source IP, account)` -
 `RATE_LIMIT_LOGIN` (5) attempts per `RATE_LIMIT_WINDOW_SECONDS` (300) per
 `ip:email`. Including the source IP means an attacker cannot exhaust a
 victim's quota from the victim's own IP (no account-lockout DoS); including
@@ -94,8 +94,8 @@ the email means a shared NAT IP does not lock out every tenant behind it.
 ## Related
 
 - [AUTH-TASK-055] security checklist (SKY-24)
-- SKY-20 (MFA feature) — tenant-owner MFA enforcement flag (`mfa_required`)
+- SKY-20 (MFA feature) - tenant-owner MFA enforcement flag (`mfa_required`)
   is emitted at login; the `/auth/mfa/verify` challenge endpoint remains
   blocked on SKY-20.
-- SKY-13 (staging CD) — the tenant-isolation suite runs against local/CI
+- SKY-13 (staging CD) - the tenant-isolation suite runs against local/CI
   Postgres; the staging run is blocked until staging CD is enabled.

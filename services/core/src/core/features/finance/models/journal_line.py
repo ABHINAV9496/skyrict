@@ -1,4 +1,4 @@
-"""erp_journal_lines — the debit/credit legs of a journal entry.
+"""erp_journal_lines - the debit/credit legs of a journal entry.
 
 This table carries the double-entry invariants as CHECK constraints: every
 line is exactly one of debit/credit (never both, never neither) and never

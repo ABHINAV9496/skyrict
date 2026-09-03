@@ -1,4 +1,4 @@
-"""PayrollCompute unit tests — rules 7/9 math, pure, DB-free.
+"""PayrollCompute unit tests - rules 7/9 math, pure, DB-free.
 
 Covers proration (Rule 9), statutory deductions, rounding modes, and totals.
 The effective-date pick (Rule 7) is repository-side and tested in the service

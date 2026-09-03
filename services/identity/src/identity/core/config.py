@@ -1,7 +1,7 @@
-"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
+"""Application configuration - pydantic-settings, env-driven, fail-fast on missing secrets.
 
 Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly — everything routes through the ``settings`` object.
+call os.getenv() directly - everything routes through the ``settings`` object.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
-    """Deployment environments — exactly four, no ad-hoc values."""
+    """Deployment environments - exactly four, no ad-hoc values."""
 
     DEV = "dev"
     TEST = "test"
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     """All configuration loaded from environment variables.
 
     Prefix: IDENTITY_ (set via .env or shell environment).
-    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults —
+    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults -
     the process refuses to start if they are missing.
     """
 
@@ -47,29 +47,29 @@ class Settings(BaseSettings):
     )
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
-    # --- Database (CRITICAL — no default) ---
-    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
+    # --- Database (CRITICAL - no default) ---
+    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string - REQUIRED")
 
-    # --- Redis (CRITICAL — no default) ---
-    REDIS_URL: str = Field(..., description="Redis connection — REQUIRED")
+    # --- Redis (CRITICAL - no default) ---
+    REDIS_URL: str = Field(..., description="Redis connection - REQUIRED")
 
-    # --- JWT RS256 (CRITICAL — all four required) ---
+    # --- JWT RS256 (CRITICAL - all four required) ---
     JWT_PRIVATE_KEY_PATH: Path = Field(
-        ..., description="path to RSA private key PEM for signing — REQUIRED"
+        ..., description="path to RSA private key PEM for signing - REQUIRED"
     )
     JWT_PUBLIC_KEY_PATH: Path = Field(
-        ..., description="path to RSA public key PEM for verification — REQUIRED"
+        ..., description="path to RSA public key PEM for verification - REQUIRED"
     )
     JWKS_ISSUER: str = Field(
-        ..., description="JWT issuer claim (iss) — REQUIRED, e.g. https://auth.skyrict.io"
+        ..., description="JWT issuer claim (iss) - REQUIRED, e.g. https://auth.skyrict.io"
     )
     JWKS_AUDIENCE: str = Field(
-        ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
+        ..., description="JWT audience claim (aud) - REQUIRED, e.g. api.skyrict.io"
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
     MAX_CONCURRENT_SESSIONS: int = Field(
-        default=5, description="max active sessions per user — oldest are evicted"
+        default=5, description="max active sessions per user - oldest are evicted"
     )
     HANDOFF_TOKEN_EXPIRE_MINUTES: int = Field(
         default=30, description="TTL for single-use onboarding handoff tokens"
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default=[],
-        description="allowed CORS origins — must be explicit, never '*' in staging/production",
+        description="allowed CORS origins - must be explicit, never '*' in staging/production",
     )
 
     # --- IP extraction (trusted proxies) ---
@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     BASE_DOMAIN: str = Field(
         default="",
         description=(
-            "production tenant base domain, e.g. 'skyrict.com' — the first "
+            "production tenant base domain, e.g. 'skyrict.com' - the first "
             "label of a Host like acme.skyrict.com is the tenant slug. Required "
             "in staging/production; ignored in dev/test which resolve tenants "
             "from the X-Tenant-Slug header injected by nginx."
@@ -181,7 +181,7 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Path to a MaxMind GeoLite2-City.mmdb database. Empty disables "
-            "geolocation — new-login emails then show only the masked IP. "
+            "geolocation - new-login emails then show only the masked IP. "
             "Download with scripts/geolite2/download-geolite2.py."
         ),
     )
@@ -248,11 +248,11 @@ class Settings(BaseSettings):
     SIGNUP_CAPTCHA_RATE_LIMIT: int = Field(
         default=30, description="max /signup/captcha issues per IP per window"
     )
-    # --- MFA (CRITICAL — no default) ---
+    # --- MFA (CRITICAL - no default) ---
     MFA_ENCRYPTION_KEY: str = Field(
         ...,
         description=(
-            "Fernet key used to encrypt TOTP secrets at rest — REQUIRED. "
+            "Fernet key used to encrypt TOTP secrets at rest - REQUIRED. "
             'Generate with: python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
         ),
@@ -319,7 +319,7 @@ class Settings(BaseSettings):
         return tuple(ipaddress.ip_network(entry, strict=False) for entry in self.TRUSTED_PROXIES)
 
     # ------------------------------------------------------------------
-    # Validators — run in definition order (pydantic v2)
+    # Validators - run in definition order (pydantic v2)
     # ------------------------------------------------------------------
 
     @field_validator("TRUSTED_PROXIES", mode="before")

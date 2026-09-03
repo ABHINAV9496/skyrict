@@ -1,4 +1,4 @@
-"""Async database engine and session factory — the ONE place DB connections are created.
+"""Async database engine and session factory - the ONE place DB connections are created.
 
 Sets Row-Level Security context on every transaction: when the request-scoped
 TenantContext is populated, ``app.current_tenant_id`` is set via
@@ -15,7 +15,7 @@ inside the greenlet bridge, before any statement of the transaction runs.
 
 After-commit events (docs §2.5) are drained on the sync ``after_commit`` hook:
 by then the COMMIT is durable, so an event is only observable after its write
-survives — and the drain is scheduled as a background task on the running
+survives - and the drain is scheduled as a background task on the running
 loop, so a failing publish can never turn a successful request into a 500.
 """
 
@@ -88,7 +88,7 @@ def _drain_event_buffer(_session: Session) -> None:
 
     Runs on the loop that executed the commit (we're inside the greenlet
     bridge of an ``await session.commit()``); scheduling a task means the
-    request does not wait on — and can never fail because of — the publish.
+    request does not wait on - and can never fail because of - the publish.
     If no loop is running (e.g. an out-of-request commit) there is nothing
     durable to coordinate with, so the buffer is dropped with a warning.
     """
@@ -109,12 +109,12 @@ def _drain_event_buffer(_session: Session) -> None:
 
 @event.listens_for(_sync_session_factory, "after_rollback")
 def _discard_event_buffer(_session: Session) -> None:
-    """Discard buffered events on rollback — nothing rolled back may be emitted."""
+    """Discard buffered events on rollback - nothing rolled back may be emitted."""
     clear_event_buffer()
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]
-    """FastAPI dependency — yields an async session; commit on success.
+    """FastAPI dependency - yields an async session; commit on success.
 
     Commits when the handler completes successfully, rolls back otherwise:
     without the commit every write made by a route handler would be rolled
@@ -122,7 +122,7 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
 
     Domain events emitted during the request are buffered (docs §2.5: events
     fire AFTER commit). The buffer is drained by the ``after_commit`` listener
-    above and discarded by ``after_rollback`` — nothing here publishes events.
+    above and discarded by ``after_rollback`` - nothing here publishes events.
     """
     start_event_buffer()
     async with async_session_factory() as session:

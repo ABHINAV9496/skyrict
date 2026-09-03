@@ -1,4 +1,4 @@
-"""Tenant repository — DB operations for the tenants table.
+"""Tenant repository - DB operations for the tenants table.
 
 All SQLAlchemy stays in this file. Service-facing methods accept and return
 domain entities (``identity.domain.entities.Tenant``).

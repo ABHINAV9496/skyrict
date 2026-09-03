@@ -2,7 +2,7 @@
 
 Core resolves tenant slugs against this table during routing (middleware) and
 then relies on Row-Level Security for isolation. This model deliberately maps
-only the columns core reads — ``id``, ``slug``, ``is_active`` — and is never
+only the columns core reads - ``id``, ``slug``, ``is_active`` - and is never
 used for writes: identity owns the tenants table.
 """
 

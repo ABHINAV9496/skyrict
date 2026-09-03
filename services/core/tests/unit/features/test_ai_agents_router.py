@@ -2,7 +2,7 @@
 
 The permission matrix (invoke/list = erp.ai.invoke; approve/deny =
 erp.ai.invoke + erp.finance.write) is enforced by dependency closures, which
-are stubbed here — the matrix itself is documented in the router and its
+are stubbed here - the matrix itself is documented in the router and its
 behavior is covered by the identity/integration suites. What this file pins:
 path ids are UUIDs BEFORE forwarding (no traversal reaches ai-agent), a
 non-UUID interrupt id dies with 422 without any upstream call, and the agent

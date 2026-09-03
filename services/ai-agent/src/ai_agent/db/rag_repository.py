@@ -1,14 +1,14 @@
 """Persistence for parent-child RAG documents (SKY-58).
 
 ``replace_document`` implements idempotent re-ingestion: it deletes the
-existing rows for ``(tenant_id, module, source_ref)`` — children first, then
-the parent (FK order) — and inserts the new parent plus its embedded children.
+existing rows for ``(tenant_id, module, source_ref)`` - children first, then
+the parent (FK order) - and inserts the new parent plus its embedded children.
 ``--incremental`` and ``--full`` ingestion modes therefore converge to the
 same final state; re-running a document is always safe.
 
 Integrity is enforced by Postgres, not this layer: the chunk FK targets the
 composite parent PK ``(tenant_id, id)``, and RLS (``current_tenant_id()``)
-bounds every row to the tenant set on the session by the caller — the CLI
+bounds every row to the tenant set on the session by the caller - the CLI
 MUST populate :class:`TenantContext` before calling, or the deletes/writes
 silently match no rows.
 """

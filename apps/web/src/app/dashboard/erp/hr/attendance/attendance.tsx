@@ -138,7 +138,7 @@ export function AttendanceClient({
       key: "note",
       label: "Note",
       render: (record) => (
-        <span className="text-muted-foreground">{record.note ?? "—"}</span>
+        <span className="text-muted-foreground">{record.note ?? "-"}</span>
       ),
     },
   ];
@@ -147,7 +147,7 @@ export function AttendanceClient({
     <div className="space-y-6">
       <PageHeader
         title="Attendance"
-        description="Daily attendance per employee — late arrivals pay half, absences none."
+        description="Daily attendance per employee late arrivals pay half, absences none."
         icon={CalendarClock}
       />
 

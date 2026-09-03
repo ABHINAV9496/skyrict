@@ -11,7 +11,7 @@ interface ErrorStateProps {
 
 /**
  * Failure state for API errors (network, timeout, 5xx). Distinct from the
- * empty state — an error is never rendered as "no rows".
+ * empty state - an error is never rendered as "no rows".
  */
 export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (

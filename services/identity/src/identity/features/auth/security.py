@@ -1,4 +1,4 @@
-"""Auth security helpers — JWT tenant cross-checking.
+"""Auth security helpers - JWT tenant cross-checking.
 
 Pure functions shared by the HTTP middleware and the API dependency layer;
 both are consumers that verify a token belongs to the routed tenant.

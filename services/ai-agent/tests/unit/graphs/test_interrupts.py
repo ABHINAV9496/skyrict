@@ -145,7 +145,7 @@ class TestLazyExpiry:
 
         assert expired is True
         assert ledger.status == "denied"
-        assert ledger.decided_by is None  # no human decided — the clock did
+        assert ledger.decided_by is None  # no human decided - the clock did
         assert ledger.decided_at is not None
 
     async def test_fresh_pending_is_not_expired(self) -> None:

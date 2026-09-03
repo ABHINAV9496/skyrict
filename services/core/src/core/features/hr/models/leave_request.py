@@ -1,6 +1,6 @@
-"""erp_leave_requests — leave requests and their approval state.
+"""erp_leave_requests - leave requests and their approval state.
 
-``leave_type`` is a REAL composite FK to ``erp_leave_types(tenant_id, code)`` —
+``leave_type`` is a REAL composite FK to ``erp_leave_types(tenant_id, code)`` -
 a typo'd or cross-tenant leave type is rejected by the database. ``days`` is
 derived (end_date - start_date + 1) and computed server-side, never trusted
 from the client. ``approved_by`` is a plain UUID (identity user), no FK.

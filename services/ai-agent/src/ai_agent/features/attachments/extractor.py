@@ -132,7 +132,7 @@ def extract_attachments(
         files: List of ``(name, mime_type, raw_bytes)`` tuples.
 
     Returns:
-        ``(combined_text, image_base64_list)`` — extracted text concatenated,
+        ``(combined_text, image_base64_list)`` - extracted text concatenated,
         and a list of base64 strings for images (for multimodal LLM).
     """
     text_parts: list[str] = []
@@ -149,7 +149,7 @@ def extract_attachments(
                 # Images are handled via multimodal LLM, not text extraction.
                 # Store raw base64 for the vision API.
                 image_base64s.append(base64.b64encode(raw).decode("ascii"))
-                text_parts.append(f"[Image: {name} — sent to vision model]")
+                text_parts.append(f"[Image: {name} - sent to vision model]")
             elif mime == "application/pdf":
                 text_parts.append(f"[{name}]\n{extract_pdf(raw)}")
             elif mime in (

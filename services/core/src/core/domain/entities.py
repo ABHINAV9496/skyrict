@@ -1,4 +1,4 @@
-"""Domain entities — pure Python, no framework dependencies.
+"""Domain entities - pure Python, no framework dependencies.
 
 These are the in-memory representations the repository layer maps ORM models
 to/from. They are plain (immutable) dataclasses so services can reason about
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 class CorePermission:
     """A platform-fixed permission key (e.g. ``erp.invoice.read``).
 
-    Global — not tenant-scoped: the catalog is the same for every tenant.
+    Global - not tenant-scoped: the catalog is the same for every tenant.
     """
 
     key: str
@@ -73,7 +73,7 @@ class CoreRole:
 class CoreUserRole:
     """A tenant-scoped grant of one role to one user.
 
-    ``user_id`` references an identity-service user (no FK at the DB level —
+    ``user_id`` references an identity-service user (no FK at the DB level -
     identity owns users).
     """
 
@@ -140,7 +140,7 @@ class StockLevel:
 
 @dataclass(frozen=True)
 class StockMovement:
-    """One immutable ledger entry — insert-only, never updated or deleted.
+    """One immutable ledger entry - insert-only, never updated or deleted.
 
     ``qty`` is signed (negative for issues/outflows). ``(ref_type, ref_id)``
     identifies the source document line for idempotency probes; combined with
@@ -197,7 +197,7 @@ class AuditLogEntry:
 
 
 # ---------------------------------------------------------------------------
-# HR & Payroll entities (HR-BE-002) — pure domain, no framework dependencies.
+# HR & Payroll entities (HR-BE-002) - pure domain, no framework dependencies.
 # The repository layer maps these to/from the ORM models under
 # ``features/{hr,payroll}/models/``.
 # ---------------------------------------------------------------------------
@@ -220,7 +220,7 @@ class Department:
 class Employee:
     """A person employed within a tenant.
 
-    ``employment_status`` is the single source of employment truth — there is
+    ``employment_status`` is the single source of employment truth - there is
     deliberately no separate ``is_active`` flag. ``termination_date`` is
     required when status is ``terminated``.
     """
@@ -316,7 +316,7 @@ class LeaveBalance:
 
 @dataclass(frozen=True)
 class LeavePolicy:
-    """Tenant-scoped leave policy — replaces per-type accrual config.
+    """Tenant-scoped leave policy - replaces per-type accrual config.
 
     Defines annual allotments for casual and sick leave. Effective from a
     chosen date; policy changes apply at the next Jan-1 reset (lazy accrual
@@ -339,7 +339,7 @@ class AttendanceRecord:
     """One work day's attendance for an employee.
 
     ``pay_impact`` is derived from ``status`` by the service (on_time -> full,
-    late -> half, absent -> none) — never trusted from clients. One record per
+    late -> half, absent -> none) - never trusted from clients. One record per
     (employee, work_date); corrections upsert the existing day.
     """
 
@@ -428,7 +428,7 @@ class PayrollEntry:
 
 @dataclass(frozen=True)
 class PayrollSettings:
-    """Tenant payroll configuration — exactly one row per tenant."""
+    """Tenant payroll configuration - exactly one row per tenant."""
 
     tenant_id: uuid.UUID
     default_currency: str = "USD"
@@ -441,7 +441,7 @@ class PayrollSettings:
 
 
 # ---------------------------------------------------------------------------
-# Finance entities (FIN-BE-002) — pure domain, no framework dependencies.
+# Finance entities (FIN-BE-002) - pure domain, no framework dependencies.
 # ---------------------------------------------------------------------------
 
 
@@ -469,7 +469,7 @@ class JournalLine:
     """One side of a double-entry journal transaction.
 
     Exactly one of ``debit`` / ``credit`` must be set (DB CHECK XOR), the amount
-    must be non-zero and non-negative. Balance is NOT enforced here — drafts may
+    must be non-zero and non-negative. Balance is NOT enforced here - drafts may
     be unbalanced; the service enforces balance only at ``post``.
     """
 
@@ -552,7 +552,7 @@ class Invoice:
 class Payment:
     """A cash receipt applied to an invoice (DR Cash / CR AR).
 
-    ``(source, source_ref)`` is the second idempotency lock — a replayed
+    ``(source, source_ref)`` is the second idempotency lock - a replayed
     ``apply_payment`` can never double-book.
     """
 
@@ -589,7 +589,7 @@ class FiscalPeriod:
 
 
 # ---------------------------------------------------------------------------
-# Report read-models (derived from posted journal lines — never stored).
+# Report read-models (derived from posted journal lines - never stored).
 # ---------------------------------------------------------------------------
 
 
@@ -656,7 +656,7 @@ class ArAgingBucket:
 
     ``bucket`` is one of ``current | 1_30 | 31_60 | 61_90 | over_90``; ``share``
     is the bucket's proportion of ``total_ar`` (0..1). Outstanding is derived
-    from issued/approved (unpaid) invoices — fixed accounting columns do not
+    from issued/approved (unpaid) invoices - fixed accounting columns do not
     track recoverability, so aging is a read-side derivation like the other
     reports.
     """
@@ -677,7 +677,7 @@ class ArAging:
 
 
 # ---------------------------------------------------------------------------
-# Finance automation read-models (SKY-56/SKY-64) — derived, never stored.
+# Finance automation read-models (SKY-56/SKY-64) - derived, never stored.
 # ---------------------------------------------------------------------------
 
 
@@ -797,7 +797,7 @@ class ComparativePnl:
 
 @dataclass(frozen=True)
 class TenantSetting:
-    """Generic tenant KV setting — row in erp_tenant_settings."""
+    """Generic tenant KV setting - row in erp_tenant_settings."""
 
     tenant_id: uuid.UUID
     key: str
@@ -809,7 +809,7 @@ class TenantSetting:
 
 @dataclass(frozen=True)
 class AiFinanceAnomaly:
-    """Persisted anomaly detected by automation — row in ai_finance_anomalies."""
+    """Persisted anomaly detected by automation - row in ai_finance_anomalies."""
 
     tenant_id: uuid.UUID
     entity_type: str
@@ -825,7 +825,7 @@ class AiFinanceAnomaly:
 
 @dataclass(frozen=True)
 class AiFinanceSuggestion:
-    """Persisted account-code suggestion — row in ai_finance_suggestions."""
+    """Persisted account-code suggestion - row in ai_finance_suggestions."""
 
     tenant_id: uuid.UUID
     description: str
@@ -838,7 +838,7 @@ class AiFinanceSuggestion:
 
 
 # ---------------------------------------------------------------------------
-# CRM entities (leads, opportunities, customers) — CRM-DATA-001
+# CRM entities (leads, opportunities, customers) - CRM-DATA-001
 # ---------------------------------------------------------------------------
 
 
@@ -848,7 +848,7 @@ class Lead:
 
     Owner/team-scoped: ``owner_id`` and ``team_id`` are plain UUID references
     to identity users (and a future teams model), resolved through ports at
-    the service layer. ``email`` is deliberately not unique — dedupe is a
+    the service layer. ``email`` is deliberately not unique - dedupe is a
     soft probe at the service layer.
     """
 
@@ -869,7 +869,7 @@ class Lead:
 
 @dataclass(frozen=True)
 class Opportunity:
-    """A pipeline deal — moves through stages and terminates won/lost.
+    """A pipeline deal - moves through stages and terminates won/lost.
 
     Deliberately customer-less in Phase 1 (a won opportunity is promoted to a
     customer by the service layer). ``amount`` is optional until the deal has
@@ -898,7 +898,7 @@ class Opportunity:
 class Customer:
     """An account we do business with.
 
-    Soft-deleted via ``is_active`` (the ERP convention — no status enum).
+    Soft-deleted via ``is_active`` (the ERP convention - no status enum).
     ``customer_code`` is the stable per-tenant external key. A NULL
     ``credit_limit`` means "no limit"; when present it is a ``Money`` so the
     currency tag travels with it.
@@ -921,7 +921,7 @@ class Customer:
 class Contact:
     """A person on a customer account (a customer is the account).
 
-    Tenant-scoped like its customer (customers have no owner/team columns —
+    Tenant-scoped like its customer (customers have no owner/team columns -
     locked SKY-43 decision), soft-deleted via ``is_active``. ``customer_id``
     is a plain UUID anchor (no FK, mirroring ``source_opportunity_id``).
     """
@@ -942,7 +942,7 @@ class Contact:
 
 @dataclass(frozen=True)
 class Activity:
-    """A unified CRM activity — task/call/meeting/follow-up/email/note.
+    """A unified CRM activity - task/call/meeting/follow-up/email/note.
 
     Owner/team-scoped (mirroring leads/opportunities): the repository applies
     the same OWNER/TEAM/ALL rule on ``owner_id``/``team_id``; rows created
@@ -1013,7 +1013,7 @@ class TimelineEvent:
 class TimelineItem:
     """One merged row of the customer-facing timeline (DB-layer UNION).
 
-    Produced by the repository from activities + notes + timeline events —
+    Produced by the repository from activities + notes + timeline events -
     never assembled in application code from three independently paged lists.
     """
 
@@ -1041,17 +1041,17 @@ class CrmSearchHit:
 
 
 # ---------------------------------------------------------------------------
-# Sales entities (orders, order lines) — CRM-DATA-001
+# Sales entities (orders, order lines) - CRM-DATA-001
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class SalesOrder:
-    """A customer commitment — the money record handed to finance.
+    """A customer commitment - the money record handed to finance.
 
     ``status`` follows ``draft -> confirmed -> fulfilled`` (``cancelled``
     terminal). The money columns are a cached projection: the service
-    recomputes them from the lines on every write (CRM-BE-002) — never
+    recomputes them from the lines on every write (CRM-BE-002) - never
     trusted from clients. ``credit_check`` records the confirm-time result.
     """
 
@@ -1080,7 +1080,7 @@ class SalesOrderLine:
     ``line_total`` is a cached projection recomputed by the service.
 
     ``order_id`` is None on a line being created (the repository stamps the
-    generated header id on write — mirroring ``InvoiceLine.invoice_id``) and
+    generated header id on write - mirroring ``InvoiceLine.invoice_id``) and
     always populated on read.
     """
 

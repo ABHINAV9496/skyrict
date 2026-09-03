@@ -1,4 +1,4 @@
-"""Invitation event producers — structured log events for the invitation lifecycle."""
+"""Invitation event producers - structured log events for the invitation lifecycle."""
 
 from __future__ import annotations
 

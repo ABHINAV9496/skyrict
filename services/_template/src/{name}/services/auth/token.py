@@ -1,10 +1,10 @@
-"""Token service — create, refresh, revoke JWT tokens."""
+"""Token service - create, refresh, revoke JWT tokens."""
 
 from __future__ import annotations
 
 
 class TokenService:
-    """Manages JWT token lifecycle — creation, refresh, revocation."""
+    """Manages JWT token lifecycle - creation, refresh, revocation."""
 
     def __init__(self, session_repo) -> None:
         self.session_repo = session_repo
@@ -22,5 +22,5 @@ class TokenService:
         raise NotImplementedError
 
     async def introspect(self, token: str) -> dict:
-        """Introspect a token — return its claims if valid."""
+        """Introspect a token - return its claims if valid."""
         raise NotImplementedError

@@ -1,10 +1,10 @@
-"""Membership ORM model — a user's relationship with a tenant.
+"""Membership ORM model - a user's relationship with a tenant.
 
 The single source of membership truth: ``users.tenant_id`` stays denormalized
 for Row-Level Security simplicity, but the membership lifecycle (invited ->
 active -> suspended) is owned here.
 
-``user_id`` is NULL while INVITED (no placeholder users — invitations carry
+``user_id`` is NULL while INVITED (no placeholder users - invitations carry
 the pending relationship); ``invited_email`` reserves the email within the
 tenant. ``role_id`` is the membership's primary role (denormalized from
 ``user_roles``).

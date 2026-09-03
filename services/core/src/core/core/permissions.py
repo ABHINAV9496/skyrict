@@ -51,6 +51,11 @@ ERP_FINANCE_READ = "erp.finance.read"
 ERP_FINANCE_WRITE = "erp.finance.write"
 ERP_FINANCE_APPROVE = "erp.finance.approve"
 
+# Finance AI (FIN-AI-001): read gates AI-generated suggestions/drafts/narrations;
+# write gates actions that persist AI output.
+ERP_FINANCE_AI_READ = "erp.finance.ai.read"
+ERP_FINANCE_AI_WRITE = "erp.finance.ai.write"
+
 # HR (design doc docs/design/hr-payroll.md)
 ERP_HR_READ = "erp.hr.read"
 ERP_HR_WRITE = "erp.hr.write"
@@ -105,6 +110,8 @@ CATALOG: tuple[str, ...] = (
     ERP_FINANCE_READ,
     ERP_FINANCE_WRITE,
     ERP_FINANCE_APPROVE,
+    ERP_FINANCE_AI_READ,
+    ERP_FINANCE_AI_WRITE,
     ERP_HR_READ,
     ERP_HR_WRITE,
     ERP_HR_APPROVE,
@@ -139,6 +146,11 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("sales", "Sales", (ERP_SALES_READ, ERP_SALES_WRITE, ERP_SALES_APPROVE)),
     ("invoice", "Finance / invoicing", (ERP_INVOICE_READ, ERP_INVOICE_WRITE, ERP_INVOICE_APPROVE)),
     ("finance", "Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
+    (
+        "finance_ai",
+        "Finance AI",
+        (ERP_FINANCE_AI_READ, ERP_FINANCE_AI_WRITE),
+    ),
     ("hr", "HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
     ("payroll", "Payroll", (ERP_PAYROLL_READ, ERP_PAYROLL_WRITE, ERP_PAYROLL_APPROVE)),
     ("ai", "AI assistant", (ERP_AI_INVOKE, ERP_AI_NARRATOR_REFRESH)),
@@ -181,6 +193,8 @@ __all__ = [
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_FINANCE_APPROVE",
+    "ERP_FINANCE_AI_READ",
+    "ERP_FINANCE_AI_WRITE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
     "ERP_HR_AI_ACKNOWLEDGE",

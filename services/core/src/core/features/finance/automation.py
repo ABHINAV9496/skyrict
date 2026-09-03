@@ -73,6 +73,8 @@ router = APIRouter(prefix="/finance/automation", tags=["finance-automation"])
 require_finance_read = require_permission("erp.finance.read")
 require_finance_write = require_permission("erp.finance.write")
 require_finance_approve = require_permission("erp.finance.approve")
+require_finance_ai_read = require_permission("erp.finance.ai.read")
+require_finance_ai_write = require_permission("erp.finance.ai.write")
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
@@ -236,7 +238,7 @@ class FinanceAutomationService:
         suggestion = await self.repo.suggest_account_code(tenant_id, description)
         from decimal import Decimal
 
-        return DraftEntry(
+        draft = DraftEntry(
             lines=(
                 DraftEntryLine(
                     account_code=suggestion.suggested_code,
@@ -257,6 +259,14 @@ class FinanceAutomationService:
             confidence=suggestion.confidence,
             reasoning="Deterministic fallback — AI service unavailable",
         )
+        await self.audit.log(
+            tenant_id=tenant_id,
+            user_id=None,
+            action=FINANCE_AI_DRAFT_GENERATED,
+            target="finance:draft",
+            details={"description": description},
+        )
+        return draft
 
     async def narrate_anomaly(
         self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
@@ -267,10 +277,18 @@ class FinanceAutomationService:
         # AI narration requires the ai_suggest callable to be wired with
         # the narrate function. This is handled in the deps factory.
         # Fallback: return a basic narration from the description
-        return {
+        narration = {
             "narration": f"Anomaly detected: {anomaly.anomaly_type} — {anomaly.description}",
             "model_used": "",
         }
+        await self.audit.log(
+            tenant_id=tenant_id,
+            user_id=None,
+            action=FINANCE_AI_ANOMALY_NARRATED,
+            target=f"finance:anomaly:{anomaly_id}",
+            details={"anomaly_type": anomaly.anomaly_type},
+        )
+        return narration
 
     async def generate_reminder(
         self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
@@ -282,7 +300,7 @@ class FinanceAutomationService:
 
         days_overdue = (_date.today() - invoice.due_date).days if invoice.due_date else 0
         tone = "polite" if days_overdue < 30 else "firm" if days_overdue < 60 else "final"
-        return ReminderDraft(
+        reminder = ReminderDraft(
             invoice_number=invoice.invoice_number,
             customer_name=None,
             amount=invoice.total,
@@ -292,6 +310,14 @@ class FinanceAutomationService:
             body=f"Please remit payment for invoice {invoice.invoice_number} totaling {invoice.total}.",
             model_used="",
         )
+        await self.audit.log(
+            tenant_id=tenant_id,
+            user_id=None,
+            action=FINANCE_AI_REMINDER_GENERATED,
+            target=f"finance:invoice:{invoice_id}",
+            details={"invoice": invoice.invoice_number, "tone": tone},
+        )
+        return reminder
 
     async def batch_reminders(self, tenant_id: uuid.UUID) -> list[ReminderDraft]:
         invoices = await self.repo.list_invoices_overdue(tenant_id)
@@ -357,7 +383,7 @@ async def get_duplicates(
 )
 async def suggest_account_code(
     body: SuggestAccountCodeRequest,
-    current_user: dict[str, Any] = Depends(require_finance_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[AccountCodeSuggestionResponse]:
     suggestion = await svc.suggest_account_code(_tenant_id(current_user), body.description)
@@ -474,7 +500,7 @@ async def put_settings(
 @router.post("/draft-entry", response_model=ResponseEnvelope[DraftEntryResponse])
 async def draft_journal_entry(
     body: SuggestAccountCodeRequest,
-    current_user: dict[str, Any] = Depends(require_finance_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[DraftEntryResponse]:
     draft = await svc.draft_journal_entry(_tenant_id(current_user), body.description)
@@ -504,7 +530,7 @@ async def draft_journal_entry(
 )
 async def narrate_anomaly(
     anomaly_id: uuid.UUID,
-    current_user: dict[str, Any] = Depends(require_finance_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[AnomalyNarrationResponse]:
     narration = await svc.narrate_anomaly(_tenant_id(current_user), anomaly_id)
@@ -522,7 +548,7 @@ async def narrate_anomaly(
 )
 async def generate_reminder(
     body: ReminderGenerateRequest,
-    current_user: dict[str, Any] = Depends(require_finance_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[ReminderDraftLineResponse]:
     reminder = await svc.generate_reminder(_tenant_id(current_user), body.invoice_id)
@@ -536,7 +562,7 @@ async def generate_reminder(
     response_model=ResponseEnvelope[ReminderDraftResponse],
 )
 async def batch_reminders(
-    current_user: dict[str, Any] = Depends(require_finance_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[ReminderDraftResponse]:
     reminders = await svc.batch_reminders(_tenant_id(current_user))

@@ -50,6 +50,7 @@ const entryTone: Record<EntryStatus, Tone> = {
   draft: "muted",
   posted: "success",
   voided: "danger",
+  reversed: "warning",
 };
 
 export function EntryStatusBadge({ status }: { status: EntryStatus }) {

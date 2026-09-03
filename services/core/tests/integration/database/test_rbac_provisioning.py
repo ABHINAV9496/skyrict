@@ -31,7 +31,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-async def tenant() -> AsyncGenerator[str, None]:
+async def tenant(migrated_schema: None) -> AsyncGenerator[str, None]:
     """One fresh tenant per test; cleaned up afterwards."""
     tenant_id = str(uuid.uuid4())
     async with async_session_factory() as session:

@@ -122,6 +122,7 @@ class LlmRouter:
                 user_prompt=redacted.text,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
+                image_blocks=request.image_blocks,
             )
 
         saw_unavailable = False
@@ -201,6 +202,7 @@ class LlmRouter:
                 user_prompt=redacted.text,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
+                image_blocks=request.image_blocks,
             )
 
         saw_unavailable = False

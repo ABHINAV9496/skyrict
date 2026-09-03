@@ -26,12 +26,21 @@ from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
     CRM_SYSTEM_PROMPT,
     CRM_UNAVAILABLE,
+    FINANCE_NO_ANSWER,
+    FINANCE_SYSTEM_PROMPT,
+    FINANCE_UNAVAILABLE,
     HR_NO_ANSWER,
     HR_UNAVAILABLE,
     INVENTORY_NO_DATA,
     INVENTORY_SYSTEM_PROMPT,
 )
-from ai_agent.features.supervisor.schemas import AGENT_CRM, AGENT_HR, AGENT_INVENTORY, Citation
+from ai_agent.features.supervisor.schemas import (
+    AGENT_CRM,
+    AGENT_FINANCE,
+    AGENT_HR,
+    AGENT_INVENTORY,
+    Citation,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -43,6 +52,7 @@ if TYPE_CHECKING:
     from ai_agent.features.hr_copilot.engine import HrCopilotResult
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RetrievalResult
+    from ai_agent.features.supervisor.finance_gateway import FinanceGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor.delegates")
 
@@ -502,6 +512,84 @@ class CrmAssistantDelegator:
             if stage in query:
                 return stage
         return None
+
+
+class FinanceAssistantDelegator:
+    """Answers finance questions using live P&L/aging context + the LLM."""
+
+    key = AGENT_FINANCE
+    display_name = "Finance Assistant"
+
+    def __init__(
+        self,
+        *,
+        llm_router: LlmRouter,
+        finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]],
+    ) -> None:
+        self._llm_router = llm_router
+        self._finance_gateway_factory = finance_gateway_factory
+
+    async def stream(
+        self,
+        *,
+        query: str,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        citations: list[Citation],
+    ) -> AsyncIterator[str]:
+        try:
+            context = await self._gather_finance_context(query)
+            system_prompt = FINANCE_SYSTEM_PROMPT
+            if context:
+                system_prompt = f"{system_prompt}\n\nLive finance data:\n{context}"
+
+            completion = await self._llm_router.complete(
+                LlmRequest(
+                    system_prompt=system_prompt,
+                    user_prompt=query.strip(),
+                    max_tokens=512,
+                    temperature=0.2,
+                )
+            )
+            answer = (completion.text or "").strip()
+            if answer:
+                for delta in _iter_text_deltas(answer):
+                    yield delta
+            else:
+                for delta in _iter_text_deltas(FINANCE_NO_ANSWER):
+                    yield delta
+        except AiUnavailableError as exc:
+            logger.warning("supervisor.finance_assistant_failed", error=str(exc))
+            for delta in _iter_text_deltas(FINANCE_UNAVAILABLE):
+                yield delta
+
+    async def _gather_finance_context(self, query: str) -> str:
+        """Fetch live P&L + aging context, best-effort (degrade, never raise)."""
+        try:
+            gateway = await self._finance_gateway_factory()
+        except AiUnavailableError:
+            return ""
+
+        parts: list[str] = []
+        try:
+            import datetime as _dt
+
+            today = _dt.date.today()
+            from_date = today - _dt.timedelta(days=365)
+            parts.append("Profit & Loss (last 12 months):")
+            parts.append(await gateway.get_pnl(from_date=from_date, to_date=today))
+        except AiUnavailableError:
+            parts.append("P&L unavailable.")
+
+        try:
+            import datetime as _dt
+
+            parts.append("\nAR Aging (today):")
+            parts.append(await gateway.get_aging(as_of=_dt.date.today()))
+        except AiUnavailableError:
+            parts.append("AR aging unavailable.")
+
+        return "\n".join(parts)
 
 
 def _iter_text_deltas(text: str) -> Iterator[str]:

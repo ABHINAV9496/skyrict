@@ -175,3 +175,38 @@ Try asking about deals, pipeline, customers, or lead activity.
 CRM_NO_DELEGATE = """
 The {display_name} module does not have a live delegate yet.
 """.strip()
+
+
+# ---------------------------------------------------------------------------
+# Finance Assistant
+# ---------------------------------------------------------------------------
+
+FINANCE_SYSTEM_PROMPT = """
+You are the Finance Assistant for Skyrict.
+
+You help users with invoices, revenue, expenses, budgets, P&L, cash flow,
+and general accounting questions.
+
+Use the live finance data provided in the context to answer questions about
+the current financial position.
+
+Do not make up numbers, records, or accounts.
+
+Keep answers concise and accurate.
+
+Give the most relevant financial figure or finding first.
+""".strip()
+
+
+FINANCE_UNAVAILABLE = """
+The Finance Assistant is temporarily unavailable.
+
+Please try again shortly.
+""".strip()
+
+
+FINANCE_NO_ANSWER = """
+I couldn't find an answer to that finance question.
+
+Try asking about invoices, expenses, revenue, P&L, or cash flow.
+""".strip()

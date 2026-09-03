@@ -141,6 +141,17 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         repo=MemoryRepository(session),
     )
 
+    from ai_agent.features.supervisor.finance_gateway import HttpFinanceGateway
+
+    finance_gateway = HttpFinanceGateway(
+        base_url=str(settings.INVENTORY_SERVICE_URL),
+        bearer_token=token,
+        tenant_slug=tenant_slug,
+    )
+
+    async def finance_gateway_factory() -> HttpFinanceGateway:
+        return finance_gateway
+
     return SupervisorRuntime(
         session=session,
         llm_router=request.app.state.llm_router,
@@ -148,6 +159,7 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         rag=rag,
         hr_copilot=hr_copilot,
         crm_gateway_factory=crm_gateway_factory,
+        finance_gateway_factory=finance_gateway_factory,
         memory_service=memory_service,
         forecast=ForecastService(gateway_factory=gateway_factory),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,

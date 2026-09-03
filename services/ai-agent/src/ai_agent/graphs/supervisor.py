@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
     from ai_agent.features.rag.retrieval.service import RagRetrievalService
     from ai_agent.features.supervisor.delegates import ForecastPort
+    from ai_agent.features.supervisor.finance_gateway import FinanceGatewayPort
 
 
 class SupervisorRuntime:
@@ -56,6 +57,7 @@ class SupervisorRuntime:
         rag: RagRetrievalService | None = None,
         hr_copilot: HrCopilotService | None = None,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]] | None = None,
         memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
         confidence_threshold: float = 0.75,
@@ -66,6 +68,7 @@ class SupervisorRuntime:
         self._rag = rag
         self._hr_copilot = hr_copilot
         self._crm_gateway_factory = crm_gateway_factory
+        self._finance_gateway_factory = finance_gateway_factory
         self._memory_service = memory_service
         self._forecast = forecast
         self._confidence_threshold = confidence_threshold
@@ -91,6 +94,7 @@ class SupervisorRuntime:
             rag=self._rag,
             hr_copilot=self._hr_copilot,
             crm_gateway_factory=self._crm_gateway_factory,
+            finance_gateway_factory=self._finance_gateway_factory,
             memory_service=self._memory_service,
             forecast=self._forecast,
             provisioned=provisioned,

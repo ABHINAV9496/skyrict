@@ -29,6 +29,7 @@ from ai_agent.core.providers import LlmRequest
 from ai_agent.features.supervisor.delegates import (
     CrmAssistantDelegator,
     Delegator,
+    FinanceAssistantDelegator,
     ForecastPort,
     HrCopilotDelegator,
     HrCopilotPort,
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
+    from ai_agent.features.supervisor.finance_gateway import FinanceGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
 
@@ -121,6 +123,7 @@ class SupervisorService:
         rag: RagSearchPort | None = None,
         hr_copilot: HrCopilotPort | None = None,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]] | None = None,
         memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
         provisioned: Mapping[str, bool],
@@ -145,6 +148,11 @@ class SupervisorService:
                 llm_router=llm_router,
                 crm_gateway_factory=crm_gateway_factory,
                 memory_service=memory_service,
+            )
+        if finance_gateway_factory is not None:
+            delegates[AGENT_FINANCE] = FinanceAssistantDelegator(
+                llm_router=llm_router,
+                finance_gateway_factory=finance_gateway_factory,
             )
         self._delegates = delegates
 

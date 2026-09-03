@@ -1962,9 +1962,7 @@ async def seed_demo_data(
                 plan_code=str(plan["code"]),
                 name=str(plan["name"]),
                 plan_type=str(plan["plan_type"]),
-                monthly_cost_cents=(
-                    Decimal(str(plan_cents)) if plan_cents is not None else None
-                ),
+                monthly_cost_cents=(Decimal(str(plan_cents)) if plan_cents is not None else None),
                 is_active=True,
                 effective_from=_date_ago(int(str(plan["effective_days_ago"]))),
             )
@@ -2429,17 +2427,21 @@ async def seed_demo_data(
         #     to share the SAME normalised bank account (2 members -> medium).
         # Hitting exactly these keeps the inbox deterministic on ANY seed day.
         latest_run = (
-            await session.execute(
-                select(PayrollRunModel)
-                .where(
-                    PayrollRunModel.tenant_id == tenant_id,
-                    PayrollRunModel.status != PayrollRunStatus.VOID,
-                    PayrollRunModel.period_start
-                    < date.fromisoformat(str(PAYROLL_RUN_ROWS[-1]["start"])),
+            (
+                await session.execute(
+                    select(PayrollRunModel)
+                    .where(
+                        PayrollRunModel.tenant_id == tenant_id,
+                        PayrollRunModel.status != PayrollRunStatus.VOID,
+                        PayrollRunModel.period_start
+                        < date.fromisoformat(str(PAYROLL_RUN_ROWS[-1]["start"])),
+                    )
+                    .order_by(PayrollRunModel.period_start.desc())
                 )
-                .order_by(PayrollRunModel.period_start.desc())
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if latest_run is not None and len(emp_ids) > 13:
             # ghost: pay the terminated + uncompensated EMP-0014 in the latest run.
             ghost_base = Decimal("7000")
@@ -2460,14 +2462,18 @@ async def seed_demo_data(
             # net_pay_delta: bump employee 0's latest-run net 2.5x (medium).
             latest_run_code = str(latest_run.run_code or "")
             e0_entry = (
-                await session.execute(
-                    select(PayrollEntryModel).where(
-                        PayrollEntryModel.tenant_id == tenant_id,
-                        PayrollEntryModel.run_id == latest_run.id,
-                        PayrollEntryModel.employee_id == emp_ids[0],
+                (
+                    await session.execute(
+                        select(PayrollEntryModel).where(
+                            PayrollEntryModel.tenant_id == tenant_id,
+                            PayrollEntryModel.run_id == latest_run.id,
+                            PayrollEntryModel.employee_id == emp_ids[0],
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if e0_entry is not None:
                 base_net = Decimal(str(e0_entry.net))
                 tripled_net = base_net * Decimal("2.5")
@@ -2477,21 +2483,29 @@ async def seed_demo_data(
             # duplicate_account: employee 1 reuses employee 2's bank account.
             if len(emp_ids) > 2:
                 emp_1 = (
-                    await session.execute(
-                        select(EmployeeModel).where(
-                            EmployeeModel.tenant_id == tenant_id,
-                            EmployeeModel.id == emp_ids[1],
+                    (
+                        await session.execute(
+                            select(EmployeeModel).where(
+                                EmployeeModel.tenant_id == tenant_id,
+                                EmployeeModel.id == emp_ids[1],
+                            )
                         )
                     )
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 emp_2 = (
-                    await session.execute(
-                        select(EmployeeModel).where(
-                            EmployeeModel.tenant_id == tenant_id,
-                            EmployeeModel.id == emp_ids[2],
+                    (
+                        await session.execute(
+                            select(EmployeeModel).where(
+                                EmployeeModel.tenant_id == tenant_id,
+                                EmployeeModel.id == emp_ids[2],
+                            )
                         )
                     )
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 if emp_1 is not None and emp_2 is not None:
                     emp_1.bank_account = emp_2.bank_account
 
@@ -2537,13 +2551,17 @@ async def seed_demo_data(
                 ]
             )
             emp_6 = (
-                await session.execute(
-                    select(EmployeeModel).where(
-                        EmployeeModel.tenant_id == tenant_id,
-                        EmployeeModel.id == emp_ids[6],
+                (
+                    await session.execute(
+                        select(EmployeeModel).where(
+                            EmployeeModel.tenant_id == tenant_id,
+                            EmployeeModel.id == emp_ids[6],
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if emp_6 is not None:
                 emp_6.phone = None
 
@@ -2676,9 +2694,7 @@ async def seed_demo_data(
                 name="Monthly payroll",
                 cron_expression=_demo_schedule_cron,
                 enabled=True,
-                next_run_at=_parse_cron(_demo_schedule_cron).next_match_after(
-                    datetime.now(UTC)
-                ),
+                next_run_at=_parse_cron(_demo_schedule_cron).next_match_after(datetime.now(UTC)),
             )
         )
         counts["payroll_schedules"] = 1

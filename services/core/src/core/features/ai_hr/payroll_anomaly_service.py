@@ -62,7 +62,9 @@ class AiHrPayrollAnomalyRepositoryPort(Protocol):
         self, tenant_id: uuid.UUID, employee_id: uuid.UUID | None = None
     ) -> list[PayrollAnomaly]: ...
 
-    async def get_anomaly(self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID) -> PayrollAnomaly | None: ...
+    async def get_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> PayrollAnomaly | None: ...
 
     async def set_disposition(
         self,
@@ -126,17 +128,14 @@ class PayrollAnomalyService:
     ) -> PayrollAnomaly:
         """Apply a disposition transition and record it in the audit log."""
         if status not in _ANOMALY_DISPOSITION_EVENTS:
-            raise IllegalStateTransitionError(
-                f"unknown disposition '{status}' for payroll anomaly"
-            )
+            raise IllegalStateTransitionError(f"unknown disposition '{status}' for payroll anomaly")
         await self._ensure_scan(tenant_id)
         current = await self._repository.get_anomaly(tenant_id, anomaly_id)
         if current is None:
             raise NotFoundError(f"no payroll anomaly {anomaly_id}")
         if status not in _ALLOWED_TRANSITIONS.get(current.status, frozenset()):
             raise IllegalStateTransitionError(
-                f"cannot move payroll anomaly {anomaly_id} from "
-                f"'{current.status}' to '{status}'"
+                f"cannot move payroll anomaly {anomaly_id} from '{current.status}' to '{status}'"
             )
         updated = await self._repository.set_disposition(
             tenant_id,

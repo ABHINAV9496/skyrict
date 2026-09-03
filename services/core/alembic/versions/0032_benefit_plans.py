@@ -75,9 +75,7 @@ def upgrade() -> None:
             "plan_type IN ('medical', 'dental', 'retirement', 'other')",
             name="ck_erp_benefit_plans_type",
         ),
-        sa.UniqueConstraint(
-            "tenant_id", "plan_code", name="uq_erp_benefit_plans_tenant_code"
-        ),
+        sa.UniqueConstraint("tenant_id", "plan_code", name="uq_erp_benefit_plans_tenant_code"),
     )
     _enable_rls("erp_benefit_plans")
 

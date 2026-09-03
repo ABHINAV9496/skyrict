@@ -187,10 +187,16 @@ class TestNotificationOrchestrator:
         orch = PayrollNotificationOrchestrator(repo)
 
         await orch.notify_payslip_approved(
-            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
+            tenant_id=TENANT_ID,
+            run_id=RUN_ID,
+            employee_id=EMP_1,
+            version=1,
         )
         await orch.notify_payslip_approved(
-            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_2, version=1,
+            tenant_id=TENANT_ID,
+            run_id=RUN_ID,
+            employee_id=EMP_2,
+            version=1,
         )
 
         assert len(repo.notifications) == 2
@@ -208,7 +214,10 @@ class TestNotificationOrchestrator:
         orch = PayrollNotificationOrchestrator(repo)
 
         await orch.notify_payslip_approved(
-            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
+            tenant_id=TENANT_ID,
+            run_id=RUN_ID,
+            employee_id=EMP_1,
+            version=1,
         )
 
         assert repo.notifications[0].email_stub is True
@@ -219,7 +228,10 @@ class TestNotificationOrchestrator:
         orch = PayrollNotificationOrchestrator(repo)
 
         await orch.notify_payslip_approved(
-            tenant_id=TENANT_ID, run_id=RUN_ID, employee_id=EMP_1, version=1,
+            tenant_id=TENANT_ID,
+            run_id=RUN_ID,
+            employee_id=EMP_1,
+            version=1,
         )
 
         assert repo.notifications == []
@@ -247,8 +259,10 @@ class TestNotificationOrchestrator:
         orch = PayrollNotificationOrchestrator(repo)
 
         inserted = await orch.record_batch_notifications(
-            tenant_id=TENANT_ID, batch=_batch(status=BATCH_FAILED),
-            status=BATCH_FAILED, run_id=RUN_ID,
+            tenant_id=TENANT_ID,
+            batch=_batch(status=BATCH_FAILED),
+            status=BATCH_FAILED,
+            run_id=RUN_ID,
             totals={"total": 2, "done": 1, "failed": 1, "skipped": 0},
         )
 
@@ -260,15 +274,23 @@ class TestNotificationOrchestrator:
 
     async def test_dry_run_and_aborted_batches_are_silent(self) -> None:
         dry = PayrollBatchRun(
-            id=BATCH_ID, tenant_id=TENANT_ID, source="payroll.run",
-            source_ref=str(RUN_ID), status="queued", dry_run=True,
+            id=BATCH_ID,
+            tenant_id=TENANT_ID,
+            source="payroll.run",
+            source_ref=str(RUN_ID),
+            status="queued",
+            dry_run=True,
             totals={},
         )
         repo = FakeNotificationRepo()
         orch = PayrollNotificationOrchestrator(repo)
 
         inserted = await orch.record_batch_notifications(
-            tenant_id=TENANT_ID, batch=dry, status="queued", run_id=RUN_ID, totals={},
+            tenant_id=TENANT_ID,
+            batch=dry,
+            status="queued",
+            run_id=RUN_ID,
+            totals={},
         )
 
         assert inserted == 0
@@ -303,8 +325,12 @@ class FakeScheduleRepo:
 
     async def create_schedule(self, *, tenant_id, cron_expression, enabled, name, next_run_at):
         s = PayrollSchedule(
-            tenant_id=tenant_id, cron_expression=cron_expression, enabled=enabled,
-            name=name, next_run_at=next_run_at, id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            cron_expression=cron_expression,
+            enabled=enabled,
+            name=name,
+            next_run_at=next_run_at,
+            id=uuid.uuid4(),
         )
         self.schedules.append(s)
         return s
@@ -318,19 +344,27 @@ class FakeScheduleRepo:
     async def list_schedules(self, *, tenant_id):
         return [s for s in self.schedules if s.tenant_id == tenant_id]
 
-    async def update_schedule(self, schedule_id, *, tenant_id, cron_expression, enabled, name, next_run_at):
+    async def update_schedule(
+        self, schedule_id, *, tenant_id, cron_expression, enabled, name, next_run_at
+    ):
         for i, s in enumerate(self.schedules):
             if s.id == schedule_id and s.tenant_id == tenant_id:
                 replacement = PayrollSchedule(
-                    tenant_id=tenant_id, cron_expression=cron_expression,
-                    enabled=enabled, name=name, next_run_at=next_run_at, id=s.id,
+                    tenant_id=tenant_id,
+                    cron_expression=cron_expression,
+                    enabled=enabled,
+                    name=name,
+                    next_run_at=next_run_at,
+                    id=s.id,
                 )
                 self.schedules[i] = replacement
                 return replacement
         raise ValueError(f"payroll schedule {schedule_id} not found")
 
     async def delete_schedule(self, schedule_id, *, tenant_id):
-        self.schedules = [s for s in self.schedules if not (s.id == schedule_id and s.tenant_id == tenant_id)]
+        self.schedules = [
+            s for s in self.schedules if not (s.id == schedule_id and s.tenant_id == tenant_id)
+        ]
 
     async def mark_fired(self, schedule_id, *, tenant_id, last_fired_at, next_run_at):
         self.fired.append(_Fired(schedule_id, tenant_id, last_fired_at, next_run_at))
@@ -404,7 +438,9 @@ class TestScheduler:
     async def test_exact_period_existing_run_is_reused(self) -> None:
         repo = FakeScheduleRepo()
         payroll = FakeSchedulerPayroll()
-        payroll.existing = _SchedRun(uuid.uuid4(), datetime(2026, 8, 1).date(), datetime(2026, 8, 31).date())
+        payroll.existing = _SchedRun(
+            uuid.uuid4(), datetime(2026, 8, 1).date(), datetime(2026, 8, 31).date()
+        )
         batches = FakeBatches()
         repo.due = [_due_schedule()]
         svc = PayrollSchedulerService(repo, payroll, batches)
@@ -418,7 +454,9 @@ class TestScheduler:
     async def test_wider_overlap_skips_without_advancing(self) -> None:
         repo = FakeScheduleRepo()
         payroll = FakeSchedulerPayroll()
-        payroll.existing = _SchedRun(uuid.uuid4(), datetime(2026, 1, 1).date(), datetime(2026, 12, 31).date())
+        payroll.existing = _SchedRun(
+            uuid.uuid4(), datetime(2026, 1, 1).date(), datetime(2026, 12, 31).date()
+        )
         batches = FakeBatches()
         repo.due = [_due_schedule()]
         svc = PayrollSchedulerService(repo, payroll, batches)
@@ -460,8 +498,11 @@ class TestScheduler:
         assert await svc.list_schedules(tenant_id=TENANT_ID) == [created]
 
         updated = await svc.update_schedule(
-            created.id, tenant_id=TENANT_ID, cron_expression="15 9 * * *",
-            name="Weekdays", enabled=False,
+            created.id,
+            tenant_id=TENANT_ID,
+            cron_expression="15 9 * * *",
+            name="Weekdays",
+            enabled=False,
         )
         assert updated.enabled is False
 

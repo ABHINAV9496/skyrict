@@ -39,9 +39,7 @@ _COMPLIANCE_DISPOSITION_EVENTS: dict[str, str] = {
 }
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    ComplianceStatus.OPEN: frozenset(
-        {ComplianceStatus.ACKNOWLEDGED, ComplianceStatus.RESOLVED}
-    ),
+    ComplianceStatus.OPEN: frozenset({ComplianceStatus.ACKNOWLEDGED, ComplianceStatus.RESOLVED}),
     ComplianceStatus.ACKNOWLEDGED: frozenset({ComplianceStatus.RESOLVED}),
     ComplianceStatus.RESOLVED: frozenset(),
 }
@@ -126,17 +124,14 @@ class ComplianceService:
     ) -> ComplianceFindingRow:
         """Apply a status transition and record it in the audit log."""
         if status not in _COMPLIANCE_DISPOSITION_EVENTS:
-            raise IllegalStateTransitionError(
-                f"unknown compliance status '{status}' for finding"
-            )
+            raise IllegalStateTransitionError(f"unknown compliance status '{status}' for finding")
         await self._ensure_scan(tenant_id)
         current = await self._repository.get_finding(tenant_id, check_id)
         if current is None:
             raise NotFoundError(f"no compliance finding {check_id}")
         if status not in _ALLOWED_TRANSITIONS.get(current.status, frozenset()):
             raise IllegalStateTransitionError(
-                f"cannot move compliance finding {check_id} from "
-                f"'{current.status}' to '{status}'"
+                f"cannot move compliance finding {check_id} from '{current.status}' to '{status}'"
             )
         updated = await self._repository.set_status(
             tenant_id,

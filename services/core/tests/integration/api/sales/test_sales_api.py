@@ -177,7 +177,13 @@ async def rbac_world(integration_db: dict[str, str]) -> AsyncGenerator[dict[str,
                         "VALUES (:tid, :id, :code, :name, :account_type) "
                         "ON CONFLICT (tenant_id, code) DO NOTHING"
                     ),
-                    {"tid": tid, "id": uuid.uuid4(), "code": code, "name": name, "account_type": account_type},
+                    {
+                        "tid": tid,
+                        "id": uuid.uuid4(),
+                        "code": code,
+                        "name": name,
+                        "account_type": account_type,
+                    },
                 )
         await session.commit()
 

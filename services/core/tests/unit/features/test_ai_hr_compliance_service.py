@@ -186,9 +186,7 @@ async def test_scan_skipped_when_fresh() -> None:
 
 
 async def test_scan_runs_when_stale_or_absent() -> None:
-    stale = _FakeComplianceRepo(
-        latest=datetime.now(UTC) - timedelta(days=8), rows=[_finding()]
-    )
+    stale = _FakeComplianceRepo(latest=datetime.now(UTC) - timedelta(days=8), rows=[_finding()])
     await ComplianceService(stale, refresh_days=7).org_feed(TENANT)
     assert len(stale.replacements) == 1
 
@@ -202,9 +200,7 @@ async def test_set_status_open_to_acknowledged_audits() -> None:
     repo = _FakeComplianceRepo(latest=datetime.now(UTC), stored=[target])
     audit = _FakeAudit()
     actor = uuid.uuid4()
-    updated = await ComplianceService(
-        repo, refresh_days=7, audit=audit
-    ).set_status(
+    updated = await ComplianceService(repo, refresh_days=7, audit=audit).set_status(
         TENANT, target.check_id, status=ComplianceStatus.ACKNOWLEDGED, actor_user_id=actor
     )
     assert updated.status == ComplianceStatus.ACKNOWLEDGED
@@ -218,9 +214,7 @@ async def test_set_status_acknowledged_to_resolved_audits() -> None:
     target = _finding(status=ComplianceStatus.ACKNOWLEDGED)
     repo = _FakeComplianceRepo(latest=datetime.now(UTC), stored=[target])
     audit = _FakeAudit()
-    updated = await ComplianceService(
-        repo, refresh_days=7, audit=audit
-    ).set_status(
+    updated = await ComplianceService(repo, refresh_days=7, audit=audit).set_status(
         TENANT, target.check_id, status=ComplianceStatus.RESOLVED, actor_user_id=uuid.uuid4()
     )
     assert updated.status == ComplianceStatus.RESOLVED
@@ -244,7 +238,10 @@ async def test_set_status_rejects_backwards_or_disallowed_transition() -> None:
     svc = ComplianceService(repo, refresh_days=7)
     with pytest.raises(IllegalStateTransitionError):
         await svc.set_status(
-            TENANT, resolved.check_id, status=ComplianceStatus.ACKNOWLEDGED, actor_user_id=uuid.uuid4()
+            TENANT,
+            resolved.check_id,
+            status=ComplianceStatus.ACKNOWLEDGED,
+            actor_user_id=uuid.uuid4(),
         )
 
 
@@ -255,9 +252,7 @@ async def test_set_status_unknown_status_rejected() -> None:
     repo = _FakeComplianceRepo(latest=datetime.now(UTC), stored=[target])
     svc = ComplianceService(repo, refresh_days=7)
     with pytest.raises(IllegalStateTransitionError):
-        await svc.set_status(
-            TENANT, target.check_id, status="banana", actor_user_id=uuid.uuid4()
-        )
+        await svc.set_status(TENANT, target.check_id, status="banana", actor_user_id=uuid.uuid4())
 
 
 async def test_set_status_missing_finding_raises_not_found() -> None:

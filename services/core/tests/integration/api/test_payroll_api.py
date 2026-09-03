@@ -641,8 +641,7 @@ class TestJeBridge:
         async with async_session_factory() as session:
             await session.execute(
                 sa_text(
-                    "UPDATE erp_employees SET user_id = :uid "
-                    "WHERE id = :eid AND tenant_id = :tid"
+                    "UPDATE erp_employees SET user_id = :uid WHERE id = :eid AND tenant_id = :tid"
                 ),
                 {"uid": linked_user, "eid": uuid.UUID(employee["id"]), "tid": tenant_id},
             )

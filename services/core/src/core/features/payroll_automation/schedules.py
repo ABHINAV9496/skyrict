@@ -121,9 +121,7 @@ class PayrollSchedulerService:
             enabled=enabled,
             next_run_at=schedule_cron.next_match_after(datetime.now(UTC)),
         )
-        await self.insertion_log(
-            schedule, tenant_id, actor_user_id, PAYROLL_AUTO_SCHEDULE_CREATED
-        )
+        await self.insertion_log(schedule, tenant_id, actor_user_id, PAYROLL_AUTO_SCHEDULE_CREATED)
         return schedule
 
     async def list_schedules(self, *, tenant_id: uuid.UUID) -> list[PayrollSchedule]:
@@ -151,18 +149,12 @@ class PayrollSchedulerService:
             cron_expression=cron_expression,
             name=name,
             enabled=enabled,
-            next_run_at=schedule_cron.next_match_after(datetime.now(UTC))
-            if enabled
-            else None,
+            next_run_at=schedule_cron.next_match_after(datetime.now(UTC)) if enabled else None,
         )
-        await self.insertion_log(
-            schedule, tenant_id, actor_user_id, PAYROLL_AUTO_SCHEDULE_UPDATED
-        )
+        await self.insertion_log(schedule, tenant_id, actor_user_id, PAYROLL_AUTO_SCHEDULE_UPDATED)
         return schedule
 
-    async def delete_schedule(
-        self, schedule_id: uuid.UUID, *, tenant_id: uuid.UUID
-    ) -> None:
+    async def delete_schedule(self, schedule_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
         await self._repo.delete_schedule(schedule_id, tenant_id=tenant_id)
         if self._audit is not None:
             await self._audit.log(
@@ -206,9 +198,7 @@ class PayrollSchedulerService:
                 await self._fire_schedule(schedule, now=now)
                 fired += 1
             except Exception as exc:  # a bad schedule must not block the rest
-                logger.warning(
-                    "payroll schedule %s failed to fire: %s", schedule.id, exc
-                )
+                logger.warning("payroll schedule %s failed to fire: %s", schedule.id, exc)
         session = getattr(self._repo, "session", None)
         if session is not None:
             await session.commit()

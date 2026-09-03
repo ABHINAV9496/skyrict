@@ -204,9 +204,9 @@ class PayrollAutomationService:
             source_ref=str(run_id),
         )
         if existing is not None and existing.status != BATCH_ABORTED:
-            return EnqueueResult(batch=existing, employee_count=int(
-                (existing.totals or {}).get("total", 0)
-            ))
+            return EnqueueResult(
+                batch=existing, employee_count=int((existing.totals or {}).get("total", 0))
+            )
 
         settings = await self._payroll.get_settings(tenant_id)
         overlapping = await self._payroll.find_overlapping_run(
@@ -331,9 +331,7 @@ class PayrollAutomationService:
         TenantContext.set(str(batch.tenant_id))
         tenant_id = batch.tenant_id
         try:
-            run_id = (
-                uuid.UUID(batch.source_ref) if batch.source == SOURCE_PAYROLL_RUN else None
-            )
+            run_id = uuid.UUID(batch.source_ref) if batch.source == SOURCE_PAYROLL_RUN else None
         except ValueError:
             # Not a payroll-run batch (or a corrupted source_ref): every item
             # fails PermanentBatchItemError below and the batch closes ``failed``
@@ -425,9 +423,7 @@ class PayrollAutomationService:
         """
         try:
             if run_id is None:
-                raise PermanentBatchItemError(
-                    "batch has no payroll run source to compute against"
-                )
+                raise PermanentBatchItemError("batch has no payroll run source to compute against")
             entry, reason = await self._payroll.compute_single(
                 run_id=run_id,
                 employee_id=employee_id,

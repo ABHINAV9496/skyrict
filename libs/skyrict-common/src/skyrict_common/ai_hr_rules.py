@@ -388,9 +388,7 @@ def detect_payroll_anomalies(
     """
     latest_by_emp = {e.employee_id: e for e in latest_entries}
     prior_by_emp = {e.employee_id: e for e in prior_entries}
-    latest_code = (
-        latest_entries[0].run_code if latest_entries else "unknown"
-    )
+    latest_code = latest_entries[0].run_code if latest_entries else "unknown"
     findings: list[PayrollAnomalyFinding] = []
 
     # net_pay_delta — magnitude of the per-payday swing vs the preceding run.
@@ -442,6 +440,7 @@ def detect_payroll_anomalies(
             continue
         members = [(emp_id, employees.get(emp_id)) for emp_id in member_ids]
         has_terminated = any(ctx is not None and ctx.status == "terminated" for _, ctx in members)
+
         # Deterministic primary: highest net in the current run, then uuid.
         def _net_of(emp_id: uuid.UUID, ctx: PayrollEmployeeContext | None) -> float:
             entry = latest_by_emp.get(emp_id)
@@ -456,11 +455,12 @@ def detect_payroll_anomalies(
             PayrollAnomalyFinding(
                 employee_id=primary,
                 anomaly_type="duplicate_account",
-                severity="critical" if has_terminated else ("high" if len(member_ids) >= 3 else "medium"),
+                severity="critical"
+                if has_terminated
+                else ("high" if len(member_ids) >= 3 else "medium"),
                 title=_PAYROLL_FINDING_TITLES["duplicate_account"],
                 description=(
-                    f"{len(member_ids)} employees share payout account "
-                    f"{masked} in {latest_code}."
+                    f"{len(member_ids)} employees share payout account {masked} in {latest_code}."
                 ),
                 evidence={
                     "account_masked": masked,
@@ -506,8 +506,7 @@ def detect_payroll_anomalies(
                     severity="medium",
                     title=_PAYROLL_FINDING_TITLES["ghost_employee"],
                     description=(
-                        f"{current.run_code} pays an employee who has no bank "
-                        "account on file."
+                        f"{current.run_code} pays an employee who has no bank account on file."
                     ),
                     evidence={
                         "status": ctx.status,
@@ -616,11 +615,7 @@ def detect_compliance_findings(
     context: dict[uuid.UUID, EmployeeComplianceContext] = {
         e.employee_id: e for e in employees.values()
     }
-    active_ids = {
-        eid
-        for eid, ctx in context.items()
-        if ctx.status != "terminated"
-    }
+    active_ids = {eid for eid, ctx in context.items() if ctx.status != "terminated"}
 
     findings: list[ComplianceFinding] = []
 
@@ -690,8 +685,7 @@ def detect_compliance_findings(
                     owner_rule="compliance_officer",
                     title="Required training overdue",
                     description=(
-                        f"Required certification is {days_late} day(s) past its "
-                        "expiry date."
+                        f"Required certification is {days_late} day(s) past its expiry date."
                     ),
                     evidence={
                         "doc_type": "certification",

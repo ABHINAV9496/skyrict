@@ -252,11 +252,7 @@ class FakeRepo:
 
     async def reset_batch(self, *, batch_id, tenant_id, dry_run, totals, preflight):
         for b in self.batches:
-            if (
-                b["id"] == batch_id
-                and b["tenant_id"] == tenant_id
-                and b["status"] == "aborted"
-            ):
+            if b["id"] == batch_id and b["tenant_id"] == tenant_id and b["status"] == "aborted":
                 b["status"] = "queued"
                 b["claimed_by"] = None
                 b["started_at"] = None

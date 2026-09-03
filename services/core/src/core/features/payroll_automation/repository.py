@@ -159,8 +159,10 @@ class PostgresPayrollAutomationRepository:
             {"tenant_id": tenant_id, "batch_id": batch_id, "employee_id": employee_id}
             for employee_id in employee_ids
         ]
-        stmt = pg_insert(ItemModel).values(rows).on_conflict_do_nothing(
-            index_elements=["batch_id", "employee_id"]
+        stmt = (
+            pg_insert(ItemModel)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["batch_id", "employee_id"])
         )
         await self._session.execute(stmt)
 

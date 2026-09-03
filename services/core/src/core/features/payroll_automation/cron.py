@@ -26,7 +26,7 @@ _LIMITS: tuple[tuple[int, int], ...] = (
     (0, 23),  # hour
     (1, 31),  # day-of-month
     (1, 12),  # month
-    (0, 6),   # day-of-week
+    (0, 6),  # day-of-week
 )
 
 
@@ -123,8 +123,7 @@ class CronExpression:
                     if moment > from_dt:
                         return moment
         raise ValueError(
-            f"cron expression {self.expression!r} has no next fire within "
-            f"{_MAX_SCAN_DAYS} days"
+            f"cron expression {self.expression!r} has no next fire within {_MAX_SCAN_DAYS} days"
         )
 
 

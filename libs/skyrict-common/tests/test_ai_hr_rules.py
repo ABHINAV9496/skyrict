@@ -294,12 +294,18 @@ def _entry(
 
 
 def _ctx(emp_id: uuid.UUID, **overrides) -> PayrollEmployeeContext:
-    base: dict = {"employee_id": emp_id, "status": "active", "bank_account": "GB29 NWBK 6016 1331 9268 19"}
+    base: dict = {
+        "employee_id": emp_id,
+        "status": "active",
+        "bank_account": "GB29 NWBK 6016 1331 9268 19",
+    }
     base.update(overrides)
     return PayrollEmployeeContext(**base)
 
 
-def _run_payroll(latest: list, prior: list, *, employees: dict, delta_ratio: float = 1.5) -> list[PayrollAnomalyFinding]:
+def _run_payroll(
+    latest: list, prior: list, *, employees: dict, delta_ratio: float = 1.5
+) -> list[PayrollAnomalyFinding]:
     return detect_payroll_anomalies(
         latest_entries=latest,
         prior_entries=prior,
@@ -386,7 +392,10 @@ def test_duplicate_account_three_is_high_and_terminated_is_critical() -> None:
     (fired,) = _found(_run_payroll(latest, [], employees=employees), "duplicate_account")
     assert fired.severity == "high"
 
-    terminated = {E1: _ctx(E1, status="terminated", bank_account="ACC-1234"), E2: _ctx(E2, bank_account="ACC-1234")}
+    terminated = {
+        E1: _ctx(E1, status="terminated", bank_account="ACC-1234"),
+        E2: _ctx(E2, bank_account="ACC-1234"),
+    }
     pair = [_entry(E1, "PR-2026-04", 5100.0), _entry(E2, "PR-2026-04", 5100.0)]
     (critical,) = _found(_run_payroll(pair, [], employees=terminated), "duplicate_account")
     assert critical.severity == "critical"
@@ -495,8 +504,11 @@ def test_compliance_clean_seed_is_quiet() -> None:
     employees = {E1: _compliance_ctx(E1), E2: _compliance_ctx(E2)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="work_permit",
-            expiry_date=TODAY + timedelta(days=90), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="work_permit",
+            expiry_date=TODAY + timedelta(days=90),
+            is_required=True,
         )
     ]
     assert _run_compliance(docs, employees=employees) == []
@@ -506,8 +518,11 @@ def test_document_expiry_past_is_high() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="visa",
-            expiry_date=TODAY - timedelta(days=5), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=5),
+            is_required=True,
         )
     ]
     (fired,) = _run_compliance(docs, employees=employees)
@@ -522,8 +537,11 @@ def test_document_expiry_soon_is_medium() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="passport",
-            expiry_date=TODAY + timedelta(days=20), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="passport",
+            expiry_date=TODAY + timedelta(days=20),
+            is_required=True,
         )
     ]
     (fired,) = _run_compliance(docs, employees=employees)
@@ -536,8 +554,11 @@ def test_document_expiry_outside_window_is_silent() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="national_id",
-            expiry_date=TODAY + timedelta(days=90), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="national_id",
+            expiry_date=TODAY + timedelta(days=90),
+            is_required=True,
         )
     ]
     assert _run_compliance(docs, employees=employees) == []
@@ -547,8 +568,11 @@ def test_document_expiry_ignores_terminated_employee() -> None:
     employees = {E1: _compliance_ctx(E1, status="terminated")}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="visa",
-            expiry_date=TODAY - timedelta(days=2), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=2),
+            is_required=True,
         )
     ]
     assert _run_compliance(docs, employees=employees) == []
@@ -558,8 +582,11 @@ def test_document_expiry_ignores_non_identity_document() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="medical",
-            expiry_date=TODAY - timedelta(days=2), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="medical",
+            expiry_date=TODAY - timedelta(days=2),
+            is_required=True,
         )
     ]
     assert _run_compliance(docs, employees=employees) == []
@@ -569,8 +596,11 @@ def test_training_overdue_expired_required_certification() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="certification",
-            expiry_date=TODAY - timedelta(days=14), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="certification",
+            expiry_date=TODAY - timedelta(days=14),
+            is_required=True,
         )
     ]
     (fired,) = _run_compliance(docs, employees=employees)
@@ -584,8 +614,11 @@ def test_training_overdue_optional_certification_is_silent() -> None:
     employees = {E1: _compliance_ctx(E1)}
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="certification",
-            expiry_date=TODAY - timedelta(days=14), is_required=False,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="certification",
+            expiry_date=TODAY - timedelta(days=14),
+            is_required=False,
         )
     ]
     assert _run_compliance(docs, employees=employees) == []
@@ -630,8 +663,11 @@ def test_compliance_no_pii_in_evidence() -> None:
     }
     docs = [
         DocumentComplianceSignal(
-            employee_id=E1, document_id=uuid.uuid4(), doc_type="visa",
-            expiry_date=TODAY - timedelta(days=1), is_required=True,
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=1),
+            is_required=True,
         )
     ]
     for f in _run_compliance(docs, employees=employees):

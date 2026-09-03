@@ -79,16 +79,20 @@ class PostgresPayrollNotificationRepository:
     ) -> list[uuid.UUID]:
         """Employee ids whose batch item completed (got a committed entry)."""
         rows = (
-            await self._session.execute(
-                sa.select(PayrollBatchItemModel.employee_id)
-                .where(
-                    PayrollBatchItemModel.tenant_id == tenant_id,
-                    PayrollBatchItemModel.batch_id == batch_id,
-                    PayrollBatchItemModel.status == ITEM_DONE,
+            (
+                await self._session.execute(
+                    sa.select(PayrollBatchItemModel.employee_id)
+                    .where(
+                        PayrollBatchItemModel.tenant_id == tenant_id,
+                        PayrollBatchItemModel.batch_id == batch_id,
+                        PayrollBatchItemModel.status == ITEM_DONE,
+                    )
+                    .distinct()
                 )
-                .distinct()
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return [uuid.UUID(str(item_id)) for item_id in rows]
 
     async def employee_user_ids(
@@ -141,30 +145,32 @@ class PostgresPayrollNotificationRepository:
     ) -> list[uuid.UUID]:
         """Users granted a permission in this tenant via any role."""
         rows = (
-            await self._session.execute(
-                sa.select(CoreUserRoleModel.user_id)
-                .join(
-                    CoreRoleModel,
-                    sa.and_(
-                        CoreRoleModel.tenant_id == CoreUserRoleModel.tenant_id,
-                        CoreRoleModel.id == CoreUserRoleModel.role_id,
-                    ),
+            (
+                await self._session.execute(
+                    sa.select(CoreUserRoleModel.user_id)
+                    .join(
+                        CoreRoleModel,
+                        sa.and_(
+                            CoreRoleModel.tenant_id == CoreUserRoleModel.tenant_id,
+                            CoreRoleModel.id == CoreUserRoleModel.role_id,
+                        ),
+                    )
+                    .where(
+                        CoreUserRoleModel.tenant_id == tenant_id,
+                        CoreRoleModel.permissions.any(permission),
+                    )
+                    .order_by(CoreUserRoleModel.user_id)
+                    .distinct()
                 )
-                .where(
-                    CoreUserRoleModel.tenant_id == tenant_id,
-                    CoreRoleModel.permissions.any(permission),
-                )
-                .order_by(CoreUserRoleModel.user_id)
-                .distinct()
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return [uuid.UUID(str(user_id)) for user_id in rows]
 
     # --- Preferences ----------------------------------------------------------
 
-    async def get_pref(
-        self, tenant_id: uuid.UUID, user_id: uuid.UUID
-    ) -> PayrollNotificationPref:
+    async def get_pref(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> PayrollNotificationPref:
         """Merged preference for one user — defaults when no row exists."""
         row = (
             await self._session.execute(
@@ -206,13 +212,17 @@ class PostgresPayrollNotificationRepository:
         if not user_ids:
             return merged
         rows = (
-            await self._session.execute(
-                sa.select(PrefModel).where(
-                    PrefModel.tenant_id == tenant_id,
-                    PrefModel.user_id.in_(user_ids),
+            (
+                await self._session.execute(
+                    sa.select(PrefModel).where(
+                        PrefModel.tenant_id == tenant_id,
+                        PrefModel.user_id.in_(user_ids),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in rows:
             merged[row.user_id] = PayrollNotificationPref(
                 tenant_id=row.tenant_id,

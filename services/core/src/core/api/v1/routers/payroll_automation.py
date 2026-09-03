@@ -87,9 +87,7 @@ async def enqueue_batch(
     status = result.batch.status
     if status == "aborted":
         blocks = (result.batch.preflight or {}).get("blocks", [])
-        message = (
-            f"Payroll batch blocked by pre-flight checks: {', '.join(blocks)}"
-        )
+        message = f"Payroll batch blocked by pre-flight checks: {', '.join(blocks)}"
     else:
         message = f"Enqueued payroll batch for {result.employee_count} employees"
     return ResponseEnvelope(
@@ -272,9 +270,7 @@ async def list_notifications(
     before: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     current_user: dict[str, Any] = Depends(_require_payroll_ai_read),
-    orchestrator: PayrollNotificationOrchestrator = Depends(
-        get_payroll_notification_orchestrator
-    ),
+    orchestrator: PayrollNotificationOrchestrator = Depends(get_payroll_notification_orchestrator),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[list[PayrollNotificationOut]]:
     rows = await orchestrator.list_notifications(
@@ -296,14 +292,10 @@ async def list_notifications(
 )
 async def get_preferences(
     current_user: dict[str, Any] = Depends(_require_payroll_ai_notify),
-    orchestrator: PayrollNotificationOrchestrator = Depends(
-        get_payroll_notification_orchestrator
-    ),
+    orchestrator: PayrollNotificationOrchestrator = Depends(get_payroll_notification_orchestrator),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollPreferencesOut]:
-    prefs = await orchestrator.get_pref(
-        tenant_id=tenant_id, user_id=current_user["user_id"]
-    )
+    prefs = await orchestrator.get_pref(tenant_id=tenant_id, user_id=current_user["user_id"])
     return ResponseEnvelope(data=PayrollPreferencesOut(**prefs), message="Fetched preferences")
 
 
@@ -314,9 +306,7 @@ async def get_preferences(
 async def update_preferences(
     body: PayrollPreferencesIn,
     current_user: dict[str, Any] = Depends(_require_payroll_ai_notify),
-    orchestrator: PayrollNotificationOrchestrator = Depends(
-        get_payroll_notification_orchestrator
-    ),
+    orchestrator: PayrollNotificationOrchestrator = Depends(get_payroll_notification_orchestrator),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[PayrollPreferencesOut]:
     prefs = await orchestrator.upsert_pref(

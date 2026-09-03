@@ -89,7 +89,9 @@ class _FakePayrollAnomalyRepo:
             return [a for a in self.stored if a.employee_id == employee_id]
         return list(self.stored)
 
-    async def get_anomaly(self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID) -> PayrollAnomaly | None:
+    async def get_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> PayrollAnomaly | None:
         for a in self.stored:
             if a.anomaly_id == anomaly_id:
                 return a
@@ -122,9 +124,7 @@ class _FakePayrollAnomalyRepo:
             created_at=current.created_at,
             anomaly_id=current.anomaly_id,
             acknowledged_by=actor_user_id if status == AnomalyStatus.ACKNOWLEDGED else None,
-            acknowledged_at=datetime.now(UTC)
-            if status == AnomalyStatus.ACKNOWLEDGED
-            else None,
+            acknowledged_at=datetime.now(UTC) if status == AnomalyStatus.ACKNOWLEDGED else None,
         )
         self.stored[idx] = updated
         return updated
@@ -141,9 +141,7 @@ async def test_org_feed_aggregates_types_and_severity() -> None:
                 severity="critical",
                 status=AnomalyStatus.OPEN,
             ),
-            _anomaly(
-                employee_id=E3, anomaly_type="ghost_employee", severity="high"
-            ),
+            _anomaly(employee_id=E3, anomaly_type="ghost_employee", severity="high"),
             _anomaly(
                 employee_id=E2,
                 anomaly_type="duplicate_account",
@@ -178,9 +176,7 @@ async def test_scan_skipped_when_fresh() -> None:
 
 
 async def test_scan_runs_when_stale_or_absent() -> None:
-    stale = _FakePayrollAnomalyRepo(
-        latest=datetime.now(UTC) - timedelta(days=8), rows=[_anomaly()]
-    )
+    stale = _FakePayrollAnomalyRepo(latest=datetime.now(UTC) - timedelta(days=8), rows=[_anomaly()])
     await PayrollAnomalyService(stale, refresh_days=7).org_feed(TENANT)
     assert len(stale.replacements) == 1
 
@@ -224,7 +220,10 @@ async def test_disposition_rejects_backwards_or_disallowed_transition() -> None:
     svc = PayrollAnomalyService(repo, refresh_days=7)
     with pytest.raises(IllegalStateTransitionError):
         await svc.set_disposition(
-            TENANT, resolved.anomaly_id, status=AnomalyStatus.ACKNOWLEDGED, actor_user_id=uuid.uuid4()
+            TENANT,
+            resolved.anomaly_id,
+            status=AnomalyStatus.ACKNOWLEDGED,
+            actor_user_id=uuid.uuid4(),
         )
 
 

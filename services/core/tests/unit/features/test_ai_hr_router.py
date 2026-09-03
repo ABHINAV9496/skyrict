@@ -476,7 +476,9 @@ class _FakePayrollAnomalyService:
             narrative="2 open payroll anomaly(-ies) ...",
         )
 
-    async def employee_anomalies(self, tenant_id: uuid.UUID, employee_id: uuid.UUID) -> list[object]:
+    async def employee_anomalies(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> list[object]:
         self.employee_calls.append((tenant_id, employee_id))
         return [_payroll_anomaly()]
 
@@ -615,9 +617,7 @@ class _FakeComplianceService:
             narrative="2 open compliance finding(-ies) ...",
         )
 
-    async def employee_findings(
-        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
-    ) -> list[object]:
+    async def employee_findings(self, tenant_id: uuid.UUID, employee_id: uuid.UUID) -> list[object]:
         self.employee_calls.append((tenant_id, employee_id))
         return [_compliance_finding()]
 
@@ -672,9 +672,7 @@ def test_compliance_org_feed_returns_l1_aggregate() -> None:
     service = _FakeComplianceService()
     client = _build_compliance_app(service, individual=False)
 
-    resp = client.get(
-        "/api/v1/ai/hr/alerts/compliance", headers={"authorization": "Bearer tok"}
-    )
+    resp = client.get("/api/v1/ai/hr/alerts/compliance", headers={"authorization": "Bearer tok"})
 
     assert resp.status_code == 200
     assert service.org_calls == [TENANT_ID]

@@ -132,12 +132,8 @@ _QualityServiceDep = Annotated[QualityService, Depends(get_quality_service)]
 _UtilizationServiceDep = Annotated[UtilizationService, Depends(get_utilization_service)]
 _AnomalyServiceDep = Annotated[AnomalyService, Depends(get_anomaly_service)]
 _SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_service)]
-_PayrollAnomalyServiceDep = Annotated[
-    PayrollAnomalyService, Depends(get_payroll_anomaly_service)
-]
-_ComplianceServiceDep = Annotated[
-    ComplianceService, Depends(get_compliance_service)
-]
+_PayrollAnomalyServiceDep = Annotated[PayrollAnomalyService, Depends(get_payroll_anomaly_service)]
+_ComplianceServiceDep = Annotated[ComplianceService, Depends(get_compliance_service)]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
 _PatternDataRepositoryDep = Annotated[
     AiHrPatternDataRepository, Depends(get_pattern_data_repository)
@@ -696,9 +692,7 @@ async def compliance_employee(
             message="erp.hr.ai.individual required",
         )
         return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
-    findings = await compliance_service.employee_findings(
-        _tenant_id(current_user), employee_id
-    )
+    findings = await compliance_service.employee_findings(_tenant_id(current_user), employee_id)
     return ResponseEnvelope(
         data=[compliance_finding_to_out(f) for f in findings],
         message="HR AI employee compliance findings retrieved",

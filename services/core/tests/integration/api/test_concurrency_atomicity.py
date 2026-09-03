@@ -711,8 +711,8 @@ class TestPostEmitPreCommitFailure:
                         text(
                             "INSERT INTO public.erp_leave_movements "
                             "(tenant_id, id, employee_id, leave_type, qty, ref_type, ref_id) "
-"VALUES (:tenant_id, :id, :employee_id, 'casual', 1, "
-                    "'manual_adjustment', NULL)"
+                            "VALUES (:tenant_id, :id, :employee_id, 'casual', 1, "
+                            "'manual_adjustment', NULL)"
                         ),
                         {
                             "tenant_id": uuid.UUID("00000000-0000-0000-0000-000000000000"),

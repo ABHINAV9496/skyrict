@@ -76,12 +76,16 @@ class PostgresPayrollScheduleRepository:
 
     async def list_schedules(self, *, tenant_id: uuid.UUID) -> list[PayrollSchedule]:
         rows = (
-            await self._session.execute(
-                sa.select(ScheduleModel)
-                .where(ScheduleModel.tenant_id == tenant_id)
-                .order_by(ScheduleModel.created_at, ScheduleModel.id)
+            (
+                await self._session.execute(
+                    sa.select(ScheduleModel)
+                    .where(ScheduleModel.tenant_id == tenant_id)
+                    .order_by(ScheduleModel.created_at, ScheduleModel.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return [_to_schedule(row) for row in rows]
 
     async def update_schedule(
@@ -143,16 +147,20 @@ class PostgresPayrollScheduleRepository:
     async def list_due_schedules(self, now: datetime) -> list[PayrollSchedule]:
         """Enabled schedules whose ``next_run_at`` has arrived (cross-tenant)."""
         rows = (
-            await self._session.execute(
-                sa.select(ScheduleModel)
-                .where(
-                    ScheduleModel.enabled.is_(True),
-                    ScheduleModel.next_run_at.is_not(None),
-                    ScheduleModel.next_run_at <= now,
+            (
+                await self._session.execute(
+                    sa.select(ScheduleModel)
+                    .where(
+                        ScheduleModel.enabled.is_(True),
+                        ScheduleModel.next_run_at.is_not(None),
+                        ScheduleModel.next_run_at <= now,
+                    )
+                    .order_by(ScheduleModel.next_run_at, ScheduleModel.id)
                 )
-                .order_by(ScheduleModel.next_run_at, ScheduleModel.id)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return [_to_schedule(row) for row in rows]
 
 

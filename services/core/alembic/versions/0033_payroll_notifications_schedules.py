@@ -103,8 +103,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         sa.CheckConstraint(
-            "event_type IN "
-            "('payslip_ready', 'payroll_batch_digest')",
+            "event_type IN ('payslip_ready', 'payroll_batch_digest')",
             name="ck_ai_payroll_notifications_event_type",
         ),
         sa.UniqueConstraint(
@@ -207,4 +206,3 @@ def downgrade() -> None:
     _disable_rls("ai_payroll_notifications")
     op.drop_index("ix_ai_payroll_notifications_inbox", table_name="ai_payroll_notifications")
     op.drop_table("ai_payroll_notifications")
-

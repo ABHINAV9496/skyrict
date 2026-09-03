@@ -163,9 +163,7 @@ def run_preflight(
     # ---- advisory checks (warnings; never abort) ----
 
     # banking: payslip payload fields missing on a roster employee
-    missing_bank = [
-        e.employee_number for e in roster if not (e.bank_account or "").strip()
-    ]
+    missing_bank = [e.employee_number for e in roster if not (e.bank_account or "").strip()]
     if missing_bank:
         warnings.append("banking")
         checks["banking"] = _warn(

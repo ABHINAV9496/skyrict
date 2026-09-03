@@ -42,6 +42,7 @@ from skyrict_common.ai_hr_rules import (
 @dataclass(frozen=True, slots=True)
 class PayrollAnomaly:
     """One stored payroll finding, with read-side enrichment."""
+
     run_id: uuid.UUID
     employee_id: uuid.UUID | None
     anomaly_type: str
@@ -113,16 +114,13 @@ class AiHrPayrollAnomalyRepository:
         latest = runs_with_rows[0]
         prior = runs_with_rows[1] if len(runs_with_rows) > 1 else None
 
-        latest_signal = (
-            select(
-                PayrollEntryModel.employee_id,
-                PayrollEntryModel.net,
-                PayrollEntryModel.pay_days,
-            )
-            .where(
-                PayrollEntryModel.tenant_id == tenant_id,
-                PayrollEntryModel.run_id == latest.id,
-            )
+        latest_signal = select(
+            PayrollEntryModel.employee_id,
+            PayrollEntryModel.net,
+            PayrollEntryModel.pay_days,
+        ).where(
+            PayrollEntryModel.tenant_id == tenant_id,
+            PayrollEntryModel.run_id == latest.id,
         )
         latest_rows = (await self.session.execute(latest_signal)).all()
         latest_entries = [
@@ -142,16 +140,13 @@ class AiHrPayrollAnomalyRepository:
 
         prior_entries: list[PayrollEntrySignal] = []
         if prior is not None:
-            prior_signal = (
-                select(
-                    PayrollEntryModel.employee_id,
-                    PayrollEntryModel.net,
-                    PayrollEntryModel.pay_days,
-                )
-                .where(
-                    PayrollEntryModel.tenant_id == tenant_id,
-                    PayrollEntryModel.run_id == prior.id,
-                )
+            prior_signal = select(
+                PayrollEntryModel.employee_id,
+                PayrollEntryModel.net,
+                PayrollEntryModel.pay_days,
+            ).where(
+                PayrollEntryModel.tenant_id == tenant_id,
+                PayrollEntryModel.run_id == prior.id,
             )
             for e in (await self.session.execute(prior_signal)).all():
                 prior_entries.append(
@@ -266,7 +261,9 @@ class AiHrPayrollAnomalyRepository:
         rows = (await self.session.execute(stmt)).all()
         return [self._to_anomaly(r) for r in rows]
 
-    async def get_anomaly(self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID) -> PayrollAnomaly | None:
+    async def get_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> PayrollAnomaly | None:
         stmt = self._read_stmt(tenant_id).where(PayrollAnomalyModel.id == anomaly_id)
         r = (await self.session.execute(stmt)).first()
         return self._to_anomaly(r) if r is not None else None

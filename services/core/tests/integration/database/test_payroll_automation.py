@@ -186,7 +186,9 @@ async def _fault_once_compute_single(payroll: Any, *, target_number: str, exc: E
     real = payroll.compute_single
     state = {"fired": False}
 
-    async def _faulty(*, run_id: uuid.UUID, employee_id: uuid.UUID, tenant_id: uuid.UUID, persist: bool = True):
+    async def _faulty(
+        *, run_id: uuid.UUID, employee_id: uuid.UUID, tenant_id: uuid.UUID, persist: bool = True
+    ):
         if not state["fired"]:
             await payroll.get_run(run_id, tenant_id=tenant_id)
             roster = await payroll.active_employees(run_id, tenant_id=tenant_id)
@@ -241,9 +243,7 @@ async def _drain_until_finished(
 FIXTURE_WORKER = "it-deterministic"
 
 
-async def _claim_batch_for_this_worker(
-    session: Any, *, expected_batch_id: uuid.UUID
-) -> None:
+async def _claim_batch_for_this_worker(session: Any, *, expected_batch_id: uuid.UUID) -> None:
     """Claim the just-created batch under THIS test worker before the always-on
     dev worker's 0.25s poll can take it — pin-first, matching the concurrency
     test's discipline. The claim is committed here; the service is built with
@@ -302,7 +302,9 @@ async def test_full_50_employee_run_with_permanent_failure_finishes_under_60s(
     async with async_session_factory() as session:
         service, payroll = _build_service(session, worker_id=FIXTURE_WORKER)
         await _fault_once_compute_single(
-            payroll, target_number="EMP-0027", exc=PermanentBatchItemError("injected permanent failure")
+            payroll,
+            target_number="EMP-0027",
+            exc=PermanentBatchItemError("injected permanent failure"),
         )
 
         started = time.monotonic()
@@ -623,9 +625,7 @@ async def test_preflight_block_aborts_and_reenqueue_rearms(
 
             item_count = (
                 await session.execute(
-                    text(
-                        "SELECT count(*) FROM ai_payroll_batch_items WHERE batch_id = :bid"
-                    ),
+                    text("SELECT count(*) FROM ai_payroll_batch_items WHERE batch_id = :bid"),
                     {"bid": blocked.batch.id},
                 )
             ).scalar_one()
@@ -638,9 +638,7 @@ async def test_preflight_block_aborts_and_reenqueue_rearms(
             # Re-enable automation and re-submit: same batch row is re-armed.
             settings = await payroll.get_settings(tenant_id)
             assert settings is not None
-            await payroll.update_settings(
-                dataclasses.replace(settings, ai_automation_enabled=True)
-            )
+            await payroll.update_settings(dataclasses.replace(settings, ai_automation_enabled=True))
             retried = await service.enqueue(run_id=run_id, tenant_id=tenant_id)
             assert retried.batch.id == blocked.batch.id, "one row per (source, source_ref)"
             assert retried.batch.status == "queued"
@@ -661,7 +659,9 @@ async def test_preflight_block_aborts_and_reenqueue_rearms(
 
             run_status = (
                 await session.execute(
-                    text("SELECT status FROM erp_payroll_runs WHERE id = :rid AND tenant_id = :tid"),
+                    text(
+                        "SELECT status FROM erp_payroll_runs WHERE id = :rid AND tenant_id = :tid"
+                    ),
                     {"rid": run_id, "tid": tenant_id},
                 )
             ).scalar_one()
@@ -929,9 +929,7 @@ def commit3_world(migrated_schema: None) -> dict[str, str]:
                     last_name="Seed",
                     job_title="Engineer",
                     hire_date=date(2025, 1, 1),
-                    user_id=(
-                        uuid.UUID(user_ids[linked_user]) if linked_user is not None else None
-                    ),
+                    user_id=(uuid.UUID(user_ids[linked_user]) if linked_user is not None else None),
                     bank_account="US1234567890",
                     bank_name="Test Bank",
                 )
@@ -953,7 +951,11 @@ def commit3_world(migrated_schema: None) -> dict[str, str]:
                     tenant_id=uuid.UUID(tenant_id),
                     id=uuid.UUID(role_id),
                     name="Payroll Admin",
-                    permissions=["erp.payroll.ai.read", "erp.payroll.ai.run", "erp.payroll.ai.notify"],
+                    permissions=[
+                        "erp.payroll.ai.read",
+                        "erp.payroll.ai.run",
+                        "erp.payroll.ai.notify",
+                    ],
                 )
             )
             session.add(
@@ -1130,9 +1132,7 @@ class TestCommit3Notifications:
             assert again == 0
             count = (
                 await session.execute(
-                    text(
-                        "SELECT count(*) FROM ai_payroll_notifications WHERE tenant_id = :tid"
-                    ),
+                    text("SELECT count(*) FROM ai_payroll_notifications WHERE tenant_id = :tid"),
                     {"tid": batch.tenant_id},
                 )
             ).scalar_one()
@@ -1150,12 +1150,20 @@ class TestCommit3Notifications:
             emp_2 = uuid.UUID(commit3_world["employee_ids"]["emp_2"])
             emp_3 = uuid.UUID(commit3_world["employee_ids"]["emp_3"])
             # emp_2's email opt-in is already persisted from the first block.
-            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1)
-            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_2, version=1)
+            await orch.notify_payslip_approved(
+                tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1
+            )
+            await orch.notify_payslip_approved(
+                tenant_id=tenant_id, run_id=run_id, employee_id=emp_2, version=1
+            )
             # emp_3 has no linked portal user — nothing inserted, no error.
-            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_3, version=1)
+            await orch.notify_payslip_approved(
+                tenant_id=tenant_id, run_id=run_id, employee_id=emp_3, version=1
+            )
             # Re-approving the same version is idempotent.
-            await orch.notify_payslip_approved(tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1)
+            await orch.notify_payslip_approved(
+                tenant_id=tenant_id, run_id=run_id, employee_id=emp_1, version=1
+            )
             await session.commit()
 
             rows = (
@@ -1178,7 +1186,9 @@ class TestCommit3Notifications:
             # 1 digest + 2 payslip_ready, no duplicates from the idempotent re-approval.
             assert len(rows) == 3
 
-    async def test_failed_batch_digests_admin_with_failure_list(self, commit3_world: dict[str, str]) -> None:
+    async def test_failed_batch_digests_admin_with_failure_list(
+        self, commit3_world: dict[str, str]
+    ) -> None:
         from core.features.payroll_automation.constants import BATCH_FAILED
         from core.features.payroll_automation.domain import PayrollBatchRun
         from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
@@ -1188,7 +1198,9 @@ class TestCommit3Notifications:
 
         async with async_session_factory() as session:
             batch_id = await _seed_terminal_batch(
-                session, world=commit3_world, status=BATCH_FAILED,
+                session,
+                world=commit3_world,
+                status=BATCH_FAILED,
                 errors={"dummy": "tax rate missing for payroll entry"},
             )
             await session.commit()
@@ -1303,9 +1315,7 @@ class TestCommit3Scheduler:
                 batches=automation,
                 audit=make_core_audit_service(session),
             )
-            fired = await scheduler.run_due_schedules(
-                now=datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
-            )
+            fired = await scheduler.run_due_schedules(now=datetime(2026, 8, 2, 0, 0, tzinfo=UTC))
             await session.commit()
 
             assert fired == 1

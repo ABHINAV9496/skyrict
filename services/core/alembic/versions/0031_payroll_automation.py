@@ -22,7 +22,7 @@ check constraints so they stay mutable without a type migration):
   item:   pending | processing | done | failed
 
 Revision ID: 0031
-Revises: 0026
+Revises: 0030
 Create Date: 2026-08-29
 """
 
@@ -33,7 +33,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0031"
-down_revision = "0028"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

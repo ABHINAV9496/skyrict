@@ -64,8 +64,8 @@ export async function renameConversation(id: string, title: string): Promise<Con
   return apiPatch<Conversation>(`/api/v1/agents/conversations/${id}`, { title });
 }
 
-export async function setConversationPinned(id: string, pin: boolean): Promise<Conversation> {
-  return apiPatch<Conversation>(`/api/v1/agents/conversations/${id}`, { pin });
+export async function setConversationPinned(id: string, pinned: boolean): Promise<Conversation> {
+  return apiPatch<Conversation>(`/api/v1/agents/conversations/${id}`, { pinned });
 }
 
 export async function deleteConversation(id: string): Promise<{ deleted: boolean }> {

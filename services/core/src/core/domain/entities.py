@@ -740,6 +740,42 @@ class AccountCodeSuggestion:
 
 
 @dataclass(frozen=True)
+class DraftEntryLine:
+    account_code: str
+    account_name: str
+    amount: Decimal
+    side: str  # "debit" or "credit"
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class DraftEntry:
+    lines: tuple[DraftEntryLine, ...]
+    explanation: str
+    confidence: Decimal
+    reasoning: str = ""
+    model_used: str = ""
+
+
+@dataclass(frozen=True)
+class AnomalyNarration:
+    narration: str
+    model_used: str = ""
+
+
+@dataclass(frozen=True)
+class ReminderDraft:
+    invoice_number: str
+    customer_name: str | None = None
+    amount: Decimal = Decimal("0")
+    days_overdue: int = 0
+    tone: str = "polite"
+    subject: str = ""
+    body: str = ""
+    model_used: str = ""
+
+
+@dataclass(frozen=True)
 class WorkingCapitalAlert:
     ratio: Decimal
     threshold: Decimal

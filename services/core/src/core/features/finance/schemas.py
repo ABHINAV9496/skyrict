@@ -400,3 +400,63 @@ class TenantSettingsResponse(BaseModel):
 
 class SuggestAccountCodeRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=512)
+
+
+# ---------------------------------------------------------------------------
+# AI Draft / Narrate / Remind schemas
+# ---------------------------------------------------------------------------
+
+
+class DraftEntryRequest(BaseModel):
+    description: str = Field(..., min_length=1, max_length=512)
+
+
+class DraftEntryLineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    account_code: str
+    account_name: str
+    amount: Decimal
+    side: str
+    description: str = ""
+
+
+class DraftEntryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    lines: list[DraftEntryLineResponse]
+    explanation: str
+    confidence: Decimal
+    reasoning: str = ""
+    model_used: str = ""
+
+
+class AnomalyNarrationRequest(BaseModel):
+    anomaly_id: uuid.UUID
+
+
+class AnomalyNarrationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    narration: str
+    model_used: str = ""
+
+
+class ReminderGenerateRequest(BaseModel):
+    invoice_id: uuid.UUID
+
+
+class ReminderDraftLineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    invoice_number: str
+    customer_name: str | None = None
+    amount: Decimal
+    days_overdue: int
+    tone: str
+    subject: str
+    body: str
+
+
+class ReminderDraftResponse(BaseModel):
+    reminders: list[ReminderDraftLineResponse]

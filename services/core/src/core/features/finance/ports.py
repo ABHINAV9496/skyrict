@@ -288,6 +288,22 @@ class FinanceRepositoryPort(Protocol):
 
     async def list_open_ai_anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
 
+    # --- AI anomaly lookup by ID ---
+
+    async def get_ai_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> AiFinanceAnomaly | None: ...
+
+    # --- Overdue invoices for batch reminders ---
+
+    async def list_invoices_overdue(self, tenant_id: uuid.UUID) -> Sequence[Invoice]: ...
+
+    # --- Invoice lookup ---
+
+    async def get_invoice_by_id(
+        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> Invoice | None: ...
+
 
 # ---------------------------------------------------------------------------
 # Cross-module invoicing port (seam for CRM/sales)

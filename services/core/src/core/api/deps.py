@@ -700,10 +700,13 @@ def get_finance_automation_service_with_ai(
     from collections.abc import Sequence
 
     from core.core.tenant_resolver import derive_tenant_slug
-    from core.domain.entities import AccountCodeSuggestion, ChartOfAccount
+    from core.domain.entities import AccountCodeSuggestion, ChartOfAccount, DraftEntry
     from core.features.ai.router import get_ai_client
     from core.features.audit.repository import AuditRepository
-    from core.features.finance.ai_suggester import suggest_account_code_with_ai
+    from core.features.finance.ai_suggester import (
+        draft_journal_entry_with_ai,
+        suggest_account_code_with_ai,
+    )
     from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.repository import FinanceRepository
 
@@ -722,10 +725,20 @@ def get_finance_automation_service_with_ai(
             accounts=accounts,
         )
 
+    async def ai_draft(description: str, accounts: Sequence[ChartOfAccount]) -> DraftEntry | None:
+        return await draft_journal_entry_with_ai(
+            client,
+            authorization=authorization,
+            tenant_slug=tenant_slug,
+            description=description,
+            accounts=accounts,
+        )
+
     return FinanceAutomationService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         ai_suggest=ai_suggest,
+        ai_draft=ai_draft,
     )
 
 

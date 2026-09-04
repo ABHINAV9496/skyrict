@@ -542,3 +542,54 @@ export function updateAutomationSettings(threshold: number): Promise<TenantSetti
 export function reverseJournalEntry(entryId: string): Promise<JournalEntry> {
   return apiPost<JournalEntry>(`${AUTOMATION}/journal-entries/${entryId}/reverse`, {});
 }
+
+// ---------------------------------------------------------------------------
+// FIN-AI-001: AI draft / narrate / remind
+// ---------------------------------------------------------------------------
+
+export interface DraftEntryLine {
+  account_code: string;
+  account_name: string;
+  amount: number;
+  side: "debit" | "credit";
+  description: string;
+}
+
+export interface DraftEntry {
+  lines: DraftEntryLine[];
+  explanation: string;
+  confidence: number;
+  reasoning: string;
+  model_used: string;
+}
+
+export interface AnomalyNarration {
+  narration: string;
+  model_used: string;
+}
+
+export interface ReminderDraft {
+  invoice_number: string;
+  customer_name: string | null;
+  amount: number;
+  days_overdue: number;
+  tone: "polite" | "firm" | "final";
+  subject: string;
+  body: string;
+}
+
+export function draftJournalEntry(description: string): Promise<DraftEntry> {
+  return apiPost<DraftEntry>(`${AUTOMATION}/draft-entry`, { description });
+}
+
+export function narrateAnomaly(anomalyId: string): Promise<AnomalyNarration> {
+  return apiPost<AnomalyNarration>(`${AUTOMATION}/anomalies/${anomalyId}/narrate`, {});
+}
+
+export function generateReminder(invoiceId: string): Promise<ReminderDraft> {
+  return apiPost<ReminderDraft>(`${AUTOMATION}/reminders/generate`, { invoice_id: invoiceId });
+}
+
+export function batchReminders(): Promise<{ reminders: ReminderDraft[] }> {
+  return apiPost<{ reminders: ReminderDraft[] }>(`${AUTOMATION}/reminders/batch`, {});
+}

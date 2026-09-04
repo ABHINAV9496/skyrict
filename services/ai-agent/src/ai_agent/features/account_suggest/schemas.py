@@ -36,3 +36,21 @@ class AccountSuggestion:
     side: str = "debit"
     contra_code: str = ""
     contra_name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class JournalLineSuggestion:
+    account_code: str
+    account_name: str
+    amount: float
+    side: str  # "debit" or "credit"
+    description: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DraftSuggestion:
+    lines: tuple[JournalLineSuggestion, ...]
+    explanation: str
+    confidence: float
+    reasoning: str
+    model_used: str

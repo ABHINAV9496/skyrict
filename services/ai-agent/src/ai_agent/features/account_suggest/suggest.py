@@ -19,7 +19,11 @@ from ai_agent.core.providers import LlmRequest
 
 if TYPE_CHECKING:
     from ai_agent.core.llm_router import LlmRouter
-    from ai_agent.features.account_suggest.schemas import AccountSuggestion, SuggestRequest
+    from ai_agent.features.account_suggest.schemas import (
+        AccountSuggestion,
+        DraftSuggestion,
+        SuggestRequest,
+    )
 
 logger = structlog.get_logger("ai_agent.account_suggest")
 
@@ -37,6 +41,39 @@ _SYSTEM_PROMPT = (
     '(the credit account name), "confidence" (a number 0 to 1), "reasoning" '
     '(a short one-sentence explanation), "amount" (number or null), and '
     '"side" ("debit" or "credit").'
+)
+
+_DRAFT_SYSTEM_PROMPT = (
+    "You are a bookkeeping assistant. Given a transaction description and a "
+    "chart of accounts (list of {code, name}), create a complete double-entry "
+    "journal entry with ALL required lines. "
+    "All account codes MUST be from the provided chart — never invent codes. "
+    "Return ONLY strict JSON with the keys: "
+    '"lines" (array of objects, each with "account_code", "account_name", '
+    '"amount" (positive number), "side" ("debit" or "credit"), "description"), '
+    '"explanation" (explain the account relationships and why each line is '
+    'needed), "confidence" (a number 0 to 1, set below 0.75 if uncertain), '
+    '"reasoning" (step-by-step thought process). '
+    "Rules: total debits MUST equal total credits. Every line must have a "
+    "valid account code from the chart. Amounts must be positive numbers."
+)
+
+_NARRATE_SYSTEM_PROMPT = (
+    "You are a financial analyst. Explain this anomaly in plain English. "
+    "Cite the specific figures that triggered it. Reference what this type "
+    "of anomaly typically means. Suggest resolution steps. "
+    "Return ONLY strict JSON with keys: "
+    '"narration" (string, 2-4 sentences), '
+    '"confidence" (number 0 to 1).'
+)
+
+_REMINDER_SYSTEM_PROMPT = (
+    "You are a professional accounts receivable assistant. Draft a payment "
+    "reminder email for an overdue invoice. Use the tone specified. "
+    "Return ONLY strict JSON with keys: "
+    '"subject" (email subject line), '
+    '"body" (the email body, plain text, 3-5 sentences), '
+    '"tone" (the tone used).'
 )
 
 
@@ -106,6 +143,170 @@ async def suggest(llm_router: LlmRouter, req: SuggestRequest) -> AccountSuggesti
         contra_code=contra_code,
         contra_name=contra_name,
     )
+
+
+async def draft_entry(llm_router: LlmRouter, req: SuggestRequest) -> DraftSuggestion | None:
+    """Generate a multi-line journal entry draft; return ``None`` on failure."""
+    chart_json = json.dumps(
+        [{"code": a.code, "name": a.name} for a in req.accounts],
+        ensure_ascii=False,
+    )
+    user_prompt = f"Description: {req.description}\n\nChart of accounts:\n{chart_json}"
+    try:
+        completion = await llm_router.complete(
+            LlmRequest(
+                system_prompt=_DRAFT_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                max_tokens=600,
+                temperature=0.0,
+            )
+        )
+    except Exception:
+        logger.warning("draft_entry.llm_failed")
+        return None
+
+    payload = _parse_json(completion.text)
+    if payload is None:
+        logger.warning("draft_entry.unparseable")
+        return None
+
+    raw_lines = payload.get("lines")
+    if not isinstance(raw_lines, list) or len(raw_lines) == 0:
+        logger.warning("draft_entry.no_lines")
+        return None
+
+    codes = {a.code for a in req.accounts}
+    from ai_agent.features.account_suggest.schemas import DraftSuggestion, JournalLineSuggestion
+
+    lines: list[JournalLineSuggestion] = []
+    for raw in raw_lines:
+        if not isinstance(raw, dict):
+            continue
+        code = str(raw.get("account_code") or "").strip()
+        if code not in codes:
+            logger.warning("draft_entry.out_of_chart", code=code[:64])
+            continue
+        amt = raw.get("amount")
+        if not isinstance(amt, (int, float)) or amt <= 0:
+            continue
+        side_val = str(raw.get("side") or "debit").strip().lower()
+        if side_val not in ("debit", "credit"):
+            side_val = "debit"
+        name_str = str(raw.get("account_name") or "").strip()
+        if not name_str:
+            # look up name from chart
+            for a in req.accounts:
+                if a.code == code:
+                    name_str = a.name
+                    break
+        lines.append(
+            JournalLineSuggestion(
+                account_code=code,
+                account_name=name_str,
+                amount=float(amt),
+                side=side_val,
+                description=str(raw.get("description") or "").strip(),
+            )
+        )
+
+    if not lines:
+        logger.warning("draft_entry.no_valid_lines")
+        return None
+
+    total_debit = sum(line.amount for line in lines if line.side == "debit")
+    total_credit = sum(line.amount for line in lines if line.side == "credit")
+    if abs(total_debit - total_credit) > 0.01:
+        logger.warning("draft_entry.unbalanced", debit=total_debit, credit=total_credit)
+        # still return but lower confidence
+
+    confidence = payload.get("confidence")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        confidence = 0.5
+    confidence = max(0.0, min(float(confidence), 1.0))
+
+    return DraftSuggestion(
+        lines=tuple(lines),
+        explanation=str(payload.get("explanation") or "").strip(),
+        confidence=confidence,
+        reasoning=str(payload.get("reasoning") or "").strip(),
+        model_used=completion.model_used,
+    )
+
+
+async def narrate_anomaly(
+    llm_router: LlmRouter, *, anomaly_type: str, description: str, severity: str
+) -> dict[str, str] | None:
+    """Generate a plain-English narration of a finance anomaly."""
+    user_prompt = f"Anomaly type: {anomaly_type}\nSeverity: {severity}\nDescription: {description}"
+    try:
+        completion = await llm_router.complete(
+            LlmRequest(
+                system_prompt=_NARRATE_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                max_tokens=300,
+                temperature=0.2,
+            )
+        )
+    except Exception:
+        logger.warning("narrate_anomaly.llm_failed")
+        return None
+
+    payload = _parse_json(completion.text)
+    if payload is None:
+        return None
+
+    narration = str(payload.get("narration") or "").strip()
+    if not narration:
+        return None
+
+    return {"narration": narration, "model_used": completion.model_used}
+
+
+async def draft_reminder(
+    llm_router: LlmRouter,
+    *,
+    customer_name: str | None,
+    invoice_number: str,
+    amount: float,
+    days_overdue: int,
+    tone: str,
+) -> dict[str, str] | None:
+    """Draft a payment reminder email."""
+    user_prompt = (
+        f"Customer: {customer_name or 'Valued Customer'}\n"
+        f"Invoice: {invoice_number}\n"
+        f"Amount due: {amount:.2f}\n"
+        f"Days overdue: {days_overdue}\n"
+        f"Requested tone: {tone}"
+    )
+    try:
+        completion = await llm_router.complete(
+            LlmRequest(
+                system_prompt=_REMINDER_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                max_tokens=400,
+                temperature=0.3,
+            )
+        )
+    except Exception:
+        logger.warning("draft_reminder.llm_failed")
+        return None
+
+    payload = _parse_json(completion.text)
+    if payload is None:
+        return None
+
+    subject = str(payload.get("subject") or "").strip()
+    body = str(payload.get("body") or "").strip()
+    if not subject or not body:
+        return None
+
+    return {
+        "subject": subject,
+        "body": body,
+        "tone": tone,
+        "model_used": completion.model_used,
+    }
 
 
 def _parse_json(text: str) -> dict[str, object] | None:

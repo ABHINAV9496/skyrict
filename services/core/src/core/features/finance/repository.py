@@ -44,6 +44,8 @@ from core.domain.entities import (
     AiFinanceSuggestion,
     ArAging,
     ArAgingBucket,
+    AuditReadiness,
+    AuditReadinessCheck,
     BalanceSheet,
     BalanceSheetLine,
     CashflowPosition,
@@ -63,12 +65,18 @@ from core.domain.entities import (
     JournalEntry,
     JournalLine,
     Payment,
+    PaymentMethodAnalytics,
+    PaymentMethodAnalyticsEntry,
     PnlLine,
     ProfitAndLoss,
+    RevenueConcentration,
+    RevenueConcentrationEntry,
     TenantSetting,
     TrialBalance,
     TrialBalanceRow,
     WorkingCapitalAlert,
+    WorkingCapitalPosition,
+    WorkingCapitalSeries,
 )
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
@@ -1418,6 +1426,147 @@ class FinanceRepository:
             prior_to=prior_to,
             rows=tuple(rows),
         )
+
+    async def revenue_concentration(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> RevenueConcentration:
+        threshold = Decimal("0.25")
+        stmt = (
+            select(
+                ErpInvoiceModel.customer_id.label("customer_id"),
+                func.coalesce(func.sum(ErpInvoiceModel.total), 0).label("amount"),
+            )
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status == InvoiceStatus.APPROVED,
+                ErpInvoiceModel.invoice_date >= from_date,
+                ErpInvoiceModel.invoice_date <= to_date,
+            )
+            .group_by(ErpInvoiceModel.customer_id)
+            .order_by(func.coalesce(func.sum(ErpInvoiceModel.total), 0).desc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        total_revenue = sum((Decimal(row.amount) for row in rows), Decimal("0"))
+        entries: list[RevenueConcentrationEntry] = []
+        for row in rows:
+            amount = Decimal(row.amount)
+            share = amount / total_revenue if total_revenue else Decimal("0")
+            share = share.quantize(Decimal("0.0001"))
+            entries.append(
+                RevenueConcentrationEntry(
+                    customer_id=row.customer_id,
+                    customer_name=None,  # resolved by the service via CustomerPort
+                    amount=amount,
+                    share=share,
+                    above_threshold=share >= threshold,
+                )
+            )
+        return RevenueConcentration(
+            from_date=from_date,
+            to_date=to_date,
+            threshold=threshold,
+            total_revenue=total_revenue,
+            entries=tuple(entries),
+        )
+
+    async def working_capital_series(
+        self, tenant_id: uuid.UUID, as_of: date, months: int = 6
+    ) -> WorkingCapitalSeries:
+        positions: list[WorkingCapitalPosition] = []
+        for i in range(months):
+            month_start = date(
+                as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1
+            )
+            month_end = _end_of_month(month_start)
+            balance = await self.balance_sheet(tenant_id, month_end)
+            assets = balance.total_assets
+            liabilities = balance.total_liabilities
+            positions.append(
+                WorkingCapitalPosition(
+                    month=month_start.strftime("%Y-%m"),
+                    assets=assets,
+                    liabilities=liabilities,
+                    working_capital=assets - liabilities,
+                )
+            )
+        positions.reverse()
+        return WorkingCapitalSeries(positions=tuple(positions))
+
+    async def payment_method_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> PaymentMethodAnalytics:
+        stmt = (
+            select(
+                ErpPaymentModel.method.label("method"),
+                func.count(ErpPaymentModel.id).label("cnt"),
+                func.coalesce(func.sum(ErpPaymentModel.amount), 0).label("amount"),
+            )
+            .where(
+                ErpPaymentModel.tenant_id == tenant_id,
+                ErpPaymentModel.status == PaymentStatus.APPLIED,
+                ErpPaymentModel.paid_at.cast(date) >= from_date,
+                ErpPaymentModel.paid_at.cast(date) <= to_date,
+            )
+            .group_by(ErpPaymentModel.method)
+            .order_by(func.coalesce(func.sum(ErpPaymentModel.amount), 0).desc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        total_amount = sum((Decimal(row.amount) for row in rows), Decimal("0"))
+        entries: list[PaymentMethodAnalyticsEntry] = []
+        for row in rows:
+            amount = Decimal(row.amount)
+            share = amount / total_amount if total_amount else Decimal("0")
+            share = share.quantize(Decimal("0.0001"))
+            entries.append(
+                PaymentMethodAnalyticsEntry(
+                    method=row.method,
+                    count=row.cnt,
+                    amount=amount,
+                    share=share,
+                )
+            )
+        return PaymentMethodAnalytics(
+            from_date=from_date,
+            to_date=to_date,
+            total_amount=total_amount,
+            entries=tuple(entries),
+        )
+
+    async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness:
+        from datetime import date as _date
+
+        trial = await self.trial_balance(tenant_id, _date.today())
+        balanced = trial.total_debit == trial.total_credit
+        posted = await self.list_journal_entries(tenant_id, status=EntryStatus.POSTED)
+        has_unposted = any(e.status != EntryStatus.POSTED for e in posted)
+        open_anomalies = await self.list_open_ai_anomalies(tenant_id)
+
+        checks = [
+            AuditReadinessCheck(
+                key="trial_balance_balanced",
+                label="Trial balance balanced",
+                status="ok" if balanced else "missing",
+                detail=None if balanced else "Debits and credits do not match",
+            ),
+            AuditReadinessCheck(
+                key="journal_entries_posted",
+                label="Journal entries posted",
+                status="ok" if posted and not has_unposted else "missing",
+                detail=None if posted and not has_unposted else "Unposted journal entries remain",
+            ),
+            AuditReadinessCheck(
+                key="no_open_anomalies",
+                label="No open anomalies",
+                status="ok" if not open_anomalies else "warning",
+                detail=(
+                    f"{len(open_anomalies)} open anomaly(s) to review"
+                    if open_anomalies
+                    else None
+                ),
+            ),
+        ]
+        ready = all(c.status == "ok" for c in checks)
+        return AuditReadiness(ready=ready, checks=tuple(checks))
 
     async def reverse_journal_entry(
         self,

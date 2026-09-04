@@ -1,9 +1,11 @@
-"""Finance automation routes - SKY-56/SKY-64 wave 1.
+"""Finance automation routes - SKY-56/SKY-64 wave 1 + SKY-66 wave 2.
 
 A thin service + router over :class:`FinanceRepositoryPort` for the finance
 automation widgets: close checklist, duplicates, account-code suggestions,
 working-capital alert, health score, cash-flow projection, anomalies,
-comparative P&L, journal-entry reversal, and tenant automation settings.
+comparative P&L, journal-entry reversal, and tenant automation settings. Wave
+2 adds revenue concentration, working-capital trend, payment-method analytics,
+audit readiness, and audit-log search.
 
 Reads use ``erp.finance.read``; the reversal (a money moment) uses
 ``erp.finance.approve``; settings writes use ``erp.finance.write``.
@@ -18,9 +20,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from core.api.deps import (
+    get_core_audit_service,
     get_finance_automation_service,
     get_finance_automation_service_with_ai,
     require_permission,
@@ -42,13 +45,18 @@ from core.domain.entities import (
     DraftEntry,
     DraftEntryLine,
     ReminderDraft,
+    RevenueConcentration,
+    RevenueConcentrationEntry,
 )
-from core.features.finance.ports import AuditSink, FinanceRepositoryPort
+from core.features.finance.ports import AuditSink, CustomerPort, FinanceRepositoryPort
 from core.features.finance.schemas import (
     AccountCodeSuggestionResponse,
     AnomalyNarrationResponse,
     AnomalyResponse,
     ArAgingResponse,
+    AuditLogEntryResponse,
+    AuditLogSearchResponse,
+    AuditReadinessResponse,
     CashflowProjectionResponse,
     CloseChecklistResponse,
     ComparativePnlResponse,
@@ -57,12 +65,15 @@ from core.features.finance.schemas import (
     DuplicateGroupResponse,
     HealthScoreResponse,
     JournalEntryResponse,
+    PaymentMethodAnalyticsResponse,
     ReminderDraftLineResponse,
     ReminderDraftResponse,
     ReminderGenerateRequest,
+    RevenueConcentrationResponse,
     SuggestAccountCodeRequest,
     TenantSettingsResponse,
     WorkingCapitalAlertResponse,
+    WorkingCapitalSeriesResponse,
     WorkingCapitalSettingsRequest,
 )
 from skyrict_common.exceptions import NotFoundError
@@ -97,6 +108,7 @@ class FinanceAutomationService:
 
     repo: FinanceRepositoryPort
     audit: AuditSink
+    customers: CustomerPort | None = field(default=None)
     ai_suggest: AiSuggester | None = field(default=None)
     ai_draft: AiDrafter | None = field(default=None)
 
@@ -187,6 +199,45 @@ class FinanceAutomationService:
         return await self.repo.comparative_pnl(
             tenant_id, current_from, current_to, prior_from, prior_to
         )
+
+    async def revenue_concentration(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> Any:
+        report = await self.repo.revenue_concentration(tenant_id, from_date, to_date)
+        if self.customers is not None and report.entries:
+            names = await self.customers.get_customer_names(
+                [e.customer_id for e in report.entries], tenant_id=tenant_id
+            )
+            report = RevenueConcentration(
+                from_date=report.from_date,
+                to_date=report.to_date,
+                threshold=report.threshold,
+                total_revenue=report.total_revenue,
+                entries=tuple(
+                    RevenueConcentrationEntry(
+                        customer_id=e.customer_id,
+                        customer_name=names.get(e.customer_id),
+                        amount=e.amount,
+                        share=e.share,
+                        above_threshold=e.above_threshold,
+                    )
+                    for e in report.entries
+                ),
+            )
+        return report
+
+    async def working_capital_series(
+        self, tenant_id: uuid.UUID, as_of: date, months: int = 6
+    ) -> Any:
+        return await self.repo.working_capital_series(tenant_id, as_of, months)
+
+    async def payment_method_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> Any:
+        return await self.repo.payment_method_analytics(tenant_id, from_date, to_date)
+
+    async def audit_readiness(self, tenant_id: uuid.UUID) -> Any:
+        return await self.repo.audit_readiness(tenant_id)
 
     async def reverse_journal_entry(
         self, tenant_id: uuid.UUID, user_id: uuid.UUID, entry_id: uuid.UUID
@@ -460,6 +511,89 @@ async def get_comparative_pnl(
         _tenant_id(current_user), current_from, current_to, prior_from, prior_to
     )
     return ResponseEnvelope(data=ComparativePnlResponse.model_validate(pnl))
+
+
+@router.get(
+    "/revenue-concentration",
+    response_model=ResponseEnvelope[RevenueConcentrationResponse],
+)
+async def get_revenue_concentration(
+    from_date: date,
+    to_date: date,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[RevenueConcentrationResponse]:
+    report = await svc.revenue_concentration(_tenant_id(current_user), from_date, to_date)
+    return ResponseEnvelope(data=RevenueConcentrationResponse.model_validate(report))
+
+
+@router.get(
+    "/working-capital-series",
+    response_model=ResponseEnvelope[WorkingCapitalSeriesResponse],
+)
+async def get_working_capital_series(
+    as_of: date,
+    months: int = Query(default=6, ge=1, le=24),
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[WorkingCapitalSeriesResponse]:
+    series = await svc.working_capital_series(_tenant_id(current_user), as_of, months)
+    return ResponseEnvelope(data=WorkingCapitalSeriesResponse.model_validate(series))
+
+
+@router.get(
+    "/payment-methods",
+    response_model=ResponseEnvelope[PaymentMethodAnalyticsResponse],
+)
+async def get_payment_method_analytics(
+    from_date: date,
+    to_date: date,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[PaymentMethodAnalyticsResponse]:
+    analytics = await svc.payment_method_analytics(_tenant_id(current_user), from_date, to_date)
+    return ResponseEnvelope(data=PaymentMethodAnalyticsResponse.model_validate(analytics))
+
+
+@router.get("/audit-readiness", response_model=ResponseEnvelope[AuditReadinessResponse])
+async def get_audit_readiness(
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[AuditReadinessResponse]:
+    readiness = await svc.audit_readiness(_tenant_id(current_user))
+    return ResponseEnvelope(data=AuditReadinessResponse.model_validate(readiness))
+
+
+@router.get("/audit/search", response_model=ResponseEnvelope[AuditLogSearchResponse])
+async def search_audit_log(
+    q: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    actor_user_id: uuid.UUID | None = None,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    audit_svc: Any = Depends(get_core_audit_service),
+) -> ResponseEnvelope[AuditLogSearchResponse]:
+    entries, total = await audit_svc.search(
+        _tenant_id(current_user),
+        action=action,
+        actor_user_id=actor_user_id,
+        q=q,
+        from_date=from_date,
+        to_date=to_date,
+        offset=offset,
+        limit=limit,
+    )
+    return ResponseEnvelope(
+        data=AuditLogSearchResponse(
+            entries=[AuditLogEntryResponse.model_validate(e) for e in entries],
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
+    )
 
 
 @router.post(

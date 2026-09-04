@@ -528,6 +528,7 @@ def get_finance_automation_service(
 ) -> FinanceAutomationService:
     """Composition root for the finance automation feature (SKY-56/SKY-64)."""
     from core.features.audit.repository import AuditRepository
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.repository import FinanceRepository
 
@@ -536,6 +537,7 @@ def get_finance_automation_service(
     return FinanceAutomationService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
+        customers=CrmRepository(db),
     )
 
 
@@ -550,6 +552,7 @@ def get_finance_automation_service_with_ai(
     from core.domain.entities import AccountCodeSuggestion, ChartOfAccount, DraftEntry
     from core.features.ai.router import get_ai_client
     from core.features.audit.repository import AuditRepository
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.ai_suggester import (
         draft_journal_entry_with_ai,
         suggest_account_code_with_ai,
@@ -584,6 +587,7 @@ def get_finance_automation_service_with_ai(
     return FinanceAutomationService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
+        customers=CrmRepository(db),
         ai_suggest=ai_suggest,
         ai_draft=ai_draft,
     )

@@ -1133,3 +1133,86 @@ class SalesOrderLine:
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# Finance automation wave-2 read-models (SKY-66) - derived, never stored.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RevenueConcentrationEntry:
+    """One customer's share of recognized revenue over a period (B11)."""
+
+    customer_id: uuid.UUID
+    customer_name: str | None
+    amount: Decimal
+    share: Decimal  # 0..1 of total revenue
+    above_threshold: bool  # share >= threshold
+
+
+@dataclass(frozen=True)
+class RevenueConcentration:
+    """Revenue concentration report - how dependent revenue is on top customers."""
+
+    from_date: date
+    to_date: date
+    threshold: Decimal  # e.g. 0.25
+    total_revenue: Decimal
+    entries: tuple[RevenueConcentrationEntry, ...]
+
+
+@dataclass(frozen=True)
+class WorkingCapitalPosition:
+    """Assets minus liabilities for a single month end (B12)."""
+
+    month: str  # "YYYY-MM"
+    assets: Decimal
+    liabilities: Decimal
+    working_capital: Decimal
+
+
+@dataclass(frozen=True)
+class WorkingCapitalSeries:
+    """Monthly assets - liabilities trend (B12)."""
+
+    positions: tuple[WorkingCapitalPosition, ...]
+
+
+@dataclass(frozen=True)
+class PaymentMethodAnalyticsEntry:
+    """Revenue share by payment method over a period (B20)."""
+
+    method: str
+    count: int
+    amount: Decimal
+    share: Decimal  # 0..1 of total
+
+
+@dataclass(frozen=True)
+class PaymentMethodAnalytics:
+    """How payments split by method - used to spot CPP/fee-heavy channels."""
+
+    from_date: date
+    to_date: date
+    total_amount: Decimal
+    entries: tuple[PaymentMethodAnalyticsEntry, ...]
+
+
+@dataclass(frozen=True)
+class AuditReadinessCheck:
+    """A single audit-readiness gate and whether the tenant passes it (B32)."""
+
+    key: str
+    label: str
+    status: str  # "ok" | "warning" | "missing"
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditReadiness:
+    """Overall audit-readiness posture for the tenant (B32)."""
+
+    ready: bool
+    checks: tuple[AuditReadinessCheck, ...]
+

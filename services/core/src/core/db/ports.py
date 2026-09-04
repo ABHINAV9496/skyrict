@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
     from core.domain.entities import AuditLogEntry, ErpSequence
 
@@ -37,7 +38,23 @@ class AuditLogRepositoryPort(Protocol):
         tenant_id: uuid.UUID,
         *,
         action: str | None = None,
-        limit: int = 100,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
     ) -> list[AuditLogEntry]: ...
 
     async def get(self, tenant_id: uuid.UUID, entry_id: uuid.UUID) -> AuditLogEntry | None: ...
+
+    async def count(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        action: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> int: ...

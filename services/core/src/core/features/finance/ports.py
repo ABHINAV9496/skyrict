@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         AiFinanceAnomaly,
         AiFinanceSuggestion,
         ArAging,
+        AuditReadiness,
         BalanceSheet,
         CashflowProjection,
         ChartOfAccount,
@@ -45,10 +46,13 @@ if TYPE_CHECKING:
         Invoice,
         JournalEntry,
         Payment,
+        PaymentMethodAnalytics,
         ProfitAndLoss,
+        RevenueConcentration,
         TenantSetting,
         TrialBalance,
         WorkingCapitalAlert,
+        WorkingCapitalSeries,
     )
     from core.domain.value_objects import EntryStatus, InvoiceStatus
 
@@ -258,6 +262,20 @@ class FinanceRepositoryPort(Protocol):
         prior_from: date,
         prior_to: date,
     ) -> ComparativePnl: ...
+
+    async def revenue_concentration(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> RevenueConcentration: ...
+
+    async def working_capital_series(
+        self, tenant_id: uuid.UUID, as_of: date, months: int = 6
+    ) -> WorkingCapitalSeries: ...
+
+    async def payment_method_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> PaymentMethodAnalytics: ...
+
+    async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness: ...
 
     async def reverse_journal_entry(
         self,

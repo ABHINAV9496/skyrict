@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, TypedDict
 
@@ -1793,6 +1793,32 @@ class FinanceRepository:
         )
         models = (await self.session.execute(stmt)).scalars().all()
         return [_ai_anomaly_from_orm(m) for m in models]
+
+    async def close_stale_anomalies(
+        self,
+        tenant_id: uuid.UUID,
+        anomaly_type: str,
+        keep_entity_ids: set[uuid.UUID],
+    ) -> int:
+        """Close open anomalies whose source entity is no longer affected.
+
+        Called by the anomaly scan so a duplicate that has since been resolved
+        (e.g. one copy was reversed) stops surfacing as an open anomaly.
+        Returns the number of anomalies closed.
+        """
+        stmt = select(AiFinanceAnomalyModel).where(
+            AiFinanceAnomalyModel.tenant_id == tenant_id,
+            AiFinanceAnomalyModel.anomaly_type == anomaly_type,
+            AiFinanceAnomalyModel.status == "open",
+        )
+        if keep_entity_ids:
+            stmt = stmt.where(AiFinanceAnomalyModel.entity_id.notin_(tuple(keep_entity_ids)))
+        models = (await self.session.execute(stmt)).scalars().all()
+        now = datetime.now(UTC)
+        for model in models:
+            model.status = "closed"
+            model.reviewed_at = now
+        return len(models)
 
     async def get_ai_anomaly(
         self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID

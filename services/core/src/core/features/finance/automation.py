@@ -161,6 +161,7 @@ class FinanceAutomationService:
     async def run_anomaly_scan(self, tenant_id: uuid.UUID) -> Any:
         detected: list[AiFinanceAnomaly] = []
         dupes = await self.repo.duplicates(tenant_id)
+        active_entity_ids: set[uuid.UUID] = set()
         for group in dupes:
             first = group.entries[0]
             anomaly = await self.repo.upsert_ai_anomaly(
@@ -175,6 +176,12 @@ class FinanceAutomationService:
                 ),
             )
             detected.append(anomaly)
+            active_entity_ids.add(anomaly.entity_id)
+        await self.repo.close_stale_anomalies(
+            tenant_id,
+            anomaly_type="duplicate_entry",
+            keep_entity_ids=active_entity_ids,
+        )
         for anomaly in detected:
             await self.audit.log(
                 tenant_id=tenant_id,

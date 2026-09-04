@@ -25,6 +25,7 @@ from core.db.audit_repository import AuditLogRepository
 from core.db.session import async_session_factory, engine
 from core.domain.entities import AuditLogEntry
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
+from core.features.finance.automation import FinanceAutomationService
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
@@ -253,6 +254,41 @@ async def test_reverse_flips_lines_and_stamps(automation_world: dict[str, str]) 
 
     assert reversed_entry is not None
     assert reversed_entry.status == EntryStatus.REVERSED
+
+
+class _NoopAuditSink:
+    async def log(self, **kwargs: object) -> None:
+        pass
+
+
+async def test_scan_closes_resolved_duplicate_anomaly(
+    automation_world: dict[str, str],
+) -> None:
+    """A duplicate that was resolved (one copy reversed) stops surfacing.
+
+    Regression: the anomaly scan only upserted anomalies and never closed one
+    whose duplicate group no longer existed, so a stale open anomaly persisted
+    across rescans and refreshes.
+    """
+    tenant_id = uuid.UUID(automation_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        svc = FinanceAutomationService(repo=repo, audit=_NoopAuditSink())
+        detected = await svc.run_anomaly_scan(tenant_id)
+        assert any(a.anomaly_type == "duplicate_entry" for a in detected)
+        dup_group = next(g for g in await repo.duplicates(tenant_id))
+        await repo.reverse_journal_entry(
+            dup_group.entries[0].entry_id,
+            tenant_id,
+            reversed_by_user_id=uuid.uuid4(),
+            reversed_at=PIVOT,
+        )
+        await svc.run_anomaly_scan(tenant_id)
+        open_anomalies = await repo.list_open_ai_anomalies(tenant_id)
+        assert not [
+            a for a in open_anomalies if a.anomaly_type == "duplicate_entry"
+        ]
+        await session.rollback()
 
 
 @pytest.fixture(scope="module")

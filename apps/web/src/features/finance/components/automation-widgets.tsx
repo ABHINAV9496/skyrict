@@ -993,14 +993,14 @@ export function RevenueConcentrationCard({
                 <div className="space-y-3">
                     {entries.map((entry) => (
                         <div key={entry.customer_id}>
-                            <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                            <div className="flex items-center justify-between gap-2">
                                 <span className="flex min-w-0 items-center gap-2">
                                     <span className="truncate font-medium text-foreground">
                                         {entry.customer_name ??
                                             entry.customer_id.slice(0, 8)}
                                     </span>
                                     {entry.above_threshold ? (
-                                        <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                        <span className="shrink-0 whitespace-nowrap rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                                             {Math.round(
                                                 toMoney(
                                                     concentration.threshold,
@@ -1010,12 +1010,16 @@ export function RevenueConcentrationCard({
                                         </span>
                                     ) : null}
                                 </span>
-                                <span className="shrink-0 tabular-nums text-muted-foreground">
-                                    {formatMoney(entry.amount)} ·{" "}
+                            </div>
+                            <div className="mt-0.5 flex items-baseline justify-between gap-2 text-sm">
+                                <span className="tabular-nums text-foreground">
+                                    {formatMoney(entry.amount)}
+                                </span>
+                                <span className="tabular-nums text-muted-foreground">
                                     {Math.round(toMoney(entry.share) * 100)}%
                                 </span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                                 <div
                                     className={cn(
                                         "h-full rounded-full",
@@ -1063,7 +1067,7 @@ export function WorkingCapitalTrendCard({
                     No working capital history yet.
                 </p>
             ) : (
-                <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40 text-left text-xs text-muted-foreground uppercase">
                             <tr>
@@ -1087,7 +1091,7 @@ export function WorkingCapitalTrendCard({
                                     key={position.month}
                                     className="border-t border-border/60"
                                 >
-                                    <td className="px-3 py-1.5 font-medium text-foreground">
+                                    <td className="whitespace-nowrap px-3 py-1.5 font-medium text-foreground">
                                         {position.month}
                                     </td>
                                     <td
@@ -1101,10 +1105,10 @@ export function WorkingCapitalTrendCard({
                                     >
                                         {formatMoney(position.working_capital)}
                                     </td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums">
+                                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                                         {formatMoney(position.assets)}
                                     </td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums">
+                                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                                         {formatMoney(position.liabilities)}
                                     </td>
                                 </tr>
@@ -1151,21 +1155,24 @@ export function PaymentMethodsCard({
                 <div className="space-y-3">
                     {entries.map((entry) => (
                         <div key={entry.method}>
-                            <div className="mb-1 flex items-center justify-between gap-2 text-sm">
-                                <span className="flex min-w-0 items-center gap-2">
-                                    <span className="truncate font-medium text-foreground">
-                                        {formatPaymentMethod(entry.method)}
-                                    </span>
-                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                        {entry.count} {entry.count === 1 ? "payment" : "payments"}
-                                    </span>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="min-w-0 truncate font-medium text-foreground">
+                                    {formatPaymentMethod(entry.method)}
                                 </span>
-                                <span className="shrink-0 tabular-nums text-muted-foreground">
-                                    {formatMoney(entry.amount)} ·{" "}
+                                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                    {entry.count}{" "}
+                                    {entry.count === 1 ? "payment" : "payments"}
+                                </span>
+                            </div>
+                            <div className="mt-0.5 flex items-baseline justify-between gap-2 text-sm">
+                                <span className="tabular-nums text-foreground">
+                                    {formatMoney(entry.amount)}
+                                </span>
+                                <span className="tabular-nums text-muted-foreground">
                                     {Math.round(toMoney(entry.share) * 100)}%
                                 </span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                                 <div
                                     className="h-full rounded-full bg-primary"
                                     style={{

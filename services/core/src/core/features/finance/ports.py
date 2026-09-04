@@ -306,6 +306,10 @@ class FinanceRepositoryPort(Protocol):
 
     async def list_open_ai_anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]: ...
 
+    async def close_stale_anomalies(
+        self, tenant_id: uuid.UUID, anomaly_type: str, keep_entity_ids: set[uuid.UUID]
+    ) -> int: ...
+
     # --- AI anomaly lookup by ID ---
 
     async def get_ai_anomaly(

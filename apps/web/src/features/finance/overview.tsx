@@ -246,7 +246,9 @@ export function FinanceOverview() {
             // Re-fetch the persisted open anomalies so the panel mirrors the
             // DB after the scan, matching the initial load (scanning returns
             // only newly-detected rows and would otherwise blank the feed).
-            const anomalies = await getAnomalies().catch(() => [] as FinanceAnomaly[]);
+            const anomalies = await getAnomalies().catch(
+                () => [] as FinanceAnomaly[],
+            );
             setStatus({ ...status, scanning: false, anomalies });
         } catch (error) {
             setStatus({
@@ -379,17 +381,20 @@ export function FinanceOverview() {
                 </div>
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 sm:grid-cols-2">
                 <RevenueConcentrationCard
                     concentration={status.revenueConcentration}
                     loading={false}
                 />
-                <WorkingCapitalTrendCard
-                    series={status.workingCapitalSeries}
-                    loading={false}
-                />
                 <PaymentMethodsCard
                     analytics={status.paymentMethods}
+                    loading={false}
+                />
+            </section>
+
+            <section className="grid gap-4 sm:grid-cols-2">
+                <WorkingCapitalTrendCard
+                    series={status.workingCapitalSeries}
                     loading={false}
                 />
                 <AuditReadinessCard

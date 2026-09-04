@@ -377,13 +377,6 @@ def make_payroll_service(
     (the cross-feature accrual bridge used by ``mark_paid``) and
     ``payslip_notifier`` (the 0035 approval delivery-gate) are injected only
     where they are resolvable.
-    """Payroll service with ``LeaveService`` injected as the leave ledger.
-
-    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
-    leave days, accrual-type catalogue, idempotent annual accrual - Rule 4), so
-    the payroll feature never imports the HR feature directly. The HR repository
-    is shared (same ``db`` session), keeping payroll-driven accrual in the same
-    transaction as the compute.
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.hr.repository import HrRepository

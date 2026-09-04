@@ -30,7 +30,7 @@ let refreshPromise: Promise<boolean> | null = null;
 let sessionLostRedirectPending = false;
 
 /**
- * The session has definitively ended — the refresh token was rejected or
+ * The session has definitively ended - the refresh token was rejected or
  * revoked. Clear the in-memory access token and leave the workspace origin
  * for the tenant's signin surface exactly once, so the app never keeps
  * retrying a dead session (which re-arms the backend's reuse detector and
@@ -81,7 +81,7 @@ let sessionPromise: Promise<HydratedSession | null> | null = null;
  * Restore the in-memory access token from the httpOnly session cookie via
  * /api/auth/session, single-flight. Every consumer (SessionProvider and the
  * authenticated /api/v1 client) shares one request so that exactly one
- * server-side refresh-token rotation happens per page load — concurrent
+ * server-side refresh-token rotation happens per page load - concurrent
  * rotations from the same token would be flagged as reuse and revoke the
  * whole token family.
  */
@@ -195,7 +195,7 @@ export async function fetchWithSession(path: string, options: RequestInit): Prom
 
   // A 401 means the access token is missing (fresh page load on the workspace
   // origin, where the token only lives in memory) or stale. Hydrate/refresh
-  // silently through the BFF — the refresh token lives in an httpOnly cookie —
+  // silently through the BFF - the refresh token lives in an httpOnly cookie -
   // then retry once. If the refresh itself fails the session is gone and the
   // caller surfaces the 401. Both recovery paths are single-flight so exactly
   // one server-side token rotation happens at a time.
@@ -321,8 +321,8 @@ export function buildQueryString(
  *
  * The core backend returns bare arrays (no envelope meta), so the client
  * probes with `limit + 1` to detect a following page. When a full page is
- * returned the probe reveals exactly one extra row — enough to know there IS a
- * next page — and `total`/`total_pages` are reported honestly ("at least this
+ * returned the probe reveals exactly one extra row - enough to know there IS a
+ * next page - and `total`/`total_pages` are reported honestly ("at least this
  * many") rather than guessed. The probe is clamped to the backend's limit cap
  * of 100, so page sizes at the cap report a single page.
  */

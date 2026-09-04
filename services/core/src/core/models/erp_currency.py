@@ -1,4 +1,4 @@
-"""ERP currency reference model — global (not tenant-scoped), seeded ISO 4217."""
+"""ERP currency reference model - global (not tenant-scoped), seeded ISO 4217."""
 
 from __future__ import annotations
 

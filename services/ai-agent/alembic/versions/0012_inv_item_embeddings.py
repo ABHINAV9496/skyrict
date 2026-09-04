@@ -2,7 +2,7 @@
 
 One row per ``(tenant_id, product_id)`` with a 512-dimension pgvector
 embedding of the product's *existing* catalog text (``"{sku} {name}
-{category} {unit}"`` — concatenated, no glue tokens). Embedding whole-item
+{category} {unit}"`` - concatenated, no glue tokens). Embedding whole-item
 text keeps the snapshot independent of core's schema, at the cost that a
 hit cannot be attributed to a single field; the search layer therefore
 carries per-field ``matched_fields``/highlight only for EXACT (ILIKE) hits
@@ -10,7 +10,7 @@ and surfaces ``score`` + ``source="semantic"`` for vector hits (spec §2.3).
 
 The table is a snapshot mirror of core-owned ``erp_products`` maintained by
 ``inventory.product.upserted``/``.removed`` events + post-commit HTTP sync
-and the ``inventory reindex`` CLI — it is never written by any request path.
+and the ``inventory reindex`` CLI - it is never written by any request path.
 The composite ``(tenant_id, product_id)`` FK into ``erp_products`` mirrors
 the SKY-68 cross-service idiom (migration 0006); RLS bounds every row to
 the session tenant via ``current_tenant_id()``.

@@ -1,4 +1,4 @@
-"""Payroll service — rules 7-10 (docs/hr-payroll.md §4.9-§4.10) + compute engine.
+"""Payroll service - rules 7-10 (docs/hr-payroll.md §4.9-§4.10) + compute engine.
 
 Payroll is the money-sensitive core of this phase: ``PayrollCompute`` is pure
 (no DB), and ``PayrollService`` composes it with the repository, the shared
@@ -95,7 +95,7 @@ class ComputeResult:
 
 
 class PayrollCompute:
-    """Pure payroll computation — no repository, no DB.
+    """Pure payroll computation - no repository, no DB.
 
     ``pay_days`` follows docs §4.10 Rule 9:
         pay_days = days_in_period
@@ -119,7 +119,7 @@ class PayrollCompute:
         """Full-time-equivalent paid days for one employee in the period.
 
         Rule 9: ``days_in_period`` minus the period days before hire, after
-        termination, and on approved unpaid leave — never negative.
+        termination, and on approved unpaid leave - never negative.
         """
         days_in_period = (period_end - period_start).days + 1
         reduction = 0
@@ -395,9 +395,9 @@ class PayrollService:
         #
         # LOCK-ORDERING CONTRACT (load-bearing, see HrRepository.lock_leave_balance):
         # each accrual takes the employee's balance-row lock. This loop MUST
-        # iterate in a stable total order — `employees` is ordered by
+        # iterate in a stable total order - `employees` is ordered by
         # employee_number (list_active_employees) and `accrual_types` by code
-        # (list_accrual_leave_types) — so aggregate lock acquisition is a total
+        # (list_accrual_leave_types) - so aggregate lock acquisition is a total
         # order across the whole roster and a concurrent single-row approver
         # (exactly one lock) can never deadlock with it. Preserve both orderings
         # if this loop or those queries ever change.
@@ -431,7 +431,7 @@ class PayrollService:
             )
             if compensation is None:
                 skipped.append((employee_id, "no effective compensation"))
-                continue  # no effective salary for this period — no entry
+                continue  # no effective salary for this period - no entry
             unpaid_days = await self._leave_ledger.approved_unpaid_days(
                 employee_id,
                 tenant_id=tenant_id,

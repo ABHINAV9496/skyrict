@@ -1,11 +1,11 @@
-"""Scheduled CRM follow-up scan — hourly background job (SKY-61 Part 11).
+"""Scheduled CRM follow-up scan - hourly background job (SKY-61 Part 11).
 
 Every hour, for every active tenant, the scan enumerates all leads and
 opportunities via core's paginated CRM API, checks for staleness, and
 generates deterministic follow-up suggestions for entity owners.
 
 Lives under ``ai_agent.api.scheduled`` (not ``core/jobs``) because it
-orchestrates feature services and depends on the CRM gateway — the same
+orchestrates feature services and depends on the CRM gateway - the same
 architectural boundary that places the anomaly scan here.
 
 Authentication: the scan runs as a system task with no user JWT. It
@@ -15,7 +15,7 @@ scan (log-only), mirroring the anomaly scan's pattern.
 
 Isolation: tenant enumeration uses the ``tenants_readable`` policy (no GUC),
 then each tenant opens its own session and sets ``TenantContext`` before the
-first CRM query — the transaction-local ``set_config`` scopes every RLS
+first CRM query - the transaction-local ``set_config`` scopes every RLS
 row. One tenant's failure never aborts others.
 """
 

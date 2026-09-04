@@ -1,7 +1,7 @@
-"""Sales repository — DB operations for sales orders and their lines.
+"""Sales repository - DB operations for sales orders and their lines.
 
 Concrete implementation of :class:`SalesRepositoryPort`. Orders are
-tenant-scoped only (no owner/team columns — locked SKY-43 decision); every
+tenant-scoped only (no owner/team columns - locked SKY-43 decision); every
 query carries an explicit ``tenant_id`` filter as defense in depth under RLS.
 
 - **Atomic document creation**: header + lines are flushed in one transaction;
@@ -47,7 +47,7 @@ _UNIQUE_VIOLATION_MESSAGES: dict[str, str] = {
 _DEFAULT_CONFLICT_MESSAGE = "The resource conflicts with existing data"
 
 # Per-tenant document sequence claimed by this repository (wired at the
-# composition root — features never import core.db), mirroring the HR
+# composition root - features never import core.db), mirroring the HR
 # repository's ``next_sequence``.
 _ORDER_NUMBER_SEQUENCE = "sales_order"
 
@@ -259,16 +259,16 @@ class SalesRepository:
         lines: Sequence[SalesOrderLine] | None = None,
         totals: tuple[Money, Money, Money, Money] | None = None,
     ) -> SalesOrder | None:
-        """PATCH a DRAFT order — change the customer and/or replace its lines.
+        """PATCH a DRAFT order - change the customer and/or replace its lines.
 
         Atomic guard: the header UPDATE carries ``WHERE status = 'draft'``, so
         a confirmed/fulfilled/cancelled order is never mutated (rowcount 0 ->
         None, the service re-probes and replies accordingly). When neither
         field is provided the guard still runs and the current order returns
         (no-op PATCH). Lines are replaced wholesale (delete + insert in the
-        same transaction) — never merged.
+        same transaction) - never merged.
 
-        ``totals`` is ``(subtotal, discount, tax, total)`` — the service's
+        ``totals`` is ``(subtotal, discount, tax, total)`` - the service's
         recomputed header money columns (clients never supply money); writing
         them in the SAME guarded UPDATE keeps the header consistent with the
         replaced lines atomically.
@@ -359,7 +359,7 @@ class SalesRepository:
         """draft|confirmed -> cancelled; returns the updated order, None when the guard loses.
 
         ``confirmed_at`` is cleared because the DB CHECK ties it to
-        ``confirmed``/``fulfilled`` — a cancelled order must not carry it.
+        ``confirmed``/``fulfilled`` - a cancelled order must not carry it.
         """
         stmt = (
             update(ErpSalesOrderModel)
@@ -380,7 +380,7 @@ class SalesRepository:
     ) -> SalesOrder | None:
         """Record a FAILED credit check on a draft order (informational).
 
-        The order STAYS in draft — the DB has no opinion on the check result;
+        The order STAYS in draft - the DB has no opinion on the check result;
         the service re-runs the check on every confirm attempt, so raising the
         customer's limit later makes the same order confirmable.
         """
@@ -399,5 +399,5 @@ class SalesRepository:
         return await self.get_order(order_id, tenant_id=tenant_id)
 
     async def commit(self) -> None:
-        """Commit the current transaction — the service owns the transaction lifecycle."""
+        """Commit the current transaction - the service owns the transaction lifecycle."""
         await self.session.commit()

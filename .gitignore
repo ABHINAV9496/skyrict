@@ -94,13 +94,13 @@ secrets.yaml
 credentials.json
 service-account*.json
 
-# RSA keys — NEVER commit key material; tests generate ephemeral keys
+# RSA keys - NEVER commit key material; tests generate ephemeral keys
 *.pem
 
 # Local dev-only files
 .dev/
 
-# Local runtime data (GeoLite2 DB etc. — see scripts/geolite2)
+# Local runtime data (GeoLite2 DB etc. - see scripts/geolite2)
 .local/
 
 # ---------- Docker ----------

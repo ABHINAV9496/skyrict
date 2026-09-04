@@ -1,4 +1,4 @@
-# Terraform — Skyrict infrastructure
+# Terraform - Skyrict infrastructure
 
 Cloud infrastructure as code. Environments are thin glue layers; provider
 implementation lives in reusable modules.
@@ -28,7 +28,7 @@ points tenant subdomains at the identity service ingress load balancer.
   GitHub secrets (see `backend.tf` and `docs/runbooks/staging-deployment.md`).
 - The wildcard target is the ingress load balancer address: an IPv4 address
   becomes an `A` record, a hostname becomes a `CNAME`.
-- TLS certificates are intentionally **not** provisioned here — cert-manager
+- TLS certificates are intentionally **not** provisioned here - cert-manager
   issues and renews the wildcard certificate in-cluster (DNS-01), writing its
   `_acme-challenge` TXT records into this same zone.
 
@@ -38,7 +38,7 @@ points tenant subdomains at the identity service ingress load balancer.
    `modules/dns/README.md` (same variables/outputs as `route53/`).
 2. In `environments/<env>/main.tf`, change the module `source`; add the
    provider's `required_providers` + config in `provider.tf`.
-3. Nothing else changes — the environment glue is provider-agnostic.
+3. Nothing else changes - the environment glue is provider-agnostic.
 
 ## Validation (no credentials required)
 

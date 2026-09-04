@@ -1,6 +1,6 @@
 """Transport logic for proxying requests to the ai-agent microservice.
 
-Pure asyncio/httpx — no FastAPI router/request imports — so failure mapping
+Pure asyncio/httpx - no FastAPI router/request imports - so failure mapping
 and header hygiene are exhaustively unit-testable with ``httpx.MockTransport``.
 The only FastAPI surface is the two response wrappers (buffered + streaming).
 
@@ -19,7 +19,7 @@ Security posture:
   pass through untouched (ai-agent speaks RFC 7807 already).
 - Streaming relays (``stream=True``) keep the upstream connection open and
   forward each chunk as it arrives; a client disconnect closes that
-  connection, cancelling the upstream SSE stream — no orphaned generation.
+  connection, cancelling the upstream SSE stream - no orphaned generation.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 def build_forward_headers(*, authorization: str | None, tenant_slug: str | None) -> dict[str, str]:
-    """The exact header set relayed upstream — nothing else survives."""
+    """The exact header set relayed upstream - nothing else survives."""
     headers: dict[str, str] = {}
     if authorization:
         headers["Authorization"] = authorization
@@ -59,15 +59,15 @@ async def forward_to_ai_agent(
     """Send one request to ai-agent and return its response untouched.
 
     ``stream=True`` returns a streaming response whose body must be consumed
-    via ``aiter_bytes()`` and closed with ``aclose()`` — use it only with
+    via ``aiter_bytes()`` and closed with ``aclose()`` - use it only with
     :func:`relay_stream_response`.
 
     Raises:
         AiServiceUnavailableError: On any transport-level failure
             (connection refused, DNS, TLS, timeout). Never on HTTP error
-            statuses — those are valid upstream application responses.
+            statuses - those are valid upstream application responses.
         ValueError: If the resolved request target points at a host other
-            than the client's configured origin — the proxy refuses to
+            than the client's configured origin - the proxy refuses to
             relay anywhere else.
     """
     headers = build_forward_headers(authorization=authorization, tenant_slug=tenant_slug)
@@ -107,7 +107,7 @@ def relay_stream_response(upstream: httpx.Response) -> Response:
     """Relay a streaming upstream body chunk-by-chunk (SSE never buffered).
 
     The upstream connection is closed when the stream ends OR the client
-    disconnects, which cancels the ai-agent generator upstream — no orphaned
+    disconnects, which cancels the ai-agent generator upstream - no orphaned
     LLM generation keeps running server-side.
     """
 

@@ -14,13 +14,13 @@ from jose import JWTError, jwt
 from {name}.core.config import settings
 from {name}.core.exceptions import TokenExpiredError, TokenInvalidError
 
-# Algorithms we accept — explicitly whitelisted. Rejects "none" and any
+# Algorithms we accept - explicitly whitelisted. Rejects "none" and any
 # header-driven algorithm switching (CVE-2015-2951 / algorithm confusion).
 _ALLOWED_ALGORITHMS = {"RS256"}
 
 
 # ---------------------------------------------------------------------------
-# Password hashing — Argon2id (OWASP recommended)
+# Password hashing - Argon2id (OWASP recommended)
 # ---------------------------------------------------------------------------
 try:
     from argon2 import PasswordHasher
@@ -48,7 +48,7 @@ try:
 except ImportError:
     import logging
     logging.warning(
-        "argon2-cffi not installed — falling back to plaintext comparison. "
+        "argon2-cffi not installed - falling back to plaintext comparison. "
         "DO NOT use in production. Install: pip install argon2-cffi"
     )
 
@@ -60,7 +60,7 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# JWT — RS256 only
+# JWT - RS256 only
 # ---------------------------------------------------------------------------
 def create_access_token(
     subject: str,
@@ -109,10 +109,10 @@ def create_refresh_token(
 
 
 def verify_jwt(token: str) -> dict[str, Any]:
-    """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
+    """Decode and VERIFY a JWT - the ONE AND ONLY verification path.
 
     Security guarantees:
-      - RS256 only (asymmetric — public key verifies, private key signs)
+      - RS256 only (asymmetric - public key verifies, private key signs)
       - Algorithm whitelist rejects "none" and header-driven attacks
       - Issuer and audience are validated
       - Expiry (exp) and not-before (nbf) are checked

@@ -4,7 +4,7 @@ Stores structured facts extracted by the LLM after each CRM chat turn.
 Facts are categorized (preference, entity, context, instruction) and used
 to provide context in future exchanges. Rows expire after 90 days.
 
-Embeddings and vector search are deferred — this table stores text and
+Embeddings and vector search are deferred - this table stores text and
 metadata for keyword/FTS retrieval only.
 """
 

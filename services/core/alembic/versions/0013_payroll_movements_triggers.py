@@ -5,10 +5,10 @@ Close-out of gap-audit item 11. The ledger contract was documented
 enforcement: nothing at the SQL layer stopped a row from being updated,
 deleted, or from summing to a negative balance. This migration adds both:
 
-* ``erp_leave_movements_append_only`` — direct UPDATE/DELETE is rejected
+* ``erp_leave_movements_append_only`` - direct UPDATE/DELETE is rejected
   (referential-integrity writes at ``pg_trigger_depth() > 1`` still pass,
   mirroring the core_audit_logs pattern from 0006).
-* ``erp_leave_movements_guard_negative`` (SECURITY DEFINER) — on INSERT the
+* ``erp_leave_movements_guard_negative`` (SECURITY DEFINER) - on INSERT the
   SUM(qty) for the affected ``(tenant_id, employee_id, leave_type)`` is
   recomputed including the new row and raises when it is negative. The
   function reads the full ledger as the owner, deliberately bypassing the

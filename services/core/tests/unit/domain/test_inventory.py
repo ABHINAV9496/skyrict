@@ -1,4 +1,4 @@
-"""Inventory domain tests — movement type enum + entity construction (no DB)."""
+"""Inventory domain tests - movement type enum + entity construction (no DB)."""
 
 from __future__ import annotations
 

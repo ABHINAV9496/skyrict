@@ -1,6 +1,6 @@
-"""erp_payroll_runs — a monthly payroll run covering a whole tenant period.
+"""erp_payroll_runs - a monthly payroll run covering a whole tenant period.
 
-A run is NOT employee-scoped — it covers every active employee for a period.
+A run is NOT employee-scoped - it covers every active employee for a period.
 ``total_gross``/``total_net`` are NULLABLE on purpose: NULL means "not yet
 computed", which must stay distinct from a genuine zero-dollar run. The
 partial unique index ``uq_erp_payroll_runs_period_active`` (same tenant +
@@ -91,7 +91,7 @@ class PayrollRunModel(Base):
     )
     total_gross: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     total_net: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
-    # Approver/executor user UUIDs — plain UUIDs, no FK (identity service).
+    # Approver/executor user UUIDs - plain UUIDs, no FK (identity service).
     computed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     paid_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

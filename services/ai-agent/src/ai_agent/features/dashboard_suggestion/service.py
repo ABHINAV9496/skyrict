@@ -149,6 +149,6 @@ class DashboardSuggestionService:
         """Return the current layout as-is when LLM is unavailable."""
         return {
             "suggested_layout": current_layout,
-            "reasoning": "AI suggestion unavailable — showing current layout.",
+            "reasoning": "AI suggestion unavailable - showing current layout.",
             "confidence": 0.0,
         }

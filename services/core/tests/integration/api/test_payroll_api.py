@@ -301,7 +301,7 @@ class TestRosterScope:
         run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
         result = await _compute(client, headers, run["id"])
 
-        # Only the mid-period employee is on the roster — and they are paid
+        # Only the mid-period employee is on the roster - and they are paid
         # through their termination date, not the full period.
         assert len(result["entries"]) == 1
         entry = result["entries"][0]
@@ -321,7 +321,7 @@ class TestRepositoryLevelEntryImmutability:
 
     Calls ``PayrollRepository.update_entry`` DIRECTLY against the real
     repository, bypassing the service layer, on entries belonging to runs in
-    every status — proving the repository-level backstop itself fires when
+    every status - proving the repository-level backstop itself fires when
     something ever bypasses the service guard.
     """
 
@@ -460,7 +460,7 @@ class TestRepositoryLevelEntryImmutability:
         assert approved.status_code == 200, approved.text
 
         # Direct repo DELETE (bypassing the service layer) must refuse to drop
-        # entries from an immutable run — same defense-in-depth as update_entry.
+        # entries from an immutable run - same defense-in-depth as update_entry.
         with pytest.raises(PayrollEntryImmutableError):
             await self._repo_delete(tenant_id, run_id, keep=[])
 

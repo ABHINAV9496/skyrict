@@ -1,1 +1,1 @@
-"""Persistence — async engine/session and the generic repository base."""
+"""Persistence - async engine/session and the generic repository base."""

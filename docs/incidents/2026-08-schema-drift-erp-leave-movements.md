@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Severity:** P3 (dev-infrastructure; silent schema drift, no data loss)
-**Scope:** Infrastructure / migration hygiene — not HR/Payroll feature scope
+**Scope:** Infrastructure / migration hygiene - not HR/Payroll feature scope
 
 First entry in `docs/incidents/` (no prior convention existed). Written to persist in
 repo history and to be pasted into a GitHub issue verbatim.
@@ -21,12 +21,12 @@ fine.
 Concretely, the leave-accrual path fails on such a database with
 `operator does not exist: uuid = character varying` whenever the ledger writes
 a string ref like `'2026'` (the annual-accrual leave year). The local dev
-volume for this project hit exactly that. CI databases are immune (ephemeral —
+volume for this project hit exactly that. CI databases are immune (ephemeral -
 always built from current files); persistent local/shared volumes are not.
 
 ## Diagnosis
 
-1. `alembic heads` and `alembic current` both report `0006` — no signal.
+1. `alembic heads` and `alembic current` both report `0006` - no signal.
 2. `\d erp_leave_movements` shows `ref_id` as `uuid`; migration 0005 says
    `sa.String(64)`.
 3. `alembic check` against a fresh database passes, because the ORM model and
@@ -39,15 +39,15 @@ always built from current files); persistent local/shared volumes are not.
   and a placeholder `down_revision` explicitly marked `DRAFT PLACEHOLDER`.
 - The migration was **applied to a live (persistent) database** during the
   data-layer window while the chain was still unstable.
-- `8bfcc08` (2026-08-13): the design decision changed — the annual-accrual ref
-  is a leave-year string, not a UUID — and the applied migration was edited
+- `8bfcc08` (2026-08-13): the design decision changed - the annual-accrual ref
+  is a leave-year string, not a UUID - and the applied migration was edited
   **in place** (UUID → `String(64)`) alongside the ORM model, instead of adding
   a new revision.
 - The version table already read head, so the edit was never replayed. Drift.
 
 ### Why the earlier `down_revision` scrutiny missed this
 
-Careful chain bookkeeping guards against branch/multiple-head problems — but it
+Careful chain bookkeeping guards against branch/multiple-head problems - but it
 assumes the version table is a trustworthy proxy for actual schema state. An
 in-place edit of an applied migration breaks that assumption entirely, while
 every alembic health check still reports green.
@@ -69,8 +69,8 @@ ref inserts cleanly. The `downgrade` is intentionally a no-op (reversing to
 
 **Regression guard (added after this incident):**
 `services/core/tests/integration/database/test_migration_roundtrip.py` now
-exercises the WHOLE chain — identity base → core `upgrade head` → core
-`downgrade base` → core `upgrade head` — on a scratch database it creates and
+exercises the WHOLE chain - identity base → core `upgrade head` → core
+`downgrade base` → core `upgrade head` - on a scratch database it creates and
 drops, asserting the sentinel schema (including `ref_id` varchar(64)) after
 both upgrades and full teardown after the downgrade. This is the first test
 to ever run 0006's six-step downgrade (trigger functions, RLS policies,
@@ -81,8 +81,8 @@ would fail on the round-trip.
 
 ## Prevention
 
-The two obvious rules — "never edit an applied migration" and "don't commit
-placeholder `down_revision`s" — are the same workflow problem stated twice.
+The two obvious rules - "never edit an applied migration" and "don't commit
+placeholder `down_revision`s" - are the same workflow problem stated twice.
 The rule that actually prevents a repeat, stated as something to do up front:
 
 > **Iterate on schema changes against an ephemeral/disposable database during
@@ -96,14 +96,14 @@ merged state. This keeps the version table trustworthy, which is the real
 invariant every other guard depends on.
 
 Corollary (the classic rule, still true): once a migration has been applied to
-any non-disposable database, never edit it — any correction is a new revision.
+any non-disposable database, never edit it - any correction is a new revision.
 
-## Future work (suggestion — not part of this remediation)
+## Future work (suggestion - not part of this remediation)
 
 A guard that compares a **deployed** database's actual schema against what the
 migration chain claims would catch this class of drift (fresh-database
-`alembic check` cannot). This is a meaningfully larger ask — tooling that does
-not exist yet — and the team should decide explicitly whether to prioritize it.
+`alembic check` cannot). This is a meaningfully larger ask - tooling that does
+not exist yet - and the team should decide explicitly whether to prioritize it.
 It is not required for 0007; 0007 is complete and verified on its own.
 
 ## References

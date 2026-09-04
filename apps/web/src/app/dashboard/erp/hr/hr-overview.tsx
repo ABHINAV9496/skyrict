@@ -231,7 +231,7 @@ export function HrOverview() {
         <RecentActivityList
           title="Recent leave activity"
           items={data.recentLeave}
-          emptyMessage="No leave activity yet — hire a team member or create a leave request."
+          emptyMessage="No leave activity yet hire a team member or create a leave request."
         />
       </div>
     </div>

@@ -46,7 +46,7 @@ ERP_INVOICE_READ = "erp.invoice.read"
 ERP_INVOICE_APPROVE = "erp.invoice.approve"
 ERP_INVOICE_WRITE = "erp.invoice.write"
 
-# Finance — full ledger/invoice/payment domain (successor to erp.invoice.*).
+# Finance - full ledger/invoice/payment domain (successor to erp.invoice.*).
 ERP_FINANCE_READ = "erp.finance.read"
 ERP_FINANCE_WRITE = "erp.finance.write"
 ERP_FINANCE_APPROVE = "erp.finance.approve"

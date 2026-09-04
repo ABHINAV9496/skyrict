@@ -195,7 +195,7 @@ class TestAiDigest:
 
 class TestAiQueryCache:
     def test_tenant_hash_unique_index_is_tenant_scoped(self) -> None:
-        """One cache entry per tenant+query — never a global query hash."""
+        """One cache entry per tenant+query - never a global query hash."""
         index = next(
             index
             for index in AiQueryCacheModel.__table__.indexes

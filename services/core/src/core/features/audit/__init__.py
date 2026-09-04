@@ -1,4 +1,4 @@
-"""Audit feature — append-only audit trail for ERP mutations.
+"""Audit feature - append-only audit trail for ERP mutations.
 
 Writes into the SHARED ``audit_logs`` table (created by identity's migration,
 hash-chained + append-only + RLS-protected), so core records security-relevant

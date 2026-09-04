@@ -1,4 +1,4 @@
-# Core — pre-existing integration-test drift (tech-debt log)
+# Core - pre-existing integration-test drift (tech-debt log)
 
 Logged during the SKY-70 semantic search gate (branch `feat/SKY-70-semantic-inventory-search`).
 Scope decision (user-approved): **leave as tech-debt; do not fix under SKY-70.**
@@ -9,7 +9,7 @@ with zero SKY-70 involvement. Full suite: 815 passed, 11 failed; the 11th
 (`test_team_size_gate_passes_for_four_members`, model-eval anomaly) is a
 separate, already-followed pre-existing failure.
 
-## Root cause A — stale `annual` accrual expectations (9 tests)
+## Root cause A - stale `annual` accrual expectations (9 tests)
 
 Commit `ff822f8` "feat(leave): replace annual with policy-driven casual+sick
 (Leave Type Rework)" replaced the legacy `annual` accrual with
@@ -35,7 +35,7 @@ leave-type the tenant policy accrues), aligning with the rework's model and
 its updated unit tests (`test_leave_service.py::test_list_accrual_leave_types_returns_only_accrual_types`
 asserts `["casual", "sick"]`).
 
-## Root cause B — sales fulfil needs a seeded COGS account (1 test)
+## Root cause B - sales fulfil needs a seeded COGS account (1 test)
 
 | Test | Failure |
 |------|---------|
@@ -46,7 +46,7 @@ code `5000`; no finance seed currently creates that account, so the request 404s
 Fix direction: add `5000` (Cost of Goods Sold) to the tenant finance
 chart-of-accounts seed used by integration tests (or the fulfil test's own setup).
 
-## Pre-existing (already tracked) — unrelated
+## Pre-existing (already tracked) - unrelated
 
 | Test | Notes |
 |------|-------|

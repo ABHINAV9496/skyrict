@@ -1,4 +1,4 @@
-"""erp_employee_documents — the compliance source table.
+"""erp_employee_documents - the compliance source table.
 
 Holds an employee's documents / certifications per ``erp_document_type``.
 ``expiry_date`` enables the ``document_expiry`` and ``training_overdue``

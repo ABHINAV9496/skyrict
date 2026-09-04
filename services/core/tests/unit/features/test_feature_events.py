@@ -1,4 +1,4 @@
-"""Feature event tests — after-commit buffer + new emitters (docs §2.5).
+"""Feature event tests - after-commit buffer + new emitters (docs §2.5).
 
 Covers the after-commit buffer added for gap #12 and the emitters added for
 gaps #7/#8. Unit-level: the process-wide stub producer is swapped for a
@@ -41,7 +41,7 @@ TENANT = uuid.uuid4()
 
 
 class RecordingProducer:
-    """Swap-in for the process-wide stub — records every published event."""
+    """Swap-in for the process-wide stub - records every published event."""
 
     def __init__(self) -> None:
         self.published: list[tuple[str, BaseEvent, str | None]] = []

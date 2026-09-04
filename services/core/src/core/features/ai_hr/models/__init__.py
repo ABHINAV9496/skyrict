@@ -1,4 +1,4 @@
-"""HR/Payroll AI ORM models — one file per ``ai_*`` / ``erp_employee_documents`` table."""
+"""HR/Payroll AI ORM models - one file per ``ai_*`` / ``erp_employee_documents`` table."""
 
 from core.features.ai_hr.models.attrition_score import (
     AttritionRiskBand,

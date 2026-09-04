@@ -1,4 +1,4 @@
-"""Passkey (WebAuthn) service — registration and authentication. Not yet implemented."""
+"""Passkey (WebAuthn) service - registration and authentication. Not yet implemented."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class PasskeyService:
         self.user_repo = user_repo
 
     async def start_registration(self, user_id: uuid.UUID) -> dict[str, Any]:
-        """Initiate passkey registration — return challenge options."""
+        """Initiate passkey registration - return challenge options."""
         raise NotImplementedError("Passkey registration is not yet implemented")
 
     async def complete_registration(
@@ -31,7 +31,7 @@ class PasskeyService:
         raise NotImplementedError("Passkey registration is not yet implemented")
 
     async def start_authentication(self, email: str) -> dict[str, Any]:
-        """Initiate passkey authentication — return challenge options."""
+        """Initiate passkey authentication - return challenge options."""
         raise NotImplementedError("Passkey authentication is not yet implemented")
 
     async def complete_authentication(self, credential: dict[str, Any]) -> dict[str, Any]:

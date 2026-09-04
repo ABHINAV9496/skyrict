@@ -1,4 +1,4 @@
-"""Session endpoints — list and revoke active sessions."""
+"""Session endpoints - list and revoke active sessions."""
 
 from __future__ import annotations
 

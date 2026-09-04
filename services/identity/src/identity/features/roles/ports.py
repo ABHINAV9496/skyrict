@@ -1,4 +1,4 @@
-"""Role repository port — the persistence contract role management depends on.
+"""Role repository port - the persistence contract role management depends on.
 
 Ports abstract persistence only (never business rules). Methods accept and
 return domain entities; SQLAlchemy lives in the concrete implementation

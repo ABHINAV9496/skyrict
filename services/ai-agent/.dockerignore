@@ -1,4 +1,4 @@
-# Keep build context minimal — mirrors services/core/.dockerignore
+# Keep build context minimal - mirrors services/core/.dockerignore
 .git
 .venv
 **/__pycache__

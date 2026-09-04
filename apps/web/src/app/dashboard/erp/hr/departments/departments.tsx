@@ -75,7 +75,7 @@ export function DepartmentsClient() {
       label: "Manager",
       render: (department) => (
         <span className="text-muted-foreground">
-          {employeeName(department.managerEmployeeId) ?? "—"}
+          {employeeName(department.managerEmployeeId) ?? "-"}
         </span>
       ),
     },

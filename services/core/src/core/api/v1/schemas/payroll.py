@@ -52,7 +52,7 @@ class MoneyOut(BaseModel):
 
 
 class PayrollSettingsIn(BaseModel):
-    """Partial settings update — omitted fields keep their current values."""
+    """Partial settings update - omitted fields keep their current values."""
 
     default_currency: str | None = Field(default=None, min_length=3, max_length=3)
     pf_rate: Decimal | None = Field(default=None, ge=0, le=1)
@@ -224,7 +224,7 @@ class PayslipOut(BaseModel):
 
 
 class RunComputeOut(BaseModel):
-    """Result of POST /runs/{id}/compute — run snapshot + entries + skips."""
+    """Result of POST /runs/{id}/compute - run snapshot + entries + skips."""
 
     run: PayrollRunOut
     entries: list[PayrollEntryOut] = Field(default_factory=list)

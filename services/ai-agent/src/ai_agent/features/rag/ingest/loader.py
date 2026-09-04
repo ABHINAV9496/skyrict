@@ -2,14 +2,14 @@
 
 Two loaders cover the two approved sources:
 
-- :class:`DocsLoader` — markdown documents from a directory (ERP manuals,
+- :class:`DocsLoader` - markdown documents from a directory (ERP manuals,
   SOPs, UI help). ``source_ref`` is the POSIX path relative to the root.
-- :class:`ModuleLoader` — whitelisted transactional text fields fetched from
+- :class:`ModuleLoader` - whitelisted transactional text fields fetched from
   the core monolith (SKY-70 semantic product search needs product name and
   SKU, not money or PII). Every row becomes a compact markdown record.
 
 FIELD WHITELIST SECURITY RULE (inventory AI spec §5.5): never include cost
-prices, sell prices, customer/supplier names, or user IDs — those data
+prices, sell prices, customer/supplier names, or user IDs - those data
 classes must not leave the trust boundary even for embeddings. Each module
 lists its allowed fields explicitly in :data:`MODULE_FIELD_WHITELISTS`; a
 field added to core is not ingested until the whitelist grows deliberately.
@@ -35,7 +35,7 @@ MODULE_ENDPOINTS: dict[str, str] = {
     "products": "/api/v1/inventory/products",
 }
 
-# Allowed textual fields per module — see module docstring for the whitelist
+# Allowed textual fields per module - see module docstring for the whitelist
 # rule. Money (reorder_point, cost prices) and PII are deliberately absent.
 MODULE_FIELD_WHITELISTS: dict[str, tuple[str, ...]] = {
     "products": ("name", "sku"),

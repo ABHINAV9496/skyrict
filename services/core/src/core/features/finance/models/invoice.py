@@ -1,4 +1,4 @@
-"""erp_invoices — accounts-receivable documents (bills to customers).
+"""erp_invoices - accounts-receivable documents (bills to customers).
 
 ``status`` drives revenue recognition: revenue is only recognized at
 ``approved`` (accrual basis), never at issue or payment. The transition
@@ -9,7 +9,7 @@ timestamps record when each state change happened. ``UNIQUE
 ``source`` / ``source_ref`` stamp where the invoice came from:
 ``UNIQUE (tenant_id, source, source_ref)`` is the idempotency lock for
 ``InvoicePort.create_from_order`` (source = 'sales_order', source_ref =
-order_id) — a replayed CRM handoff can never create a second invoice. Manual
+order_id) - a replayed CRM handoff can never create a second invoice. Manual
 invoices default to source = 'manual' with a NULL source_ref, which stays
 distinct, so unlimited manual bills are allowed.
 """

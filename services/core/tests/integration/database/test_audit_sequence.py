@@ -1,9 +1,9 @@
-"""Audit + sequence integration tests (0006) — real Postgres, real migrations.
+"""Audit + sequence integration tests (0006) - real Postgres, real migrations.
 
 Covers what a model test cannot:
 
   - the SHA-256 hash chain on ``core_audit_logs``: every row links to its
-    predecessor, and — critically — the chain is SELF-CONTAINED PER TENANT
+    predecessor, and - critically - the chain is SELF-CONTAINED PER TENANT
     under RLS (a non-owner role scoped by the ``app.current_tenant_id`` GUC
     sees genesis ``prev_hash = 64 zeros`` for ITS OWN tenant even when other
     tenants have rows). The table owner bypasses RLS, so owner-level writes
@@ -19,7 +19,7 @@ Covers what a model test cannot:
 
 Each test gets a FRESH pair of tenants (function-scoped ``audit_world``), and
 the teardown temporarily disables the append-only trigger so it can delete the
-fixture's rows — the log is otherwise unrecoverable even for its owner.
+fixture's rows - the log is otherwise unrecoverable even for its owner.
 
 Skipped automatically when Postgres is unreachable (``migrated_schema``).
 """
@@ -73,7 +73,7 @@ async def audit_world(migrated_schema: None) -> AsyncIterator[dict[str, str]]:
     setup. An async fixture runs on the test's own loop, so no extra loop is
     created.
 
-    ``core_audit_logs`` is append-only — the trigger blocks even the owner's
+    ``core_audit_logs`` is append-only - the trigger blocks even the owner's
     DELETE. Teardown disables the trigger for the cleanup transaction
     (transactional DDL in Postgres), then always restores it so the table stays
     append-only.
@@ -235,7 +235,7 @@ class TestAuditHashChain:
         async with async_session_factory() as session:
             repo = AuditLogRepository(session)
             # Commit after each insert so ``created_at`` (transaction start time)
-            # differs row to row — otherwise ordering within the same transaction
+            # differs row to row - otherwise ordering within the same transaction
             # is not meaningful.
             for i in range(3):
                 await repo.add(
@@ -288,7 +288,7 @@ class TestAuditHashChain:
         """The hash chain is self-contained PER TENANT when RLS applies.
 
         As a non-owner role scoped by the tenant GUC, the trigger's previous-hash
-        lookup only sees the current tenant's rows — so each tenant's chain
+        lookup only sees the current tenant's rows - so each tenant's chain
         starts from 64 zeros even though the other tenant already has rows.
         """
         await _ensure_erp_rls_role()

@@ -1,4 +1,4 @@
-"""HR API endpoints — departments, employees, leave (HR-BE-002 §2, §7).
+"""HR API endpoints - departments, employees, leave (HR-BE-002 §2, §7).
 
 Every handler requires a valid access token bound to the routed tenant and the
 appropriate ``erp.hr.*`` permission (resolved from the database per request).
@@ -63,7 +63,7 @@ from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
-# Permission singletons (docs/modules/hr-payroll.md §7) — resolved per request.
+# Permission singletons (docs/modules/hr-payroll.md §7) - resolved per request.
 _require_hr_read = require_permission(ERP_HR_READ)
 _require_hr_write = require_permission(ERP_HR_WRITE)
 _require_hr_approve = require_permission(ERP_HR_APPROVE)

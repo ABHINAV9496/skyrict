@@ -1,4 +1,4 @@
-"""Token internal schemas — used by services, not exposed in API."""
+"""Token internal schemas - used by services, not exposed in API."""
 
 from __future__ import annotations
 

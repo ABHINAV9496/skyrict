@@ -1,4 +1,4 @@
-"""{name} application/use-case layer — business logic, grouped by domain."""
+"""{name} application/use-case layer - business logic, grouped by domain."""
 
 from {name}.services.audit import AuditService
 from {name}.services.auth import AuthenticationService, AuthorizationService, TokenService

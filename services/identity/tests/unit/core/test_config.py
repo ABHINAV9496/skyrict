@@ -1,4 +1,4 @@
-"""Unit tests for identity/core/config.py — production safety guards.
+"""Unit tests for identity/core/config.py - production safety guards.
 
 Covers all four staging/production fail-fast checks:
   1. JWT key paths pointing at committed test fixtures
@@ -180,7 +180,7 @@ class TestProductionSafety:
                 CORS_ORIGINS=["https://app.skyrict.io"],
             )
         )
-        assert "https://app.skyrict.io" in s.CORS_ORIGINS
+        assert s.CORS_ORIGINS == ["https://app.skyrict.io"]
 
     # --- Check 4: BASE_DOMAIN required (tenant subdomain resolution) ---
 

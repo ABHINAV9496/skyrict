@@ -1,4 +1,4 @@
-"""Extended anomaly detection — tests for the 4 new rules."""
+"""Extended anomaly detection - tests for the 4 new rules."""
 
 from __future__ import annotations
 

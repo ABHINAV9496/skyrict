@@ -1,4 +1,4 @@
-"""Restock Advisor — the SKY-59 HITL demo agent (feature slice).
+"""Restock Advisor - the SKY-59 HITL demo agent (feature slice).
 
 The agent module contract lives in ``graph.py``: ``build_graph(deps)``
 returns an uncompiled ``StateGraph`` the runtime compiles with the

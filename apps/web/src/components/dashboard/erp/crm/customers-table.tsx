@@ -84,7 +84,7 @@ export function CustomersTable() {
       label: "Contact",
       render: (customer) => (
         <div className="min-w-0">
-          <p className="truncate text-foreground">{customer.email || "—"}</p>
+          <p className="truncate text-foreground">{customer.email || "-"}</p>
           <p className="truncate text-xs text-muted-foreground">{customer.phone || ""}</p>
         </div>
       ),

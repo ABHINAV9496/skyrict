@@ -1,8 +1,8 @@
-"""Async Redis client — the ONE place Redis connections are created.
+"""Async Redis client - the ONE place Redis connections are created.
 
 Mirrors db.py: a module-level client built from settings so the whole service
-shares a single connection pool. Redis clients are lazy — no TCP connection is
-opened until the first command — so importing this module (and even
+shares a single connection pool. Redis clients are lazy - no TCP connection is
+opened until the first command - so importing this module (and even
 constructing the app) never blocks on Redis.
 
 Redis backs the distributed AI rate limiter (spec §5.4). The pool is closed

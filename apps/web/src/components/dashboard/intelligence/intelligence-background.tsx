@@ -1,6 +1,6 @@
 /**
  * Decorative market-analytics chart behind the GMIE home hero. A faded green
- * line/area graph with subtle CSS-animated overlays — a sweeping
+ * line/area graph with subtle CSS-animated overlays - a sweeping
  * scan, a trend line that draws itself in, and pulsing markers. Pure
  * decoration: never receives pointer events, and motion is disabled under
  * prefers-reduced-motion.

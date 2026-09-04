@@ -41,7 +41,7 @@ export function DataTable({ payload }: { payload: TablePayload }) {
                       column.align === "right" && "text-right tabular-nums",
                     )}
                   >
-                    {String(row[column.key] ?? "—")}
+                    {String(row[column.key] ?? "-")}
                   </td>
                 ))}
               </tr>

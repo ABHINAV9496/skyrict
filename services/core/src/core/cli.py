@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-# services/core — the alembic.ini lives here; the CLI is invoked via
+# services/core - the alembic.ini lives here; the CLI is invoked via
 # `uv run --directory services/core core ...`, so never resolve relative to
 # the process CWD (which is already services/core, making a nested path).
 # cli.py lives at services/core/src/core/, so parents[2] is services/core.
@@ -63,7 +63,7 @@ def seed(
     0001 itself, so this command always verifies those rows are present. With
     ``--tenant-id`` it additionally seeds that tenant's leave-type catalogue
     defaults, the single payroll-settings row, and the five system roles in
-    ``core_roles`` (core.seed) — idempotent.
+    ``core_roles`` (core.seed) - idempotent.
     """
     import asyncio
 

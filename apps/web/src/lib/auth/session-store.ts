@@ -1,7 +1,7 @@
 /**
  * In-memory access-token store (browser only).
  *
- * The access token never touches localStorage/sessionStorage — it lives in a
+ * The access token never touches localStorage/sessionStorage - it lives in a
  * module variable and is re-hydrated on page load via /api/auth/session.
  */
 

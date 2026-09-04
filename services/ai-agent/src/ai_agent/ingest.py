@@ -1,4 +1,4 @@
-"""RAG ingestion runner — composition root for the ``ai-agent ingest`` CLI.
+"""RAG ingestion runner - composition root for the ``ai-agent ingest`` CLI.
 
 Wires the pieces the feature layer may not import itself (repositories,
 sessions, settings) around the pure ingestion pipeline. Lives at the package

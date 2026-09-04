@@ -1,4 +1,4 @@
-"""Role management service — custom role CRUD business rules.
+"""Role management service - custom role CRUD business rules.
 
 ``AuthorizationService`` resolves a user's roles to permissions and enforces
 permission checks (fail-closed). ``RoleManagementService`` owns role-creation,

@@ -4,7 +4,7 @@ Migration 0013 made ``erp_leave_movements`` append-only and hardened the per-
 ``(tenant, employee, leave_type)`` ledger against going negative for EVERY
 leave type. That over-reached for non-accrual (ledger-only) types such as
 ``sick`` and ``unpaid``: the HR service deliberately treats those as unbounded
-ledger entries (no balance rows, no balance pre-check — see
+ledger entries (no balance rows, no balance pre-check - see
 ``core/features/hr/service.py`` approve) yet the guard made their very first
 approval INSERT raise and surface as an unhandled 500 against the real stack.
 

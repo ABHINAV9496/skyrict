@@ -66,14 +66,14 @@ Journalists, educators, and content creators may use the Skyrict name and logo i
 
 You may **not** use Skyrict trademarks to:
 
-- **Imply endorsement** — Suggest that Skyrict endorses, sponsors, or is affiliated with your product, service, or organization without written permission
-- **Use in a product name** — Use "Skyrict" or any confusingly similar mark as part of your own product, service, domain name, or company name
-- **Alter the marks** — Modify, recolor, stretch, distort, or create derivative versions of the logo or word mark
-- **Use on merchandise** — Place Skyrict marks on physical products (t-shirts, mugs, stickers, etc.) without prior written permission
-- **Use in advertising** — Use Skyrict marks in paid advertising (Google Ads, social media ads, sponsored content) without prior written permission
-- **Use for promotional purposes** — Use Skyrict marks in a way that creates a false sense of urgency, scarcity, or exclusivity
-- **In a disparaging context** — Use Skyrict marks in connection with content that is defamatory, obscene, or otherwise objectionable
-- **As part of a logo** — Use Skyrict marks as a component of your own logo or trademark
+- **Imply endorsement** - Suggest that Skyrict endorses, sponsors, or is affiliated with your product, service, or organization without written permission
+- **Use in a product name** - Use "Skyrict" or any confusingly similar mark as part of your own product, service, domain name, or company name
+- **Alter the marks** - Modify, recolor, stretch, distort, or create derivative versions of the logo or word mark
+- **Use on merchandise** - Place Skyrict marks on physical products (t-shirts, mugs, stickers, etc.) without prior written permission
+- **Use in advertising** - Use Skyrict marks in paid advertising (Google Ads, social media ads, sponsored content) without prior written permission
+- **Use for promotional purposes** - Use Skyrict marks in a way that creates a false sense of urgency, scarcity, or exclusivity
+- **In a disparaging context** - Use Skyrict marks in connection with content that is defamatory, obscene, or otherwise objectionable
+- **As part of a logo** - Use Skyrict marks as a component of your own logo or trademark
 
 ## 5. Domain Names
 
@@ -85,7 +85,7 @@ You may not register or use domain names that contain "skyrict" or confusing var
 - myskyrict.com
 - skyrict-erp.com
 
-If you operate a legitimate open-source fork, you may use a domain that clearly distinguishes your project from the official Skyrict project (e.g., "myskyrict-fork.com") — but this requires prior written approval.
+If you operate a legitimate open-source fork, you may use a domain that clearly distinguishes your project from the official Skyrict project (e.g., "myskyrict-fork.com") - but this requires prior written approval.
 
 ## 6. Community Projects and Events
 
@@ -124,7 +124,7 @@ This policy may be updated from time to time. Material changes will be announced
 For trademark inquiries, permissions, or questions:
 
 - **Email:** trademarks@skyrict.dev
-- **Subject line:** [Trademark Request] — {brief description}
+- **Subject line:** [Trademark Request] - {brief description}
 - **Response time:** 10 business days
 
 ---

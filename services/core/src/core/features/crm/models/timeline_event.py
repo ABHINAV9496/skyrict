@@ -1,4 +1,4 @@
-"""erp_crm_timeline_events — curated business events for the CRM timeline.
+"""erp_crm_timeline_events - curated business events for the CRM timeline.
 
 Tenant-scoped with RLS and the composite ``(tenant_id, id)`` primary key.
 This is the customer-facing CRM history log: written transactionally inside
@@ -7,7 +7,7 @@ the same request as the business action. It is a SEPARATE concept from:
 - the security/compliance ``audit_logs`` trail (never a CRM timeline source);
 - the async ``crm.*`` domain events (bus-only, after-commit).
 
-``entity_type`` is one of ``lead|opportunity|customer|contact`` — order
+``entity_type`` is one of ``lead|opportunity|customer|contact`` - order
 creations anchor to the related customer, never an ``order`` entity type.
 """
 

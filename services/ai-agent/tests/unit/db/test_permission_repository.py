@@ -51,7 +51,7 @@ def _compile(statement: object) -> str:
     [
         # Direct match on a single role.
         ([[PERM_INVENTORY_READ]], [PERM_INVENTORY_READ]),
-        # Two roles held by the user — both arrays are flattened.
+        # Two roles held by the user - both arrays are flattened.
         (
             [[PERM_INVENTORY_READ], [PERM_INVENTORY_AI_APPROVE]],
             [PERM_INVENTORY_READ, PERM_INVENTORY_AI_APPROVE],
@@ -92,7 +92,7 @@ async def test_join_is_scoped_by_composite_tenant_key() -> None:
     assert len(session.executed) == 1
     sql = _compile(session.executed[0])
     assert "FROM core_roles JOIN core_user_roles" in sql
-    # The composite join key is (tenant_id, role_id) — a grant can never pull
+    # The composite join key is (tenant_id, role_id) - a grant can never pull
     # permissions from a role outside the caller's tenant.
     assert "core_user_roles.tenant_id = core_roles.tenant_id" in sql.replace("\n", " ")
     assert "core_user_roles.role_id = core_roles.id" in sql.replace("\n", " ")
@@ -108,7 +108,7 @@ async def test_where_filters_on_caller_identity_and_tenant() -> None:
     sql = str(compiled)
     assert "core_user_roles.user_id" in sql
     assert "core_user_roles.tenant_id" in sql
-    # Bound values carry the caller's identity — never an inline literal.
+    # Bound values carry the caller's identity - never an inline literal.
     assert compiled.params["user_id_1"] == USER_ID
     assert compiled.params["tenant_id_1"] == TENANT_ID
 

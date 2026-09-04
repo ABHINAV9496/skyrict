@@ -150,7 +150,7 @@ export function AdjustStockDialog({
                                         key={product.id}
                                         value={product.id}
                                     >
-                                        {product.sku} — {product.name}
+                                        {product.sku} - {product.name}
                                         {product.isActive === false
                                             ? " (archived)"
                                             : ""}

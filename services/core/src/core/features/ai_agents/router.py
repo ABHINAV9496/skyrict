@@ -1,4 +1,4 @@
-"""``/api/v1/ai/agents/*`` proxy routes — permission checks BEFORE forwarding.
+"""``/api/v1/ai/agents/*`` proxy routes - permission checks BEFORE forwarding.
 
 SKY-59 agent orchestration runs on ai-agent; the monolith edge enforces the
 ERP matrix (spec 6.3, same posture as features/ai/router.py):
@@ -8,7 +8,7 @@ ERP matrix (spec 6.3, same posture as features/ai/router.py):
   chat stream            erp.ai.invoke
 
 The decision edge demands the finance-writer grant because it is a
-financial-class write (recorded Q&A decision) — defense in depth on top of
+financial-class write (recorded Q&A decision) - defense in depth on top of
 the ai-agent runtime's own tool-permission checks.
 
 The JWT is forwarded verbatim; ai-agent re-verifies it against the relayed

@@ -52,7 +52,7 @@ Each service/lib has its own `pyproject.toml` with dependencies. One `uv.lock` a
 
 ### Negative
 
-- uv is newer than Poetry — smaller community, fewer blog posts/tutorials
+- uv is newer than Poetry - smaller community, fewer blog posts/tutorials
 - Some edge cases may still have bugs (mitigated by active development)
 - Team members need to learn uv (mitigated by similar CLI to pip)
 

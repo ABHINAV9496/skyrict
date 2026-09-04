@@ -1,1 +1,1 @@
-"""{name} domain — pure Python entities and value objects."""
+"""{name} domain - pure Python entities and value objects."""

@@ -1,4 +1,4 @@
-"""Organization service — tenant CRUD business rules.
+"""Organization service - tenant CRUD business rules.
 
 Owns the business rules (slug uniqueness). All persistence goes through the
 ``TenantRepositoryPort``; no ORM models or sessions are touched here.

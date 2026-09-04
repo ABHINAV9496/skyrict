@@ -1,9 +1,9 @@
-"""erp_sales_order_lines — line items of a sales order, tenant-scoped with RLS.
+"""erp_sales_order_lines - line items of a sales order, tenant-scoped with RLS.
 
 Tenant-scoped, composite primary key ``(tenant_id, id)``. Two composite FKs
 keep referential integrity aligned with RLS: the line can only reference its
 order and its product in the SAME tenant. ``product_id`` is a REAL hard FK to
-inventory's ``erp_products`` (RESTRICT — locked SKY-43 decision), so a line
+inventory's ``erp_products`` (RESTRICT - locked SKY-43 decision), so a line
 can never point at a cross-tenant or non-existent product at the constraint
 level.
 

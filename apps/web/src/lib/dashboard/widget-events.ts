@@ -1,5 +1,5 @@
 /**
- * Widget interaction telemetry — client-side batching + flush.
+ * Widget interaction telemetry - client-side batching + flush.
  *
  * Records open/hide events per widget and flushes them to the API
  * every 10 seconds (or on page unload).  Fire-and-forget: telemetry

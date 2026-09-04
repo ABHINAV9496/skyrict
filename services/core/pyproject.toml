@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "core"
 version = "0.1.0"
-description = "ERP core service — finance, inventory, procurement, sales foundations + shared tenant/RLS plumbing"
+description = "ERP core service - finance, inventory, procurement, sales foundations + shared tenant/RLS plumbing"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
@@ -75,4 +75,4 @@ exclude_lines = [
 ]
 
 # Ruff / mypy config intentionally lives in the ROOT pyproject.toml (with the
-# per-file-ignores for core paths) — mirroring services/identity.
+# per-file-ignores for core paths) - mirroring services/identity.

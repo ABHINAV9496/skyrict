@@ -1,1 +1,1 @@
-"""Pydantic request/response DTOs — never expose ORM models directly."""
+"""Pydantic request/response DTOs - never expose ORM models directly."""

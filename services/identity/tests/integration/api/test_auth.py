@@ -123,7 +123,7 @@ class TestLoginAntiEnumeration:
 
     Unknown email, wrong password, unverified, and disabled accounts are
     indistinguishable at the API layer (status code, problem type, and
-    detail) — the backend is the source of truth; the frontend guides
+    detail) - the backend is the source of truth; the frontend guides
     account recovery via account-level state (SKY-21), never via backend
     error semantics.
     """
@@ -177,7 +177,7 @@ class TestLoginAntiEnumeration:
             )
             await session.commit()
         try:
-            # Correct password, but the account was never verified — the
+            # Correct password, but the account was never verified - the
             # response must look exactly like a wrong-password failure.
             resp = await client.post(
                 "/api/v1/auth/login",

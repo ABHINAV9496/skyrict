@@ -1,4 +1,4 @@
-"""SQL-level Row-Level Security smoke tests — verified against REAL Postgres.
+"""SQL-level Row-Level Security smoke tests - verified against REAL Postgres.
 
 These tests prove the RLS security boundary at the database layer, not through
 mocks or the HTTP stack:
@@ -7,13 +7,13 @@ mocks or the HTTP stack:
   - the GUC ``app.current_tenant_id`` (set by db/session.py's ``after_begin``)
     drives the policy function;
   - a NON-OWNER role (the ``core_rls_smoke`` test role) sees only its tenant's
-    rows — tenant B cannot read tenant A rows;
+    rows - tenant B cannot read tenant A rows;
   - cross-tenant INSERTs are rejected by the RLS ``WITH CHECK``;
   - the composite-FK convention rejects a cross-tenant role grant even as the
     table OWNER (referential integrity agrees with RLS).
 
 The dev ``skyrict`` user owns the tables (and is a superuser in the compose
-stack), so RLS is bypassed for it — exactly as in production where the app
+stack), so RLS is bypassed for it - exactly as in production where the app
 connects as a non-owner role. ``SET ROLE`` to the smoke role simulates that.
 """
 

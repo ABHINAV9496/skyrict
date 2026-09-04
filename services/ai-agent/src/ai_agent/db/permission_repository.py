@@ -1,11 +1,11 @@
-"""Read-only RBAC resolution — the agent runtime's authorization path (SKY-59).
+"""Read-only RBAC resolution - the agent runtime's authorization path (SKY-59).
 
 The core monolith resolves ERP permissions from the database at its proxy edge
 (``core/db/rbac.py``); the ai-agent runtime re-resolves them IN this service so
 agent tools can be scoped per tool without trusting a forwarded header. The
 grants live in core's tables in the shared database, so this repository maps
 the read-only projections (``models/core_rbac.py``) and runs the exact join
-core's ``RbacRepository`` uses — a grant can only ever pull permissions from a
+core's ``RbacRepository`` uses - a grant can only ever pull permissions from a
 role in the same tenant.
 
 Permissions are NEVER read from JWT claims: the claims name the subject and

@@ -1,4 +1,4 @@
-"""L1 aggregate service — composes repositories and builds deterministic narratives.
+"""L1 aggregate service - composes repositories and builds deterministic narratives.
 
 Narratives (spec §5) are rule-based templates over the aggregate numbers, not
 LLM output. They are fast, deterministic, and unit-testable.

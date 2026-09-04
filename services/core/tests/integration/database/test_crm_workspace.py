@@ -7,7 +7,7 @@ Complements the API suite with what only SQL-level access can prove:
     contacts/activities/notes/timeline events, and a cross-tenant INSERT is
     rejected by ``WITH CHECK``;
   - the three new native enum types created by migration 0016;
-  - OWNER/TEAM/ALL scoping of activities (the owner/team-scoped surface) —
+  - OWNER/TEAM/ALL scoping of activities (the owner/team-scoped surface) -
     direct fetch/update/complete/delete blocked outside scope, unassigned
     rows visible only to ALL;
   - the merged timeline: the DB-layer UNION is ordered and paginated as ONE
@@ -838,7 +838,7 @@ class TestWorkspaceRepository:
                 tenant_id=tenant_a, scope=DataScope.ALL, user_id=None, team_id=None
             )
             # Other tests in this module seed leads for the same tenant, so the
-            # count is cumulative — assert the shape, not an exact total.
+            # count is cumulative - assert the shape, not an exact total.
             status_map = dict(by_status)
             assert status_map[LeadStatus.NEW] >= 1
 
@@ -875,7 +875,7 @@ class TestWorkspaceRepository:
 
 
 class TestDowngradeRoundTrip0016:
-    """Migration 0016 downgrade round-trip — MUST stay the last class here.
+    """Migration 0016 downgrade round-trip - MUST stay the last class here.
 
     Drops the four workspace tables + three enum types, then re-applies to
     head so every later test module sees the head schema.

@@ -5,9 +5,9 @@ permission. ``seeded_test_rbac`` grants the deterministic admin identity the
 six ERP keys; the ``unprivileged`` identity has a valid token but zero grants.
 
 Assertions follow the spec's error table:
-  401 authentication-error   — missing/invalid token
-  403 permission-denied   — valid JWT, missing permission
-  200/201                    — valid JWT with the required grant
+  401 authentication-error   - missing/invalid token
+  403 permission-denied   - valid JWT, missing permission
+  200/201                    - valid JWT with the required grant
 """
 
 from __future__ import annotations

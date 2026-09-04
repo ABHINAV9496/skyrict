@@ -1,7 +1,7 @@
-"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
+"""Application configuration - pydantic-settings, env-driven, fail-fast on missing secrets.
 
 Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly — everything routes through the ``settings`` object.
+call os.getenv() directly - everything routes through the ``settings`` object.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(enum.StrEnum):
-    """Deployment environments — exactly four, no ad-hoc values."""
+    """Deployment environments - exactly four, no ad-hoc values."""
 
     DEV = "dev"
     TEST = "test"
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     Prefix: CORE_ (set via .env or shell environment).
     CRITICAL vars (DATABASE_URL, JWT public key, JWKS issuer/audience) have NO
-    defaults — the process refuses to start if they are missing.
+    defaults - the process refuses to start if they are missing.
 
     Core only VERIFIES identity-issued access tokens: it needs the public key
     and the issuer/audience the identity service signs for, never a private
@@ -51,24 +51,24 @@ class Settings(BaseSettings):
     )
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
-    # --- Database (CRITICAL — no default) ---
-    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string — REQUIRED")
+    # --- Database (CRITICAL - no default) ---
+    DATABASE_URL: str = Field(..., description="async PostgreSQL connection string - REQUIRED")
 
-    # --- JWT verification (CRITICAL — all three required) ---
+    # --- JWT verification (CRITICAL - all three required) ---
     JWT_PUBLIC_KEY_PATH: Path = Field(
-        ..., description="path to RSA public key PEM for verifying identity tokens — REQUIRED"
+        ..., description="path to RSA public key PEM for verifying identity tokens - REQUIRED"
     )
     JWKS_ISSUER: str = Field(
-        ..., description="JWT issuer claim (iss) — REQUIRED, e.g. https://auth.skyrict.io"
+        ..., description="JWT issuer claim (iss) - REQUIRED, e.g. https://auth.skyrict.io"
     )
     JWKS_AUDIENCE: str = Field(
-        ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
+        ..., description="JWT audience claim (aud) - REQUIRED, e.g. api.skyrict.io"
     )
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default=[],
-        description="allowed CORS origins — must be explicit, never '*' in staging/production",
+        description="allowed CORS origins - must be explicit, never '*' in staging/production",
     )
 
     # --- Logging ---
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     BASE_DOMAIN: str = Field(
         default="",
         description=(
-            "production tenant base domain, e.g. 'skyrict.com' — the first "
+            "production tenant base domain, e.g. 'skyrict.com' - the first "
             "label of a Host like acme.skyrict.com is the tenant slug. Required "
             "in staging/production; ignored in dev/test which resolve tenants "
             "from the X-Tenant-Slug header injected by nginx."
@@ -99,7 +99,7 @@ class Settings(BaseSettings):
         default=Decimal("100.00"),
         description=(
             "inventory adjustments above this absolute value require approval "
-            "before posting (in the tenant's default currency). Placeholder — "
+            "before posting (in the tenant's default currency). Placeholder - "
             "consumed by the inventory module ticket."
         ),
     )
@@ -220,7 +220,7 @@ class Settings(BaseSettings):
     jwt_public_key: str = ""
 
     # ------------------------------------------------------------------
-    # Validators — run in definition order (pydantic v2)
+    # Validators - run in definition order (pydantic v2)
     # ------------------------------------------------------------------
 
     @model_validator(mode="after")

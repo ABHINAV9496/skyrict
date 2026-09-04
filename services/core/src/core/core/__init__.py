@@ -1,4 +1,4 @@
-"""Core foundations — config, security, tenant context, exceptions, logging."""
+"""Core foundations - config, security, tenant context, exceptions, logging."""
 
 from core.core.config import Environment, Settings, settings
 from core.core.logging import configure_logging, get_logger

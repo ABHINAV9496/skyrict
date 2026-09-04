@@ -1,4 +1,4 @@
-"""Role schemas — requests and responses."""
+"""Role schemas - requests and responses."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RoleCreateRequest(BaseModel):
-    """POST /roles — create a custom (non-system) role."""
+    """POST /roles - create a custom (non-system) role."""
 
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9_-]+$")
     permission_keys: list[str] = Field(..., min_length=1, max_length=64)

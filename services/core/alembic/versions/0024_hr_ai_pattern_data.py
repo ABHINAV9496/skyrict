@@ -12,8 +12,8 @@ outside the ERP leave tables:
     NULL = org-wide).
 
 Both are tenant-scoped with the same composite-PK + RLS convention as every
-sibling ``ai_*`` table. They are lookup/config data — no employee PII, no
-signal tables — written via the existing ``erp.hr.write`` gate and consumed
+sibling ``ai_*`` table. They are lookup/config data - no employee PII, no
+signal tables - written via the existing ``erp.hr.write`` gate and consumed
 server-side by the AI engines under tenant context.
 
 Revision ID: 0024

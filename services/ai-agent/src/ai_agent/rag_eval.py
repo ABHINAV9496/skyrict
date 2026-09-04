@@ -1,4 +1,4 @@
-"""RAGAS evaluation runner — composition root for ``ai-agent eval`` (SKY-58).
+"""RAGAS evaluation runner - composition root for ``ai-agent eval`` (SKY-58).
 
 Runs the nightly retrieval-quality gate: for each curated eval case, drive the
 REAL production retrieval pipeline (embedding provider → vector search → parent
@@ -8,7 +8,7 @@ relevancy, context precision, context recall). Results are persisted to
 ``ai_eval_runs`` and the CLI exits nonzero when any metric falls below its
 threshold so the nightly workflow gates on the scores.
 
-ragas is deliberately NOT a package dependency — the runner imports it lazily
+ragas is deliberately NOT a package dependency - the runner imports it lazily
 and the nightly workflow installs it ephemerally:
 
     uv run --with "ragas>=0.2,<0.3" ai-agent eval --tenant <slug|uuid>

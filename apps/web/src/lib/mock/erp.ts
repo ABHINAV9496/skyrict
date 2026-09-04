@@ -1,8 +1,8 @@
 /**
  * Mock ERP data for the frontend-only ERP world.
  *
- * Each sub-module exposes a lightweight table shape — `columns` drives the
- * headers, `rows` are plain objects — so the shared DataTable renders without
+ * Each sub-module exposes a lightweight table shape - `columns` drives the
+ * headers, `rows` are plain objects - so the shared DataTable renders without
  * knowing what domain it is showing. Swap these behind stub API routes when
  * the core service grows real endpoints.
  */

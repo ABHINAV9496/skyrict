@@ -1,4 +1,4 @@
-"""Finance automation routes — SKY-56/SKY-64 wave 1.
+"""Finance automation routes - SKY-56/SKY-64 wave 1.
 
 A thin service + router over :class:`FinanceRepositoryPort` for the finance
 automation widgets: close checklist, duplicates, account-code suggestions,

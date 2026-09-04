@@ -1,4 +1,4 @@
-"""Persistence for ai_eval_runs — one RAGAS evaluation run per row.
+"""Persistence for ai_eval_runs - one RAGAS evaluation run per row.
 
 The table is global (cross-tenant metrics, no tenant_id column) and rows are
 append-only: the nightly evaluation inserts a run, CI reads last night's row

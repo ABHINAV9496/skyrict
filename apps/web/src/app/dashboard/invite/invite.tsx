@@ -191,7 +191,7 @@ export default function InviteClient() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable — the link stays visible for manual copying.
+      // Clipboard unavailable - the link stays visible for manual copying.
     }
   }
 

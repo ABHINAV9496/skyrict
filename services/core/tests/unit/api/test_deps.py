@@ -1,4 +1,4 @@
-"""API dependency logic tests — permission grant resolution (pure functions).
+"""API dependency logic tests - permission grant resolution (pure functions).
 
 ``require_permission`` resolves grants from the database at request time; the
 DB-backed join (RbacRepository) is covered by the integration suite. Here we
@@ -24,7 +24,7 @@ class TestGrantsPermission:
         assert not grants_permission([], "erp.invoice.read")
 
     def test_fails_closed_on_partial_prefix(self) -> None:
-        # "erp.inventory" must NOT grant "erp.inventory.adjust" — exact keys only.
+        # "erp.inventory" must NOT grant "erp.inventory.adjust" - exact keys only.
         assert not grants_permission(["erp.inventory"], "erp.inventory.adjust")
 
     def test_owner_grant_list(self) -> None:

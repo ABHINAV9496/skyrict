@@ -4,18 +4,18 @@
   this function with a plain ``CREATE FUNCTION``; core re-creates it with
   ``CREATE OR REPLACE`` so the two services can migrate the shared database
   in any order.
-- ``erp_currencies`` — global ISO 4217 reference catalog (no RLS), seeded.
-- ``core_permissions`` — global platform-fixed ERP catalog (no RLS), seeded.
-- ``core_roles`` — tenant-scoped, Row-Level Security via
+- ``erp_currencies`` - global ISO 4217 reference catalog (no RLS), seeded.
+- ``core_permissions`` - global platform-fixed ERP catalog (no RLS), seeded.
+- ``core_roles`` - tenant-scoped, Row-Level Security via
   ``public.current_tenant_id()``, COMPOSITE PRIMARY KEY ``(tenant_id, id)``.
-- ``core_user_roles`` — tenant-scoped, RLS, COMPOSITE FOREIGN KEY
+- ``core_user_roles`` - tenant-scoped, RLS, COMPOSITE FOREIGN KEY
   ``(tenant_id, role_id) -> core_roles(tenant_id, id)``.
 
 COMPOSITE-FK RLS CONVENTION (ERP feature tables MUST follow this):
   a tenant-scoped table declares ``tenant_id`` as BOTH its RLS column and a
   member of its primary key, and references its parent with a composite FK
   that includes ``tenant_id``. Then a child row can only ever point at a
-  parent in the SAME tenant — referential integrity agrees with RLS and the
+  parent in the SAME tenant - referential integrity agrees with RLS and the
   cross-tenant reference hole is closed at the constraint level, not just
   filtered at query time.
 
@@ -47,7 +47,7 @@ depends_on = None
 _TENANT_SCOPED_TABLES = ("core_roles", "core_user_roles")
 
 # ---------------------------------------------------------------------------
-# Currency catalog (global, seeded — ISO 4217)
+# Currency catalog (global, seeded - ISO 4217)
 # ---------------------------------------------------------------------------
 CURRENCY_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     ("USD", "US Dollar", "$", "840"),
@@ -73,7 +73,7 @@ CURRENCY_CATALOG: tuple[tuple[str, str, str, str], ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# ERP permission catalog (global, seeded — must match core/core/permissions.py)
+# ERP permission catalog (global, seeded - must match core/core/permissions.py)
 # ---------------------------------------------------------------------------
 PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("erp.inventory.read", "View inventory records"),
@@ -92,7 +92,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
 
 
 def upgrade() -> None:
-    # --- Row-Level Security helper (idempotent — shared with identity) ---
+    # --- Row-Level Security helper (idempotent - shared with identity) ---
     op.execute(
         "CREATE OR REPLACE FUNCTION public.current_tenant_id() RETURNS uuid "
         "LANGUAGE sql STABLE AS $$ "
@@ -186,7 +186,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         # Composite-FK convention: the grant can only ever reference a role in
-        # the SAME tenant — referential integrity agrees with RLS.
+        # the SAME tenant - referential integrity agrees with RLS.
         sa.ForeignKeyConstraint(
             ["tenant_id", "role_id"],
             ["core_roles.tenant_id", "core_roles.id"],
@@ -209,14 +209,14 @@ def upgrade() -> None:
             "WITH CHECK (tenant_id = public.current_tenant_id())"
         )
 
-    # --- Seed reference data (literal values only — offline SQL generation) ---
+    # --- Seed reference data (literal values only - offline SQL generation) ---
     currency_rows = ", ".join(
         f"('{code}', '{name}', '{symbol}', '{numeric}')"
         for code, name, symbol, numeric in CURRENCY_CATALOG
     )
     op.execute(
         # ``currency_rows`` is built solely from the compile-time literal
-        # ``CURRENCY_CATALOG`` above — no user input, so this f-string SQL is
+        # ``CURRENCY_CATALOG`` above - no user input, so this f-string SQL is
         # not an injection vector.
         "INSERT INTO erp_currencies (code, name, symbol, numeric) VALUES "
         f"{currency_rows} ON CONFLICT (code) DO NOTHING"  # nosec B608
@@ -227,7 +227,7 @@ def upgrade() -> None:
     )
     op.execute(
         # ``permission_rows`` is built solely from the compile-time literal
-        # ``PERMISSION_CATALOG`` above — no user input, so this f-string SQL is
+        # ``PERMISSION_CATALOG`` above - no user input, so this f-string SQL is
         # not an injection vector.
         "INSERT INTO core_permissions (key, description) VALUES "
         f"{permission_rows} ON CONFLICT (key) DO NOTHING"  # nosec B608
@@ -250,6 +250,6 @@ def downgrade() -> None:
 
     op.drop_table("erp_currencies")
 
-    # NOTE: current_tenant_id() is intentionally NOT dropped — identity also
+    # NOTE: current_tenant_id() is intentionally NOT dropped - identity also
     # uses it. Identity's downgrade drops the function; core's downgrade must
     # leave it in place for identity's tenant-scoped tables.

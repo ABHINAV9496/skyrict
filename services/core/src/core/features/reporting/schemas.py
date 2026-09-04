@@ -18,7 +18,7 @@ class WidgetLayoutItem(BaseModel):
 
 
 class DashboardLayout(BaseModel):
-    """A complete dashboard layout — list of widget positions."""
+    """A complete dashboard layout - list of widget positions."""
 
     widgets: list[WidgetLayoutItem] = Field(default_factory=list)
 

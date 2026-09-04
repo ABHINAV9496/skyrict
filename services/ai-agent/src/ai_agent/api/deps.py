@@ -1,7 +1,7 @@
-"""FastAPI dependencies — the composition root for request-scoped security.
+"""FastAPI dependencies - the composition root for request-scoped security.
 
 The AI agent service enforces AUTHENTICATION (verified JWT + tenant
-cross-check). Authorization is enforced at the core monolith edge — the
+cross-check). Authorization is enforced at the core monolith edge - the
 ``/api/v1/ai/*`` proxy resolves permissions (erp.ai.invoke plus module keys)
 BEFORE forwarding, so a request that reaches this service has already passed
 the permission gate (SKY-57: AI is a proxy, not a bypass).

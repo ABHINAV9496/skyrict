@@ -1,4 +1,4 @@
-"""Handoff repository port — the persistence contract the handoff service depends on.
+"""Handoff repository port - the persistence contract the handoff service depends on.
 
 Ports abstract persistence only (never business rules). Methods accept and
 return domain entities; SQLAlchemy lives in the concrete implementation

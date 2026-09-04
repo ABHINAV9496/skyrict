@@ -1,7 +1,7 @@
 """Pydantic response schemas for the L1 HR/Payroll AI endpoints.
 
 Mirror the aggregate dataclasses from :mod:`core.features.ai_hr.repository`.
-None of these models carries an employee identifier, name, or per-person value —
+None of these models carries an employee identifier, name, or per-person value -
 they are L1 shapes by construction.
 """
 
@@ -106,7 +106,7 @@ class FactorOut(BaseModel):
 
 
 class EmployeeRiskOut(BaseModel):
-    """L2 individual risk — the ONLY shape allowed to carry a name/number."""
+    """L2 individual risk - the ONLY shape allowed to carry a name/number."""
 
     employee_id: uuid.UUID
     employee_number: str | None
@@ -137,7 +137,7 @@ class DepartmentRiskOut(BaseModel):
 
 
 class AttritionSummaryOut(BaseModel):
-    """L1 aggregate response — never carries an employee identifier/name."""
+    """L1 aggregate response - never carries an employee identifier/name."""
 
     generated_at: datetime
     model_version: str
@@ -221,7 +221,7 @@ class DepartmentQualityOut(BaseModel):
 
 
 class QualityOrgOut(BaseModel):
-    """L1 aggregate response — never carries an employee identifier/name."""
+    """L1 aggregate response - never carries an employee identifier/name."""
 
     total_scored: int
     average_score: float
@@ -232,7 +232,7 @@ class QualityOrgOut(BaseModel):
 
 
 class EmployeeQualityOut(BaseModel):
-    """L2 individual quality — the ONLY shape allowed to carry name/number."""
+    """L2 individual quality - the ONLY shape allowed to carry name/number."""
 
     employee_id: uuid.UUID
     employee_number: str | None
@@ -312,7 +312,7 @@ class UtilizationAlertOut(BaseModel):
 
 
 class UtilizationOrgOut(BaseModel):
-    """L1 aggregate response — never carries an employee identifier/name."""
+    """L1 aggregate response - never carries an employee identifier/name."""
 
     total_alerts: int
     by_type: dict[str, int]
@@ -367,7 +367,7 @@ class LeaveAnomalyOut(BaseModel):
 
 
 class AnomalyOrgOut(BaseModel):
-    """L1 aggregate response — never carries an employee identifier/name."""
+    """L1 aggregate response - never carries an employee identifier/name."""
 
     total_anomalies: int
     by_type: dict[str, int]
@@ -422,7 +422,7 @@ class LeaveSuggestionOut(BaseModel):
 
 
 class SuggestionOrgOut(BaseModel):
-    """L1 aggregate response — never carries an employee identifier/name."""
+    """L1 aggregate response - never carries an employee identifier/name."""
 
     total_suggestions: int
     pending: int

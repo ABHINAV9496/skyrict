@@ -1,1 +1,1 @@
-"""Organizations feature — tenant lookup and creation."""
+"""Organizations feature - tenant lookup and creation."""

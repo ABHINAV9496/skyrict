@@ -1,9 +1,9 @@
-"""Tenant-scoped user→role grant model — RLS-protected, composite key.
+"""Tenant-scoped user→role grant model - RLS-protected, composite key.
 
 ``tenant_id`` is both the isolation column and a member of the primary key
 (composite-PK RLS convention). The reference to its parent role is a COMPOSITE
 foreign key ``(tenant_id, role_id) -> core_roles(tenant_id, id)`` so a grant can
-only ever point at a role in the same tenant — referential integrity agrees
+only ever point at a role in the same tenant - referential integrity agrees
 with RLS, closing the cross-tenant reference hole at the constraint level.
 """
 

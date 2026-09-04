@@ -63,7 +63,7 @@ async def test_posts_anonymous_features_and_parses_scored_employees() -> None:
         seen["path"] = request.url.path
         seen["auth"] = request.headers.get("authorization")
         seen["slug"] = request.headers.get("x-tenant-slug")
-        # Only anonymous numbers + opaque refs — never PII.
+        # Only anonymous numbers + opaque refs - never PII.
         seen["keys"] = sorted(body["employees"][0])
         return httpx.Response(200, json=_score_response())
 

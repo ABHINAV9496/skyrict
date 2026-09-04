@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class RagSearchRequest(BaseModel):
-    """POST /ai/rag/search body — one free-text query over the RAG store."""
+    """POST /ai/rag/search body - one free-text query over the RAG store."""
 
     query: str = Field(min_length=1, max_length=500)
 
@@ -50,7 +50,7 @@ class RagModuleStatus(BaseModel):
 
 
 class RagStatusResponse(BaseModel):
-    """GET /ai/rag/status response — what the tenant's store contains."""
+    """GET /ai/rag/status response - what the tenant's store contains."""
 
     modules: list[RagModuleStatus]
     total_parents: int

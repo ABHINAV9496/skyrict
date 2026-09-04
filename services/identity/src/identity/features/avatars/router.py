@@ -1,4 +1,4 @@
-"""Avatar endpoints — serve images publicly, upload/remove the current user's.
+"""Avatar endpoints - serve images publicly, upload/remove the current user's.
 
 Serving (``GET /avatars/{user_id}/{filename}``) is deliberately unauthenticated:
 ``<img>`` tags cannot send Authorization headers. Tenant isolation comes from

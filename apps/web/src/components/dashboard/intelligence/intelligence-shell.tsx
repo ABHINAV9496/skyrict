@@ -19,7 +19,7 @@ interface IntelligenceNavItem {
 }
 
 /**
- * Skyrict GMIE — the market intelligence "world". The top navbar carries the
+ * Skyrict GMIE - the market intelligence "world". The top navbar carries the
  * wordmark, the module routes (Home, Explore, Trending, Market), a country
  * selector, and the profile. A menu button on the far left opens a drawer with
  * the utility routes (helpdesk, feedback, and more).

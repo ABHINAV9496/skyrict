@@ -1,4 +1,4 @@
-"""Sequence repository — tenant-scoped monotonic document counters.
+"""Sequence repository - tenant-scoped monotonic document counters.
 
 ``next_value`` claims the next number with a single row-locking
 ``UPDATE ... SET current_value = current_value + 1 ... RETURNING``, so

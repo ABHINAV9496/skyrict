@@ -1,4 +1,4 @@
-"""ai_hr_leave_blackout_periods — times the suggestion engine must avoid (8.2.4).
+"""ai_hr_leave_blackout_periods - times the suggestion engine must avoid (8.2.4).
 
 Tenant-scoped config the smart leave-window suggestion engine treats as hard
 constraints: a candidate window overlapping an active blackout for the

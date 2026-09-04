@@ -1,4 +1,4 @@
-"""Alembic env.py — async migration runner for the identity service."""
+"""Alembic env.py - async migration runner for the identity service."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode — generate SQL without connecting."""
+    """Run migrations in 'offline' mode - generate SQL without connecting."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -57,7 +57,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """Run migrations in 'online' mode — connect to the database."""
+    """Run migrations in 'online' mode - connect to the database."""
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

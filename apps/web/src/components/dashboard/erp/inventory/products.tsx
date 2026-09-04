@@ -147,7 +147,7 @@ export function ProductsClient() {
                 setAbcMap(map);
             })
             .catch(() => {
-                // ABC data unavailable — filter silently hidden
+                // ABC data unavailable - filter silently hidden
             });
     }, []);
 
@@ -403,7 +403,7 @@ export function ProductsClient() {
                                             {product.name}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {product.category ?? "—"}
+                                            {product.category ?? "-"}
                                         </td>
                                         <td className="px-4 py-3 text-right tabular-nums text-foreground">
                                             {formatMoney(product.sellPrice)}
@@ -427,7 +427,7 @@ export function ProductsClient() {
                                                         {band}
                                                     </Badge>
                                                 ) : (
-                                                    <span className="text-xs text-muted-foreground">—</span>
+                                                    <span className="text-xs text-muted-foreground">-</span>
                                                 )}
                                             </td>
                                         )}
@@ -686,7 +686,7 @@ export function ProductsClient() {
                         <DialogTitle>Archive product?</DialogTitle>
                         <DialogDescription>
                             {deleting
-                                ? `${deleting.name} (${deleting.sku}) will be archived and hidden from the catalog. Remaining stock can be written off via Adjust stock, but it cannot be archived while reservations are open — and it stops receiving new stock movements until reactivated.`
+                                ? `${deleting.name} (${deleting.sku}) will be archived and hidden from the catalog. Remaining stock can be written off via Adjust stock, but it cannot be archived while reservations are open - and it stops receiving new stock movements until reactivated.`
                                 : ""}
                         </DialogDescription>
                     </DialogHeader>

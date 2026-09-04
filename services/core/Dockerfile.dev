@@ -1,5 +1,5 @@
 # =============================================================================
-# Skyrict Core Service — Dev Dockerfile
+# Skyrict Core Service - Dev Dockerfile
 #
 # Local development: dev dependencies, tests, and uvicorn live reload.
 # Used by docker-compose.dev.yml (the `core` service build).
@@ -24,7 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Copy every workspace member pyproject.toml file (for dependency resolution).
-# The workspace glob is services/* and libs/* — uv --frozen refuses to resolve
+# The workspace glob is services/* and libs/* - uv --frozen refuses to resolve
 # if a member manifest is missing. READMEs too: hatchling requires the `readme`
 # file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
@@ -38,7 +38,7 @@ COPY libs/skyrict-events/README.md libs/skyrict-events/
 COPY libs/skyrict-testing/pyproject.toml libs/skyrict-testing/
 COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 
-# Install all deps (dev group included — pytest, mypy, ruff)
+# Install all deps (dev group included - pytest, mypy, ruff)
 RUN uv sync --frozen --directory services/core
 
 # Make venv entry points (alembic, uvicorn, etc.) available on PATH
@@ -46,12 +46,12 @@ RUN uv sync --frozen --directory services/core
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy source code (skyrict-common and skyrict-events are imported directly
-# by core at runtime — uv installs workspace members editable)
+# by core at runtime - uv installs workspace members editable)
 COPY services/core/src services/core/src
 COPY libs/skyrict-common/src libs/skyrict-common/src
 COPY libs/skyrict-events/src libs/skyrict-events/src
 
-# Copy tests (dev only — never reaches production)
+# Copy tests (dev only - never reaches production)
 COPY services/core/tests services/core/tests
 
 # Copy alembic config and migrations

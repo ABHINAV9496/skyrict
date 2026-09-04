@@ -3,7 +3,7 @@
 Core proxies ANONYMOUS per-employee feature vectors to ``ai-agent``
 ``POST /ai/hr/attrition/score`` and maps the returned scores back into
 :class:`ScoredRisk` rows for the repository to persist. The employee UUID is
-sent as ``employee_ref`` (opaque to ai-agent — it has no HR knowledge).
+sent as ``employee_ref`` (opaque to ai-agent - it has no HR knowledge).
 
 The caller's ``Authorization`` and tenant slug are relayed so ai-agent can
 re-verify the JWT and cross-check the tenant (the same posture as the generic

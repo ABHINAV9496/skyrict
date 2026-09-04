@@ -1,8 +1,8 @@
-"""Value objects — immutable, identity-less domain concepts.
+"""Value objects - immutable, identity-less domain concepts.
 
 ``Money`` is the single representation of monetary amounts in every ERP module.
 It is a pure-domain object: no framework, no database. The currency set mirrors
-the ISO 4217 codes seeded into the ``erp_currencies`` table by migration 0001 —
+the ISO 4217 codes seeded into the ``erp_currencies`` table by migration 0001 -
 the table exists for FK constraints and reference lookups, while validation at
 construction stays here so the domain layer never touches the DB.
 """
@@ -52,7 +52,7 @@ class StockMovementType(StrEnum):
     ``qty_on_hand`` sums everything EXCEPT ``reservation``/``release``, while
     ``qty_reserved`` is the net of those two. ``transfer`` is recorded as a
     dual-row pair (negative at the source warehouse, positive at the
-    destination) sharing one ``(ref_type, ref_id)`` — allowed because the
+    destination) sharing one ``(ref_type, ref_id)`` - allowed because the
     idempotency key also includes ``warehouse_id``.
     """
 
@@ -120,7 +120,7 @@ class LeadStatus(StrEnum):
 
     An inbound inquiry before it has pipeline value. ``qualified`` is the
     terminal lead state that qualifies into an opportunity; ``disqualified``
-    is the dead end. There is deliberately no ``converted`` state — promotion
+    is the dead end. There is deliberately no ``converted`` state - promotion
     to an opportunity is an event, not a lead state (SKY-43).
     """
 
@@ -134,7 +134,7 @@ class OpportunityStage(StrEnum):
     """Native PostgreSQL enum backing ``erp_crm_opportunities.stage``.
 
     The pipeline moves ``prospecting -> qualified -> proposal ->
-    negotiation`` and terminates at ``won`` or ``lost`` (both are terminal —
+    negotiation`` and terminates at ``won`` or ``lost`` (both are terminal -
     the DB CHECK ``ck_erp_crm_opportunities_stage_outcome`` ties each terminal
     stage to its timestamp and forbids both).
     """
@@ -153,7 +153,7 @@ class ActivityKind(StrEnum):
     The unified CRM activity catalog (CRM workspace): actionable follow-ups
     (``task``, ``follow_up``), interaction records (``call``, ``meeting``,
     ``email``), and quick ``note`` interactions. Everything is a row in ONE
-    table — follow-ups are ``kind=follow_up`` rows, not a separate model.
+    table - follow-ups are ``kind=follow_up`` rows, not a separate model.
     """
 
     TASK = "task"
@@ -168,7 +168,7 @@ class CrmEntityType(StrEnum):
     """The CRM anchor entity types for activities, notes, and timeline events.
 
     ``customer`` covers promoted accounts; ``contact`` is a person on a
-    customer. Deliberately NOT extensible to ``order`` — sales order records
+    customer. Deliberately NOT extensible to ``order`` - sales order records
     are anchored to the related customer (``entity_type=customer``), so the
     timeline never mixes a fifth anchor kind.
     """
@@ -182,7 +182,7 @@ class CrmEntityType(StrEnum):
 class CrmTimelineEventType(StrEnum):
     """Native PostgreSQL enum backing ``erp_crm_timeline_events.event_type``.
 
-    The curated CRM business-event vocabulary — the customer-facing timeline
+    The curated CRM business-event vocabulary - the customer-facing timeline
     is Activities + Notes + these events. It is a SEPARATE concept from the
     security/compliance ``audit_logs`` trail and from the async domain events
     (``crm.*``), which remain bus-only.
@@ -225,7 +225,7 @@ class CreditCheckResult(StrEnum):
 
     The confirm-time credit check against the customer's credit limit:
     ``pending`` until confirm runs it, then ``passed`` or ``failed``. A failed
-    check keeps the order in ``draft`` (the DB has no opinion on the result —
+    check keeps the order in ``draft`` (the DB has no opinion on the result -
     the service does).
     """
 
@@ -240,7 +240,7 @@ class DataScope(StrEnum):
     Ordered by increasing privilege: ``OWNER`` (only rows the user owns) <
     ``TEAM`` (own rows plus the user's team's rows) < ``ALL`` (everything in
     the tenant, still bounded by RLS). Resolution from a role happens in ONE
-    place — ``core.db.rbac.resolve_data_scope`` — repositories only ever
+    place - ``core.db.rbac.resolve_data_scope`` - repositories only ever
     receive the resolved scope and never hardcode role names.
     """
 
@@ -259,7 +259,7 @@ def _require_currency(currency: str) -> None:
 
 @dataclass(frozen=True)
 class Money:
-    """Immutable monetary value — Decimal amount + ISO 4217 currency.
+    """Immutable monetary value - Decimal amount + ISO 4217 currency.
 
     Arithmetic is Decimal-only and same-currency: mixing currencies raises
     ``ValidationError`` so a naive ``usd + eur`` can never silently corrupt an

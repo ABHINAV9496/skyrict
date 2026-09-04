@@ -1,4 +1,4 @@
-"""erp_sales_orders — customer commitments, tenant-scoped with RLS.
+"""erp_sales_orders - customer commitments, tenant-scoped with RLS.
 
 Tenant-scoped, composite primary key ``(tenant_id, id)``, ``order_number``
 unique per tenant. The status machine is ``draft -> confirmed -> fulfilled``
@@ -8,7 +8,7 @@ with ``cancelled`` terminal from draft/confirmed; the DB CHECK
 
 Money columns (``subtotal`` / ``discount`` / ``tax`` / ``total``) are a cached
 projection recomputed from the lines by the service on every write (CRM-BE-002)
-— never trusted from clients. ``credit_check`` records the confirm-time result
+- never trusted from clients. ``credit_check`` records the confirm-time result
 (``pending`` until confirm runs it). The composite FK to the customer keeps
 referential integrity aligned with RLS: an order can only reference a customer
 in the same tenant, RESTRICT because customers are soft-deleted.

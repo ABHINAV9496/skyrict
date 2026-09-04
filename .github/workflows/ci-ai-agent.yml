@@ -1,4 +1,4 @@
-name: CI — AI Agent Service
+name: CI - AI Agent Service
 
 on:
   push:

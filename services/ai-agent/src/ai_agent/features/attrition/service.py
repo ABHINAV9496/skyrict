@@ -1,4 +1,4 @@
-"""Attrition scoring service (spec §6) — loads a model and scores a batch.
+"""Attrition scoring service (spec §6) - loads a model and scores a batch.
 
 Stateless compute: given a list of anonymous employee feature vectors, return
 the non-abstaining scores + top-3 factors. Deterministic, no LLM, no DB. Model

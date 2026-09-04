@@ -1,1 +1,1 @@
-"""Roles feature — RBAC roles and authorization checks."""
+"""Roles feature - RBAC roles and authorization checks."""

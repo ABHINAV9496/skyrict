@@ -7,7 +7,7 @@ response payloads.
 
 The table is a SNAPSHOT MIRROR of core-owned ``erp_products`` maintained by
 outbox-style events (``inventory.product.upserted``/``.removed``) dispatched
-via post-commit HTTP and by the ``inventory reindex`` CLI — never written by
+via post-commit HTTP and by the ``inventory reindex`` CLI - never written by
 any request path. Integrity is enforced by Postgres: the composite FK into
 ``erp_products`` (cross-service idiom, same as the SKY-68 restock tables) and
 RLS via ``current_tenant_id()``.

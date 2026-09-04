@@ -107,7 +107,7 @@ export function OpportunitiesBoard() {
 
   /**
    * Optimistic drag-drop move: flip the card locally first, then persist.
-   * The server stays authoritative — on any failure we reload so the board
+   * The server stays authoritative - on any failure we reload so the board
    * reverts to the real pipeline state and the error is surfaced above.
    */
   async function onDropTo(stage: OpportunityStage) {

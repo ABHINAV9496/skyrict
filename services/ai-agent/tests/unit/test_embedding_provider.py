@@ -1,6 +1,6 @@
 """Unit tests for the OpenAI-compatible embedding adapter and factory.
 
-Exercised over ``httpx.MockTransport`` — real HTTP semantics, no network.
+Exercised over ``httpx.MockTransport`` - real HTTP semantics, no network.
 Security assertions: the API key travels ONLY in the Authorization header and
 never leaks into results, logs, or exception strings.
 """

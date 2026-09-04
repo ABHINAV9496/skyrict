@@ -1,14 +1,14 @@
-"""CRM repository — DB operations for leads, opportunities, and customers.
+"""CRM repository - DB operations for leads, opportunities, and customers.
 
 Concrete implementation of :class:`CrmRepositoryPort`. Every read is
-tenant-scoped (``WHERE tenant_id = :tenant_id`` — defense in depth under RLS)
+tenant-scoped (``WHERE tenant_id = :tenant_id`` - defense in depth under RLS)
 AND owner/team-scoped for leads and opportunities: the caller passes a
 :class:`DataScope` (resolved once per request by ``core.db.rbac``) plus their
 ``user_id`` / ``team_id``, and :func:`_scope_filter` turns that into a SQL
 predicate. The repository never sees a role name, so a role change cannot
 silently broaden a query.
 
-Scope semantics (fail closed — missing ids narrow, never broaden):
+Scope semantics (fail closed - missing ids narrow, never broaden):
 
 - ``OWNER``: rows where ``owner_id = user_id``; no user -> no rows.
 - ``TEAM``: rows where ``owner_id = user_id`` OR ``team_id = team_id``;
@@ -16,7 +16,7 @@ Scope semantics (fail closed — missing ids narrow, never broaden):
 - ``ALL``: tenant filter only (RLS still bounds the tenant).
 
 Unassigned rows (owner_id AND team_id NULL) are visible only to ``ALL``
-scope — a deliberate strict default; the service layer can opt into broader
+scope - a deliberate strict default; the service layer can opt into broader
 visibility explicitly.
 
 Customers have no owner/team columns (locked SKY-43 decision), so they are
@@ -66,12 +66,12 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 # Per-tenant document sequences this repository can claim. The callable is
-# injected at the composition root (``core.db.sequence_repository`` — features
+# injected at the composition root (``core.db.sequence_repository`` - features
 # never import core.db), mirroring the HR repository's ``next_sequence``.
 _CUSTOMER_CODE_SEQUENCE = "customer_code"
 
 # Editable (PATCH) fields per entity. Unknown keys are programming errors and
-# raise loudly — the service only ever forwards validated schema fields.
+# raise loudly - the service only ever forwards validated schema fields.
 _LEAD_EDITABLE_FIELDS: frozenset[str] = frozenset(
     {"source", "first_name", "last_name", "email", "phone", "company", "owner_id", "team_id"}
 )
@@ -89,7 +89,7 @@ _NOTE_EDITABLE_FIELDS: frozenset[str] = frozenset({"body"})
 
 
 def _assert_known_fields(changes: dict[str, object], known: frozenset[str]) -> None:
-    """Reject unknown update keys — a service bug must not silently no-op."""
+    """Reject unknown update keys - a service bug must not silently no-op."""
     unknown = set(changes) - known
     if unknown:
         raise ValueError(f"Unknown editable fields: {sorted(unknown)}")
@@ -105,7 +105,7 @@ def _scope_filter(
 ) -> ColumnElement[bool] | None:
     """SQL predicate enforcing owner/team/all scoping on a lead/opportunity.
 
-    Returns ``None`` for ALL scope (tenant filter only — RLS bounds the
+    Returns ``None`` for ALL scope (tenant filter only - RLS bounds the
     tenant). Fails closed: a missing user/team id narrows the result, never
     broadens it.
     """
@@ -380,7 +380,7 @@ class CrmRepository:
     async def find_leads_by_email(self, email: str, *, tenant_id: uuid.UUID) -> list[Lead]:
         """Soft dedupe probe: every lead in the tenant with this email.
 
-        Deliberately NON-unique at the DB level (locked SKY-43 decision) —
+        Deliberately NON-unique at the DB level (locked SKY-43 decision) -
         the service layer decides how to act on duplicates. This probe is
         tenant-scoped only: it answers "has anyone in this tenant been
         approached at this address", not "can this user see them".
@@ -434,7 +434,7 @@ class CrmRepository:
         team_id: uuid.UUID | None,
         changes: dict[str, object],
     ) -> Lead | None:
-        """PATCH the editable lead fields (never ``status`` — use update_lead_status)."""
+        """PATCH the editable lead fields (never ``status`` - use update_lead_status)."""
         _assert_known_fields(changes, _LEAD_EDITABLE_FIELDS)
         stmt = select(ErpCrmLeadModel).where(
             ErpCrmLeadModel.tenant_id == tenant_id,
@@ -628,10 +628,10 @@ class CrmRepository:
         team_id: uuid.UUID | None,
         changes: dict[str, object],
     ) -> Opportunity | None:
-        """PATCH the editable opportunity fields (never ``stage`` — use update_opportunity_stage).
+        """PATCH the editable opportunity fields (never ``stage`` - use update_opportunity_stage).
 
         ``amount`` may be a :class:`Money` (written with its currency tag) or
-        ``None`` (clears the amount AND the currency — the DB CHECK forbids a
+        ``None`` (clears the amount AND the currency - the DB CHECK forbids a
         bare amount).
         """
         _assert_known_fields(changes, _OPPORTUNITY_EDITABLE_FIELDS)
@@ -778,7 +778,7 @@ class CrmRepository:
 
         Customers are tenant-scoped only (no owner/team columns). ``credit_limit``
         may be a :class:`Money` (written with its currency tag) or ``None``
-        (clears the limit AND the currency — the DB CHECK forbids a bare limit).
+        (clears the limit AND the currency - the DB CHECK forbids a bare limit).
         """
         _assert_known_fields(changes, _CUSTOMER_EDITABLE_FIELDS)
         stmt = select(ErpCrmCustomerModel).where(
@@ -823,7 +823,7 @@ class CrmRepository:
         return _customer_from_orm(model)
 
     # ------------------------------------------------------------------
-    # CRM workspace — contacts
+    # CRM workspace - contacts
     # ------------------------------------------------------------------
 
     async def create_contact(self, contact: Contact) -> Contact:
@@ -918,7 +918,7 @@ class CrmRepository:
         return _contact_from_orm(model)
 
     # ------------------------------------------------------------------
-    # CRM workspace — activities
+    # CRM workspace - activities
     # ------------------------------------------------------------------
 
     async def create_activity(self, activity: Activity) -> Activity:
@@ -975,7 +975,7 @@ class CrmRepository:
         """List activities, scope-aware, with the follow-up window filters.
 
         ``status`` is one of ``open``/``overdue``/``today``/``upcoming``/
-        ``completed`` — resolved here to SQL on ``due_at``/``completed_at``.
+        ``completed`` - resolved here to SQL on ``due_at``/``completed_at``.
         ``day_start``/``day_end`` bound the ``today`` window; ``completed_since``
         bounds ``completed`` (e.g. last 30 days).
         """
@@ -1056,7 +1056,7 @@ class CrmRepository:
         team_id: uuid.UUID | None,
         changes: dict[str, object],
     ) -> Activity | None:
-        """PATCH the editable activity fields (never completion — use complete_activity)."""
+        """PATCH the editable activity fields (never completion - use complete_activity)."""
         _assert_known_fields(changes, _ACTIVITY_EDITABLE_FIELDS)
         stmt = select(ErpCrmActivityModel).where(
             ErpCrmActivityModel.tenant_id == tenant_id,
@@ -1148,7 +1148,7 @@ class CrmRepository:
         return removed
 
     # ------------------------------------------------------------------
-    # CRM workspace — notes
+    # CRM workspace - notes
     # ------------------------------------------------------------------
 
     async def create_note(self, note: Note) -> Note:
@@ -1241,7 +1241,7 @@ class CrmRepository:
         return removed
 
     # ------------------------------------------------------------------
-    # CRM workspace — timeline (DB-layer UNION of the three sources)
+    # CRM workspace - timeline (DB-layer UNION of the three sources)
     # ------------------------------------------------------------------
 
     async def get_timeline(
@@ -1256,7 +1256,7 @@ class CrmRepository:
         """Merged relationship timeline for one entity.
 
         The three sources (activities, notes, timeline events) are merged with
-        a SQL ``UNION ALL`` BEFORE ordering and pagination — never three
+        a SQL ``UNION ALL`` BEFORE ordering and pagination - never three
         independently paged lists combined in application code.
         """
         union = _timeline_union(tenant_id, entity_type, entity_id)
@@ -1274,7 +1274,7 @@ class CrmRepository:
         offset: int = 0,
         limit: int = 10,
     ) -> list[TimelineItem]:
-        """Recent CRM activity across all entities — dashboard feed."""
+        """Recent CRM activity across all entities - dashboard feed."""
         union = _global_timeline_union(tenant_id)
         merged = union.subquery()
         stmt = select(merged).order_by(merged.c.occurred_at.desc(), merged.c.id.desc())
@@ -1309,7 +1309,7 @@ class CrmRepository:
         return _timeline_event_from_orm(model)
 
     # ------------------------------------------------------------------
-    # CRM workspace — overview aggregates (real data only)
+    # CRM workspace - overview aggregates (real data only)
     # ------------------------------------------------------------------
 
     async def lead_status_counts(
@@ -1558,7 +1558,7 @@ class CrmRepository:
         return [_opportunity_from_orm(model) for model in result.scalars().all()]
 
     # ------------------------------------------------------------------
-    # CRM workspace — server-side search
+    # CRM workspace - server-side search
     # ------------------------------------------------------------------
 
     async def search(
@@ -1670,7 +1670,7 @@ class CrmRepository:
 
 
 # ---------------------------------------------------------------------------
-# CRM workspace — ORM <-> domain mappers
+# CRM workspace - ORM <-> domain mappers
 # ---------------------------------------------------------------------------
 
 
@@ -1820,7 +1820,7 @@ def _timeline_item_from_row(row: Mapping[str, Any]) -> TimelineItem:
 
 
 # ---------------------------------------------------------------------------
-# CRM workspace — timeline UNION + status/search predicates
+# CRM workspace - timeline UNION + status/search predicates
 # ---------------------------------------------------------------------------
 
 
@@ -1890,7 +1890,7 @@ def _global_timeline_union(
 ) -> Any:
     """UNION ALL over all CRM activity sources for the dashboard feed.
 
-    Unlike :func:`_timeline_union`, this has no entity filters — it returns
+    Unlike :func:`_timeline_union`, this has no entity filters - it returns
     recent activity across the entire tenant, ordered by ``occurred_at DESC``.
     """
     activities = select(

@@ -1,4 +1,4 @@
-"""Session service — track, list, revoke, expire user sessions.
+"""Session service - track, list, revoke, expire user sessions.
 
 Owns the session lifecycle. Every status mutation passes through the
 ``SESSION_STATE_MACHINE`` so invalid hops fail fast. All persistence goes
@@ -58,7 +58,7 @@ SESSION_STATE_MACHINE = StateMachine(
 
 
 class SessionService:
-    """Manages user sessions — creation, listing, revocation, expiry."""
+    """Manages user sessions - creation, listing, revocation, expiry."""
 
     def __init__(self, session_repo: SessionRepositoryPort, audit_service: AuditService) -> None:
         self.session_repo = session_repo
@@ -233,7 +233,7 @@ class SessionService:
     ) -> None:
         """Revoke all sessions for a user (force logout everywhere).
 
-        When ``tenant_id`` is given only that tenant's sessions are revoked —
+        When ``tenant_id`` is given only that tenant's sessions are revoked -
         used to log a member out of the current workspace without touching
         their sessions in other organizations.
         """

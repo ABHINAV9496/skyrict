@@ -1,15 +1,15 @@
-"""Application lifespan — startup verification and graceful shutdown.
+"""Application lifespan - startup verification and graceful shutdown.
 
 Extracted from main.py for testability and separation of concerns.
 
 Startup: configures structured logging and verifies every required dependency
-ONCE (database, Redis, JWT public key) and refuses to boot on failure — the
+ONCE (database, Redis, JWT public key) and refuses to boot on failure - the
 orchestrator sees the non-zero exit and restarts the pod instead of serving
 traffic with a dead dependency. The readiness gate only opens after
 verification succeeds; ``GET /ready`` reports it (with lightweight live
 probes) but never re-runs this verification.
 
-AI providers are intentionally absent from this gate — see api/readiness.py.
+AI providers are intentionally absent from this gate - see api/readiness.py.
 
 Shutdown: closes the gate so probes drain the pod, then disposes the DB
 engine and the Redis pool.
@@ -38,7 +38,7 @@ from ai_agent.core.providers import build_providers_from_settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan — startup and graceful shutdown."""
+    """Application lifespan - startup and graceful shutdown."""
     configure_logging(log_level=settings.LOG_LEVEL, json_output=settings.LOG_JSON)
 
     logger = get_logger("ai_agent.startup")
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         inventory_service_url=settings.INVENTORY_SERVICE_URL,
     )
 
-    # Startup verification — fail-fast: any failure raises StartupError and
+    # Startup verification - fail-fast: any failure raises StartupError and
     # the process exits immediately (orchestrator restarts the pod).
     await readiness.verify_startup_dependencies()
     readiness.mark_ready()

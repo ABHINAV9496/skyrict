@@ -1,4 +1,4 @@
-"""Audit service — log all security-relevant actions.
+"""Audit service - log all security-relevant actions.
 
 Owns the business rules (tenant-context gating). All persistence goes through
 the ``AuditRepositoryPort``; no ORM models or sessions are touched here.
@@ -37,7 +37,7 @@ class AuditService:
         ``target`` is a ``"<type>:<id>"`` string (e.g. ``"user:3f4..."``) so
         the audit log stays a single source of truth for what changed.
 
-        ``tenant_id`` overrides the resolved request tenant — used by flows
+        ``tenant_id`` overrides the resolved request tenant - used by flows
         that run without a routed tenant (self-service registration).
         """
         resolved_tenant = tenant_id or TenantContext.get_optional()

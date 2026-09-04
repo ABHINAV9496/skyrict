@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * The browser sends multipart/form-data with the invite token, email, password,
  * full name, and an optional avatar file; the handler forwards the same parts
  * to the identity service's /invitations/accept endpoint. On success the
- * client redirects to signin — the accept response carries no tokens.
+ * client redirects to signin - the accept response carries no tokens.
  */
 export async function POST(request: NextRequest) {
   if (!assertSameOrigin(request)) {

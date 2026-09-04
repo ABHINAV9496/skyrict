@@ -1,4 +1,4 @@
-"""Finance ports — persistence, cross-module, audit, and event contracts.
+"""Finance ports - persistence, cross-module, audit, and event contracts.
 
 Declares what the repository must offer so the service depends on these
 Protocols (hexagonal "ports") rather than concrete SQLAlchemy/db/event
@@ -6,14 +6,14 @@ implementations. Feature modules may NOT import ``core.models`` / ``core.db``
 (import-linter), so:
 
 - ``FinanceRepositoryPort`` is implemented by ``FinanceRepository`` (same
-  feature package — no layer violation);
+  feature package - no layer violation);
 - ``AuditSink`` is implemented structurally by
-  ``core.features.audit.repository`` (duck-typed — that module never imports
+  ``core.features.audit.repository`` (duck-typed - that module never imports
   this one, so there is no reverse dependency);
 - ``FinanceEventSink`` is implemented structurally by
   ``core.events.producers.finance_events.FinanceEventPublisher``;
 - ``InvoicePort`` is the seam the future CRM/sales module calls to bill a
-  sales order — it ships with a test double until CRM lands (finance never
+  sales order - it ships with a test double until CRM lands (finance never
   reads sales tables; it only receives the ``SalesOrderForInvoicing`` DTO).
 """
 
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Cross-module DTOs — the agreed data shape between finance and CRM/sales.
+# Cross-module DTOs - the agreed data shape between finance and CRM/sales.
 # ---------------------------------------------------------------------------
 
 
@@ -74,7 +74,7 @@ class SalesOrderLine:
 
 @dataclass(frozen=True)
 class SalesOrderForInvoicing:
-    """A sales order ready to be billed — the ONLY thing finance accepts.
+    """A sales order ready to be billed - the ONLY thing finance accepts.
 
     ``order_id`` becomes ``source_ref`` with ``source='sales_order'``; the DB
     ``UNIQUE (tenant_id, source, source_ref)`` lock makes a replayed handoff
@@ -316,7 +316,7 @@ class InvoicePort(Protocol):
 
 
 class CustomerPort(Protocol):
-    """Customer name resolution port — finance reads customer names, never CRM tables.
+    """Customer name resolution port - finance reads customer names, never CRM tables.
 
     Implemented by ``CrmRepository`` (via ``get_customer``). The service calls
     ``get_customer_name`` to resolve a single customer, or the batch variant
@@ -410,7 +410,7 @@ class PayrollAccrualPort(Protocol):
 class FinanceTimelinePort(Protocol):
     """Write curated finance events to the customer-facing CRM timeline.
 
-    Implemented structurally by ``CrmRepository.record_timeline_event`` —
+    Implemented structurally by ``CrmRepository.record_timeline_event`` -
     the finance service never imports CRM modules. Events are anchored to
     the customer entity (``entity_type='customer'``).
     """
@@ -436,7 +436,7 @@ class FinanceTimelinePort(Protocol):
 class OrderLookupPort(Protocol):
     """Resolve a sales order number from its UUID for display on invoice detail.
 
-    Implemented structurally by ``SalesRepository.get_order`` — finance never
+    Implemented structurally by ``SalesRepository.get_order`` - finance never
     imports the sales feature.
     """
 

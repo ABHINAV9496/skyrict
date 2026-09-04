@@ -1,4 +1,4 @@
-"""Membership service — lifecycle operations driven by the state machine."""
+"""Membership service - lifecycle operations driven by the state machine."""
 
 from __future__ import annotations
 

@@ -268,7 +268,7 @@ export default function MembersClient() {
     <div className="space-y-6">
       <PageHeader
         title="Members"
-        description="Manage who has access to this workspace — roles, devices, and access."
+        description="Manage who has access to this workspace roles, devices, and access."
         icon={Users}
       />
 

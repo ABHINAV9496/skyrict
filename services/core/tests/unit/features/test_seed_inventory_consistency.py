@@ -1,4 +1,4 @@
-"""Seed-data consistency — stock levels must reconcile with the movement ledger.
+"""Seed-data consistency - stock levels must reconcile with the movement ledger.
 
 The AI-agent ledger-mismatch rule (and core's recompute_stock_level) define
 ``qty_on_hand`` as the sum of all non-reservation/release movements. The demo

@@ -7,7 +7,7 @@
  * ListResponse envelope ({ data, meta }); mutations are idempotent per
  * (ref_type, ref_id, warehouse) and require erp.inventory.* permissions
  * enforced server-side. Adjustments whose |qty| exceeds the approval threshold
- * require erp.inventory.adjust.approve — mirroring the core service default.
+ * require erp.inventory.adjust.approve - mirroring the core service default.
  */
 
 import { apiDelete, apiFetchEnvelope, apiPatch, apiPost } from "@/lib/api/http";
@@ -124,7 +124,7 @@ export interface UpdateWarehouseInput {
 export interface AdjustStockInput {
     productId: string;
     warehouseId: string;
-    /** Signed delta — positive receives, negative issues. Must be non-zero. */
+    /** Signed delta - positive receives, negative issues. Must be non-zero. */
     qty: number;
     reason: string;
     refId?: string;
@@ -753,7 +753,7 @@ export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
 
 /** Format a (amount, currency) money tuple for display. */
 export function formatMoney(value: Money | null | undefined): string {
-    if (!value) return "—";
+    if (!value) return "-";
     const [amount, currency] = value;
     if (currency === "USD") return `$${amount}`;
     return `${amount} ${currency}`;
@@ -761,9 +761,9 @@ export function formatMoney(value: Money | null | undefined): string {
 
 /** Short, locale-aware date for ledger/audit timestamps. */
 export function formatDate(value: string | null | undefined): string {
-    if (!value) return "—";
+    if (!value) return "-";
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "—";
+    if (Number.isNaN(parsed.getTime())) return "-";
     return parsed.toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",

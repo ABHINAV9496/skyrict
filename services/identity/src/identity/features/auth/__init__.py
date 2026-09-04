@@ -1,1 +1,1 @@
-"""Authentication feature — login, register, token lifecycle."""
+"""Authentication feature - login, register, token lifecycle."""

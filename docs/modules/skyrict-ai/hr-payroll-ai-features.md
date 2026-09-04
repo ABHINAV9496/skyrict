@@ -1,9 +1,9 @@
-# HR/Payroll AI Features — Technical Specification
+# HR/Payroll AI Features - Technical Specification
 
 This document specifies the AI-powered HR & Payroll slice delivered by ticket
 **HR-AI-001**. It is the scoped, reviewable implementation plan for the first
 L1–L2 portion of the broader *AI Implementation in HR & Payroll Module*
-proposal (`ai-hr-payroll-proposal.md`). Every feature is an **advisor** — it
+proposal (`ai-hr-payroll-proposal.md`). Every feature is an **advisor** - it
 suggests, flags, and explains; it never executes a human-gated decision on its
 own.
 
@@ -23,15 +23,15 @@ own.
 2. [Data-scope model (L1 vs L2)](#2-data-scope-model-l1-vs-l2)
 3. [Permission matrix](#3-permission-matrix)
 4. [PII redaction pipeline (prereq gate)](#4-pii-redaction-pipeline-prereq-gate)
-5. [Feature 1 — L1 aggregates & narratives](#5-feature-1--l1-aggregates--narratives)
-6. [Feature 2 — Attrition model & factors](#6-feature-2--attrition-model--factors)
-7. [Feature 3 — Payroll anomaly detection](#7-feature-3--payroll-anomaly-detection)
-8. [Feature 4 — Compliance engine v1](#8-feature-4--compliance-engine-v1)
-9. [Feature 5 — HR Copilot agent](#9-feature-5--hr-copilot-agent)
+5. [Feature 1 - L1 aggregates & narratives](#5-feature-1--l1-aggregates--narratives)
+6. [Feature 2 - Attrition model & factors](#6-feature-2--attrition-model--factors)
+7. [Feature 3 - Payroll anomaly detection](#7-feature-3--payroll-anomaly-detection)
+8. [Feature 4 - Compliance engine v1](#8-feature-4--compliance-engine-v1)
+9. [Feature 5 - HR Copilot agent](#9-feature-5--hr-copilot-agent)
 10. [Security architecture](#10-security-architecture)
 11. [Database design](#11-database-design)
 12. [Model eval harness (HR-AI-002 / SKY-72)](#12-model-eval-harness-hr-ai-002--sky-72)
-13. [HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
+13. [HR-AI wave 2 - Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
 14. [Test strategy](#14-test-strategy)
 15. [HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)](#15-hr-aut-001--payroll-automation-batches-schedules-notifications--digests)
 16. [HR-AI-001 Unit B — Payroll anomaly engine (implemented)](#16-hr-ai-001-unit-b--payroll-anomaly-engine-implemented)
@@ -46,7 +46,7 @@ own.
 | Feature | Purpose | Data scope |
 |---------|---------|-----------|
 | PII redaction pipeline | Mask/strip names, IDs, bank fragments, salaries in every outbound LLM payload | Cross-cutting gate |
-| L1 aggregates + narratives | Headcount trend, department distribution, tenure-band summaries — **zero individual rows leave the service** | L1 (aggregate) |
+| L1 aggregates + narratives | Headcount trend, department distribution, tenure-band summaries - **zero individual rows leave the service** | L1 (aggregate) |
 | Attrition model + factors | Per-employee risk score + top-3 SHAP-style factor explanations | L2 (individual) |
 | Payroll anomaly detection | Net-pay delta MoM, duplicate accounts, ghost-employee signals | L3 (financial) |
 | Compliance engine v1 | Document expiry, required training overdue, missing contract fields | L3 (financial) |
@@ -57,7 +57,7 @@ own.
 HR & Payroll are manual CRUD today. This slice adds *intelligent* surfaces:
 managers see which teams carry attrition risk (with *why*), payroll admins are
 warned before anomalies are finalized, and HR conversations become natural
-language — all without ever leaking an individual's personal data to a model
+language - all without ever leaking an individual's personal data to a model
 or to an unauthorized user.
 
 ### 1.3 Architecture summary
@@ -68,7 +68,7 @@ apps/web (BFF /api/v1/ai/hr/*, ModuleAccessBoundary + L1/L2 scope labels)
    ▼
 services/core  ── features/ai_hr/
    │              ├─ router (authz: erp.hr.ai.* + erp.ai.invoke)
-   │              ├─ L1 aggregates  (SQL GROUP BY only — zero rows leave)
+   │              ├─ L1 aggregates  (SQL GROUP BY only - zero rows leave)
    │              ├─ L2 individual  (requires erp.hr.ai.individual; else 403 + L1 body)
    │              └─ proxy /ai/hr/copilot → ai-agent
    ▼
@@ -101,16 +101,16 @@ The task's **L1/L2 data-scope levels** govern how much of a tenant's data a
 consumer may see. They are orthogonal to (but map onto) the proposal's
 "Security Levels 1–4":
 
-- **L1 — Aggregate (public/internal):** counted, grouped, narrative summaries.
+- **L1 - Aggregate (public/internal):** counted, grouped, narrative summaries.
   No employee identifier, name, or per-person figure is returned. Examples:
-  `overview`, `tenure`, the **team-risk list** (counts per band per department —
+  `overview`, `tenure`, the **team-risk list** (counts per band per department -
   **not** per-employee rows).
-- **L2 — Individual (sensitive):** per-employee attrition score + top-3 factor
+- **L2 - Individual (sensitive):** per-employee attrition score + top-3 factor
   explanations. The proposal classifies retention/attrition scoring as
   **Security Level 4** ("Organization owners, Executive leadership only"), so
   L2 access requires `erp.hr.ai.individual`, granted to the owner role plus a
-  dedicated executive role only — **not** blanket `organization_admin`.
-- **L3 — Financial:** compensation/payroll data underlying anomaly and
+  dedicated executive role only - **not** blanket `organization_admin`.
+- **L3 - Financial:** compensation/payroll data underlying anomaly and
   compliance findings. Access aligns with existing `erp.payroll.read`.
 
 **Scope labels:** every AI panel in the UI carries an **L1** or **L2** badge so
@@ -137,7 +137,7 @@ seeded via identity migration, and enforced at the core edge before any AI work
 **Gate semantics (Gherkin: permission gate on predictions):** a manager with
 `erp.hr.ai.read` but **without** `erp.hr.ai.individual` requesting a
 direct-report's attrition detail receives **403 with an aggregates-only body**
-(the endpoint downgrades to the L1 shape when the L2 key is absent) — never a
+(the endpoint downgrades to the L1 shape when the L2 key is absent) - never a
 has-the-row-then-censors response, and never an empty body.
 
 ---
@@ -145,7 +145,7 @@ has-the-row-then-censors response, and never an empty body.
 ## 4. PII redaction pipeline (prereq gate)
 
 **Location:** `services/ai-agent/src/ai_agent/redaction/`. This is the **prereq
-gate** — nothing that touches an LLM is implemented until it exists.
+gate** - nothing that touches an LLM is implemented until it exists.
 
 **Gate point:** the redactor is applied inside `LlmRouter.complete()` to every
 `LlmRequest` (system + user prompt) **before** the request reaches any provider
@@ -179,7 +179,7 @@ Example corpus entry (mixed language):
 
 ---
 
-## 5. Feature 1 — L1 aggregates & narratives
+## 5. Feature 1 - L1 aggregates & narratives
 
 **Location:** `services/core/src/core/features/ai_hr/`.
 
@@ -190,19 +190,19 @@ Endpoints (require `erp.ai.invoke` + `erp.hr.ai.read`):
 | `GET /api/v1/ai/hr/overview` | headcount trend by month, department distribution, tenure-band counts + rule-based narrative strings |
 | `GET /api/v1/ai/hr/tenure` | tenure-band aggregate summary + narrative |
 
-**Guarantee:** all computation is SQL `GROUP BY`/aggregate in the repository —
+**Guarantee:** all computation is SQL `GROUP BY`/aggregate in the repository -
 no employee row is ever selected and serialized. A test asserts the serialized
 response contains no `employee_id`, `first_name`/`last_name`/`EMPLOYEE_NO`/
 email/phone values.
 
 Narratives are deterministic rule-based templates over the aggregate numbers
 (e.g. "Headcount grew 4.2% MoM, led by Engineering (+3); tenure is
-concentrated at 1–3 years (58%).") No LLM is involved in these — they are fast,
+concentrated at 1–3 years (58%).") No LLM is involved in these - they are fast,
 deterministic, and unit-testable.
 
 ---
 
-## 6. Feature 2 — Attrition model & factors
+## 6. Feature 2 - Attrition model & factors
 
 **Location:** `services/ai-agent/src/ai_agent/features/attrition/`.
 
@@ -228,7 +228,7 @@ deterministic, and unit-testable.
 
 > **Staleness disclosure:** because scores refresh on a lazy TTL, a displayed
 > score reflects the model run whose `generated_at` is shown and may be up to
-> 7 days stale — it is **not** necessarily "as of today." Every score-bearing
+> 7 days stale - it is **not** necessarily "as of today." Every score-bearing
 > response includes `generated_at`, and the UI renders an "as of <date>" label.
 
 Endpoints (core):
@@ -240,7 +240,7 @@ Endpoints (core):
 
 ---
 
-## 7. Feature 3 — Payroll anomaly detection
+## 7. Feature 3 - Payroll anomaly detection
 
 **Location:** `services/core/src/core/features/ai_hr/`; rows in
 `ai_payroll_anomaly_log`. The scan runs on payroll-run **approve** and via an
@@ -265,7 +265,7 @@ explicit CLI command.
 
 ---
 
-## 8. Feature 4 — Compliance engine v1
+## 8. Feature 4 - Compliance engine v1
 
 **Location:** `services/core/src/core/features/ai_hr/`; rows in
 `ai_compliance_checks` from the v1 `rule_pack.py`.
@@ -284,14 +284,14 @@ for owner assignment.
 
 ---
 
-## 9. Feature 5 — HR Copilot agent
+## 9. Feature 5 - HR Copilot agent
 
 **Location:** `services/ai-agent/src/ai_agent/features/hr_copilot/`. Registered
 in `agent_registry` (the SKY-59 table) as
 `{name: "hr_copilot", module: "ai_agent.features.hr_copilot.engine", enabled: true}`.
 
 **Tool surface (deliberately narrow):**
-- **Aggregate HR reads** (the L1 endpoints' results only) — never individual rows.
+- **Aggregate HR reads** (the L1 endpoints' results only) - never individual rows.
 - **Draft leave-policy answers via RAG** over `erp_leave_policies` (tenant leave
   policy documents).
 
@@ -380,16 +380,16 @@ runtime uses** and computes per-metric precision. Two model kinds are graded:
 - **attrition** (`attrition_precision`): the bundled GBC model via
   `score_employee` incl. its abstention rule.
 - **anomaly** (`anomaly_precision`): the leave rules engine ran by core's
-  `ai_hr_leave_anomalies` inbox — `skyrict_common.ai_hr_rules.
+  `ai_hr_leave_anomalies` inbox - `skyrict_common.ai_hr_rules.
   detect_leave_pattern_anomalies` (the literal deployed code, imported from the
   workspace `skyrict-common` lib). Feature/request vectors in `hr_models.yaml`
   pin `today` and the 2026 holiday calendar, so runs are reproducible.
 
 It is non-LLM and reproducible (bundled fixed-seed model + stable seed sets).
-Seed rows carry feature arrays + labels only — never employee PII.
+Seed rows carry feature arrays + labels only - never employee PII.
 
 **Warn-not-fail contract:** precision below the documented `0.70` minimum
-prints a `WARN` line (exit code 0) — an eval regression is an operator alert,
+prints a `WARN` line (exit code 0) - an eval regression is an operator alert,
 not a hard deploy gate. For `anomaly_precision` the report also records recall
 (TP/(TP+FN)) in `details`; the anomaly seed mix is two recall probes (the
 `short_notice_monday_friday` and `pre_holiday_spike` patterns MUST fire) and
@@ -411,13 +411,13 @@ Drop `--core-url/--token/--tenant-slug` for a local-only dry-run
 
 ---
 
-## 13. HR-AI wave 2 — Leave anomaly inbox, calendar-aware suggestions & pattern data
+## 13. HR-AI wave 2 - Leave anomaly inbox, calendar-aware suggestions & pattern data
 
 Wave 2 turns the HR leave records into two low-fiend, deterministic surfaces:
 a **leave-pattern anomaly inbox** (managers see teams abusing leave patterns)
 and **calendar-aware use-it-or-lose-it suggestions** (the portal tells an
 employee *when* a window is actually sensible before it forfeits). Both are fed
-by **pattern data** — org/department public holidays and leave blackouts.
+by **pattern data** - org/department public holidays and leave blackouts.
 
 **Locations:** core feature `core/features/ai_hr/` (anomaly, suggestion,
 pattern-data modules), shared pure engine `libs/skyrict-common/skyrict_common/
@@ -427,7 +427,7 @@ ai_hr_rules.py`, migrations `0022_hr_ai_wave2` (anomaly + suggestion tables),
 ### 13.1 Leave anomaly inbox (`ai_hr_leave_anomalies`)
 
 Detection runs in pure code (`skyrict_common.ai_hr_rules
-.detect_leave_pattern_anomalies`) — the SAME code the eval harness grades, so
+.detect_leave_pattern_anomalies`) - the SAME code the eval harness grades, so
 what the inbox flags is exactly what the `anomaly_precision` metric measures.
 Every rule is gated: teams with fewer than **4 active members abstain**, and
 the median-comparison rules need the team median to be measurable (>= 1 day).
@@ -478,7 +478,7 @@ box.
 
 ### 13.4 Coverage matrix (Gherkin scenarios)
 
-**HR-AI-002 wave-2 delivery — shipped:**
+**HR-AI-002 wave-2 delivery - shipped:**
 
 | Ticket scope | Status | Where |
 |--------------|--------|-------|
@@ -502,20 +502,20 @@ box.
 | suggestion: own-request windows skipped | planner | unit `test_plan_best_block_skips_windows_blocked_by_own_requests` |
 | suggestion: fully blacked-out -> forfeit window + conflict reason | planner | unit `test_plan_best_block_falls_back_to_forfeit_window_when_fully_blacked_out` |
 
-> **Demo seed — live vs pre-seeded.** The `core seed-demo --force` scenario
+> **Demo seed - live vs pre-seeded.** The `core seed-demo --force` scenario
 > mix deliberately splits determinism from end-to-end "first read" freshness:
 >
 > | Sample | Provisioning | Why |
 > |--------|--------------|-----|
-> | `leave_overuse` (Grace, EMP-0007) | **live-computed** — anomaly table left empty after force-reseed, so the portal/admin's first read runs the scan and materializes the finding | demo shows the compute path, not just a table read |
-> | `short_notice_monday_friday` (EMP-0007) | **live-computed** — approved block filed+starting today (advance 0), ending on the next Friday (Fri fringe), 7 days vs 2.0 team median | end-on-Friday is the only construction that fires for *any* seed weekday (proven over all 7) |
-> | `pre_holiday_spike` (EMP-0007) | **live-computed** — the 2026 demo calendar seeds National Day (08-31) inside the block (distance 0 -> high) | high requires overlap; a non-overlapping holiday can only reach medium |
-> | forfeit utilization alert (emp 1, 18/55) | **pre-seeded** fixture row (`ai_hr_utilization_alerts`, `created_at=now-0.5d` so the 1-day refresh keeps it fresh) | the forfeit scan only fires when < 60 days remain — mid-year (124 left on 08-29) it physically cannot fire live |
+> | `leave_overuse` (Grace, EMP-0007) | **live-computed** - anomaly table left empty after force-reseed, so the portal/admin's first read runs the scan and materializes the finding | demo shows the compute path, not just a table read |
+> | `short_notice_monday_friday` (EMP-0007) | **live-computed** - approved block filed+starting today (advance 0), ending on the next Friday (Fri fringe), 7 days vs 2.0 team median | end-on-Friday is the only construction that fires for *any* seed weekday (proven over all 7) |
+> | `pre_holiday_spike` (EMP-0007) | **live-computed** - the 2026 demo calendar seeds National Day (08-31) inside the block (distance 0 -> high) | high requires overlap; a non-overlapping holiday can only reach medium |
+> | forfeit utilization alert (emp 1, 18/55) | **pre-seeded** fixture row (`ai_hr_utilization_alerts`, `created_at=now-0.5d` so the 1-day refresh keeps it fresh) | the forfeit scan only fires when < 60 days remain - mid-year (124 left on 08-29) it physically cannot fire live |
 > | thin-team abstention | **unit-tested only** | `>= 4` active members are required to scan; seed teams are all >= 4 so the live demo cannot produce it |
 >
 > Freshness mechanics: anomaly/quality feeds refresh after 7 days,
 > utilization after 1 day (`max(created_at)` + elapsed >= refresh window).
-> The quality feed also has an explicit **weekly recalc** — the ops cron in
+> The quality feed also has an explicit **weekly recalc** - the ops cron in
 > §13.5 calls `POST /api/v1/ai/hr/quality/refresh` (force re-score; L1
 > maintenance response) every Sunday 03:17 UTC so the panel always has a
 > current run regardless of TTL.
@@ -527,14 +527,14 @@ box.
 The eval harness is deterministic and cheap; wire the same command to a
 nightly job so a rules/model regression is caught within a day and the metric
 history lands in `hr_eval_runs`. This repository ships the job at
-`.github/workflows/nightly-hr-eval.yml` — runs at **02:17 UTC** and on
+`.github/workflows/nightly-hr-eval.yml` - runs at **02:17 UTC** and on
 `workflow_dispatch`, installs with `uv sync --all-packages --frozen`, then runs
 `uv run --project services/ai-agent ai-agent eval-hr-models` with
 `SKYRICT_CORE_URL` / `SKYRICT_CORE_TOKEN` / `SKYRICT_TENANT_SLUG` supplied from
 Actions secrets.
 
 The quality feed's **weekly recalc** ships as `.github/workflows/
-weekly-quality-recalc.yml` — Sunday **03:17 UTC** + `workflow_dispatch`, a
+weekly-quality-recalc.yml` - Sunday **03:17 UTC** + `workflow_dispatch`, a
 dependency-free `curl` POST to `POST /api/v1/ai/hr/quality/refresh` reusing the
 same three secrets. Local equivalent:
 
@@ -566,7 +566,7 @@ computed or unit-pinned as marked.
 
 | Area | Coverage |
 |------|----------|
-| Redaction (unit) | corpus incl. Malay/English mixed — raw absent, tokens present; fails closed |
+| Redaction (unit) | corpus incl. Malay/English mixed - raw absent, tokens present; fails closed |
 | Permission gate (integration) | L2 request w/o `individual` → 403 + L1 body |
 | Ghost employee (integration) | active pay + zero activity → medium severity + evidence links |
 | Anomalies (integration) | all three types on seed data with correct severity |
@@ -575,7 +575,7 @@ computed or unit-pinned as marked.
 | RLS (integration) | new tables cross-tenant read filtered / write blocked |
 | Eval harness (unit) | seed-set precision ≥ threshold on the bundled model; abstentions excluded; unknown model fails fast |
 | Eval recording (integration) | migration round-trip includes 0022/0023/0024 + `hr_eval_runs` / `erp.hr.ai.eval` sentinels |
-| Leave rule engine (unit) | `skyrict_common.ai_hr_rules` — 13 tests: each pattern fires, near-misses abstain, thin teams abstain, ratio severity bands |
+| Leave rule engine (unit) | `skyrict_common.ai_hr_rules` - 13 tests: each pattern fires, near-misses abstain, thin teams abstain, ratio severity bands |
 | Anomaly eval (unit) | `anomaly_precision` seed (4 cases) = 1.0 precision/recall; missing-label case registers a recall miss |
 | Leave anomaly inbox (unit) | 12 tests over all four types incl. the two wave-2 patterns at high severity |
 | Suggestion planner (unit) | calendar-aware `_plan_best_block`: load/blackout/own-request windows, holiday ties, forfeit fallback; legacy `_plan_block` kept |

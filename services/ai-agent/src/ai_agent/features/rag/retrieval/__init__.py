@@ -1,6 +1,6 @@
-"""RAG retrieval — semantic search over the parent-child store (SKY-58).
+"""RAG retrieval - semantic search over the parent-child store (SKY-58).
 
-Feature-layer code (no models/db imports — import-linter contract): the
+Feature-layer code (no models/db imports - import-linter contract): the
 service orchestrates an embedding provider, a retrieval store protocol, and a
 Redis hot cache. Persistence of search results into ``ai_query_cache`` is
 composed by the router from a repository (the composition root), keeping this

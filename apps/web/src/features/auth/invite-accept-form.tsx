@@ -125,7 +125,7 @@ function InviteAcceptForm({
         cache: "no-store",
       });
     } catch {
-      setSubmitError("Network error — check your connection and try again.");
+      setSubmitError("Network error - check your connection and try again.");
       return;
     }
 

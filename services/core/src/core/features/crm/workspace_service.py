@@ -1,4 +1,4 @@
-"""CRM workspace service — contacts, activities, notes, timeline, overview.
+"""CRM workspace service - contacts, activities, notes, timeline, overview.
 
 Extends :class:`CrmService` (leads/opportunities/customers) with the CRM
 workspace surface: contacts (people on accounts), the unified activity model
@@ -6,11 +6,11 @@ workspace surface: contacts (people on accounts), the unified activity model
 relationship timeline, the overview dashboard, and server-side search.
 
 Conventions:
-- Reads use the request-resolved :class:`DataScope` + caller ids — the service
+- Reads use the request-resolved :class:`DataScope` + caller ids - the service
   can only narrow, never broaden. Activities are owner/team-scoped; contacts,
   notes, and timeline events are tenant-scoped (like customers).
 - Timeline records are written transactionally here (or in the sales service
-  for order creations) — the curated CRM business log is SEPARATE from the
+  for order creations) - the curated CRM business log is SEPARATE from the
   security ``audit_logs`` trail and from the async ``crm.*`` domain events.
 - Every mutation audits through the shared ``audit_logs`` trail AND emits its
   domain event via the after-commit buffer.
@@ -652,7 +652,7 @@ class CrmWorkspaceService:
         offset: int = 0,
         limit: int = 10,
     ) -> list[TimelineItem]:
-        """Recent CRM activity across all entities — dashboard feed."""
+        """Recent CRM activity across all entities - dashboard feed."""
         items = await self._repo.get_global_timeline(
             tenant_id=tenant_id,
             offset=offset,
@@ -672,7 +672,7 @@ class CrmWorkspaceService:
         user_id: uuid.UUID | None,
         team_id: uuid.UUID | None,
     ) -> CrmOverview:
-        """CRM overview dashboard — every number from real DB aggregates."""
+        """CRM overview dashboard - every number from real DB aggregates."""
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)

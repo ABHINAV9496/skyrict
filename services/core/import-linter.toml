@@ -1,4 +1,4 @@
-# Core service import-linter configuration — enforced architecture.
+# Core service import-linter configuration - enforced architecture.
 #
 # Run from the repo root:
 #   uv run import-linter --config services/core/import-linter.toml
@@ -29,7 +29,7 @@ type = "forbidden"
 source_modules = ["core.features"]
 forbidden_modules = ["core.models", "core.db"]
 # Feature ORM MODELS are the one sanctioned exception: they must inherit the
-# shared declarative Base/mixins from core.models.base (identity convention —
+# shared declarative Base/mixins from core.models.base (identity convention -
 # no db/base.py), so importing core.models.** from features/**/models/** is
 # allowed. Repositories and everything else under core.features stay forbidden.
 ignore_imports = [

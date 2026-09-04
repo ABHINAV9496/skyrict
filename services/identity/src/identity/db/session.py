@@ -1,4 +1,4 @@
-"""Async database engine and session factory — the ONE place DB connections are created.
+"""Async database engine and session factory - the ONE place DB connections are created.
 
 Sets Row-Level Security context on every transaction: when the request-scoped
 TenantContext is populated, ``app.current_tenant_id`` is set via
@@ -56,6 +56,6 @@ def _set_rls_tenant_context(_session: Session, _transaction: object, connection:
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]
-    """FastAPI dependency — yields an async session."""
+    """FastAPI dependency - yields an async session."""
     async with async_session_factory() as session:
         yield session

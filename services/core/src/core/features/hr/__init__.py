@@ -1,4 +1,4 @@
-"""HR feature package — departments, employees, leave requests, leave ledger.
+"""HR feature package - departments, employees, leave requests, leave ledger.
 
 Feature-based layout: every ERP module owns its ``models/``, ``ports.py`` and
 ``repository.py`` inside its own package under ``core.features``. The HR

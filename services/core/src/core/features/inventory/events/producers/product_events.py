@@ -1,4 +1,4 @@
-"""Product snapshot events — keeps the ai-agent embedding store in sync (SKY-70).
+"""Product snapshot events - keeps the ai-agent embedding store in sync (SKY-70).
 
 Two concerns ride on every product mutation:
 
@@ -13,7 +13,7 @@ Two concerns ride on every product mutation:
    ``POST /api/v1/ai/inventory/embeddings/sync`` endpoint so the searchable
    pgvector snapshot project lives independently of the core schema. Dispatch
    is BEST-EFFORT by design: it runs as a background task on the request loop
-   and a failure is logged, never turned into a 500 — the write already
+   and a failure is logged, never turned into a 500 - the write already
    committed. Recovery is the ``ai-agent inventory reindex`` CLI. Disabled
    when ``CORE_AI_SYNC_TOKEN`` (or the routed tenant slug) is absent.
 """
@@ -42,7 +42,7 @@ class ProductUpsertedEvent(BaseEvent):
     """Envelope for ``inventory.product.upserted``.
 
     Metadata carries the catalog snapshot text fields (sku/name/category/unit)
-    — exactly the projection the ai-agent embedding row mirrors, and nothing
+    - exactly the projection the ai-agent embedding row mirrors, and nothing
     more: cost/sell prices never leave the trust boundary via events (spec §5.5).
     """
 
@@ -144,7 +144,7 @@ def _spawn_sync_dispatch(payload: dict[str, Any]) -> None:
 
 
 def _log_dispatch_failure(task: asyncio.Task[object]) -> None:
-    """Log (never raise) a failed background sync — the write already committed."""
+    """Log (never raise) a failed background sync - the write already committed."""
     try:
         task.result()
     except Exception:

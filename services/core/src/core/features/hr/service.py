@@ -1,4 +1,4 @@
-"""HR service — departments, employees, leave rules 1-6 (docs/hr-payroll.md §4).
+"""HR service - departments, employees, leave rules 1-6 (docs/hr-payroll.md §4).
 
 Pure-logic phase: services depend on :class:`HrRepositoryPort` /
 :class:`IdentityUserPort` protocols and the shared :class:`AuditService`;
@@ -77,7 +77,7 @@ def _require_id(entity: ent.Employee, what: str) -> uuid.UUID:
 
 
 class DepartmentService:
-    """Department CRUD — tenant-scoped, soft-disable via ``is_active``."""
+    """Department CRUD - tenant-scoped, soft-disable via ``is_active``."""
 
     def __init__(self, repository: HrRepositoryPort, audit: AuditService) -> None:
         self._repo = repository
@@ -162,7 +162,7 @@ class DepartmentService:
 
 
 class EmployeeService:
-    """Employee lifecycle — hire, update, status transitions, terminate (rules via §3.3)."""
+    """Employee lifecycle - hire, update, status transitions, terminate (rules via §3.3)."""
 
     def __init__(
         self, repository: HrRepositoryPort, audit: AuditService, identity: IdentityUserPort
@@ -443,7 +443,7 @@ class EmployeeService:
 
 
 class LeaveService:
-    """Leave lifecycle — rules 1-6: approve, balance, atomicity, accrual, cancel, self-approval."""
+    """Leave lifecycle - rules 1-6: approve, balance, atomicity, accrual, cancel, self-approval."""
 
     def __init__(self, repository: HrRepositoryPort, audit: AuditService) -> None:
         self._repo = repository
@@ -565,7 +565,7 @@ class LeaveService:
                     f"approving {request.days} days would drive balance below zero"
                 )
 
-        # Rule 3: atomic guard — transition returns None if the row wasn't pending.
+        # Rule 3: atomic guard - transition returns None if the row wasn't pending.
         transitioned = await self._repo.transition_leave_status(
             request_id,
             LeaveRequestStatus.PENDING.value,
@@ -575,7 +575,7 @@ class LeaveService:
             approved_at=datetime.now(UTC),
         )
         if transitioned is None:
-            # Concurrent approve won (guard) — re-read and treat as already-approved.
+            # Concurrent approve won (guard) - re-read and treat as already-approved.
             current = await self._repo.get_leave_request(request_id, tenant_id)
             if current is None:
                 raise ValueError(f"leave request {request_id} not found")
@@ -698,7 +698,7 @@ class LeaveService:
         leave_type_row = await self._repo.get_leave_type(request.leave_type, tenant_id=tenant_id)
         is_accrual = leave_type_row is not None and leave_type_row.is_accrual
         if is_accrual:
-            # Rule 3 (docs §4.3): same balance-row lock as approve — the reversal
+            # Rule 3 (docs §4.3): same balance-row lock as approve - the reversal
             # below also reads-then-writes the balance, so a concurrent approval
             # must serialize against it rather than compute a stale ledger view.
             await self._repo.lock_leave_balance(
@@ -815,7 +815,7 @@ class LeaveService:
         reason: str,
         actor_user_id: uuid.UUID | None = None,
     ) -> int:
-        """Manual balance adjustment (override) — ledger write + recompute."""
+        """Manual balance adjustment (override) - ledger write + recompute."""
         if qty == 0:
             raise ValueError("adjustment quantity cannot be zero")
         leave_type_row = await self._repo.get_leave_type(leave_type, tenant_id=tenant_id)
@@ -823,7 +823,7 @@ class LeaveService:
             raise ValueError(f"unknown leave type {leave_type!r}")
         if leave_type_row.is_accrual:
             # Rule 2 (docs §4.3): same balance-bucket lock + projected-balance
-            # check as approve — a manual adjustment must never drive the ledger
+            # check as approve - a manual adjustment must never drive the ledger
             # negative. The lock serializes against concurrent approves so the
             # re-read below sees the committed ledger, not a stale snapshot.
             await self._repo.lock_leave_balance(employee_id, leave_type, tenant_id=tenant_id)
@@ -988,7 +988,7 @@ class LeaveService:
     ) -> None:
         """Lazy Jan-1 reset: accrue casual+sick for the current year if missing.
 
-        Called on every balance read. Idempotent — if accruals already exist
+        Called on every balance read. Idempotent - if accruals already exist
         for the current year, the ``accrue()`` call short-circuits immediately.
         """
         current_year = date.today().year
@@ -1089,7 +1089,7 @@ _PAY_IMPACT_BY_STATUS: dict[AttendanceStatus, PayImpact] = {
 class AttendanceService:
     """Daily attendance logging/correction (feeds payroll pay-impact rules).
 
-    One record per employee per work day — corrections upsert the same day.
+    One record per employee per work day - corrections upsert the same day.
     ``pay_impact`` is derived here from the status (on_time -> full, late ->
     half, absent -> none) and never trusted from clients.
     """
@@ -1123,7 +1123,7 @@ class AttendanceService:
         )
         saved = await self._repo.upsert_attendance_record(record)
         # Derive from the in-memory impact (the ORM returns pay_impact as a
-        # plain string — its column is VARCHAR with a CHECK, not a pg enum).
+        # plain string - its column is VARCHAR with a CHECK, not a pg enum).
         impact = record.pay_impact.value
         await self._audit.log(
             action=audit_events.HR_ATTENDANCE_RECORDED,

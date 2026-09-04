@@ -1,15 +1,15 @@
 """
-JWT verification for the AI agent service — RS256, verify-only.
+JWT verification for the AI agent service - RS256, verify-only.
 
 The service never signs tokens: it VERIFIES access tokens issued by the
 identity service using the shared RS256 public key and the same issuer/
-audience. Every other layer MUST go through verify_jwt() — the single
+audience. Every other layer MUST go through verify_jwt() - the single
 verification path.
 
 The token's ``tenant_id`` claim is cross-checked against the routed tenant by
-the middleware; permissions are NEVER read from JWT claims — authorization is
+the middleware; permissions are NEVER read from JWT claims - authorization is
 enforced at the core monolith edge BEFORE requests are forwarded here
-(SKY-57 design decision: AI is a proxy, not a bypass — spec §1.4).
+(SKY-57 design decision: AI is a proxy, not a bypass - spec §1.4).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from ai_agent.core.exceptions import StartupError, TokenExpiredError, TokenInval
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
-# Algorithms we accept — explicitly whitelisted. Rejects "none" and any
+# Algorithms we accept - explicitly whitelisted. Rejects "none" and any
 # header-driven algorithm switching (CVE-2015-2951 / algorithm confusion).
 _ALLOWED_ALGORITHMS = {"RS256"}
 
@@ -49,10 +49,10 @@ class TokenClaims(TypedDict):
 
 
 def verify_jwt(token: str) -> TokenClaims:
-    """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
+    """Decode and VERIFY a JWT - the ONE AND ONLY verification path.
 
     Security guarantees:
-      - RS256 only (asymmetric — public key verifies)
+      - RS256 only (asymmetric - public key verifies)
       - Algorithm whitelist rejects "none" and header-driven attacks
       - Issuer and audience are validated
       - Expiry (exp) and not-before (nbf) are checked
@@ -129,5 +129,5 @@ def verify_jwt_key_usable() -> None:
         raise StartupError(f"JWT public key is not an RSA key (got {type(public_key).__name__})")
     if public_key.key_size < 2048:
         raise StartupError(
-            f"JWT public key is only {public_key.key_size} bits — RSA 2048 or larger required"
+            f"JWT public key is only {public_key.key_size} bits - RSA 2048 or larger required"
         )

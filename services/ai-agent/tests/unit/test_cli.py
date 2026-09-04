@@ -1,4 +1,4 @@
-"""CLI surface tests — command registration and naming (SKY-58)."""
+"""CLI surface tests - command registration and naming (SKY-58)."""
 
 from collections.abc import Callable
 from typing import Any

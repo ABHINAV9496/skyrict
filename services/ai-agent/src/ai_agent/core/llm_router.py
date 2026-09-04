@@ -55,7 +55,7 @@ class LlmRouter:
     passes. As such it also enforces the PII redaction gate (HR-AI-001): every
     ``LlmRequest`` is passed through ``self._redactor`` BEFORE it reaches any
     provider adapter, so no raw sensitive value can ever be serialized into an
-    outbound provider payload. The gate fails closed — anything that matches a
+    outbound provider payload. The gate fails closed - anything that matches a
     sensitive pattern is masked.
     """
 
@@ -166,8 +166,8 @@ class LlmRouter:
     ) -> AsyncIterator[LlmStreamChunk]:
         """Stream ``request`` through the provider chain (SKY-60).
 
-        Shares ``complete``'s contracts — data residency gate, PII redaction
-        gate, ordered provider chain — with one streaming-specific nuance:
+        Shares ``complete``'s contracts - data residency gate, PII redaction
+        gate, ordered provider chain - with one streaming-specific nuance:
         failover is ONLY possible until the first yielded token. Once a
         provider has begun answering, tokens are visible to the client and a
         mid-stream failure cannot be replayed; it is raised to the consumer

@@ -1,4 +1,4 @@
-"""Application-wide constants — single source of truth for magic values.
+"""Application-wide constants - single source of truth for magic values.
 
 Services, schemas, and configs import from here instead of hardcoding strings.
 """
@@ -66,7 +66,7 @@ LOGIN_FAILED_MESSAGE = "Invalid email or password."
 # Skip-auth paths (middleware bypass)
 #
 # These are the REAL mounted paths (the api_router is mounted under /api/v1).
-# Everything else — including /api/v1/auth/login — requires tenant resolution
+# Everything else - including /api/v1/auth/login - requires tenant resolution
 # so the tenant is known before route execution. The onboarding wizard paths
 # (/auth/signup/*) and /invitations/accept|verify are self-service (no tenant
 # exists yet), so they bypass tenant resolution.
@@ -255,7 +255,7 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     # Employee self-service: portal access to OWN leave balances/requests only.
-    # Deliberately holds zero dashboard permissions — the login redirect sends
+    # Deliberately holds zero dashboard permissions - the login redirect sends
     # sole holders straight to the /leave portal.
     ("employee_self_service", ("erp.leave.self",)),
 )

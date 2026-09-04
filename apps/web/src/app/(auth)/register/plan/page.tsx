@@ -6,7 +6,7 @@ import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
   title: "Choose a plan",
-  description: "Step 4 of 5 — pick the plan that fits your business.",
+  description: "Step 4 of 5 - pick the plan that fits your business.",
 };
 
 export default async function PlanPage({

@@ -3,17 +3,17 @@
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
 (all 7 revisions) -> core ``downgrade base`` (all the way back to nothing) ->
-core ``upgrade head`` again — on a disposable scratch database created by the
+core ``upgrade head`` again - on a disposable scratch database created by the
 test and dropped afterwards.
 
 Why this exists: the thread that produced migration 0007 found a schema that
 had silently diverged from what the migration files claimed (``ref_id`` uuid
-drift), and the 0006 downgrade — dropping audit triggers, trigger functions,
-RLS policies, seeded permission rows, and tenant tables in a six-step order —
+drift), and the 0006 downgrade - dropping audit triggers, trigger functions,
+RLS policies, seeded permission rows, and tenant tables in a six-step order -
 had never been exercised as part of a longer chain unwind. A partial test
 ("upgrade head -> downgrade -1 -> upgrade head") would only prove the newest
 link round-trips; this proves the whole chain does. If ``downgrade base`` ever
-breaks, the fix is a new corrective migration or a documented accepted risk —
+breaks, the fix is a new corrective migration or a documented accepted risk -
 never an edit to an already-applied migration file.
 
 Sentinel assertions probe one representative artefact of each migration:

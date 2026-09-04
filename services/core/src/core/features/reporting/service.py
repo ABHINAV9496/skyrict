@@ -116,7 +116,7 @@ class DashboardService:
 
     async def has_enough_events(self, *, tenant_id: uuid.UUID) -> bool:
         """Check whether the tenant has enough telemetry for an AI suggestion."""
-        # Check across all widgets — if any widget hits the threshold, we suggest.
+        # Check across all widgets - if any widget hits the threshold, we suggest.
         summary = await self._repo.get_widget_event_summary(tenant_id=tenant_id)
         return any(item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in summary)
 

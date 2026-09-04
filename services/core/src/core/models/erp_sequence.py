@@ -1,4 +1,4 @@
-"""erp_sequences — tenant-scoped monotonic counters for ERP document numbering.
+"""erp_sequences - tenant-scoped monotonic counters for ERP document numbering.
 
 A row is a single per-tenant counter keyed by ``entity`` (e.g. invoice, payment,
 quote). Services claim the next number with a row-locking

@@ -1,4 +1,4 @@
-"""CRM scope-filter tests — the SQL predicate produced by ``_scope_filter``.
+"""CRM scope-filter tests - the SQL predicate produced by ``_scope_filter``.
 
 The filter must fail closed: a missing user/team id narrows the result, never
 broadens it. These tests compile the predicate against the PostgreSQL dialect

@@ -103,7 +103,7 @@ export function CountryCombobox({
    * Radix's DismissableLayer listens for Escape on `document` in the capture
    * phase, so a bubble-phase stopPropagation can never shield the dialog.
    * Register an earlier document-capture listener that swallows Escape while
-   * it targets this combobox — closing only the listbox, never the dialog.
+   * it targets this combobox - closing only the listbox, never the dialog.
    */
   useEffect(() => {
     function handleCapture(event: KeyboardEvent) {
@@ -157,7 +157,7 @@ export function CountryCombobox({
   }
 
   // New filter output: restart at the top row and reveal it. Pointer hover
-  // deliberately never scrolls — Chrome re-fires mouseenter for rows passing
+  // deliberately never scrolls - Chrome re-fires mouseenter for rows passing
   // under a stationary cursor while the list scrolls, which would otherwise
   // fight the user's wheel momentum.
   useEffect(() => {
@@ -232,7 +232,7 @@ export function CountryCombobox({
       event.preventDefault();
       if (open) commitHighlighted();
     } else if (event.key === "Escape") {
-      // Escape must never reach the Dialog's dismissable layer — with the
+      // Escape must never reach the Dialog's dismissable layer - with the
       // list already closed it would otherwise close the entire dialog.
       event.stopPropagation();
       if (open) setOpen(false);

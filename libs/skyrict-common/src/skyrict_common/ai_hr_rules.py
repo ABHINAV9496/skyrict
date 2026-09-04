@@ -1,6 +1,6 @@
 """Pure leave-pattern anomaly rules shared by core and the eval harness.
 
-HR-AI-002 §8.2.1 — the leave-pattern anomaly inbox.  This module is pure
+HR-AI-002 §8.2.1 - the leave-pattern anomaly inbox.  This module is pure
 (no SQLAlchemy, no I/O, stdlib only) so that the engine deployed in
 :mod:`core.features.ai_hr.anomaly_repository` and the ai-agent eval harness
 (``anomaly_precision``, SKY-72) run the LITERAL same detection code.

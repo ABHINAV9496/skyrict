@@ -1,4 +1,4 @@
-"""Finance service — the feature's business rules and money-moment announcements.
+"""Finance service - the feature's business rules and money-moment announcements.
 
 The only orchestrator in the finance module. Depends on Protocols
 (:class:`FinanceRepositoryPort`, :class:`AuditSink`, :class:`FinanceEventSink`)
@@ -14,14 +14,14 @@ Rules owned here (mirroring the DB CHECK constraints as early validation):
   issued -> approved -> paid, with void allowed only from draft/issued;
   revenue is recognized ONLY at ``approved`` (accrual), which writes a POSTED
   accrual entry (DR AR / CR revenue) stamped ``(source='invoice', source_ref=
-  invoice_id)`` — the unique lock that makes double-approval impossible.
+  invoice_id)`` - the unique lock that makes double-approval impossible.
 - **Idempotency**: ``create_from_order`` re-bills an order by returning the
   existing invoice; payments cannot exceed the outstanding balance.
 - **Money moments**: every irreversible state change is audited (same
   transaction) and announced through the event sink (after commit).
 
 ``create_from_order`` is the :class:`InvoicePort` implementation CRM/sales will
-call — finance only ever receives the ``SalesOrderForInvoicing`` DTO, never a
+call - finance only ever receives the ``SalesOrderForInvoicing`` DTO, never a
 sales table.
 """
 
@@ -195,7 +195,7 @@ class FinanceService:
         memo: str | None,
         lines: Sequence[JournalLineInput],
     ) -> JournalEntry:
-        """Create a DRAFT manual entry — balance is only enforced at post."""
+        """Create a DRAFT manual entry - balance is only enforced at post."""
         if not lines:
             raise ValidationError("A journal entry must have at least one line")
 
@@ -264,7 +264,7 @@ class FinanceService:
         user_id: uuid.UUID,
         entry_id: uuid.UUID,
     ) -> JournalEntry:
-        """Post a draft entry — the moment money becomes real.
+        """Post a draft entry - the moment money becomes real.
 
         Gates: entry is draft, the entry date's fiscal period is open, and the
         entry balances. On success the entry is audited and the
@@ -436,7 +436,7 @@ class FinanceService:
         return created
 
     async def create_from_order(self, order: SalesOrderForInvoicing) -> Invoice:
-        """Implement :class:`InvoicePort` — bill a CRM sales order.
+        """Implement :class:`InvoicePort` - bill a CRM sales order.
 
         Idempotent per ``order_id``: the ``UNIQUE (tenant_id, source, source_ref)``
         lock returns the existing invoice instead of billing twice. Created
@@ -588,7 +588,7 @@ class FinanceService:
         user_id: uuid.UUID,
         invoice_id: uuid.UUID,
     ) -> Invoice:
-        """Approve an issued invoice — revenue recognition (accrual).
+        """Approve an issued invoice - revenue recognition (accrual).
 
         Writes a POSTED accrual entry (DR AR / CR revenue) in the SAME
         transaction as the status flip, stamped ``(source='invoice', source_ref=
@@ -714,7 +714,7 @@ class FinanceService:
         Guards: the invoice must be approved, the amount positive, and it must
         not exceed the outstanding balance. When the outstanding balance reaches
         zero the invoice is marked paid in the same transaction. Idempotent per
-        ``(source, source_ref)`` — a replayed request can never double-book.
+        ``(source, source_ref)`` - a replayed request can never double-book.
         """
         invoice = await self.get_invoice(tenant_id, invoice_id)
         if invoice.status != InvoiceStatus.APPROVED:
@@ -804,7 +804,7 @@ class FinanceService:
         """Post a COGS journal entry after stock consumption (DR COGS / CR Inventory Asset).
 
         Called by the sales service after ``fulfil_order_lines`` succeeds. The
-        entry is created as POSTED in the same transaction — the unique
+        entry is created as POSTED in the same transaction - the unique
         ``(source, source_ref)`` lock on journal entries prevents double-posting
         for the same order.
         """
@@ -935,6 +935,7 @@ class FinanceService:
 
     # ------------------------------------------------------------------
     # Reports (derived from posted lines — never stored)
+    # Reports (derived from posted lines - never stored)
     # ------------------------------------------------------------------
 
     async def trial_balance(self, tenant_id: uuid.UUID, as_of: date) -> TrialBalance:

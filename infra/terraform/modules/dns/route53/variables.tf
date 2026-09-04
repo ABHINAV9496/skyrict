@@ -1,5 +1,5 @@
 # =============================================================================
-# DNS module — provider contract (implementation: AWS Route 53)
+# DNS module - provider contract (implementation: AWS Route 53)
 #
 # Every DNS provider implementation under infra/terraform/modules/dns/ MUST
 # expose the same variables and outputs so an environment can switch provider

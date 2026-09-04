@@ -2,8 +2,8 @@
 
 The ai agent resolves tenant slugs against this table during routing
 (middleware) and then relies on Row-Level Security for isolation. This model
-deliberately maps only the columns the ai agent reads — ``id``, ``slug``,
-``is_active`` — and is never used for writes: identity owns the tenants table.
+deliberately maps only the columns the ai agent reads - ``id``, ``slug``,
+``is_active`` - and is never used for writes: identity owns the tenants table.
 """
 
 from __future__ import annotations

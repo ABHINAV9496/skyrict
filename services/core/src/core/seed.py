@@ -1,4 +1,4 @@
-"""Database seeding — per-tenant HR/Payroll defaults (HR-DATA-001) and core RBAC roles.
+"""Database seeding - per-tenant HR/Payroll defaults (HR-DATA-001) and core RBAC roles.
 
 Global reference data (currencies, permissions) is seeded by migration 0001;
 the per-tenant defaults that CANNOT live in a migration (they are tenant-scoped
@@ -9,14 +9,14 @@ decisions) live here and are applied at tenant provisioning time:
   - the single ``erp_payroll_settings`` row per tenant (default currency from
     settings, zero PF/tax rates, nearest rounding);
   - the five system roles in ``core_roles`` (ERP grants per the HR & Payroll
-    design doc section 2.4) — the role catalog ``require_permission`` resolves
+    design doc section 2.4) - the role catalog ``require_permission`` resolves
     through ``core_user_roles``.
 
 EMP-/PR- record-numbering seeds are deliberately NOT here: ``erp_sequences``
 now exists (migration 0006) but the per-tenant counter seed rows land with the
 HR service ticket, which owns the numbering scheme.
 
-Idempotent: safe to re-run — existing rows are left untouched (system-role
+Idempotent: safe to re-run - existing rows are left untouched (system-role
 permits are appended, never removed).
 """
 
@@ -141,7 +141,7 @@ async def seed_tenant_hr_defaults(tenant_id: uuid.UUID) -> None:
 
 
 # System roles mirrored into ``core_roles`` per tenant (design doc section 2.4).
-# Keys come from ``core_permissions`` — the platform-fixed catalog seeded by
+# Keys come from ``core_permissions`` - the platform-fixed catalog seeded by
 # migration 0006 with the six ``erp.hr.*`` / ``erp.payroll.*`` keys; the
 # ``erp.crm.*`` / ``erp.sales.*`` grants mirror identity's SYSTEM_ROLE_DEFINITIONS
 # (services/identity/src/identity/core/constants.py) so role grants stay portable
@@ -209,8 +209,8 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
 async def seed_core_roles_for_tenant(tenant_id: uuid.UUID) -> None:
     """Idempotently seed the system roles for one tenant's core RBAC.
 
-    Populates ``core_roles`` — the role catalog ``require_permission`` resolves
-    through ``core_user_roles`` — with the five system roles and their ERP
+    Populates ``core_roles`` - the role catalog ``require_permission`` resolves
+    through ``core_user_roles`` - with the five system roles and their ERP
     grants (design doc section 2.4). Existing rows are merged, never reset:
     ``is_system_role`` is forced to True and missing keys appended, so
     tenant-specific grants on a system role are preserved.
@@ -255,7 +255,7 @@ async def sync_rbac_from_identity() -> None:
 
     This bridges the gap where identity's seed creates ``user_roles`` rows
     (e.g. admin → tenant_owner) but core's ``seed_core_roles_for_tenant``
-    only creates ``core_roles`` rows (role catalog) — never the user→role
+    only creates ``core_roles`` rows (role catalog) - never the user→role
     grants that ``require_permission`` resolves through.
 
     Idempotent: safe to re-run on every startup. Core's role IDs are never
@@ -265,7 +265,7 @@ async def sync_rbac_from_identity() -> None:
     async with async_session_factory() as session:
         # Step 1: Sync role permissions from identity's roles into core_roles.
         # On conflict (same tenant + name), merge permissions and update
-        # is_system_role. Core's own role `id` is NEVER overwritten — it is
+        # is_system_role. Core's own role `id` is NEVER overwritten - it is
         # the PK that core_user_roles FKs reference, so replacing it would
         # break existing grants.
         await session.execute(

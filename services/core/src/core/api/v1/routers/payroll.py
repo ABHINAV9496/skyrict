@@ -1,4 +1,4 @@
-"""Payroll API endpoints — settings, runs, entries, compensation (HR-BE-002 §7).
+"""Payroll API endpoints - settings, runs, entries, compensation (HR-BE-002 §7).
 
 Every handler requires a valid access token bound to the routed tenant and
 resolves the tenant id from the request context. Service ``ValueError`` results
@@ -49,7 +49,7 @@ from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/payroll", tags=["payroll"])
 
-# Permission singletons (docs/modules/hr-payroll.md §7) — resolved per request.
+# Permission singletons (docs/modules/hr-payroll.md §7) - resolved per request.
 _require_payroll_read = require_permission(ERP_PAYROLL_READ)
 _require_payroll_write = require_permission(ERP_PAYROLL_WRITE)
 _require_payroll_approve = require_permission(ERP_PAYROLL_APPROVE)

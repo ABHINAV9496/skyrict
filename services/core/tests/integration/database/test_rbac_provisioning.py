@@ -1,4 +1,4 @@
-"""Cross-service RBAC provisioning integration tests — real Postgres.
+"""Cross-service RBAC provisioning integration tests - real Postgres.
 
 Covers the event-driven core-RBAC provisioning path (identity -> core): the
 idempotent ``apply_role_grants`` upsert, the ``provision_tenant_rbac`` entry

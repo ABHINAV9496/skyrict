@@ -2,7 +2,7 @@
 
 The endpoint is exercised through TestClient WITHOUT triggering lifespan
 (no DB/Redis pools), with the auth dependency stubbed to a fixed caller and
-the supervisor runtime replaced by a scripted fake — so these tests cover the
+the supervisor runtime replaced by a scripted fake - so these tests cover the
 wire contract (SSE framing, ordering, sanitized error frames, caller binding)
 rather than provider internals.
 """
@@ -316,7 +316,7 @@ def test_stream_returns_rfc7807_429_when_user_quota_exhausted(
     )
 
     # The quota is checked BEFORE streaming starts, so this is a normal
-    # RFC 7807 error response — never an SSE stream that dies mid-turn.
+    # RFC 7807 error response - never an SSE stream that dies mid-turn.
     assert response.status_code == 429
     assert "ai-rate-limited" in response.text
 

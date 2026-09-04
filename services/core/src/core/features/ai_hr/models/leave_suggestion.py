@@ -1,4 +1,4 @@
-"""ai_hr_leave_suggestions — smart leave-window suggestions (8.2.4).
+"""ai_hr_leave_suggestions - smart leave-window suggestions (8.2.4).
 
 Written by the suggestion engine (deterministic, non-LLM); exposed to the
 employee's own leave application flow via the self-scoped ``/portal`` surface

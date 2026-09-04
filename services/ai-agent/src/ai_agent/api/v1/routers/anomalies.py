@@ -42,7 +42,7 @@ def get_anomaly_service(
 
     The email transport and per-tenant alert gate are built here (composition
     root) so the service layer stays free of DB and config concerns. No SMTP
-    relay and/or no configured recipients means no transport — scans stay
+    relay and/or no configured recipients means no transport - scans stay
     silent and skip the settings lookup entirely.
     """
 

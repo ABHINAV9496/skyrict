@@ -1,4 +1,4 @@
-"""CRM workspace API schemas — contacts, activities, notes, timeline.
+"""CRM workspace API schemas - contacts, activities, notes, timeline.
 
 Follows ``crm/schemas.py`` conventions: request models validate client input,
 response models validate domain entities. Money values travel as plain

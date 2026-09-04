@@ -1,13 +1,13 @@
 # =============================================================================
-# CI — Infrastructure
+# CI - Infrastructure
 #
 # Validates Terraform configuration and Kubernetes manifests on every PR that
-# touches infra/. No cloud credentials or cluster access are required — the
+# touches infra/. No cloud credentials or cluster access are required - the
 # terraform steps init without a backend, and kubeconform validates the
 # rendered overlay against Kubernetes + CRD schemas offline.
 # =============================================================================
 
-name: CI — Infrastructure
+name: CI - Infrastructure
 
 on:
   pull_request:

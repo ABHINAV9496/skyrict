@@ -1,4 +1,4 @@
-"""ai_payroll_anomaly_log — payroll anomaly findings.
+"""ai_payroll_anomaly_log - payroll anomaly findings.
 
 Written by the anomaly detection rules (Commit 4); read for the anomaly feed
 and dispositions. ``severity`` is ``low|medium|high|critical`` (spec §7.1);

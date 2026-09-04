@@ -1,6 +1,6 @@
 """Unit tests for the leave-pattern anomaly detector (HR-AI-002, 8.2.1).
 
-Covers the team-size gate Gherkin case (a <4 member team must be *abstained* —
+Covers the team-size gate Gherkin case (a <4 member team must be *abstained* -
 no finding is ever persisted), the >=3x-median overuse / frequent-absence rules
 with severity scaling, the two new pattern rules (short-notice Monday/Friday
 and pre-holiday spike) wired through the ORM boundary, the L1 aggregate, and

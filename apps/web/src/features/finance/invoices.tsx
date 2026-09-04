@@ -625,7 +625,7 @@ function CreateInvoiceDialog() {
 
 const columns: FinanceColumn<Invoice>[] = [
   { label: "Number", render: (invoice) => invoice.invoice_number },
-  { label: "Customer", render: (invoice) => invoice.customer_name ?? "—" },
+  { label: "Customer", render: (invoice) => invoice.customer_name ?? "-" },
   { label: "Date", render: (invoice) => formatDate(invoice.invoice_date) },
   { label: "Due", render: (invoice) => formatDate(invoice.due_date) },
   { label: "Status", render: (invoice) => <InvoiceStatusBadge status={invoice.status} /> },
@@ -634,7 +634,7 @@ const columns: FinanceColumn<Invoice>[] = [
     label: "Balance",
     align: "right",
     render: (invoice) => {
-      if (invoice.status === "voided") return "—";
+      if (invoice.status === "voided") return "-";
       if (invoice.status === "paid") return <span className="tabular-nums">{formatMoney(0)}</span>;
       return <span className="tabular-nums">{formatMoney(invoice.total)}</span>;
     },

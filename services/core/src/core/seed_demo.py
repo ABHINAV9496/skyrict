@@ -399,7 +399,7 @@ LEAVE_REQUEST_ROWS: tuple[dict[str, object], ...] = (
 )
 
 # Malaysian public holidays for the demo tenant (org-wide; 8.2.1 input data).
-# Dates are illustrative — demo config, not an authoritative calendar.
+# Dates are illustrative - demo config, not an authoritative calendar.
 HOLIDAY_ROWS: tuple[dict[str, object], ...] = (
     {"date": "2026-01-01", "name": "New Year's Day"},
     {"date": "2026-02-17", "name": "Chinese New Year"},
@@ -460,7 +460,7 @@ FISCAL_PERIOD_ROWS: tuple[dict[str, object], ...] = (
 # Journal entries: (memo, source, source_ref, status, entry_days_ago, lines: [(account_idx, debit, credit)])
 JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
     {
-        "memo": "Opening balance — cash injection",
+        "memo": "Opening balance - cash injection",
         "source": "manual",
         "source_ref": "JE-0001",
         "status": EntryStatus.POSTED,
@@ -484,7 +484,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(14, Decimal("12000"), None), (0, None, Decimal("12000"))],
     },
     {
-        "memo": "January payroll — Engineering",
+        "memo": "January payroll - Engineering",
         "source": "payroll",
         "source_ref": "PR-2026-01",
         "status": EntryStatus.POSTED,
@@ -492,7 +492,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(13, Decimal("45000"), None), (5, None, Decimal("45000"))],
     },
     {
-        "memo": "February payroll — Engineering",
+        "memo": "February payroll - Engineering",
         "source": "payroll",
         "source_ref": "PR-2026-02",
         "status": EntryStatus.POSTED,
@@ -500,7 +500,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(13, Decimal("45000"), None), (5, None, Decimal("45000"))],
     },
     {
-        "memo": "March payroll — Engineering",
+        "memo": "March payroll - Engineering",
         "source": "payroll",
         "source_ref": "PR-2026-03",
         "status": EntryStatus.POSTED,
@@ -508,7 +508,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(13, Decimal("47500"), None), (5, None, Decimal("47500"))],
     },
     {
-        "memo": "Cloud infrastructure — Q1",
+        "memo": "Cloud infrastructure - Q1",
         "source": "manual",
         "source_ref": "JE-0006",
         "status": EntryStatus.POSTED,
@@ -516,7 +516,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(15, Decimal("8500"), None), (0, None, Decimal("8500"))],
     },
     {
-        "memo": "Marketing campaign — Spring launch",
+        "memo": "Marketing campaign - Spring launch",
         "source": "manual",
         "source_ref": "JE-0007",
         "status": EntryStatus.POSTED,
@@ -532,7 +532,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(17, Decimal("3200"), None), (0, None, Decimal("3200"))],
     },
     {
-        "memo": "Service revenue — client project",
+        "memo": "Service revenue - client project",
         "source": "invoice",
         "source_ref": "INV-0001",
         "status": EntryStatus.POSTED,
@@ -540,7 +540,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(0, Decimal("25000"), None), (10, None, Decimal("25000"))],
     },
     {
-        "memo": "Equipment depreciation — Q1",
+        "memo": "Equipment depreciation - Q1",
         "source": "manual",
         "source_ref": "JE-0010",
         "status": EntryStatus.POSTED,
@@ -556,7 +556,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(17, Decimal("890"), None), (0, None, Decimal("890"))],
     },
     {
-        "memo": "Interest income — savings account",
+        "memo": "Interest income - savings account",
         "source": "manual",
         "source_ref": "JE-0012",
         "status": EntryStatus.POSTED,
@@ -564,7 +564,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(0, Decimal("320"), None), (11, None, Decimal("320"))],
     },
     {
-        "memo": "COGS — SO-0001 Enterprise ERP License",
+        "memo": "COGS - SO-0001 Enterprise ERP License",
         "source": "cogs",
         "source_ref": "SO-0001",
         "status": EntryStatus.POSTED,
@@ -572,7 +572,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(12, Decimal("5000"), None), (2, None, Decimal("5000"))],
     },
     {
-        "memo": "COGS — SO-0002 CRM + HR + Training",
+        "memo": "COGS - SO-0002 CRM + HR + Training",
         "source": "cogs",
         "source_ref": "SO-0002",
         "status": EntryStatus.POSTED,
@@ -580,7 +580,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(12, Decimal("3200"), None), (2, None, Decimal("3200"))],
     },
     {
-        "memo": "COGS — SO-0006 Data Migration Package",
+        "memo": "COGS - SO-0006 Data Migration Package",
         "source": "cogs",
         "source_ref": "SO-0006",
         "status": EntryStatus.POSTED,
@@ -588,7 +588,7 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "lines": [(12, Decimal("2000"), None), (2, None, Decimal("2000"))],
     },
     {
-        "memo": "COGS — SO-0010 HR Module Add-on",
+        "memo": "COGS - SO-0010 HR Module Add-on",
         "source": "cogs",
         "source_ref": "SO-0010",
         "status": EntryStatus.POSTED,
@@ -818,7 +818,7 @@ INVOICE_ROWS: tuple[dict[str, object], ...] = (
         "total": Decimal("15800"),
         "lines": [
             {
-                "desc": "Legacy migration — overdue",
+                "desc": "Legacy migration - overdue",
                 "account_idx": 10,
                 "qty": 1,
                 "price": Decimal("15800"),
@@ -1028,7 +1028,7 @@ PRODUCT_ROWS: tuple[dict[str, object], ...] = (
     # SKY-70 semantic-search acceptance targets: deliberately new, semantically
     # distinct hardware so hybrid queries ("noise cancelling headphones",
     # "office chair", "monitor") resolve through the embedding index rather
-    # than the exact-text fallback. Add-only — existing SKUs are never renamed.
+    # than the exact-text fallback. Add-only - existing SKUs are never renamed.
     {
         "sku": "HPH-100",
         "name": "Wireless Noise-Cancelling Headphones",
@@ -1480,7 +1480,7 @@ WAREHOUSE_ROWS: tuple[dict[str, object], ...] = (
 # Some products below reorder to trigger alerts: PROD-002 (reorder 3, qty 1),
 # PROD-009 (reorder 2, qty 1), PROD-012 (reorder 5, qty 2).
 STOCK_LEVEL_ROWS: tuple[dict[str, object], ...] = (
-    # Warehouse 0: Main DC — primary stock
+    # Warehouse 0: Main DC - primary stock
     {"prod": 0, "wh": 0, "on_hand": Decimal("12"), "reserved": Decimal("2")},
     {"prod": 1, "wh": 0, "on_hand": Decimal("1"), "reserved": Decimal("0")},
     {"prod": 2, "wh": 0, "on_hand": Decimal("8"), "reserved": Decimal("1")},
@@ -1502,7 +1502,7 @@ STOCK_LEVEL_ROWS: tuple[dict[str, object], ...] = (
     # Warehouse 4: Overflow Storage (sparse)
     {"prod": 2, "wh": 4, "on_hand": Decimal("2"), "reserved": Decimal("0")},
     {"prod": 10, "wh": 4, "on_hand": Decimal("5"), "reserved": Decimal("0")},
-    # SKY-70 semantic acceptance hardware (Main DC) — comfortably above
+    # SKY-70 semantic acceptance hardware (Main DC) - comfortably above
     # reorder so none of them opens the low-stock alert inbox.
     {"prod": 12, "wh": 0, "on_hand": Decimal("30"), "reserved": Decimal("2")},
     {"prod": 13, "wh": 0, "on_hand": Decimal("25"), "reserved": Decimal("1")},
@@ -2016,7 +2016,7 @@ async def seed_demo_data(
                 reason=row.get("reason"),
             )
             session.add(lr)
-        # HR-AI-002 8.2.1 — LIVE short-notice fixture (demoted from a static
+        # HR-AI-002 8.2.1 - LIVE short-notice fixture (demoted from a static
         # row because the fringe check only inspects start/end weekday): a
         # filed-today approved block that starts today (advance 0, still
         # within the trailing window) and ends on the NEXT Friday, so the
@@ -2093,7 +2093,7 @@ async def seed_demo_data(
         # block above (starts today => advance 0, ends next Friday => Mon/Fri
         # fringe, 6-13 days => 3x the 2.0 median) makes short_notice and
         # leave_overuse deterministic on any seed day, and the scan re-emits
-        # them on every rebuild — a genuine live computation path in the demo.
+        # them on every rebuild - a genuine live computation path in the demo.
         session.add(
             UtilizationAlertModel(
                 tenant_id=tenant_id,
@@ -2280,7 +2280,7 @@ async def seed_demo_data(
                     entity_type=CrmEntityType.CUSTOMER,
                     entity_id=customer_ids[idx % len(customer_ids)],
                     event_type=CrmTimelineEventType.INVOICE_APPROVED,
-                    title=f"Invoice {inv_row['number']} approved — ${inv_row['total']}",
+                    title=f"Invoice {inv_row['number']} approved - ${inv_row['total']}",
                     actor_id=owner_id,
                     payload={"invoice_number": inv_row["number"], "amount": str(inv_row["total"])},
                 )
@@ -2293,7 +2293,7 @@ async def seed_demo_data(
                 entity_type=CrmEntityType.CUSTOMER,
                 entity_id=customer_ids[inv_idx % len(customer_ids)],
                 event_type=CrmTimelineEventType.PAYMENT_APPLIED,
-                title=f"Payment {pay_row['number']} applied — ${pay_row['amount']}",
+                title=f"Payment {pay_row['number']} applied - ${pay_row['amount']}",
                 actor_id=owner_id,
                 payload={"payment_number": pay_row["number"], "amount": str(pay_row["amount"])},
             )

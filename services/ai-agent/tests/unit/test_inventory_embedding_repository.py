@@ -22,7 +22,7 @@ PRODUCT_ID = uuid.uuid4()
 
 
 class _FakeSession:
-    """Records executed statements — no real SQL."""
+    """Records executed statements - no real SQL."""
 
     def __init__(self) -> None:
         self.executed: list[object] = []

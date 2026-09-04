@@ -17,7 +17,7 @@
 
 ## Overview
 
-Skyrict is an open-source, AI-native platform that merges business operations (ERP) with real-time market intelligence into a single system. Traditional ERP treats your company as an isolated entity processing internal transactions. Skyrict treats your company as a node in a live global market — ingesting external signals, correlating them with internal operations, and letting AI agents act on the synthesis.
+Skyrict is an open-source, AI-native platform that merges business operations (ERP) with real-time market intelligence into a single system. Traditional ERP treats your company as an isolated entity processing internal transactions. Skyrict treats your company as a node in a live global market - ingesting external signals, correlating them with internal operations, and letting AI agents act on the synthesis.
 
 ---
 
@@ -99,7 +99,7 @@ Why this layering: `api → services → repositories → models`. Business logi
 | Frontend tooling | pnpm + Turborepo |
 | OLTP | PostgreSQL 16 + Row-Level Security |
 | Cache | Redis 7 |
-| Event bus | Kafka 3.x (KRaft mode) — deferred until 3+ services need async events |
+| Event bus | Kafka 3.x (KRaft mode) - deferred until 3+ services need async events |
 | CI/CD | GitHub Actions (path-filtered) |
 | Containers | Docker |
 
@@ -141,7 +141,7 @@ make dev-web
 The identity service is multi-tenant: in production each tenant reaches it via
 its own subdomain (`https://acme.skyrict.com/...`), and the ingress injects an
 `X-Tenant-Slug` header before forwarding. The dev stack mirrors that contract
-so tenant resolution behaves identically locally and in production — no
+so tenant resolution behaves identically locally and in production - no
 staging DNS required.
 
 `docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`)
@@ -163,7 +163,7 @@ curl -s http://globex.localhost/api/v1/health
 docker logs -f skyrict-nginx
 ```
 
-**Path-based fallback** — for environments without wildcard DNS, prefix the
+**Path-based fallback** - for environments without wildcard DNS, prefix the
 path with the tenant slug. Nginx strips the prefix and injects the header:
 
 ```bash
@@ -172,14 +172,14 @@ path with the tenant slug. Nginx strips the prefix and injects the header:
 curl -s http://localhost/acme/api/v1/health
 ```
 
-**Port 80 already in use?** Set a different host port — e.g. add
+**Port 80 already in use?** Set a different host port - e.g. add
 `NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
 use `http://acme.localhost:8080/docs`.
 
 > The service resolves the tenant **once per request in middleware**: in
 > staging/production from the `Host` subdomain (first label of
 > `IDENTITY_BASE_DOMAIN`, e.g. `acme.skyrict.com` → `acme`), and in dev/test
-> from the `X-Tenant-Slug` header that nginx injects — there is no bypass path
+> from the `X-Tenant-Slug` header that nginx injects - there is no bypass path
 > in any environment. The resolved tenant is stored in `TenantContext` and
 > cross-checked against the JWT `tenant_id` claim on every authenticated
 > request; a mismatch is rejected with 401 (RFC 7807
@@ -197,7 +197,7 @@ cd apps/web && pnpm install
 
 # Boot infrastructure (Postgres, Redis)
 docker compose -f infra/docker/docker-compose.yml up -d
-# Kafka is intentionally deferred — see "Roadmap & Scope" below.
+# Kafka is intentionally deferred - see "Roadmap & Scope" below.
 
 # Run migrations
 make migrate
@@ -245,7 +245,7 @@ Pre-commit hooks: Ruff lint, Ruff format, mypy, YAML/JSON/TOML validation, large
 
 ### AI Agent Service (local dev)
 
-The `ai-agent` service (port 8002) hosts the AI assistant features — natural-language inventory queries, restock suggestions, stock anomaly detection. It is provider-agnostic: any OpenAI-compatible endpoint works (OpenRouter, Groq, OpenAI, or a local Ollama via its OpenAI-compatible API). With no provider configured the service boots and serves health; AI calls then return a typed `503 ai_unavailable`.
+The `ai-agent` service (port 8002) hosts the AI assistant features - natural-language inventory queries, restock suggestions, stock anomaly detection. It is provider-agnostic: any OpenAI-compatible endpoint works (OpenRouter, Groq, OpenAI, or a local Ollama via its OpenAI-compatible API). With no provider configured the service boots and serves health; AI calls then return a typed `503 ai_unavailable`.
 
 ```bash
 # Required
@@ -281,7 +281,7 @@ See [docs/setup/branch-protection.md](docs/setup/branch-protection.md) for requi
 
 ### Target Architecture (Roadmap)
 
-Not all of these exist yet — this is the intended end state. Today only `identity` is in active development.
+Not all of these exist yet - this is the intended end state. Today only `identity` is in active development.
 
 ```
 services/
@@ -290,7 +290,7 @@ services/
 └── intelligence/      # Signal collection, NLP, scoring, knowledge graph   (planned)
 ```
 
-Future (aspirational — not yet explicitly scoped):
+Future (aspirational - not yet explicitly scoped):
 
 ```
 services/

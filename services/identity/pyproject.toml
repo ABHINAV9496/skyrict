@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "identity"
 version = "0.1.0"
-description = "Identity service — authentication, authorization, multi-tenancy, sessions, audit"
+description = "Identity service - authentication, authorization, multi-tenancy, sessions, audit"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"

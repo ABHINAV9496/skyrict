@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `useAgentChat` — one conversation's message list driven by the real SSE
+ * `useAgentChat` - one conversation's message list driven by the real SSE
  * supervisor stream (SKY-60).
  *
  * Sending a message appends the user bubble, opens an empty agent bubble, and
@@ -93,7 +93,7 @@ function toMessage(citation: ChatCitation): AgentChatCitation {
 /**
  * Yield to the browser's microtask queue so React can flush pending state
  * updates.  This avoids a race where `streamAgentChat` throws (e.g. 401)
- * before the agent bubble from the preceding `setMessages` is committed —
+ * before the agent bubble from the preceding `setMessages` is committed -
  * the error handler's updater would then not find the bubble and leave it
  * stuck on the loading dots forever.
  */
@@ -188,7 +188,7 @@ export function useAgentChat(
 
     // The auto-start echoes a message that is already persisted and already
     // present in initialMessages, so do not append (nor persist) it again.
-    // Every other send — a typed message or a resend — appends the user bubble
+    // Every other send - a typed message or a resend - appends the user bubble
     // and persists it. Using an explicit `echo` flag (rather than inferring
     // from refs) is correct even when a conversation loads ending in an agent
     // message and no auto-start ever runs.
@@ -206,12 +206,12 @@ export function useAgentChat(
     // Yield to the microtask queue so React commits the agent bubble to state
     // *before* we open the SSE stream.  Without this, a fast error (401, 502)
     // races the batch: the catch-block updater sees stale state and cannot
-    // find the agent bubble — leaving it stuck on the loading dots forever.
+    // find the agent bubble - leaving it stuck on the loading dots forever.
     await yieldToReact();
 
     // Buffer token deltas and flush at animation-frame rate to avoid
     // re-rendering the entire message list (and re-parsing markdown) on
-    // every single SSE token — the main cause of UI lag during streaming.
+    // every single SSE token - the main cause of UI lag during streaming.
     let pendingDelta = "";
     let rafId = 0;
 
@@ -280,7 +280,7 @@ export function useAgentChat(
           }
           setActiveAgent(null);
           // Persist the agent response to the conversation store so it
-          // survives page navigation. Fire-and-forget — storage failure
+          // survives page navigation. Fire-and-forget - storage failure
           // is non-fatal.
           if (lastAgentContentRef.current) {
             onCompleteRef.current?.(lastAgentContentRef.current);
@@ -377,9 +377,9 @@ export function useAgentChat(
       // never gets stuck. Three cases:
       //
       //  1. Aborted (user clicked stop OR new message sent):
-      //     - If the agent bubble is still empty, remove it — it was never
+      //     - If the agent bubble is still empty, remove it - it was never
       //       completed and showing an empty bubble is confusing.
-      //     - If it has partial content, keep it — the user chose to stop
+      //     - If it has partial content, keep it - the user chose to stop
       //       mid-stream and may want to see what was generated.
       //
       //  2. Stream ended without a terminal event (connection drop, server
@@ -401,7 +401,7 @@ export function useAgentChat(
           return previous;
         });
       } else if (!terminalReceived) {
-        // Case 2: Stream ended without done/error — finalize as failed.
+        // Case 2: Stream ended without done/error - finalize as failed.
         setMessages((previous) =>
           previous.map((message) =>
             message.id === agentMessage.id && !message.content
@@ -415,7 +415,7 @@ export function useAgentChat(
           ),
         );
       }
-      // Case 3: Terminal event received — already handled.
+      // Case 3: Terminal event received - already handled.
 
       activeStreamsRef.current -= 1;
       if (activeStreamsRef.current === 0) setSending(false);

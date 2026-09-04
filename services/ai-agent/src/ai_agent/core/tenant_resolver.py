@@ -1,4 +1,4 @@
-"""Centralized tenant slug resolution — the single place that maps a request
+"""Centralized tenant slug resolution - the single place that maps a request
 to a tenant slug.
 
 The middleware is the only layer allowed to resolve tenants, and it delegates
@@ -9,7 +9,7 @@ repositories never re-read headers or re-parse the Host.
 Two routing contracts (identical to core/identity):
   - staging/production: the tenant slug is the first label of the Host
     subdomain (acme.skyrict.com -> "acme"). A client-supplied X-Tenant-Slug
-    is NEVER trusted here — it is spoofable end-to-end.
+    is NEVER trusted here - it is spoofable end-to-end.
   - dev/test: the slug comes from the X-Tenant-Slug header injected by the
     local nginx, which always overwrites client input.
 """

@@ -10,7 +10,7 @@ export default function PayrollHomePage() {
       <div className="space-y-6">
         <PageHeader
           title="Payroll"
-          description="Pay everyone on time — runs, compensation, and rules."
+          description="Pay everyone on time runs, compensation, and rules."
           icon={Receipt}
         />
         <PayrollOverview />

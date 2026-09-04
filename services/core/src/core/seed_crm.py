@@ -1,8 +1,8 @@
-"""CRM demo-data seeding — 10+ rows per CRM entity for demo/local workspaces.
+"""CRM demo-data seeding - 10+ rows per CRM entity for demo/local workspaces.
 
 Optional development data: unlike ``core.seed`` (per-tenant defaults applied at
 provisioning), this seeds representative CRM records so the workspace UI has
-something to show — leads, opportunities, customers, contacts, activities,
+something to show - leads, opportunities, customers, contacts, activities,
 notes, and the curated timeline events that power the relationship feed.
 
 Design notes:
@@ -17,7 +17,7 @@ Design notes:
   their opportunity; the won opportunity is promoted to a customer via
   ``source_opportunity_id``; activities/notes anchor to leads, opportunities,
   customers and contacts; ``order.created`` timeline events anchor to the
-  related customer (per the SKY-45 constraint — never an ``order`` entity).
+  related customer (per the SKY-45 constraint - never an ``order`` entity).
 - **RLS**: seed connections run without a tenant context (like ``core.seed``),
   so inserts are bounded only by the role used to run the CLI. If the connect
   role is not the table owner you must set the ``app.current_tenant_id`` GUC.
@@ -193,7 +193,7 @@ _QUALIFIED_LEAD_COMPANIES = {"Cedar Peak Outdoor", "Forma Group"}
 
 _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
     {
-        "name": "Cedar Peak Outdoor — annual gear refresh",
+        "name": "Cedar Peak Outdoor - annual gear refresh",
         "from_company": "Cedar Peak Outdoor",
         "stage": OpportunityStage.QUALIFIED,
         "amount": "48000",
@@ -203,7 +203,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 12.0,
     },
     {
-        "name": "Forma Group — retail ERP rollout",
+        "name": "Forma Group - retail ERP rollout",
         "from_company": "Forma Group",
         "stage": OpportunityStage.NEGOTIATION,
         "amount": "156000",
@@ -213,7 +213,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 14.0,
     },
     {
-        "name": "Vesper Systems — inventory modules",
+        "name": "Vesper Systems - inventory modules",
         "stage": OpportunityStage.PROSPECTING,
         "amount": None,
         "currency": None,
@@ -222,7 +222,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 2.0,
     },
     {
-        "name": "Halcyon Media — multi-warehouse setup",
+        "name": "Halcyon Media - multi-warehouse setup",
         "stage": OpportunityStage.PROSPECTING,
         "amount": "72000",
         "currency": "USD",
@@ -231,7 +231,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 3.5,
     },
     {
-        "name": "Ironclad Marine — safety compliance suite",
+        "name": "Ironclad Marine - safety compliance suite",
         "stage": OpportunityStage.QUALIFIED,
         "amount": "39500",
         "currency": "USD",
@@ -240,7 +240,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 6.0,
     },
     {
-        "name": "Sagehill Health — patient portal",
+        "name": "Sagehill Health - patient portal",
         "stage": OpportunityStage.PROPOSAL,
         "amount": "88000",
         "currency": "USD",
@@ -249,7 +249,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 9.0,
     },
     {
-        "name": "Quicksilver Bank — audit automation",
+        "name": "Quicksilver Bank - audit automation",
         "stage": OpportunityStage.PROPOSAL,
         "amount": "240000",
         "currency": "USD",
@@ -258,7 +258,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 11.0,
     },
     {
-        "name": "Zephyr Airlines — loyalty rebuild",
+        "name": "Zephyr Airlines - loyalty rebuild",
         "stage": OpportunityStage.NEGOTIATION,
         "amount": "310000",
         "currency": "USD",
@@ -267,7 +267,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 13.0,
     },
     {
-        "name": "Commonwealth Glass — plant digitization",
+        "name": "Commonwealth Glass - plant digitization",
         "stage": OpportunityStage.WON,
         "amount": "92000",
         "currency": "GBP",
@@ -276,7 +276,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 60.0,
     },
     {
-        "name": "Meridian Consulting — analytics pilot",
+        "name": "Meridian Consulting - analytics pilot",
         "stage": OpportunityStage.LOST,
         "amount": "15000",
         "currency": "USD",
@@ -286,7 +286,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "lost_reason": "Budget redirected to headcount",
     },
     {
-        "name": "Stonebridge Construction — field service",
+        "name": "Stonebridge Construction - field service",
         "stage": OpportunityStage.PROSPECTING,
         "amount": "64000",
         "currency": "USD",
@@ -295,7 +295,7 @@ _OPPORTUNITY_ROWS: tuple[dict[str, object], ...] = (
         "days_ago": 4.5,
     },
     {
-        "name": "Harbor & Fenwick — legal document AI",
+        "name": "Harbor & Fenwick - legal document AI",
         "stage": OpportunityStage.QUALIFIED,
         "amount": "51000",
         "currency": "USD",
@@ -313,7 +313,7 @@ _CUSTOMER_ROWS: tuple[dict[str, object], ...] = (
         "phone": "+44 121 555 0142",
         "credit_limit": "150000",
         "currency": "GBP",
-        "source_opportunity": "Commonwealth Glass — plant digitization",
+        "source_opportunity": "Commonwealth Glass - plant digitization",
         "days_ago": 60.0,
     },
     {
@@ -540,7 +540,7 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.CALL,
         "anchor": ("lead", 1),
-        "subject": "Intro call — Kronfeld Bau",
+        "subject": "Intro call - Kronfeld Bau",
         "description": "Discussed warehouse footprint and integration needs.",
         "due_days": -1,
         "completed": True,
@@ -579,7 +579,7 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.CALL,
         "anchor": ("opportunity", 0),
-        "subject": "Quarterly review — Cedar Peak",
+        "subject": "Quarterly review - Cedar Peak",
         "description": "Confirmed budget line for the gear refresh.",
         "due_days": -3,
         "completed": True,
@@ -594,7 +594,7 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.MEETING,
         "anchor": ("opportunity", 1),
-        "subject": "Negotiation session — Forma Group",
+        "subject": "Negotiation session - Forma Group",
         "description": "Aligning on rollout timeline and support terms.",
         "due_days": 2,
         "completed": False,
@@ -617,7 +617,7 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.CALL,
         "anchor": ("opportunity", 4),
-        "subject": "Solution demo — Ironclad",
+        "subject": "Solution demo - Ironclad",
         "description": "Safety compliance walkthrough.",
         "due_days": -2,
         "completed": True,
@@ -639,14 +639,14 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.EMAIL,
         "anchor": ("opportunity", 7),
-        "subject": "Zephyr — commercial terms sent",
+        "subject": "Zephyr - commercial terms sent",
         "due_days": -1,
         "completed": True,
     },
     {
         "kind": ActivityKind.CALL,
         "anchor": ("opportunity", 11),
-        "subject": "Discovery — Harbor & Fenwick",
+        "subject": "Discovery - Harbor & Fenwick",
         "description": "Legal document AI scope call.",
         "due_days": 3,
         "completed": False,
@@ -669,7 +669,7 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.CALL,
         "anchor": ("customer", 1),
-        "subject": "Support call — Alder",
+        "subject": "Support call - Alder",
         "description": "Helped with the export template issue.",
         "due_days": -1,
         "completed": True,
@@ -699,14 +699,14 @@ _ACTIVITY_ROWS: tuple[dict[str, object], ...] = (
     {
         "kind": ActivityKind.EMAIL,
         "anchor": ("contact", 4),
-        "subject": "Veridian — onboarding email",
+        "subject": "Veridian - onboarding email",
         "due_days": -1,
         "completed": True,
     },
     {
         "kind": ActivityKind.CALL,
         "anchor": ("customer", 9),
-        "subject": "Welcome call — Willow & Sage",
+        "subject": "Welcome call - Willow & Sage",
         "description": "Walked through first steps.",
         "due_days": -1,
         "completed": True,
@@ -725,7 +725,7 @@ _NOTE_ROWS: tuple[dict[str, object], ...] = (
     },
     {
         "anchor": ("opportunity", 0),
-        "body": "Champion is Hannah at Cedar Peak — keeps the budget line visible internally.",
+        "body": "Champion is Hannah at Cedar Peak - keeps the budget line visible internally.",
     },
     {
         "anchor": ("opportunity", 1),
@@ -745,7 +745,7 @@ _NOTE_ROWS: tuple[dict[str, object], ...] = (
     },
     {
         "anchor": ("customer", 1),
-        "body": "Sensitive to price changes — grandfather rates if possible.",
+        "body": "Sensitive to price changes - grandfather rates if possible.",
     },
     {
         "anchor": ("customer", 5),
@@ -753,7 +753,7 @@ _NOTE_ROWS: tuple[dict[str, object], ...] = (
     },
     {
         "anchor": ("customer", 9),
-        "body": "New account — prefer weekly check-ins during the first month.",
+        "body": "New account - prefer weekly check-ins during the first month.",
     },
     {"anchor": ("contact", 4), "body": "Nolan is the decision maker for Veridian procurement."},
 )

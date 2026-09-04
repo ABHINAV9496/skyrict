@@ -1,4 +1,4 @@
-"""CRM API schemas — request bodies and response models (CRM-BE-002).
+"""CRM API schemas - request bodies and response models (CRM-BE-002).
 
 Request models validate client input; response models validate domain entities
 (``from_attributes``) so the router stays a thin translation layer. Money
@@ -129,7 +129,7 @@ class OpportunityResponse(BaseModel):
 
 
 class OpportunityStageResponse(BaseModel):
-    """Outcome of a pipeline transition — the customer appears on ``won``."""
+    """Outcome of a pipeline transition - the customer appears on ``won``."""
 
     opportunity: OpportunityResponse
     customer: CustomerResponse | None

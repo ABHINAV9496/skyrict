@@ -4,8 +4,8 @@ Kept out of health.py (request handlers must never re-run the one-time
 startup verification) and out of lifespan.py (so the probe logic is
 unit-testable). The lifespan:
 
-  1. runs :func:`verify_startup_dependencies` once — DB, Redis, and JWT keys
-     — and raises :class:`StartupError` on any failure so the process
+  1. runs :func:`verify_startup_dependencies` once - DB, Redis, and JWT keys
+     - and raises :class:`StartupError` on any failure so the process
      refuses to boot (fail-fast);
   2. opens the gate with :func:`mark_ready` only after every check passed.
 
@@ -43,7 +43,7 @@ _state: ReadinessState = ReadinessState.STARTING
 
 
 def reset() -> None:
-    """Reset the gate to STARTING — test fixtures only.
+    """Reset the gate to STARTING - test fixtures only.
 
     The gate is module-global, so unit tests that exercise the closed-gate
     path must reset it to keep tests order-independent.
@@ -77,7 +77,7 @@ def get_state() -> ReadinessState:
 async def check_database() -> None:
     """Probe Postgres with a trivial round-trip (SELECT 1).
 
-    Raises on any failure — the caller decides whether that means a 503.
+    Raises on any failure - the caller decides whether that means a 503.
     """
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
@@ -86,7 +86,7 @@ async def check_database() -> None:
 async def check_redis() -> None:
     """Probe Redis with a PING round-trip.
 
-    Raises on any failure — the caller decides whether that means a 503.
+    Raises on any failure - the caller decides whether that means a 503.
     """
     await redis_client.ping()
 

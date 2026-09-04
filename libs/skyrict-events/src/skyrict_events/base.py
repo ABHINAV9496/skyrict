@@ -50,11 +50,11 @@ class BaseEvent(BaseModel):
     )
     tenant_id: str = Field(
         ...,
-        description="Tenant ID — every event is tenant-scoped",
+        description="Tenant ID - every event is tenant-scoped",
     )
     version: int = Field(
         default=1,
-        description="Schema version — increment when the event shape changes",
+        description="Schema version - increment when the event shape changes",
     )
     correlation_id: str | None = Field(
         default=None,
@@ -62,7 +62,7 @@ class BaseEvent(BaseModel):
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
-        description="Arbitrary metadata — source service, user agent, etc.",
+        description="Arbitrary metadata - source service, user agent, etc.",
     )
 
     def to_json(self) -> str:
@@ -214,7 +214,7 @@ class BaseConsumer(ABC):
             logger.info("consumer.disconnected", group_id=self.group_id)
 
     def consume(self) -> None:
-        """Main consume loop — poll, handle, commit."""
+        """Main consume loop - poll, handle, commit."""
         if not self._consumer:
             raise RuntimeError("Consumer not connected. Call connect() first.")
 
@@ -235,7 +235,7 @@ class BaseConsumer(ABC):
                                 offset=message.offset,
                                 error=str(exc),
                             )
-                            # Don't commit — will retry on restart
+                            # Don't commit - will retry on restart
                             raise
             except KeyboardInterrupt:
                 logger.info("consumer.loop_interrupted", group_id=self.group_id)

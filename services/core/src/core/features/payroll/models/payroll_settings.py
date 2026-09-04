@@ -1,4 +1,4 @@
-"""erp_payroll_settings — a single settings row per tenant.
+"""erp_payroll_settings - a single settings row per tenant.
 
 Enforced by ``UNIQUE (tenant_id)``. Seeded once per tenant (default currency +
 zero PF/tax rates); rates are later tuned per tenant by the payroll service.
@@ -31,7 +31,7 @@ from core.models.base import Base
 
 
 class PayrollSettingsModel(Base):
-    """Tenant payroll configuration — exactly one row per tenant."""
+    """Tenant payroll configuration - exactly one row per tenant."""
 
     __tablename__ = "erp_payroll_settings"
     __table_args__ = (UniqueConstraint("tenant_id", name="uq_erp_payroll_settings_tenant"),)

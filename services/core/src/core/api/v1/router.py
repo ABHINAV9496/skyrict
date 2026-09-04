@@ -1,4 +1,4 @@
-"""V1 API router — aggregates all v1 endpoint modules.
+"""V1 API router - aggregates all v1 endpoint modules.
 
 Phase 1 hosts health/readiness, a protected ``/me`` exercise route, and the
 feature routers for HR & payroll (HR-BE-002), inventory (INV-BE-002), finance

@@ -1,4 +1,4 @@
-"""Platform-fixed ERP permission catalog — global (not tenant-scoped)."""
+"""Platform-fixed ERP permission catalog - global (not tenant-scoped)."""
 
 from __future__ import annotations
 

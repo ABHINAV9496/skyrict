@@ -14,19 +14,23 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import text
 
+from core.core.audit_service import AuditService
+from core.db.audit_repository import AuditLogRepository
 from core.db.session import async_session_factory, engine
-from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus
+from core.domain.entities import AuditLogEntry
+from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
+from core.features.finance.models.payment import ErpPaymentModel
 from core.features.finance.repository import FinanceRepository
 from core.models.tenant import TenantModel
 
@@ -249,3 +253,298 @@ async def test_reverse_flips_lines_and_stamps(automation_world: dict[str, str]) 
 
     assert reversed_entry is not None
     assert reversed_entry.status == EntryStatus.REVERSED
+
+
+@pytest.fixture(scope="module")
+def wave2_world(migrated_schema: None) -> dict[str, str]:
+    """Seed one tenant with wave-2 data: balanced entry, 2 invoices, applied payments."""
+
+    async def _setup() -> dict[str, str]:
+        tenant_id = uuid.uuid4()
+        cust_a = uuid.uuid4()
+        cust_b = uuid.uuid4()
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="Wave2 Tenant",
+                    slug=f"w2-{tenant_id.hex[:8]}",
+                    plan_tier="free",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            account_ids: dict[str, uuid.UUID] = {}
+            for code, name, acct_type in [
+                ("1100", "Cash", AccountType.ASSET),
+                ("2100", "Accounts Payable", AccountType.LIABILITY),
+                ("4000", "Service Revenue", AccountType.REVENUE),
+            ]:
+                acc = ErpChartOfAccountModel(
+                    tenant_id=tenant_id, code=code, name=name, account_type=acct_type
+                )
+                session.add(acc)
+                await session.flush()
+                account_ids[code] = acc.id
+
+            je = ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                entry_date=date(2026, 2, 10),
+                memo="Balanced sale",
+                status=EntryStatus.POSTED,
+                source="manual",
+                source_ref=None,
+                posted_at=datetime(2026, 2, 10, 12, 0, 0, tzinfo=UTC),
+            )
+            session.add(je)
+            await session.flush()
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=je.id,
+                    account_id=account_ids["1100"],
+                    debit=Decimal("1000"),
+                    credit=None,
+                )
+            )
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=je.id,
+                    account_id=account_ids["4000"],
+                    debit=None,
+                    credit=Decimal("1000"),
+                )
+            )
+
+            inv_a = ErpInvoiceModel(
+                tenant_id=tenant_id,
+                invoice_number="W2-A",
+                customer_id=cust_a,
+                invoice_date=date(2026, 2, 1),
+                due_date=date(2026, 3, 1),
+                status=InvoiceStatus.APPROVED,
+                total=Decimal("400"),
+                source="manual",
+                source_ref=None,
+            )
+            inv_b = ErpInvoiceModel(
+                tenant_id=tenant_id,
+                invoice_number="W2-B",
+                customer_id=cust_b,
+                invoice_date=date(2026, 3, 1),
+                due_date=date(2026, 4, 1),
+                status=InvoiceStatus.APPROVED,
+                total=Decimal("100"),
+                source="manual",
+                source_ref=None,
+            )
+            session.add_all([inv_a, inv_b])
+            await session.flush()
+            # Applied payments: 2x card on A (400 total), 1x bank on B (100 total).
+            payments = [
+                ("PAY-1", inv_a.id, "card", Decimal("200"), date(2026, 2, 5)),
+                ("PAY-2", inv_a.id, "card", Decimal("200"), date(2026, 2, 20)),
+                ("PAY-3", inv_b.id, "bank", Decimal("100"), date(2026, 3, 10)),
+            ]
+            for number, invoice_id, method, amount, paid_on in payments:
+                session.add(
+                    ErpPaymentModel(
+                        tenant_id=tenant_id,
+                        payment_number=number,
+                        invoice_id=invoice_id,
+                        amount=amount,
+                        method=method,
+                        paid_at=datetime(
+                            paid_on.year, paid_on.month, paid_on.day, 9, 0, 0, tzinfo=UTC
+                        ),
+                        status=PaymentStatus.APPLIED,
+                        source="manual",
+                        source_ref=None,
+                    )
+                )
+            await session.commit()
+            await engine.dispose()
+        return {
+            "tenant_id": str(tenant_id),
+            "cust_a": str(cust_a),
+            "cust_b": str(cust_b),
+        }
+
+    async def _teardown(created: str) -> None:
+        async with async_session_factory() as session:
+            await session.execute(
+                text("DELETE FROM tenants WHERE id = :tid"), {"tid": uuid.UUID(created)}
+            )
+            await session.commit()
+            await engine.dispose()
+
+    created = asyncio.run(_setup())
+    try:
+        yield created
+    finally:
+        asyncio.run(_teardown(created["tenant_id"]))
+
+
+async def test_revenue_concentration_flags_top_customer(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    cust_a = uuid.UUID(wave2_world["cust_a"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        concentration = await repo.revenue_concentration(
+            tenant_id, date(2026, 1, 1), date(2026, 12, 31)
+        )
+        await session.rollback()
+
+    assert concentration.total_revenue == Decimal("500")
+    assert len(concentration.entries) == 2
+    top = concentration.entries[0]
+    assert top.customer_id == cust_a
+    assert top.amount == Decimal("400")
+    assert top.share == Decimal("0.8")
+    assert top.above_threshold is True
+    assert concentration.entries[1].above_threshold is False
+
+
+async def test_working_capital_series_shape(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        series = await repo.working_capital_series(tenant_id, date(2026, 6, 30), months=3)
+        await session.rollback()
+
+    assert len(series.positions) == 3
+    months = [position.month for position in series.positions]
+    assert months == sorted(months)
+    for position in series.positions:
+        assert isinstance(position.assets, Decimal)
+        assert isinstance(position.liabilities, Decimal)
+        assert position.working_capital == position.assets - position.liabilities
+
+
+async def test_payment_method_analytics_groups_by_method(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        analytics = await repo.payment_method_analytics(
+            tenant_id, date(2026, 1, 1), date(2026, 12, 31)
+        )
+        await session.rollback()
+
+    assert analytics.total_amount == Decimal("500")
+    by_method = {entry.method: entry for entry in analytics.entries}
+    assert by_method["card"].count == 2
+    assert by_method["card"].amount == Decimal("400")
+    assert by_method["card"].share == Decimal("0.8")
+    assert by_method["bank"].count == 1
+    assert by_method["bank"].amount == Decimal("100")
+    assert by_method["bank"].share == Decimal("0.2")
+
+
+async def test_audit_readiness_all_checks_ok(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        readiness = await repo.audit_readiness(tenant_id)
+        await session.rollback()
+
+    assert readiness.ready is True
+    assert {check.key: check.status for check in readiness.checks} == {
+        "trial_balance_balanced": "ok",
+        "journal_entries_posted": "ok",
+        "no_open_anomalies": "ok",
+    }
+
+
+async def _seed_audit_entries(
+    tenant_id: uuid.UUID, repo: AuditLogRepository, n: int
+) -> None:
+    for i in range(n):
+        await repo.add(
+            AuditLogEntry(
+                tenant_id=tenant_id,
+                action="invoice.approved",
+                target=f"invoice:W2-{i}",
+            )
+        )
+
+
+async def test_audit_repository_filter_and_count(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    actor = uuid.uuid4()
+    async with async_session_factory() as session:
+        repo = AuditLogRepository(session)
+        for action, target in [
+            ("invoice.approved", "invoice:W2-A"),
+            ("invoice.approved", "invoice:W2-B"),
+            ("payment.applied", "payment:PAY-1"),
+        ]:
+            await repo.add(
+                AuditLogEntry(
+                    tenant_id=tenant_id,
+                    action=action,
+                    target=target,
+                    actor_user_id=actor if action == "payment.applied" else None,
+                )
+            )
+        await session.flush()
+
+        by_q = await repo.list(tenant_id, q="invoice")
+        by_action = await repo.list(tenant_id, action="payment.applied")
+        by_actor = await repo.list(tenant_id, actor_user_id=actor)
+        total = await repo.count(tenant_id)
+        await session.rollback()
+
+    assert len(by_q) == 2
+    assert len(by_action) == 1
+    assert len(by_actor) == 1
+    assert total == 3
+
+
+async def test_audit_repository_pagination(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = AuditLogRepository(session)
+        await _seed_audit_entries(tenant_id, repo, 5)
+        await session.flush()
+        first = await repo.list(tenant_id, offset=0, limit=2)
+        second = await repo.list(tenant_id, offset=2, limit=2)
+        total = await repo.count(tenant_id)
+        await session.rollback()
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert {e.id for e in first}.isdisjoint({e.id for e in second})
+    assert total == 5
+
+
+async def test_audit_service_search_returns_total(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = AuditLogRepository(session)
+        await _seed_audit_entries(tenant_id, repo, 4)
+        await session.flush()
+        service = AuditService(repo)
+        entries, total = await service.search(tenant_id, q="invoice", offset=0, limit=2)
+        await session.rollback()
+
+    assert total == 4
+    assert len(entries) == 2
+
+
+async def test_core_audit_log_hashes_chain(wave2_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = AuditLogRepository(session)
+        first = await repo.add(
+            AuditLogEntry(tenant_id=tenant_id, action="user.login", target="auth")
+        )
+        second = await repo.add(
+            AuditLogEntry(tenant_id=tenant_id, action="user.logout", target="auth")
+        )
+        await session.refresh(first)
+        await session.refresh(second)
+        await session.flush()
+        assert first.hash is not None
+        assert second.prev_hash == first.hash
+        await session.rollback()

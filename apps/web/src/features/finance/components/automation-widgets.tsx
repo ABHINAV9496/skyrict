@@ -57,6 +57,16 @@ function message(error: unknown, fallback: string): string {
     return error instanceof ApiError ? error.message : fallback;
 }
 
+/** Turn a stored payment channel ("bank_transfer", "credit card") into a label. */
+function formatPaymentMethod(method: string): string {
+    if (!method) return method;
+    const words = method
+        .split(/[._\s]+/)
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+    return words.join(" ") || method;
+}
+
 export function WidgetCard({
     title,
     icon,
@@ -965,7 +975,11 @@ export function RevenueConcentrationCard({
         <WidgetCard
             title="Revenue concentration"
             icon={<PieChart aria-hidden="true" className="size-4" />}
-            hint={`Top ${entries.length} customers · ${formatDate(concentration?.from_date)} → ${formatDate(concentration?.to_date)}`}
+            hint={
+                concentration
+                    ? `Top ${entries.length} · threshold ${Math.round(toMoney(concentration.threshold) * 100)}%`
+                    : "Customer revenue share"
+            }
         >
             {loading ? (
                 <div className="flex h-12 items-center justify-center text-sm text-muted-foreground">
@@ -1137,14 +1151,18 @@ export function PaymentMethodsCard({
                 <div className="space-y-3">
                     {entries.map((entry) => (
                         <div key={entry.method}>
-                            <div className="mb-1 flex items-center justify-between text-sm">
-                                <span className="font-medium text-foreground">
-                                    {entry.method}
+                            <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <span className="truncate font-medium text-foreground">
+                                        {formatPaymentMethod(entry.method)}
+                                    </span>
+                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                        {entry.count} {entry.count === 1 ? "payment" : "payments"}
+                                    </span>
                                 </span>
-                                <span className="tabular-nums text-muted-foreground">
+                                <span className="shrink-0 tabular-nums text-muted-foreground">
                                     {formatMoney(entry.amount)} ·{" "}
-                                    {Math.round(toMoney(entry.share) * 100)}% ·{" "}
-                                    {entry.count}
+                                    {Math.round(toMoney(entry.share) * 100)}%
                                 </span>
                             </div>
                             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -1174,6 +1192,8 @@ export function AuditReadinessCard({
     readiness: AuditReadiness | null;
     loading: boolean;
 }) {
+    const checks = readiness?.checks ?? [];
+    const passed = checks.filter((check) => check.status === "ok").length;
     return (
         <WidgetCard
             title="Audit readiness"
@@ -1182,13 +1202,18 @@ export function AuditReadinessCard({
                 readiness ? (
                     <span
                         className={cn(
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
                             readiness.ready
                                 ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
                                 : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
                         )}
                     >
                         {readiness.ready ? "Ready" : "In progress"}
+                        {checks.length > 0 && (
+                            <span className="tabular-nums opacity-80">
+                                · {passed}/{checks.length}
+                            </span>
+                        )}
                     </span>
                 ) : null
             }

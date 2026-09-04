@@ -1507,9 +1507,12 @@ class FinanceRepository:
     async def payment_method_analytics(
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> PaymentMethodAnalytics:
+        # Normalize the stored method so inconsistent values like
+        # "bank transfer" and "bank_transfer" collapse to one channel.
+        method_expr = func.lower(func.replace(ErpPaymentModel.method, " ", "_"))
         stmt = (
             select(
-                ErpPaymentModel.method.label("method"),
+                method_expr.label("method"),
                 func.count(ErpPaymentModel.id).label("cnt"),
                 func.coalesce(func.sum(ErpPaymentModel.amount), 0).label("amount"),
             )
@@ -1519,7 +1522,7 @@ class FinanceRepository:
                 func.date(ErpPaymentModel.paid_at) >= from_date,
                 func.date(ErpPaymentModel.paid_at) <= to_date,
             )
-            .group_by(ErpPaymentModel.method)
+            .group_by(method_expr)
             .order_by(func.coalesce(func.sum(ErpPaymentModel.amount), 0).desc())
         )
         rows = (await self.session.execute(stmt)).all()

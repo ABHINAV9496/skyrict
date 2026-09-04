@@ -17,6 +17,39 @@ import { FinanceErrorState } from "@/features/finance/components/state-cards";
 
 const PAGE_SIZE = 50;
 
+/**
+ * Turn a raw dotted audit action (e.g. "hr.leave.approved") into a readable
+ * label ("HR leave approved"). Common domain tokens are uppercased; the rest
+ * are title-cased, so ergonomic strings stay readable without a lookup table.
+ */
+const ACTION_ACRONYMS = new Set([
+    "hr",
+    "erp",
+    "ai",
+    "id",
+    "ip",
+    "api",
+    "mfa",
+    "sso",
+    "jwt",
+    "iv",
+    "rbac",
+]);
+
+function humanizeAction(action: string): string {
+    if (!action) return action;
+    const words = action
+        .toLowerCase()
+        .split(/[._]+/)
+        .filter(Boolean)
+        .map((word) =>
+            ACTION_ACRONYMS.has(word)
+                ? word.toUpperCase()
+                : word.charAt(0).toUpperCase() + word.slice(1),
+        );
+    return words.join(" ") || action;
+}
+
 interface PageState {
     entries: AuditLogEntry[];
     total: number;
@@ -31,7 +64,10 @@ type Status =
 function entryColumns(): FinanceColumn<AuditLogEntry>[] {
     return [
         { label: "When", render: (entry) => formatDateTime(entry.created_at) },
-        { label: "Action", render: (entry) => entry.action },
+        {
+            label: "Action",
+            render: (entry) => humanizeAction(entry.action),
+        },
         {
             label: "Target",
             cellClassName: "max-w-[280px] truncate",

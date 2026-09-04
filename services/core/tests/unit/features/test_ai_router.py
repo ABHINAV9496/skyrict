@@ -2,7 +2,7 @@
 
 Path ids must be UUIDs BEFORE anything is forwarded: FastAPI rejects any
 other shape with 422 and the upstream request target only ever embeds the
-canonical hyphenated form — no traversal or metacharacters can reach
+canonical hyphenated form - no traversal or metacharacters can reach
 ai-agent (taint cut for the CodeQL SSRF finding). Permission dependencies
 and the pooled client are overridden; transport behaviour lives in
 test_ai_proxy.py. The narrator (SKY-63) routes also exercise their strict
@@ -109,7 +109,7 @@ class TestProxyPathIdsAreUuids:
 
     def test_dot_segment_traversal_never_reaches_upstream(self) -> None:
         """httpx normalizes ``..`` client-side, so the request dies with 404
-        at the router — the point is that NOTHING reaches ai-agent."""
+        at the router - the point is that NOTHING reaches ai-agent."""
         seen: list[httpx.Request] = []
         client = _app_with_recorder(seen)
 

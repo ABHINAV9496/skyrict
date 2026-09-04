@@ -1,7 +1,7 @@
 """ai_episodic_memory - query-response pairs with 90-day TTL.
 
 Stores every query-response interaction for contextual recall. Embeddings and
-vector search are deferred to SKY-60 (chat citations) — this table only
+vector search are deferred to SKY-60 (chat citations) - this table only
 persists the text and metadata for now.
 
 Rows expire after 90 days and are cleaned up by the hourly sweep job. The

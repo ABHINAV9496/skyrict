@@ -1,4 +1,4 @@
-"""Member service — list, re-role, and remove workspace members.
+"""Member service - list, re-role, and remove workspace members.
 
 Composes the users, memberships, roles, sessions, and audit features. All
 persistence happens through their repositories/services; nothing here touches
@@ -103,7 +103,7 @@ class MemberService:
         """Swap a member's role to ``role_name`` (single-role replace).
 
         Replaces the member's role grant and keeps ``memberships.role_id`` in
-        sync. The workspace owner can never be demoted — only the owner keeps
+        sync. The workspace owner can never be demoted - only the owner keeps
         full access to the tenant.
         """
         user = await self._require_active_member(tenant_id, user_id)
@@ -165,7 +165,7 @@ class MemberService:
         membership = await self.membership_service.get_by_user(user_id, tenant_id)
         if membership is not None and membership.id is not None:
             with contextlib.suppress(InvalidTransitionError):
-                # Already suspended (e.g. a legacy row) — the removal stands.
+                # Already suspended (e.g. a legacy row) - the removal stands.
                 await self.membership_service.suspend(membership_id=membership.id)
 
         if user.id is not None:
@@ -220,7 +220,7 @@ class MemberService:
         """
         if str(user_id) == str(actor_user_id):
             raise ValidationError(
-                "You cannot log yourself out from member management — use your security settings instead"
+                "You cannot log yourself out from member management - use your security settings instead"
             )
         await self._require_active_member(tenant_id, user_id)
         await self.session_service.revoke_all_sessions(user_id, tenant_id)

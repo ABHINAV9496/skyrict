@@ -1,7 +1,7 @@
-"""Application configuration — pydantic-settings, env-driven, fail-fast on missing secrets.
+"""Application configuration - pydantic-settings, env-driven, fail-fast on missing secrets.
 
 Single source of truth for ALL configuration. Application code must never
-call os.getenv() directly — everything routes through the ``settings`` object.
+call os.getenv() directly - everything routes through the ``settings`` object.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(str, enum.Enum):
-    """Deployment environments — exactly four, no ad-hoc values."""
+    """Deployment environments - exactly four, no ad-hoc values."""
 
     DEV = "dev"
     TEST = "test"
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     """All configuration loaded from environment variables.
 
     Prefix: {NAME}_ (set via .env or shell environment).
-    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults —
+    CRITICAL vars (DATABASE_URL, JWT keys, REDIS_URL, JWKS) have NO defaults -
     the process refuses to start if they are missing.
     """
 
@@ -46,26 +46,26 @@ class Settings(BaseSettings):
     )
     DEBUG: bool = Field(default=False, description="enable debug mode")
 
-    # --- Database (CRITICAL — no default) ---
+    # --- Database (CRITICAL - no default) ---
     DATABASE_URL: str = Field(
-        ..., description="async PostgreSQL connection string — REQUIRED"
+        ..., description="async PostgreSQL connection string - REQUIRED"
     )
 
-    # --- Redis (CRITICAL — no default) ---
-    REDIS_URL: str = Field(..., description="Redis connection — REQUIRED")
+    # --- Redis (CRITICAL - no default) ---
+    REDIS_URL: str = Field(..., description="Redis connection - REQUIRED")
 
-    # --- JWT RS256 (CRITICAL — all four required) ---
+    # --- JWT RS256 (CRITICAL - all four required) ---
     JWT_PRIVATE_KEY_PATH: Path = Field(
-        ..., description="path to RSA private key PEM for signing — REQUIRED"
+        ..., description="path to RSA private key PEM for signing - REQUIRED"
     )
     JWT_PUBLIC_KEY_PATH: Path = Field(
-        ..., description="path to RSA public key PEM for verification — REQUIRED"
+        ..., description="path to RSA public key PEM for verification - REQUIRED"
     )
     JWKS_ISSUER: str = Field(
-        ..., description="JWT issuer claim (iss) — REQUIRED, e.g. https://auth.skyrict.io"
+        ..., description="JWT issuer claim (iss) - REQUIRED, e.g. https://auth.skyrict.io"
     )
     JWKS_AUDIENCE: str = Field(
-        ..., description="JWT audience claim (aud) — REQUIRED, e.g. api.skyrict.io"
+        ..., description="JWT audience claim (aud) - REQUIRED, e.g. api.skyrict.io"
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default=[],
-        description="allowed CORS origins — must be explicit, never '*' in staging/production",
+        description="allowed CORS origins - must be explicit, never '*' in staging/production",
     )
 
     # --- Logging ---

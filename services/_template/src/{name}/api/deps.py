@@ -1,4 +1,4 @@
-"""FastAPI dependency injection — get_db, get_current_user, require_permission."""
+"""FastAPI dependency injection - get_db, get_current_user, require_permission."""
 
 from __future__ import annotations
 

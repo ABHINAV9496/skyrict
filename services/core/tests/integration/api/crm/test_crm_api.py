@@ -1,4 +1,4 @@
-"""CRM HTTP API integration tests — real Postgres, full app stack.
+"""CRM HTTP API integration tests - real Postgres, full app stack.
 
 End-to-end coverage of CRM-BE-002 over the FastAPI app: lead lifecycle
 (create/list/get/patch/qualify/disqualify), the opportunity pipeline with its

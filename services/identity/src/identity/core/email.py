@@ -2,8 +2,8 @@
 
 Two transports behind the same ``EmailService`` protocol:
 
-* ``LogEmailService`` — logs the payload (default when no SMTP is configured).
-* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: Mailpit;
+* ``LogEmailService`` - logs the payload (default when no SMTP is configured).
+* ``SmtpEmailService`` - delivers via SMTP using the stdlib (dev: Mailpit;
   prod: a real relay).
 
 SMTP failures are logged but never raised, so auth flows don't hard-fail on
@@ -110,7 +110,7 @@ class SmtpEmailService:
 
     Delivery runs in a thread so the event loop is never blocked by the
     (usually sub-millisecond) local relay round-trip. Failures are logged and
-    swallowed — the OTP code is still retrievable in dev via the API response.
+    swallowed - the OTP code is still retrievable in dev via the API response.
     """
 
     def __init__(

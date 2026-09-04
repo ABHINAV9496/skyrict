@@ -1,7 +1,7 @@
 """Unit tests for the agent runtime (SKY-59).
 
 These run a REAL LangGraph (draft -> interrupt -> apply) against an
-``InMemorySaver`` — so the checkpointed pause/resume semantics are exercised,
+``InMemorySaver`` - so the checkpointed pause/resume semantics are exercised,
 not faked. Only the session (ledger/RLS) and the audit repo are fakes; the
 interrupt contract (tool + permission + payload) flows through the actual
 runtime gate.
@@ -335,7 +335,7 @@ async def test_lazy_expiry_auto_denies_stale_pending() -> None:
     assert outcome.status == "failed"
     assert outcome.output == {"error": "interrupt_expired"}
     assert first.interrupt.status == "denied"
-    assert first.interrupt.decided_by is None  # no human decided — the clock did
+    assert first.interrupt.decided_by is None  # no human decided - the clock did
     assert any(action == AI_AGENT_INTERRUPT_EXPIRED for action, _ in audit.events)
 
 
@@ -388,7 +388,7 @@ async def test_completed_outcome_returns_state() -> None:
 
 
 def _build_plain_graph(deps: AgentDeps, module: str) -> Any:
-    """A graph with no interrupt — used to test the completed path."""
+    """A graph with no interrupt - used to test the completed path."""
 
     def run(state: DemoState) -> dict[str, object]:
         return {"outcome": "done"}

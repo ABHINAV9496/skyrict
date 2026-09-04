@@ -111,7 +111,7 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
       align: "right",
       render: (run) => (
         <span className="tabular-nums text-muted-foreground">
-          {run.totalGross ? formatMoney(run.totalGross.amount, run.totalGross.currency) : "—"}
+          {run.totalGross ? formatMoney(run.totalGross.amount, run.totalGross.currency) : "-"}
         </span>
       ),
     },
@@ -121,7 +121,7 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
       align: "right",
       render: (run) => (
         <span className="tabular-nums font-medium text-foreground">
-          {run.totalNet ? formatMoney(run.totalNet.amount, run.totalNet.currency) : "—"}
+          {run.totalNet ? formatMoney(run.totalNet.amount, run.totalNet.currency) : "-"}
         </span>
       ),
     },
@@ -144,7 +144,7 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageHeader
           title="Payroll runs"
-          description="Periods of pay — from draft through compute, approval, and payment."
+          description="Periods of pay from draft through compute, approval, and payment."
           icon={Receipt}
         />
         {canWrite ? (

@@ -1,4 +1,4 @@
-"""SSO service package — SAML/OIDC identity provider integration."""
+"""SSO service package - SAML/OIDC identity provider integration."""
 
 from __future__ import annotations
 

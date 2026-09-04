@@ -42,6 +42,13 @@ class LlmRequest:
     # (Ollama native ``format: json``; OpenAI-compatible ``json_object``).
     # ``True`` guarantees the completion is valid JSON, never prose.
     json_mode: bool = False
+    """Optional multimodal content blocks (OpenAI vision format).
+
+    When present, the provider sends ``content`` as an array of blocks
+    instead of a plain string for the user message.  Each block is a dict
+    with a ``"type"`` key (``"text"`` or ``"image_url"``).
+    """
+    image_blocks: list[dict[str, object]] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,7 +4,7 @@ Maps a free-text transaction description to the tenant's actual chart of
 accounts via an LLM. Core sends the description + the tenant's account list;
 this service asks the LLM to pick the single best account code/name and
 return strict JSON. Any unusable outcome (invalid JSON, missing fields, LLM
-failure) is an *abstention* -> ``None``, never a hard error — core falls back
+failure) is an *abstention* -> ``None``, never a hard error - core falls back
 to its deterministic matcher.
 """
 
@@ -36,3 +36,21 @@ class AccountSuggestion:
     side: str = "debit"
     contra_code: str = ""
     contra_name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class JournalLineSuggestion:
+    account_code: str
+    account_name: str
+    amount: float
+    side: str  # "debit" or "credit"
+    description: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DraftSuggestion:
+    lines: tuple[JournalLineSuggestion, ...]
+    explanation: str
+    confidence: float
+    reasoning: str
+    model_used: str

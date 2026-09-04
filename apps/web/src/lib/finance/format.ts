@@ -4,9 +4,9 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
 });
 
-/** Backend money is Decimal, serialized as a number or string — coerce defensively. */
+/** Backend money is Decimal, serialized as a number or string - coerce defensively. */
 export function formatMoney(value: number | string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   const amount = Number(value);
   if (Number.isNaN(amount)) return String(value);
   return moneyFormatter.format(amount);
@@ -54,14 +54,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dateFormatter.format(date);
 }
 
 export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dateTimeFormatter.format(date);
@@ -77,12 +77,13 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   expense: "Expense",
 };
 
-export type EntryStatus = "draft" | "posted" | "voided";
+export type EntryStatus = "draft" | "posted" | "voided" | "reversed";
 
 export const ENTRY_STATUS_LABELS: Record<EntryStatus, string> = {
   draft: "Draft",
   posted: "Posted",
   voided: "Voided",
+  reversed: "Reversed",
 };
 
 export type InvoiceStatus = "draft" | "issued" | "approved" | "paid" | "voided";

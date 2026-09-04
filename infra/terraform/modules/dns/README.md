@@ -1,4 +1,4 @@
-# Terraform DNS modules — provider contract
+# Terraform DNS modules - provider contract
 
 All DNS implementations under `modules/dns/` implement **the same interface** so
 an environment can switch cloud provider with a one-line change. Today only the
@@ -13,7 +13,7 @@ identical variables and outputs.
 | `zone_name` | zone apex, e.g. `staging.skyrict.com` |
 | `create_zone` | `true` = create + own the zone (first bootstrap); `false` = look up an existing zone by name |
 | `zone_tags` | tags applied when the zone is created |
-| `records` | `list(object({ name, type, ttl, records }))` — names are relative to the zone apex (`"*"` is a wildcard) |
+| `records` | `list(object({ name, type, ttl, records }))` - names are relative to the zone apex (`"*"` is a wildcard) |
 | `zone_id` (output) | provider-specific zone identifier |
 | `nameservers` (output) | authoritative NS records, for parent-zone delegation |
 
@@ -41,5 +41,5 @@ records = [
    model (e.g. Cloudflare zones are looked up by name, so `create_zone=false`
    stays correct).
 
-No other changes are needed — the environment glue (record construction,
+No other changes are needed - the environment glue (record construction,
 wildcard target handling, outputs) is provider-agnostic by design.

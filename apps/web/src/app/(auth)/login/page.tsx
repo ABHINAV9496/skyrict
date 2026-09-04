@@ -40,7 +40,7 @@ export default async function LoginPage({
       // `available: true` means no tenant with this slug exists → send to signup.
       shouldRedirectToSignup = Boolean(result.ok && result.data?.available);
     } catch {
-      // Backend unreachable or unexpected error — fall through and show the
+      // Backend unreachable or unexpected error - fall through and show the
       // login form.  The user will see a credential error if they try to sign
       // in, which is acceptable as a degraded experience.
     }

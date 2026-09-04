@@ -9,7 +9,7 @@ import { ListPageSkeleton } from "@/components/ui/page-skeletons";
 /**
  * Fail-closed route guard for workspace pages. While access permissions load
  * it renders a neutral skeleton (never page content); if the user lacks the
- * required permission — or access cannot be verified — it redirects to the
+ * required permission - or access cannot be verified - it redirects to the
  * overview so a restricted route is never revealed.
  */
 export function RequirePermission({

@@ -14,8 +14,8 @@ returned by these reports. Unit-cost access is a distinct capability from
 ``erp.inventory.read``: read grants the aggregate counts, cost grants the
 money figures.
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0032
+Revises: 0031
 Create Date: 2026-09-01
 """
 
@@ -24,8 +24,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0028"
-down_revision = "0027"
+revision = "0032"
+down_revision = "0031"
 branch_labels = None
 depends_on = None
 

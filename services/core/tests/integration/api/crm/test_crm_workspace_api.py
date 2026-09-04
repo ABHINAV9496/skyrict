@@ -1,4 +1,4 @@
-"""CRM workspace HTTP API integration tests — contacts, activities, notes, timeline.
+"""CRM workspace HTTP API integration tests - contacts, activities, notes, timeline.
 
 End-to-end coverage of the CRM workspace over the FastAPI app:
 
@@ -633,7 +633,7 @@ class TestOrderOnCustomerTimeline:
             item["source"] == "event" and item["title"] == f"Order {order['order_number']} created"
             for item in items
         )
-        # The anchor is the customer — never an 'order' entity type.
+        # The anchor is the customer - never an 'order' entity type.
         assert all(item["entity_type"] == "customer" for item in items)
 
 

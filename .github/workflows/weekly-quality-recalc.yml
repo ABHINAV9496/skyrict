@@ -1,4 +1,4 @@
-name: Weekly — Data-Quality Recalc
+name: Weekly - Data-Quality Recalc
 
 # Explicit weekly recompute of per-employee data-quality scores, independent of
 # the in-service 7-day TTL (8.1.3). Calls core's force-refresh maintenance

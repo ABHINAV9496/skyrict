@@ -1,1 +1,1 @@
-"""Passkeys feature — WebAuthn registration and authentication (planned)."""
+"""Passkeys feature - WebAuthn registration and authentication (planned)."""

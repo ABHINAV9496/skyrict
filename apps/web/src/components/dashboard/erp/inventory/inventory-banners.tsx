@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-/** Inline error banner — mirrors the existing ERP error card styling. */
+/** Inline error banner - mirrors the existing ERP error card styling. */
 export function InventoryError({
     message,
     className,

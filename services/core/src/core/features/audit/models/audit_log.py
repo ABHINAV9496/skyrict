@@ -1,4 +1,4 @@
-"""Append-only audit log ORM model — maps the SHARED ``audit_logs`` table.
+"""Append-only audit log ORM model - maps the SHARED ``audit_logs`` table.
 
 Owned by identity's migration 0001 (hash-chain + append-only triggers + RLS).
 Core only ever appends rows; the schema must stay in lockstep with identity's

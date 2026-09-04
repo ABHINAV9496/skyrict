@@ -4,7 +4,7 @@ One row per ``(tenant_id, product_id)`` holds the concatenated catalog text
 (sku, name, category, unit) and its 768-dim embedding. ``upsert`` /
 ``delete`` are idempotent (post-commit HTTP sync and the ``inventory
 reindex`` CLI must both be safe to re-run), and index writes NEVER go down
-the 404 hot path — search reads via ``semantic_search`` while the write
+the 404 hot path - search reads via ``semantic_search`` while the write
 surface lives on the sync endpoint and CLI.
 
 RLS bounds every row to the current session tenant; the caller must populate
@@ -132,7 +132,7 @@ class InventoryEmbeddingRepository:
         """Substring (ILIKE) search over sku/name/category/unit.
 
         The snapshot carries the same raw strings core serves, so exact
-        matching here equals exact matching against the catalog — without a
+        matching here equals exact matching against the catalog - without a
         second HTTP round trip to core. Row matches ANY term; per-field
         attribution (``matched_fields``) is computed by the service so the
         same tokenization drives both the SQL and the payload.

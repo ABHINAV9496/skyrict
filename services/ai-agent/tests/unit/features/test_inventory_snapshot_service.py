@@ -1,6 +1,6 @@
 """Unit tests for the inventory snapshot sync service (SKY-70).
 
-Feature-layer orchestration with fake adapters (no models/db — import-linter
+Feature-layer orchestration with fake adapters (no models/db - import-linter
 contract): embedding-text building matches the migration 0012 string, one
 batch applies removes-first then embeds/persists upserts, and a missing
 embedding provider degrades to removes-only (``skipped=True``) instead of

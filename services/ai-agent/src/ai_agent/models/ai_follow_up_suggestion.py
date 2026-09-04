@@ -8,7 +8,7 @@ required application-set timestamp (7 days by convention) that drives the
 expiry sweep job.
 
 ``entity_type``/``entity_id`` soft-link to any CRM entity (lead, opportunity,
-customer, contact) — the CRM rows are owned by core. ``user_id`` references an
+customer, contact) - the CRM rows are owned by core. ``user_id`` references an
 identity user (the actor the suggestion is generated for). ``activity_id`` is
 filled when a follow-up is applied (the created CRM activity), a plain UUID.
 """

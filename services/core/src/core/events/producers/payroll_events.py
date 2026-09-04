@@ -1,4 +1,4 @@
-"""Payroll event producers — structured domain events for the payroll feature.
+"""Payroll event producers - structured domain events for the payroll feature.
 
 Phase-1 policy (docs/modules/hr-payroll.md §2.5): emit events **after commit**.
 Each ``emit_*`` function builds the shared ``skyrict_events.BaseEvent`` envelope

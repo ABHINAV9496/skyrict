@@ -1,6 +1,6 @@
 """Unit tests for the core -> ai-agent account-code suggestion client.
 
-Uses httpx.MockTransport — no network. Covers the relayed upstream path,
+Uses httpx.MockTransport - no network. Covers the relayed upstream path,
 Authorization + tenant-slug header hygiene, 2xx parsing, no-match -> None,
 non-2xx -> AiServiceUnavailableError, and invalid JSON -> AiServiceUnavailableError.
 """

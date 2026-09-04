@@ -3,7 +3,7 @@
 Feature-layer orchestration with fake adapters: hash/cache semantics, cache-hit
 short-circuit (no embedding call), miss path (dedupe by parent, fetch parent
 texts, truncation to the return budget), and the write-through to both cache
-layers. No models/db imports — import-linter contract.
+layers. No models/db imports - import-linter contract.
 """
 
 from __future__ import annotations

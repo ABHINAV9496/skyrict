@@ -1,4 +1,4 @@
-"""UserRole ORM model — scoped grant of a role to a user."""
+"""UserRole ORM model - scoped grant of a role to a user."""
 
 from __future__ import annotations
 

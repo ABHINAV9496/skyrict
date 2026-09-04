@@ -1,4 +1,4 @@
-"""Test fixtures — ephemeral RSA keys, environment bootstrap, test client.
+"""Test fixtures - ephemeral RSA keys, environment bootstrap, test client.
 
 This conftest.py is loaded by pytest before any test module. It generates a
 fresh RSA key pair in a temporary directory (never committed to the repo),

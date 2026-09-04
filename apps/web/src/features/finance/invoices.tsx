@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useController, useFieldArray, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Check, ChevronsUpDown, LoaderCircle, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { ArrowRight, Check, ChevronsUpDown, LoaderCircle, Mail, Plus, ReceiptText, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import {
+  batchReminders,
   createInvoice,
   listAccounts,
   listCustomers,
@@ -34,6 +35,7 @@ import {
   type Customer,
   type FiscalPeriod,
   type Invoice,
+  type ReminderDraft,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney } from "@/lib/finance/format";
@@ -625,7 +627,7 @@ function CreateInvoiceDialog() {
 
 const columns: FinanceColumn<Invoice>[] = [
   { label: "Number", render: (invoice) => invoice.invoice_number },
-  { label: "Customer", render: (invoice) => invoice.customer_name ?? "—" },
+  { label: "Customer", render: (invoice) => invoice.customer_name ?? "-" },
   { label: "Date", render: (invoice) => formatDate(invoice.invoice_date) },
   { label: "Due", render: (invoice) => formatDate(invoice.due_date) },
   { label: "Status", render: (invoice) => <InvoiceStatusBadge status={invoice.status} /> },
@@ -634,7 +636,7 @@ const columns: FinanceColumn<Invoice>[] = [
     label: "Balance",
     align: "right",
     render: (invoice) => {
-      if (invoice.status === "voided") return "—";
+      if (invoice.status === "voided") return "-";
       if (invoice.status === "paid") return <span className="tabular-nums">{formatMoney(0)}</span>;
       return <span className="tabular-nums">{formatMoney(invoice.total)}</span>;
     },
@@ -661,6 +663,30 @@ function FinanceInvoices() {
   const [periodValue, setPeriodValue] = useState<PeriodValue>(defaultPeriodValue());
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
+  const [batchRemindersState, setBatchRemindersState] = useState<{
+    reminders: ReminderDraft[];
+    open: boolean;
+    loading: boolean;
+    error: string | null;
+  }>({ reminders: [], open: false, loading: false, error: null });
+
+  async function loadBatchReminders() {
+    setBatchRemindersState((prev) => ({ ...prev, loading: true, error: null, open: true }));
+    try {
+      const result = await batchReminders();
+      setBatchRemindersState((prev) => ({
+        ...prev,
+        reminders: result.reminders,
+        loading: false,
+      }));
+    } catch (error) {
+      setBatchRemindersState((prev) => ({
+        ...prev,
+        loading: false,
+        error: error instanceof ApiError ? error.message : "Could not generate reminders.",
+      }));
+    }
+  }
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
@@ -747,7 +773,27 @@ function FinanceInvoices() {
               label="Invoice period"
             />
           }
-          actions={canWrite ? <CreateInvoiceDialog /> : null}
+          actions={canWrite ? (
+            <div className="flex items-center gap-2">
+              {statusTab === "overdue" && overdueInvoices.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={batchRemindersState.loading}
+                  onClick={() => void loadBatchReminders()}
+                >
+                  {batchRemindersState.loading ? (
+                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                  ) : (
+                    <Mail aria-hidden="true" className="size-3.5" />
+                  )}
+                  Generate Reminders
+                </Button>
+              ) : null}
+              <CreateInvoiceDialog />
+            </div>
+          ) : null}
         />
       </div>
 
@@ -774,6 +820,54 @@ function FinanceInvoices() {
           footer={`${visibleInvoices.length} invoices in the selected period`}
         />
       )}
+
+      <Dialog
+        open={batchRemindersState.open}
+        onOpenChange={(v) => setBatchRemindersState((prev) => ({ ...prev, open: v }))}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payment reminders</DialogTitle>
+            <DialogDescription>
+              Drafted for {batchRemindersState.reminders.length} overdue invoice
+              {batchRemindersState.reminders.length === 1 ? "" : "s"}.
+            </DialogDescription>
+          </DialogHeader>
+          {batchRemindersState.error ? (
+            <p role="alert" className="text-xs font-medium text-destructive">
+              {batchRemindersState.error}
+            </p>
+          ) : null}
+          {batchRemindersState.loading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              Generating reminders…
+            </div>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-auto pr-1">
+              {batchRemindersState.reminders.map((reminder) => (
+                <div key={reminder.invoice_number} className="rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {reminder.invoice_number}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      {reminder.days_overdue} days overdue · {reminder.tone}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm font-medium">{reminder.subject}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{reminder.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBatchRemindersState((prev) => ({ ...prev, open: false }))}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

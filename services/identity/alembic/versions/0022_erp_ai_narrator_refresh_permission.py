@@ -4,8 +4,8 @@ Ticket SKY-63 ([AI-NARR-001]): the core monolith proxies ``/api/v1/ai/
 narrator/*`` to ai-agent. Reading the daily digest requires ``erp.ai.invoke``
 plus every module read (``erp.finance.read``/``erp.sales.read``/
 ``erp.inventory.read``/``erp.crm.read``); force-refreshing it additionally
-requires ``erp.ai.narrator.refresh``. Granted to organization_admin only —
-tenant owners already pass via the ``*`` wildcard — mirroring the 0018
+requires ``erp.ai.narrator.refresh``. Granted to organization_admin only -
+tenant owners already pass via the ``*`` wildcard - mirroring the 0018
 ``erp.ai.invoke`` precedent.
 
 Revision ID: 0022

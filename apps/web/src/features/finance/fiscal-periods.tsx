@@ -370,7 +370,7 @@ export function FinanceFiscalPeriods() {
           description={
             status.periods.length === 0
               ? "Create a period covering your entry dates so postings can be made."
-              : "Try a different year — no periods fall within the selected range."
+              : "Try a different year - no periods fall within the selected range."
           }
         />
       ) : (

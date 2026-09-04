@@ -1,4 +1,4 @@
-"""Handoff repository — DB operations for the handoff_tokens table."""
+"""Handoff repository - DB operations for the handoff_tokens table."""
 
 from __future__ import annotations
 

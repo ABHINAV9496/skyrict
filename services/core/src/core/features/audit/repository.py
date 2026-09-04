@@ -1,4 +1,4 @@
-"""Audit repository — DB operations for the shared ``audit_logs`` table.
+"""Audit repository - DB operations for the shared ``audit_logs`` table.
 
 All SQLAlchemy stays in this file. The append-only + hash-chain + RLS behavior
 is enforced by identity's DB triggers/policies; this repository only appends.

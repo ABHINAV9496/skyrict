@@ -1,4 +1,4 @@
-"""erp_leave_types — tenant-scoped leave catalogue (per-tenant accrual policy).
+"""erp_leave_types - tenant-scoped leave catalogue (per-tenant accrual policy).
 
 Tenant-scoped, NOT global: accrual policy is a per-tenant decision. Seeded per
 tenant with defaults annual (is_accrual, 20 days) / sick / unpaid; tenants may

@@ -3,7 +3,7 @@
 Owns the cross-cutting concerns the pipeline deliberately stays clean of:
 day-cache reuse, the force-refresh gate, LLM-disabled abstention, and audit
 logging. A digest is produced only when (a) no fresh cached row exists, and
-(b) the day has material activity worth narrating — empty days persist an
+(b) the day has material activity worth narrating - empty days persist an
 ``abstained`` snapshot instead of letting the LLM pad boilerplate.
 """
 

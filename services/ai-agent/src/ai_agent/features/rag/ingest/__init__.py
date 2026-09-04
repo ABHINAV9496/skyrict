@@ -1,1 +1,1 @@
-"""RAG ingestion — source loaders, chunking, embedding, persistence."""
+"""RAG ingestion - source loaders, chunking, embedding, persistence."""

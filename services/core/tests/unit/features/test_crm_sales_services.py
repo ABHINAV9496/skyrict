@@ -1,7 +1,7 @@
 """Pure-logic unit tests for the CRM & Sales feature services.
 
 No database: these cover the module-level decision functions the services
-delegate to — the opportunity pipeline transition rule (``_is_forward``), the
+delegate to - the opportunity pipeline transition rule (``_is_forward``), the
 request->Money normalization helpers (``_normalize_amount_changes`` /
 ``_normalize_credit_limit_changes``), and the sales money math (``_totals`` /
 ``_quantize`` / ``_credit_check_passed``). The DB-backed behaviors are covered

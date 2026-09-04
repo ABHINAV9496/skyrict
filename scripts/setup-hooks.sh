@@ -15,8 +15,8 @@ pre-commit install --hook-type commit-msg
 
 echo ""
 echo "Hooks installed."
-echo "  pre-commit  — runs on every git commit (lint, format, checks)"
-echo "  commit-msg  — validates conventional commit format"
+echo "  pre-commit  - runs on every git commit (lint, format, checks)"
+echo "  commit-msg  - validates conventional commit format"
 echo ""
 echo "To run manually:  pre-commit run --all-files"
 echo "To skip hooks:    git commit --no-verify (use sparingly)"

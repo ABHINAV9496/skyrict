@@ -1,14 +1,14 @@
 """Canonical audit event keys for the core (ERP) domain.
 
 Single source of truth for the free-form ``action`` strings written to the
-core audit trails — ``core_audit_logs`` (HR/payroll, see ``core.core.
+core audit trails - ``core_audit_logs`` (HR/payroll, see ``core.core.
 audit_service``) and ``audit_logs`` (the shared ``features.audit`` trail used
 by finance/inventory). Services must reference these constants instead of
 hardcoding strings so the event vocabulary stays greppable and drift-checked
 against the catalog grouping below.
 
 Vocabulary is defined by the HR & Payroll design doc (``docs/modules/
-hr-payroll.md``, step 4) and the finance/inventory modules — ``{domain}.
+hr-payroll.md``, step 4) and the finance/inventory modules - ``{domain}.
 {entity}.{action}``, e.g. ``hr.leave.approved``, ``finance.invoice.issued``.
 """
 
@@ -61,6 +61,11 @@ FINANCE_PAYMENT_APPLIED = "finance.payment.applied"
 FINANCE_JOURNAL_ENTRY_REVERSED = "finance.journal_entry.reversed"
 FINANCE_ANOMALY_DETECTED = "finance.anomaly.detected"
 FINANCE_DUPLICATE_SUGGESTION_CREATED = "finance.suggestion.duplicate.created"
+FINANCE_AI_SUGGESTION_GENERATED = "finance.ai.suggestion.generated"
+FINANCE_AI_DRAFT_GENERATED = "finance.ai.draft.generated"
+FINANCE_AI_DRAFT_APPLIED = "finance.ai.draft.applied"
+FINANCE_AI_ANOMALY_NARRATED = "finance.ai.anomaly.narrated"
+FINANCE_AI_REMINDER_GENERATED = "finance.ai.reminder.generated"
 
 # Every catalogued audit event, in catalog order.
 CATALOG: tuple[str, ...] = (
@@ -100,6 +105,11 @@ CATALOG: tuple[str, ...] = (
     FINANCE_INVOICE_APPROVED,
     FINANCE_INVOICE_VOIDED,
     FINANCE_PAYMENT_APPLIED,
+    FINANCE_AI_SUGGESTION_GENERATED,
+    FINANCE_AI_DRAFT_GENERATED,
+    FINANCE_AI_DRAFT_APPLIED,
+    FINANCE_AI_ANOMALY_NARRATED,
+    FINANCE_AI_REMINDER_GENERATED,
 )
 
 ALL_AUDIT_EVENTS: frozenset[str] = frozenset(CATALOG)
@@ -159,6 +169,11 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             FINANCE_PAYMENT_APPLIED,
             FINANCE_ANOMALY_DETECTED,
             FINANCE_DUPLICATE_SUGGESTION_CREATED,
+            FINANCE_AI_SUGGESTION_GENERATED,
+            FINANCE_AI_DRAFT_GENERATED,
+            FINANCE_AI_DRAFT_APPLIED,
+            FINANCE_AI_ANOMALY_NARRATED,
+            FINANCE_AI_REMINDER_GENERATED,
         ),
     ),
 )
@@ -184,6 +199,11 @@ __all__ = [
     "ALL_AUDIT_EVENTS",
     "AUDIT_EVENT_MODULES",
     "CATALOG",
+    "FINANCE_AI_ANOMALY_NARRATED",
+    "FINANCE_AI_DRAFT_APPLIED",
+    "FINANCE_AI_DRAFT_GENERATED",
+    "FINANCE_AI_REMINDER_GENERATED",
+    "FINANCE_AI_SUGGESTION_GENERATED",
     "FINANCE_ANOMALY_DETECTED",
     "FINANCE_CHART_OF_ACCOUNTS_CREATED",
     "FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED",

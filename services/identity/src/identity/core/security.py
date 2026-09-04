@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         PublicKeyTypes,
     )
 
-# Algorithms we accept — explicitly whitelisted. Rejects "none" and any
+# Algorithms we accept - explicitly whitelisted. Rejects "none" and any
 # header-driven algorithm switching (CVE-2015-2951 / algorithm confusion).
 _ALLOWED_ALGORITHMS = {"RS256"}
 
@@ -56,10 +56,10 @@ class TokenClaims(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Password hashing — Argon2id (OWASP recommended)
+# Password hashing - Argon2id (OWASP recommended)
 #
 # argon2-cffi is a hard dependency (see pyproject.toml). If it is missing the
-# import fails at startup — there is deliberately NO fallback that silently
+# import fails at startup - there is deliberately NO fallback that silently
 # weakens hashing (e.g. plaintext comparison).
 # ---------------------------------------------------------------------------
 _ph = PasswordHasher(
@@ -74,7 +74,7 @@ _ph = PasswordHasher(
 def hash_password(password: str) -> str:
     """Hash a plaintext password with Argon2id.
 
-    Uses a random salt per call — hashes for the same password always differ.
+    Uses a random salt per call - hashes for the same password always differ.
     """
     return _ph.hash(password)
 
@@ -106,7 +106,7 @@ def validate_password_policy(password: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# MFA secret encryption — Fernet (symmetric) at rest
+# MFA secret encryption - Fernet (symmetric) at rest
 #
 # TOTP secrets are as sensitive as passwords: they are encrypted before being
 # written to ``users.mfa_secret`` and decrypted only on read. The key comes
@@ -134,7 +134,7 @@ def mfa_is_required(*, mfa_enabled: bool) -> bool:
     """
     Return whether MFA must be set up before this account can be used.
 
-    MFA is mandatory for every account in every tenant — there is no role
+    MFA is mandatory for every account in every tenant - there is no role
     exemption and no tenant-level opt-out. The one source of truth used by both
     login (``mfa_required``/``next_step``) and the request-time enforcement
     gate, so the two can never disagree.
@@ -143,7 +143,7 @@ def mfa_is_required(*, mfa_enabled: bool) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# JWT — RS256 only
+# JWT - RS256 only
 # ---------------------------------------------------------------------------
 def create_access_token(
     subject: str,
@@ -156,7 +156,7 @@ def create_access_token(
 
     Args:
         subject: User ID (sub claim).
-        tenant_id: Tenant ID (tenant_id claim) — always included.
+        tenant_id: Tenant ID (tenant_id claim) - always included.
         extra_claims: Additional claims to embed.
         expires_delta: Override default expiry.
     """
@@ -217,10 +217,10 @@ def hash_handoff_token(token: str) -> str:
 
 
 def verify_jwt(token: str) -> TokenClaims:
-    """Decode and VERIFY a JWT — the ONE AND ONLY verification path.
+    """Decode and VERIFY a JWT - the ONE AND ONLY verification path.
 
     Security guarantees:
-      - RS256 only (asymmetric — public key verifies, private key signs)
+      - RS256 only (asymmetric - public key verifies, private key signs)
       - Algorithm whitelist rejects "none" and header-driven attacks
       - Issuer and audience are validated
       - Expiry (exp) and not-before (nbf) are checked
@@ -269,13 +269,13 @@ def verify_jwt(token: str) -> TokenClaims:
 
 
 # ---------------------------------------------------------------------------
-# JWT key material — startup validation
+# JWT key material - startup validation
 # ---------------------------------------------------------------------------
 def _verify_rsa_key_size(key: rsa.RSAPrivateKey | rsa.RSAPublicKey, label: str) -> None:
     """Reject RSA keys below 2048 bits (NIST / PCI-DSS baseline)."""
     if key.key_size < 2048:
         raise StartupError(
-            f"JWT {label} key is only {key.key_size} bits — RSA 2048 or larger required"
+            f"JWT {label} key is only {key.key_size} bits - RSA 2048 or larger required"
         )
 
 

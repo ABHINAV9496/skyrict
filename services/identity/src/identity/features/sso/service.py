@@ -1,4 +1,4 @@
-"""SSO service — SAML/OIDC identity provider integration. Not yet implemented."""
+"""SSO service - SAML/OIDC identity provider integration. Not yet implemented."""
 
 from __future__ import annotations
 

@@ -67,7 +67,7 @@ type Status =
 
 const entryColumns: FinanceColumn<JournalEntry>[] = [
   { label: "Date", render: (entry) => formatDate(entry.entry_date) },
-  { label: "Memo", render: (entry) => entry.memo ?? "—" },
+  { label: "Memo", render: (entry) => entry.memo ?? "-" },
   { label: "Status", render: (entry) => <EntryStatusBadge status={entry.status} /> },
   {
     label: "Debit",

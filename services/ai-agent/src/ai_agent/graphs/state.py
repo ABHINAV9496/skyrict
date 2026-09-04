@@ -7,7 +7,7 @@ and resume any agent uniformly. The dictionary is intentionally
 and LangGraph treats missing keys as untouched channels.
 
 Identity keys (tenant_id/user_id/agent_name/session_id) are ALWAYS seeded by
-the runtime from the verified request context — never parsed from the
+the runtime from the verified request context - never parsed from the
 user prompt (prompt-injection defense, inventory-AI spec §5.6).
 
 ``intent`` records the routing decision (lookup/aggregate/narrative/

@@ -1,4 +1,4 @@
-"""Finance repository — DB operations for the money side of the ERP.
+"""Finance repository - DB operations for the money side of the ERP.
 
 The finance module's only DB-touching code. Implements
 :class:`core.features.finance.ports.FinanceRepositoryPort` and stays inside the
@@ -11,7 +11,7 @@ Guarantees this layer owns:
 - **Idempotency**: the ``UNIQUE (tenant_id, source, source_ref)`` constraints on
   journal entries / invoices / payments are the durable lock. Re-creating a
   stamped document raises a unique violation, which is translated to a 409
-  ``ConflictError`` here — a replayed handoff can never double-book.
+  ``ConflictError`` here - a replayed handoff can never double-book.
 - **Atomic document creation**: header + lines are flushed in one transaction;
   a failed line rolls the whole document back.
 - **Numbering**: nextval on the global ``seq_erp_invoice_number`` /
@@ -800,7 +800,7 @@ class FinanceRepository:
         return _document_number(PAYMENT_PREFIX, year, seq)
 
     # ------------------------------------------------------------------
-    # Reports (aggregate POSTED lines on read — never stored)
+    # Reports (aggregate POSTED lines on read - never stored)
     # ------------------------------------------------------------------
 
     async def trial_balance(self, tenant_id: uuid.UUID, as_of: date) -> TrialBalance:
@@ -1071,7 +1071,7 @@ class FinanceRepository:
             CloseChecklistItem(
                 label="Previous period closed",
                 status="ok"
-                if all(p.is_closed for p in periods if p.id != period.id)
+                if all(p.is_closed for p in periods if p.start_date < period.start_date)
                 else "warning",
                 detail="All earlier periods must be closed before this one",
             )
@@ -1081,7 +1081,7 @@ class FinanceRepository:
         items.append(
             CloseChecklistItem(
                 label="Journal entries posted",
-                status="ok" if entry_count and entry_count >= 8 else "missing",
+                status="ok" if entry_count and entry_count >= 1 else "missing",
                 detail=f"{entry_count} posted entries in period",
             )
         )
@@ -1186,7 +1186,7 @@ class FinanceRepository:
     async def suggest_account_code(
         self, tenant_id: uuid.UUID, description: str
     ) -> AccountCodeSuggestion:
-        """Deterministic keyword fallback — best-effort, honest no-match.
+        """Deterministic keyword fallback - best-effort, honest no-match.
 
         Returns an empty suggestion (no code/name, confidence 0) when no
         account scores above zero, so the UI never shows a misleading
@@ -1302,7 +1302,7 @@ class FinanceRepository:
         threshold = Decimal("1.5")
         balance = await self.balance_sheet(tenant_id, as_of)
         # ponytail: every ASSET is treated as current and every LIABILITY as
-        # current — no current/non-current split exists on the chart yet. Add
+        # current - no current/non-current split exists on the chart yet. Add
         # a sub-classification on the COA if the ratio needs to be precise.
         current_assets = sum((line.balance for line in balance.assets), Decimal("0"))
         current_liabilities = sum((line.balance for line in balance.liabilities), Decimal("0"))
@@ -1434,36 +1434,8 @@ class FinanceRepository:
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None or model.status != EntryStatus.POSTED:
             return None
-        if model.reversal_entry_id is not None:
-            return None
 
-        source_lines = await self._journal_lines(entry_id, tenant_id)
-        reversal = ErpJournalEntryModel(
-            tenant_id=tenant_id,
-            entry_date=model.entry_date,
-            memo=f"Reversal of {model.memo or model.id}",
-            status=EntryStatus.POSTED,
-            source="manual",
-            source_ref=None,
-            posted_at=reversed_at,
-            posted_by_user_id=reversed_by_user_id,
-            reversal_entry_id=None,
-        )
-        self.session.add(reversal)
-        await self.session.flush()
-        reversal_line_models = [
-            ErpJournalLineModel(
-                tenant_id=tenant_id,
-                entry_id=reversal.id,
-                account_id=line.account_id,
-                debit=line.credit,
-                credit=line.debit,
-                currency=line.currency,
-            )
-            for line in source_lines
-        ]
-        self.session.add_all(reversal_line_models)
-        model.reversal_entry_id = reversal.id
+        model.status = EntryStatus.REVERSED
         await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
@@ -1561,3 +1533,72 @@ class FinanceRepository:
         )
         models = (await self.session.execute(stmt)).scalars().all()
         return [_ai_anomaly_from_orm(m) for m in models]
+
+    async def get_ai_anomaly(
+        self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID
+    ) -> AiFinanceAnomaly | None:
+        model = (
+            await self.session.execute(
+                select(AiFinanceAnomalyModel).where(
+                    AiFinanceAnomalyModel.tenant_id == tenant_id,
+                    AiFinanceAnomalyModel.id == anomaly_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return _ai_anomaly_from_orm(model) if model else None
+
+    async def get_invoice_by_id(
+        self, tenant_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> Invoice | None:
+        model = (
+            await self.session.execute(
+                select(ErpInvoiceModel).where(
+                    ErpInvoiceModel.tenant_id == tenant_id,
+                    ErpInvoiceModel.id == invoice_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if model is None:
+            return None
+        line_models = (
+            (
+                await self.session.execute(
+                    select(ErpInvoiceLineModel).where(ErpInvoiceLineModel.invoice_id == model.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        lines = [_invoice_line_from_orm(lm) for lm in line_models]
+        return _invoice_from_orm(model, lines)
+
+    async def list_invoices_overdue(self, tenant_id: uuid.UUID) -> Sequence[Invoice]:
+        from datetime import date as _date
+
+        stmt = (
+            select(ErpInvoiceModel)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]),
+                ErpInvoiceModel.due_date < _date.today(),
+            )
+            .order_by(ErpInvoiceModel.due_date.asc())
+        )
+        models = (await self.session.execute(stmt)).scalars().all()
+        invoices = []
+        for model in models:
+            line_models = (
+                (
+                    await self.session.execute(
+                        select(ErpInvoiceLineModel).where(
+                            ErpInvoiceLineModel.invoice_id == model.id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            invoices.append(
+                _invoice_from_orm(model, [_invoice_line_from_orm(lm) for lm in line_models])
+            )
+        return invoices

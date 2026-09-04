@@ -1,4 +1,4 @@
-"""PayrollService unit tests — rules 7-10, DB-free (docs/hr-payroll.md §4.8-§4.10).
+"""PayrollService unit tests - rules 7-10, DB-free (docs/hr-payroll.md §4.8-§4.10).
 
 Uses in-memory ``FakePayrollRepository`` and ``FakeLeaveLedger`` port doubles;
 the btree_gist exclusion constraint and RLS stay in the integration suite.
@@ -453,7 +453,7 @@ class TestRunLifecycle:
 
     async def test_recompute_loses_cas_race_raises(self, monkeypatch) -> None:
         """A concurrent approver who flips the run between the service-level
-        machine check and the DB write makes the atomic CAS return None — the
+        machine check and the DB write makes the atomic CAS return None - the
         recompute must fail instead of silently overwriting the run."""
         service, repo, _ = _service()
         repo.settings[TENANT] = _settings()

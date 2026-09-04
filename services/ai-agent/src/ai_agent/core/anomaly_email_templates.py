@@ -2,7 +2,7 @@
 
 Pure presentation: takes a fully-resolved :class:`CriticalAnomalyAlert` and
 renders a borderless, inline-styled, responsive HTML body plus a plaintext
-fallback. No I/O, no imports from features — safe to render anywhere.
+fallback. No I/O, no imports from features - safe to render anywhere.
 
 Security rules (spec §4.5): anomaly descriptions never include cost/price
 data (guaranteed by the rule engine), and every dynamic value is HTML-escaped
@@ -164,7 +164,7 @@ _TEMPLATE = Template(
             <tr>
               <td style="padding:20px 32px 24px;">
                 <div style="border-top:1px solid #eef3f6;padding-top:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#8798a5;">
-                  This is an automated inventory alert — please don't reply to this email. Anomaly descriptions never include cost or price data.
+                  This is an automated inventory alert - please don't reply to this email. Anomaly descriptions never include cost or price data.
                 </div>
               </td>
             </tr>

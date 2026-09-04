@@ -1,4 +1,4 @@
-"""hr_eval_runs — model eval-harness precision results (HR-AI-002).
+"""hr_eval_runs - model eval-harness precision results (HR-AI-002).
 
 Each row records one metric (e.g. ``attrition_precision``,
 ``leave_anomaly_precision``) evaluated over labeled seed cases by the ai-agent

@@ -1,6 +1,6 @@
 # Core Service
 
-ERP foundations for Skyrict — hosts every Phase-1 ERP module (finance,
+ERP foundations for Skyrict - hosts every Phase-1 ERP module (finance,
 inventory, procurement, sales) plus the shared plumbing all of them depend on:
 config (`CORE_` env prefix), tenant context + resolver, Row-Level Security
 (`current_tenant_id()` + `after_begin` session wiring), the `Money` value
@@ -13,7 +13,7 @@ object, shared API dependencies (`get_tenant_context`, `get_current_user`,
 |--------|------|-------------|
 | GET | `/api/v1/health` | Liveness probe |
 | GET | `/api/v1/ready` | Readiness probe |
-| GET | `/api/v1/me` | Current user (protected — exercises `get_current_user`) |
+| GET | `/api/v1/me` | Current user (protected - exercises `get_current_user`) |
 
 ## Local Development
 

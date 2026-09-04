@@ -136,7 +136,7 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
 
   const canPost = entry.status === "draft" && canApprove;
   const canVoid = entry.status === "draft" && canWrite;
-  const canReverse = entry.status === "posted" && entry.reversal_entry_id === null && canApprove;
+  const canReverse = entry.status === "posted" && canApprove;
 
   return (
     <div className="space-y-6">

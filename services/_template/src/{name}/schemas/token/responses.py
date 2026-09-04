@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class TokenIntrospectionResponse(BaseModel):
-    """POST /auth/introspect — token introspection."""
+    """POST /auth/introspect - token introspection."""
 
     active: bool
     sub: str | None = None

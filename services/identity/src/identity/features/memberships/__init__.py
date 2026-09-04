@@ -1,4 +1,4 @@
-"""Membership feature — the canonical user<->tenant relationship.
+"""Membership feature - the canonical user<->tenant relationship.
 
 A membership is created INVITED at invitation time (no placeholder user),
 flips to ACTIVE when the invitee accepts and a user materializes, and moves

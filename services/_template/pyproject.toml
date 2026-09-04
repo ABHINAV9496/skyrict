@@ -7,7 +7,7 @@
 #   4. Update core/config.py: add service-specific settings
 #   5. Delete this README.md
 #
-# Layering convention (enforced — do not deviate):
+# Layering convention (enforced - do not deviate):
 #
 #   api/              FastAPI routes, dependency injection
 #   core/             Config, security, middleware, tenant context, exceptions, logging
@@ -35,7 +35,7 @@ build-backend = "hatchling.build"
 [project]
 name = "{name}"
 version = "0.1.0"
-description = "{name} service — [describe what this service does]"
+description = "{name} service - [describe what this service does]"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"

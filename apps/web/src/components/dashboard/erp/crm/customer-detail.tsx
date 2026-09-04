@@ -384,7 +384,7 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
             <DialogTitle>Deactivate {customer.name}?</DialogTitle>
             <DialogDescription>
               The customer can no longer place new orders and disappears from the active list.
-              History stays intact — you can reactivate through the API later.
+              History stays intact - you can reactivate through the API later.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -563,7 +563,7 @@ function ContactsPanel({
         <EmptyState
           icon={ContactRound}
           title="No contacts yet"
-          description="Add the people on this account — they anchor activities and notes."
+          description="Add the people on this account - they anchor activities and notes."
         />
       </PanelShell>
     );

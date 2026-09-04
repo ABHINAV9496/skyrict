@@ -48,7 +48,7 @@ export const plans: Plan[] = [
     support: "Community support",
     modules: [
       "Core ERP slice (inventory, sales, cash, orders)",
-      "Market intel — 1 signal source",
+      "Market intel - 1 signal source",
       "1 agent",
       "Email verification & MFA",
     ],

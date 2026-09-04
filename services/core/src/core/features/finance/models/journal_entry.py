@@ -1,11 +1,11 @@
-"""erp_journal_entries — the header of one double-entry transaction.
+"""erp_journal_entries - the header of one double-entry transaction.
 
 ``UNIQUE (tenant_id, source, source_ref)`` is the idempotency lock: an entry
 stamped with the same provenance (e.g. source='invoice' + invoice id) can be
 created only once, so a replayed request can never duplicate money. Manual
 entries use ``source_ref = NULL``, which Postgres UNIQUE treats as distinct,
 so unlimited manual entries are allowed. ``posted_by_user_id`` is a plain
-UUID reference to identity users (no FK — identity owns users).
+UUID reference to identity users (no FK - identity owns users).
 """
 
 from __future__ import annotations

@@ -79,6 +79,22 @@ class OpenAiCompatibleProvider:
         """Create the per-call HTTP client (overridable seam for tests)."""
         return httpx.AsyncClient(timeout=self._timeout_seconds)
 
+    @staticmethod
+    def _build_user_content(
+        request: LlmRequest,
+    ) -> str | list[dict[str, object]]:
+        """Build the user message content for the API payload.
+
+        When ``request.image_blocks`` is present, returns an array of content
+        blocks (text + image_url) for multimodal/vision requests.  Otherwise
+        returns a plain string.
+        """
+        if request.image_blocks:
+            blocks: list[dict[str, object]] = [{"type": "text", "text": request.user_prompt}]
+            blocks.extend(request.image_blocks)
+            return blocks
+        return request.user_prompt
+
     async def complete(self, request: LlmRequest) -> LlmCompletion:
         """POST one generation and parse the completion text."""
         if self._native:
@@ -91,7 +107,7 @@ class OpenAiCompatibleProvider:
             "model": self.model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": request.user_prompt},
+                {"role": "user", "content": self._build_user_content(request)},
             ],
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
@@ -220,7 +236,7 @@ class OpenAiCompatibleProvider:
             "model": self.model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": request.user_prompt},
+                {"role": "user", "content": self._build_user_content(request)},
             ],
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,

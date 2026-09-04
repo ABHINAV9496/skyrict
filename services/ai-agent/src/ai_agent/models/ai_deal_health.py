@@ -7,7 +7,7 @@ deal-detail AI insights panel. ``engagement_velocity`` (+accelerating /
 -decelerating) and ``days_in_stage`` are stored as assessed for diagnostics.
 
 ``opportunity_id`` is a plain UUID with NO FK: the opportunity is owned by the
-core service in the shared database (cross-service idiom — validated by looking
+core service in the shared database (cross-service idiom - validated by looking
 the opportunity up through core's CRM API before assessing).
 """
 

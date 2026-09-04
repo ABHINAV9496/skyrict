@@ -1,4 +1,4 @@
-"""Avatar image processing — validate, normalize, and encode to WebP.
+"""Avatar image processing - validate, normalize, and encode to WebP.
 
 All Pillow work is isolated here so services and tests depend on a pure
 ``bytes -> bytes`` function and never on image internals.

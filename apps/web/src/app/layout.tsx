@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: `${site.name} — AI Business Operating System`,
+    default: `${site.name} AI Business Operating System`,
     template: `%s · ${site.name}`,
   },
   description: site.description,
@@ -47,12 +47,12 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "/",
     siteName: site.name,
-    title: `${site.name} — AI Business Operating System`,
+    title: `${site.name} AI Business Operating System`,
     description: site.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${site.name} — AI Business Operating System`,
+    title: `${site.name} AI Business Operating System`,
     description: site.description,
   },
 };

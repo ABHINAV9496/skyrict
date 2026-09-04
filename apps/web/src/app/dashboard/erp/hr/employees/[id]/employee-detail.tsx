@@ -249,7 +249,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
       label: "Date",
       render: (movement) => (
         <span className="text-muted-foreground">
-          {movement.occurredAt ? formatDateTime(movement.occurredAt) : "—"}
+          {movement.occurredAt ? formatDateTime(movement.occurredAt) : "-"}
         </span>
       ),
     },
@@ -285,7 +285,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
       key: "note",
       label: "Note",
       render: (record) => (
-        <span className="text-muted-foreground">{record.note ?? "—"}</span>
+        <span className="text-muted-foreground">{record.note ?? "-"}</span>
       ),
     },
   ];
@@ -399,7 +399,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
         <Card title="Profile" icon={UserRound}>
           <div className="divide-y divide-border">
             <DetailItem label="Employee number" value={employee.employeeNumber} />
-            <DetailItem label="Department" value={departmentName(employee.departmentId) ?? "—"} />
+            <DetailItem label="Department" value={departmentName(employee.departmentId) ?? "-"} />
             <DetailItem label="Hired" value={formatDate(employee.hireDate)} />
             {employee.terminationDate ? (
               <DetailItem label="Terminated" value={formatDate(employee.terminationDate)} />
@@ -413,7 +413,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
                     {employee.email}
                   </span>
                 ) : (
-                  "—"
+                  "-"
                 )
               }
             />
@@ -426,7 +426,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
                     {employee.phone}
                   </span>
                 ) : (
-                  "—"
+                  "-"
                 )
               }
             />

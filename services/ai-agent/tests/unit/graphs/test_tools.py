@@ -63,7 +63,7 @@ class TestRegistryCatalog:
             ToolSpec(name="query_stock", required_permission=PERM_INVENTORY_READ, handler=_handler),
             ToolSpec(name="query_stock", required_permission=PERM_AI_INVOKE, handler=_handler),
         ]
-        # A duplicate registration must fail fast — a silently shadowed tool
+        # A duplicate registration must fail fast - a silently shadowed tool
         # would be an un-auditable permission change.
         with pytest.raises(ValueError, match="duplicate tool registration"):
             ToolRegistry(tools)

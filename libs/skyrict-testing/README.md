@@ -1,6 +1,6 @@
 # skyrict-testing
 
-Shared test utilities — fixtures, factories, and helpers for all Skyrict services.
+Shared test utilities - fixtures, factories, and helpers for all Skyrict services.
 
 ## Usage
 

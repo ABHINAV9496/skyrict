@@ -1,4 +1,4 @@
-"""CRM ports — persistence contract for the CRM feature.
+"""CRM ports - persistence contract for the CRM feature.
 
 Declares what the repository must offer so the future service depends on a
 Protocol (hexagonal "ports") rather than the concrete SQLAlchemy
@@ -6,7 +6,7 @@ implementation. The repository lives in the same feature package, so there is
 no import-linter violation.
 
 Owner/team/all scoping: every read takes an explicit ``scope`` (a
-:class:`DataScope` resolved ONCE per request by ``core.db.rbac`` — never a
+:class:`DataScope` resolved ONCE per request by ``core.db.rbac`` - never a
 role name) plus the caller's ``user_id`` / ``team_id``. The repository
 translates that into a SQL filter; the service can only pass narrower ids, it
 can never broaden the scope.
@@ -244,7 +244,7 @@ class CrmWorkspaceRepositoryPort(CrmRepositoryPort, Protocol):
     """Persistence contract for the CRM workspace surface.
 
     Contacts, activities, notes, the merged timeline, overview aggregates, and
-    server-side search — plus the anchor probes from :class:`CrmRepositoryPort`
+    server-side search - plus the anchor probes from :class:`CrmRepositoryPort`
     the workspace service uses to validate that an entity exists in the tenant.
     """
 

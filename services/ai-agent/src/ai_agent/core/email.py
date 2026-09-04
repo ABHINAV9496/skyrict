@@ -2,9 +2,9 @@
 
 Two transports behind the same ``EmailService`` protocol:
 
-* ``LogEmailService`` — logs the alert payload (default when no SMTP is
+* ``LogEmailService`` - logs the alert payload (default when no SMTP is
   configured; dev/test default).
-* ``SmtpEmailService`` — delivers via SMTP using the stdlib (dev: shared
+* ``SmtpEmailService`` - delivers via SMTP using the stdlib (dev: shared
   Mailpit relay; prod: a real relay).
 
 SMTP failures are logged but never raised, so anomaly scans don't hard-fail
@@ -59,7 +59,7 @@ class SmtpEmailService:
 
     Delivery runs in a thread so the event loop is never blocked by the
     (usually sub-millisecond) local relay round-trip. Failures are logged and
-    swallowed — the scanner's own audit trail remains the source of truth.
+    swallowed - the scanner's own audit trail remains the source of truth.
     """
 
     def __init__(

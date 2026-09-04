@@ -1,4 +1,4 @@
-"""Application-wide constants — single source of truth for magic values."""
+"""Application-wide constants - single source of truth for magic values."""
 
 from __future__ import annotations
 

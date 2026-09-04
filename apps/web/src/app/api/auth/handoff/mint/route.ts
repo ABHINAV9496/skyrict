@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   // signin-origin cookie and the payload must never hold the same token: once
   // the workspace redemption refreshes with the payload token, the cookie's
   // copy becomes stale, and the next signin-origin refresh would be flagged as
-  // reuse — revoking the whole token family, including the brand-new workspace
+  // reuse - revoking the whole token family, including the brand-new workspace
   // session. Rotating here consumes the cookie's copy and clears the cookie so
   // the payload token is the only live token, used exactly once at redemption.
   const rotated = await callBackend("/auth/refresh", {

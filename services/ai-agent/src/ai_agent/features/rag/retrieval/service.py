@@ -1,15 +1,15 @@
-"""RAG semantic retrieval service (SKY-58) — feature layer, no models/db.
+"""RAG semantic retrieval service (SKY-58) - feature layer, no models/db.
 
 Pipeline per query (all orchestration lives here, adapters stay dumb):
 
-1. Normalize + hash the query (cache key) — BEFORE any embedding call.
+1. Normalize + hash the query (cache key) - BEFORE any embedding call.
 2. Rate-limit (Redis fixed-window, same idiom as the NL service).
 3. Hot-cache read (Redis). Hit: return cached results, skip embedding.
 4. Miss: embed the normalized query, cosine-search child chunks
    (``store.semantic_search``), collapse multiple child hits per parent into
    ONE parent result (best child score wins), truncate to the return budget,
    and fetch the parent texts for generation context.
-5. Write-through both cache layers via ``cache.put`` (hot) — the persistent
+5. Write-through both cache layers via ``cache.put`` (hot) - the persistent
    ``ai_query_cache`` write is composed by the router from a repository.
 
 Query text never appears in logs or cache keys (only the hash), keeping query
@@ -111,7 +111,7 @@ class PersistentQueryCache(Protocol):
     """Durable query-cache contract (implemented by db/query_cache_repository).
 
     Kept as a protocol so the feature layer stays free of ``ai_agent.db``
-    imports — the router composes the repository into this slot.
+    imports - the router composes the repository into this slot.
     """
 
     async def put(
@@ -224,7 +224,7 @@ class RagRetrievalService:
         if self._persistent_cache is not None:
             # Durable layer: same upsert semantics as Redis but persisted
             # (increments hit_count on repeat queries). Failures here must
-            # not fail the search — cache writes are best-effort.
+            # not fail the search - cache writes are best-effort.
             try:
                 await self._persistent_cache.put(
                     tenant_id=tenant_id,

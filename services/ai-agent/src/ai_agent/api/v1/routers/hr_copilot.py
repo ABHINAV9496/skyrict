@@ -2,7 +2,7 @@
 
 Authentication happens here (JWT re-verification); authorization happened
 upstream at the core monolith's proxy (``erp.ai.invoke`` + ``erp.hr.ai.copilot``
-checked before forwarding — the "AI is a proxy, not a bypass" rule). This
+checked before forwarding - the "AI is a proxy, not a bypass" rule). This
 router composes per-request dependencies: caller identity, an HR gateway bound
 to the CALLER'S token, and the engine wired to the shared LLM router from
 ``app.state``.

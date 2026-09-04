@@ -1,8 +1,8 @@
-"""Product catalog loader for ``inventory reindex`` (SKY-70) — feature layer.
+"""Product catalog loader for ``inventory reindex`` (SKY-70) - feature layer.
 
 Fetches the products a tenant may search, page by page, from the core
 monolith's existing catalog endpoint. Only the four searchable fields pass
-through (id, sku, name, category, unit) — reorder points are NOT embedded
+through (id, sku, name, category, unit) - reorder points are NOT embedded
 and money/PII never leave the trust boundary (inventory AI spec §5.5), the
 same whitelist rule the RAG module loader enforces.
 
@@ -27,7 +27,7 @@ _CATALOG_PATH = "/api/v1/inventory/products"
 _PAGE_SIZE = 100
 _MAX_PAGES = 40  # 4000 products ceiling guard; reindexes scale by page count.
 
-# Searchable fields only — keep in step with ProductSnapshot.
+# Searchable fields only - keep in step with ProductSnapshot.
 _SNAPSHOT_FIELDS: tuple[str, ...] = ("sku", "name", "category", "unit")
 
 

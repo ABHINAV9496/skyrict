@@ -1,13 +1,13 @@
-"""Embedding provider adapters (SKY-58) — OpenAI-compatible ``/embeddings``.
+"""Embedding provider adapters (SKY-58) - OpenAI-compatible ``/embeddings``.
 
 One adapter class serves every OpenAI-compatible embedding endpoint, mirroring
 the LLM provider philosophy in ``core/providers``:
 
-- ``openai`` — ``text-embedding-3-small`` via the OpenAI API with Matryoshka
+- ``openai`` - ``text-embedding-3-small`` via the OpenAI API with Matryoshka
   dimension reduction, or ANY OpenAI-compatible endpoint by overriding the
   base URL (e.g. Gemini's ``gemini-embedding-2``). ``"dimensions"`` is sent
   in the payload and these providers honor it.
-- ``ollama`` — local ``nomic-embed-text`` via ``http://host:11434/v1``. It
+- ``ollama`` - local ``nomic-embed-text`` via ``http://host:11434/v1``. It
   emits 768-dim vectors natively and does NOT accept the ``dimensions``
   payload key, so ``send_dimensions`` is False and the key is omitted.
 
@@ -43,7 +43,7 @@ _MIN_TIMEOUT_SECONDS = 1.0
 EMBEDDING_KEYS = frozenset({"openai", "ollama"})
 EMBEDDING_PRESETS: dict[str, str] = {"openai": "https://api.openai.com/v1"}
 
-# Length of the vector column in ai_rag_chunks / ai_inv_item_embeddings — the
+# Length of the vector column in ai_rag_chunks / ai_inv_item_embeddings - the
 # adapter enforces it so a mismatched provider fails fast instead of
 # corrupting the index. Every supported provider emits this many dimensions.
 _INDEX_DIMENSIONS = 768

@@ -1,4 +1,4 @@
-"""Inventory ORM models — registered on ``Base.metadata`` by alembic/env.py.
+"""Inventory ORM models - registered on ``Base.metadata`` by alembic/env.py.
 
 Feature models are NOT re-exported from ``core.models``: importing that package
 from ``core.features`` would violate the import-linter layering contract, so

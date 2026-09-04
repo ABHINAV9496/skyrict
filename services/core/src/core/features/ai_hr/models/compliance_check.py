@@ -1,4 +1,4 @@
-"""ai_compliance_checks — compliance findings for the v1 rule pack.
+"""ai_compliance_checks - compliance findings for the v1 rule pack.
 
 Written by the compliance engine (Commit 4); read for the compliance feed and
 dispositions. ``owner_rule`` names the routing owner key (``hr_admin``,

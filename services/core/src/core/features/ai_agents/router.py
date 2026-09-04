@@ -1,4 +1,4 @@
-"""``/api/v1/ai/agents/*`` proxy routes — permission checks BEFORE forwarding.
+"""``/api/v1/ai/agents/*`` proxy routes - permission checks BEFORE forwarding.
 
 SKY-59 agent orchestration runs on ai-agent; the monolith edge enforces the
 ERP matrix (spec 6.3, same posture as features/ai/router.py):
@@ -8,7 +8,7 @@ ERP matrix (spec 6.3, same posture as features/ai/router.py):
   chat stream            erp.ai.invoke
 
 The decision edge demands the finance-writer grant because it is a
-financial-class write (recorded Q&A decision) — defense in depth on top of
+financial-class write (recorded Q&A decision) - defense in depth on top of
 the ai-agent runtime's own tool-permission checks.
 
 The JWT is forwarded verbatim; ai-agent re-verifies it against the relayed
@@ -161,4 +161,89 @@ async def proxy_deny_interrupt(
         request,
         client,
         f"/api/v1/ai/agents/{agent_name}/interrupts/{interrupt_id}/deny",
+    )
+
+
+# ------------------------------------------------------------------
+# Conversation persistence (SKY-60 durability fix)
+# ------------------------------------------------------------------
+
+
+@router.get("/conversations")
+async def proxy_list_conversations(
+    request: Request,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """List conversations -> ai-agent /ai/agents/conversations."""
+    return await _proxy(request, client, "/api/v1/ai/agents/conversations")
+
+
+@router.post("/conversations")
+async def proxy_create_conversation(
+    request: Request,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Create conversation -> ai-agent /ai/agents/conversations."""
+    return await _proxy(request, client, "/api/v1/ai/agents/conversations")
+
+
+@router.get("/conversations/{conversation_id}")
+async def proxy_get_conversation(
+    request: Request,
+    conversation_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Get conversation -> ai-agent /ai/agents/conversations/{id}."""
+    return await _proxy(
+        request,
+        client,
+        f"/api/v1/ai/agents/conversations/{conversation_id}",
+    )
+
+
+@router.post("/conversations/{conversation_id}")
+async def proxy_append_message(
+    request: Request,
+    conversation_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Append message -> ai-agent /ai/agents/conversations/{id}."""
+    return await _proxy(
+        request,
+        client,
+        f"/api/v1/ai/agents/conversations/{conversation_id}",
+    )
+
+
+@router.patch("/conversations/{conversation_id}")
+async def proxy_update_conversation(
+    request: Request,
+    conversation_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Update conversation -> ai-agent /ai/agents/conversations/{id}."""
+    return await _proxy(
+        request,
+        client,
+        f"/api/v1/ai/agents/conversations/{conversation_id}",
+    )
+
+
+@router.delete("/conversations/{conversation_id}")
+async def proxy_delete_conversation(
+    request: Request,
+    conversation_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Delete conversation -> ai-agent /ai/agents/conversations/{id}."""
+    return await _proxy(
+        request,
+        client,
+        f"/api/v1/ai/agents/conversations/{conversation_id}",
     )

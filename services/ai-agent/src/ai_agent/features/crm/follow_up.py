@@ -1,10 +1,10 @@
 """Deterministic follow-up suggestion engine (SKY-61 Part 11).
 
 Generates a templated follow-up draft for a stale CRM entity. The draft is
-imprecise — it's a starting point the owner can edit or dismiss — but it's
+imprecise - it's a starting point the owner can edit or dismiss - but it's
 free, reproducible, and zero-latency (no LLM call).
 
-Follow-up rules (per Q&A decision 1 — deterministic theme):
+Follow-up rules (per Q&A decision 1 - deterministic theme):
 - **Stale lead** (no activity > 7 days): suggest an email re-engagement.
 - **Stale opportunity** (no activity > 7 days): suggest a call/meeting.
 - **Near-close opportunity** (expected close < 7 days, no activity): suggest
@@ -110,7 +110,7 @@ def _draft_lead(
     draft = (
         f"Hi {label},\n\n"
         f"Just circling back to see how things are progressing. "
-        f"We haven't connected in {stale_days:.0f} days — happy to help "
+        f"We haven't connected in {stale_days:.0f} days - happy to help "
         f"with anything.\n\nBest regards"
     )
     reasoning = (
@@ -152,7 +152,7 @@ def _draft_opportunity(
     if overdue:
         suggestion_type = "call"
         draft = (
-            f"Hi — following up on {label}. "
+            f"Hi - following up on {label}. "
             f"Our expected close date ({entity.expected_close_date}) has passed "
             f"and we haven't touched base in {stale_days:.0f} days. "
             f"Would you be available for a brief call this week to realign?"
@@ -168,9 +168,9 @@ def _draft_opportunity(
         if days_until <= NEAR_CLOSE_DAYS and stale_days >= STALE_AFTER_DAYS:
             suggestion_type = "email"
             draft = (
-                f"Hi — just checking in ahead of our target close date "
+                f"Hi - just checking in ahead of our target close date "
                 f"({entity.expected_close_date}) for {label}. "
-                f"We haven't connected in {stale_days:.0f} days — "
+                f"We haven't connected in {stale_days:.0f} days - "
                 f"want to make sure everything is on track."
             )
             reasoning = (
@@ -200,7 +200,7 @@ def _draft_opportunity(
 
 def _default_opp_draft(label: str, stale_days: float) -> str:
     return (
-        f"Hi — following up on {label}. "
+        f"Hi - following up on {label}. "
         f"We haven't touched base in {stale_days:.0f} days. "
         f"Would you be open to a quick call to discuss next steps?"
     )
@@ -238,7 +238,7 @@ def _velocity_descriptor(velocity: float | None) -> str:
 
 
 def _confidence(activities: list[ActivityRef], stale_days: float) -> float:
-    """0..1 — rises with activity volume, falls with staleness."""
+    """0..1 - rises with activity volume, falls with staleness."""
     if not activities:
         return _NO_ACTIVITY_CONFIDENCE
     volume = min(len(activities) / 10.0, 1.0)

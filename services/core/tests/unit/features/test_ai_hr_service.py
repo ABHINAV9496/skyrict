@@ -1,6 +1,6 @@
 """Unit tests for the L1 aggregate service narrative builders (HR-AI-001).
 
-The narratives are deterministic, rule-based templates (spec §5) — they must
+The narratives are deterministic, rule-based templates (spec §5) - they must
 never emit per-employee data and must degrade gracefully on empty inputs.
 Pure unit tests (no database): they exercise the narrative helpers directly.
 """

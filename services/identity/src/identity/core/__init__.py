@@ -1,1 +1,1 @@
-"""Core primitives — config, security, exceptions, logging, tenant context."""
+"""Core primitives - config, security, exceptions, logging, tenant context."""

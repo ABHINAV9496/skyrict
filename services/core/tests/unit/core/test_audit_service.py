@@ -1,4 +1,4 @@
-"""AuditService unit tests — port double, no database."""
+"""AuditService unit tests - port double, no database."""
 
 from __future__ import annotations
 

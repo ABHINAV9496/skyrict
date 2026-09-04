@@ -1,4 +1,4 @@
-"""PII redactor — pattern-based masking of sensitive values in free text.
+"""PII redactor - pattern-based masking of sensitive values in free text.
 
 The redactor is the core of the HR-AI-001 commit-1 gate. It recognises and
 replaces sensitive fragments (NRIC/MyKad, phone, email, employee numbers, bank
@@ -151,7 +151,7 @@ def redact_text(text: str) -> tuple[str, dict[str, int]]:
     _count_and_replace(_SALARY_RE, MASK_SALARY)
     _count_and_replace(_PHONE_RE, MASK_PHONE)
 
-    # Heuristic names (noisiest — apply last so it cannot consume the strong
+    # Heuristic names (noisiest - apply last so it cannot consume the strong
     # tokens above).
     _count_and_replace(_TITLED_NAME_RE, MASK_NAME)
     _count_and_replace(_NAME_LABEL_RE, MASK_NAME)

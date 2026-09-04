@@ -7,7 +7,7 @@ metadata:
     environment: staging
 spec:
   acme:
-    # Let's Encrypt production CA — issues the real, browser-trusted wildcard
+    # Let's Encrypt production CA - issues the real, browser-trusted wildcard
     # certificate. The DNS-01 challenge writes _acme-challenge TXT records into
     # the staging.skyrict.com hosted zone (managed by Terraform).
     server: https://acme-v02.api.letsencrypt.org/directory

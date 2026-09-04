@@ -44,9 +44,12 @@ class ProductRef:
     sku: str
     name: str
     reorder_point: Decimal
-    # Local-only money data (spec §5.5): used for local estimates, never
-    # sent to any LLM provider. None when core omits it.
+    # Unit cost with its currency. Money is a Decimal(19,4) semantics region;
+    # never sent to an LLM provider without the caller's ``erp.inventory.read``
+    # permission (core returns it to any such holder - the gateway forwards the
+    # caller's scoped identity, never a privileged one).
     cost_price: Decimal | None = None
+    cost_currency: str | None = None
     # Semantic-search snapshot fields (SKY-70); None when core omits them.
     category: str | None = None
     unit: str | None = None
@@ -232,9 +235,12 @@ class HttpInventoryGateway:
 def _parse_product(item: dict[str, object]) -> ProductRef:
     # Core serializes money as [amount-string, currency] tuples.
     raw_cost = item.get("cost_price")
-    cost_price = (
-        Decimal(str(raw_cost[0])) if isinstance(raw_cost, list | tuple) and raw_cost else None
-    )
+    cost_price = None
+    cost_currency = None
+    if isinstance(raw_cost, list | tuple) and raw_cost:
+        cost_price = Decimal(str(raw_cost[0]))
+        if len(raw_cost) > 1 and raw_cost[1] is not None:
+            cost_currency = str(raw_cost[1])
     category = item.get("category")
     unit = item.get("unit")
     return ProductRef(
@@ -243,6 +249,7 @@ def _parse_product(item: dict[str, object]) -> ProductRef:
         name=str(item["name"]),
         reorder_point=Decimal(str(item["reorder_point"])),
         cost_price=cost_price,
+        cost_currency=cost_currency,
         category=None if category is None else str(category),
         unit=None if unit is None else str(unit),
     )

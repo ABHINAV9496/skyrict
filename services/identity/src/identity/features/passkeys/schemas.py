@@ -6,13 +6,13 @@ from pydantic import BaseModel, Field
 
 
 class PasskeyRegistrationChallengeRequest(BaseModel):
-    """POST /passkeys/register/challenge — get a registration challenge."""
+    """POST /passkeys/register/challenge - get a registration challenge."""
 
     device_name: str = Field(..., min_length=1, max_length=128, description="Friendly device name")
 
 
 class PasskeyRegistrationVerifyRequest(BaseModel):
-    """POST /passkeys/register/verify — complete passkey registration."""
+    """POST /passkeys/register/verify - complete passkey registration."""
 
     id: str
     raw_id: str
@@ -24,13 +24,13 @@ class PasskeyRegistrationVerifyRequest(BaseModel):
 
 
 class PasskeyAuthenticationChallengeRequest(BaseModel):
-    """POST /passkeys/authenticate/challenge — get an authentication challenge."""
+    """POST /passkeys/authenticate/challenge - get an authentication challenge."""
 
     passkey_id: str | None = Field(default=None, description="Specific passkey to challenge")
 
 
 class PasskeyAuthenticationVerifyRequest(BaseModel):
-    """POST /passkeys/authenticate/verify — complete passkey authentication."""
+    """POST /passkeys/authenticate/verify - complete passkey authentication."""
 
     id: str
     raw_id: str

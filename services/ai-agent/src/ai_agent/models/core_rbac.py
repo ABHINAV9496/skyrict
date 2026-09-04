@@ -3,12 +3,12 @@
 The ai-agent runtime gates agent tool invocation on the SAME permission keys
 the core proxy edge resolves (SKY-59 scoped tools). The grants live in core's
 tables (``core_roles``, ``core_user_roles``) inside the shared database, so
-this service maps read-only projections of those tables — never writes, and
+this service maps read-only projections of those tables - never writes, and
 only the columns the runtime reads. ``core_roles.id``/`core_user_roles.id``
 carry no server default in the projections because core owns the inserts; these
 models exist purely to SELECT from.
 
-The composite primary keys mirror the real tables exactly — SQLAlchemy needs
+The composite primary keys mirror the real tables exactly - SQLAlchemy needs
 them faithful so the tenant+role join compiles to the same predicate core's
 ``RbacRepository`` uses.
 """

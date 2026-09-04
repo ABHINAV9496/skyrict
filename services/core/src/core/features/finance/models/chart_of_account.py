@@ -1,4 +1,4 @@
-"""erp_chart_of_accounts — the tenant's chart of accounts.
+"""erp_chart_of_accounts - the tenant's chart of accounts.
 
 Accounts are never hard-deleted once referenced by journal/invoice history
 (the composite FKs use RESTRICT); ``is_active`` is the only removal path.

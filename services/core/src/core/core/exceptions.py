@@ -73,7 +73,7 @@ class StartupError(RuntimeError):
 
     Raised from the application lifespan so the process refuses to boot
     (fail-fast) instead of serving traffic with a dead database or an unusable
-    JWT public key. NOT a SkyrictError — it is never mapped to an HTTP
+    JWT public key. NOT a SkyrictError - it is never mapped to an HTTP
     response; the orchestrator sees the non-zero exit and restarts the pod.
     """
 
@@ -147,7 +147,7 @@ class StockReservedError(ConflictError):
     Mirrors the ERP rule that an item with open commitments cannot be
     archived: reservations are promises to external documents and must be
     released or fulfilled before the item can be deactivated. Plain on-hand
-    quantity is NOT blocked — it stays on the books and is written off via a
+    quantity is NOT blocked - it stays on the books and is written off via a
     stock adjustment on the archived item.
     """
 
@@ -189,7 +189,7 @@ class CreditLimitExceededError(ValidationError):
 class AiServiceUnavailableError(SkyrictError):
     """The ai-agent microservice is unreachable or timed out (503).
 
-    Raised ONLY for transport failures while proxying /api/v1/ai/* —
+    Raised ONLY for transport failures while proxying /api/v1/ai/* -
     upstream application errors pass through untouched. The frontend's
     mock-fallback policy consumes the typed 503.
     """
@@ -314,7 +314,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions — NEVER leak internals.
+    """Catch-all for unhandled exceptions - NEVER leak internals.
 
     Logs full traceback for debugging, returns sanitized 500 to the client.
     """

@@ -1,1 +1,1 @@
-"""API v1 — aggregates feature routers under /api/v1."""
+"""API v1 - aggregates feature routers under /api/v1."""

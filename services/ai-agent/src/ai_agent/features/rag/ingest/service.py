@@ -1,10 +1,10 @@
-"""RAG ingestion orchestrator (SKY-58) — load → chunk → embed → persist.
+"""RAG ingestion orchestrator (SKY-58) - load → chunk → embed → persist.
 
 Pure feature-layer service: receives a loader's documents, chunk them with the
 token counter, embeds all children of each document in ONE provider batch,
 and hands parent/child pairs to an injected repository. Dependencies
 (repository, embedding provider) come from the composition root exactly like
-``RestockService`` — this module imports NO models and NO db layer, keeping
+``RestockService`` - this module imports NO models and NO db layer, keeping
 the ``Only repositories touch the database layer`` contract intact.
 """
 

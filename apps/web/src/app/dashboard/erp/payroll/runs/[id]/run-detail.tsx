@@ -150,7 +150,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
         tone: "success",
         text:
           result.skipped.length > 0
-            ? `Run computed — ${result.skipped.length} employee(s) skipped.`
+            ? `Run computed - ${result.skipped.length} employee(s) skipped.`
             : "Run computed.",
       });
     } catch (error) {
@@ -447,11 +447,11 @@ export function RunDetailClient({ runId }: { runId: string }) {
           <SummaryRow label="Employees in run" value={entries.length} />
           <SummaryRow
             label="Total gross"
-            value={run.totalGross ? formatMoney(run.totalGross.amount, run.totalGross.currency) : "—"}
+            value={run.totalGross ? formatMoney(run.totalGross.amount, run.totalGross.currency) : "-"}
           />
           <SummaryRow
             label="Total net"
-            value={run.totalNet ? formatMoney(run.totalNet.amount, run.totalNet.currency) : "—"}
+            value={run.totalNet ? formatMoney(run.totalNet.amount, run.totalNet.currency) : "-"}
           />
           {run.computedAt ? (
             <SummaryRow label="Computed" value={formatDateTime(run.computedAt)} />

@@ -1,6 +1,6 @@
 """Unit tests for the finance after-commit event publisher.
 
-Regression: ``_on_commit`` must accept only ``session`` — SQLAlchemy's
+Regression: ``_on_commit`` must accept only ``session`` - SQLAlchemy's
 ``after_commit`` event dispatches a single argument (``after_begin`` is the
 event that also receives the transaction/connection). Requiring an extra
 ``_previous_transaction`` argument raised a TypeError on every request's
@@ -19,7 +19,7 @@ from core.events.producers.finance_events import FinanceEventPublisher
 
 
 class FakeProducer:
-    """Records publish() calls — mirrors the StubEventProducer contract."""
+    """Records publish() calls - mirrors the StubEventProducer contract."""
 
     def __init__(self) -> None:
         self.published: list[tuple[str, object, str | None]] = []

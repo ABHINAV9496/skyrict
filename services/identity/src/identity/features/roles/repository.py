@@ -1,4 +1,4 @@
-"""Role repository — DB operations for the roles and user_roles tables.
+"""Role repository - DB operations for the roles and user_roles tables.
 
 All SQLAlchemy stays in this file. Service-facing methods accept and return
 domain entities (``identity.domain.entities.Role``).

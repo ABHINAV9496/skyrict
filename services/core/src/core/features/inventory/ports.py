@@ -1,4 +1,4 @@
-"""Inventory repository + service ports — persistence and business contracts.
+"""Inventory repository + service ports - persistence and business contracts.
 
 Declares what the repository must offer so services depend on this Protocol
 (hexagonal "port") rather than the concrete SQLAlchemy implementation. There is
@@ -174,7 +174,7 @@ class InventoryRepositoryPort(Protocol):
         self, product_id: uuid.UUID, warehouse_id: uuid.UUID, qty: Decimal, tenant_id: uuid.UUID
     ) -> bool: ...
 
-    # --- Movements (immutable ledger — no update, no delete) ---
+    # --- Movements (immutable ledger - no update, no delete) ---
     async def add_movement(self, movement: StockMovement) -> StockMovement: ...
 
     async def get_movement_by_ref(

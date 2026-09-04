@@ -1,4 +1,4 @@
-"""Tenant repository port — the persistence contract the organizations service depends on.
+"""Tenant repository port - the persistence contract the organizations service depends on.
 
 Ports abstract persistence only (never business rules). Methods accept and
 return domain entities; SQLAlchemy lives in the concrete implementation

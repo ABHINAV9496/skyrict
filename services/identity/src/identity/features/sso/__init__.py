@@ -1,1 +1,1 @@
-"""SSO feature — SAML/OIDC identity provider integration (planned)."""
+"""SSO feature - SAML/OIDC identity provider integration (planned)."""

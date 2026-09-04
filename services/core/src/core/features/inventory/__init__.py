@@ -1,4 +1,4 @@
-"""Inventory feature package — products, warehouses, stock levels, movements.
+"""Inventory feature package - products, warehouses, stock levels, movements.
 
 Feature-based layout: every ERP module (finance, hr, sales, ...) owns its
 ``models/``, ``ports.py`` and ``repository.py`` inside its own package under

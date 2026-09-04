@@ -11,7 +11,7 @@ usable window is blacked out or already begun, the forfeit-window fallback
 (:meth:`_plan_block`) is returned as the last resort and the conflict is
 spelled out in the reasons.
 
-Suggestions NEVER auto-submit — the portal prefill is recorded as ``used`` by a
+Suggestions NEVER auto-submit - the portal prefill is recorded as ``used`` by a
 separate action. Per scan only ``pending`` suggestions are replaced;
 ``used``/``dismissed`` rows are kept as lifecycle history.
 """
@@ -336,7 +336,7 @@ class AiHrSuggestionRepository:
             return _PlannedBlock(start, end, planned, tuple(reasons))
 
         # 2. fallback: the forfeit window may sit inside a blackout, but the
-        #    balance is forfeiting regardless — say so explicitly.
+        #    balance is forfeiting regardless - say so explicitly.
         forfeit = cls._plan_block(balance_days, available, today, year_end)
         if forfeit is None:
             return None

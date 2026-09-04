@@ -1,4 +1,4 @@
-"""Skyrict common utilities — shared across all services."""
+"""Skyrict common utilities - shared across all services."""
 
 from skyrict_common.exceptions import (
     AuthenticationError,

@@ -85,7 +85,7 @@ export function ErpDataTable<T extends { id: string }>({
                     >
                       {column.render
                         ? column.render(row)
-                        : String(row[column.key] ?? "—")}
+                        : String(row[column.key] ?? "-")}
                     </td>
                   ))}
                 </tr>

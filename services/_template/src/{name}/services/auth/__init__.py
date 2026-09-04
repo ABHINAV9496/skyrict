@@ -1,4 +1,4 @@
-"""Auth service package — authentication, authorization, tokens."""
+"""Auth service package - authentication, authorization, tokens."""
 
 from {name}.services.auth.authentication import AuthenticationService
 from {name}.services.auth.authorization import AuthorizationService

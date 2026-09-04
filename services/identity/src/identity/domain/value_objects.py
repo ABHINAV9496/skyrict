@@ -1,4 +1,4 @@
-"""Value objects — immutable, identity-less domain concepts."""
+"""Value objects - immutable, identity-less domain concepts."""
 
 from __future__ import annotations
 

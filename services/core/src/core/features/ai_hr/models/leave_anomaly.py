@@ -1,9 +1,9 @@
-"""ai_hr_leave_anomalies — leave pattern anomaly findings (8.2.1, the inbox).
+"""ai_hr_leave_anomalies - leave pattern anomaly findings (8.2.1, the inbox).
 
 Written by the pattern detector; exposed via the HR-facing leave-anomaly inbox
 feed (L1 aggregate / L2 per-employee). Status is kept consistent with the
 sibling wave-1 tables: ``open|acknowledged|dismissed|resolved`` (no separate
-``escalated`` — escalation is not defined/triggered in the HR-AI core tables).
+``escalated`` - escalation is not defined/triggered in the HR-AI core tables).
 A detected finding with a thin team baseline is *abstained* (never stored) per
 the team-size gate (min 4 members).
 """

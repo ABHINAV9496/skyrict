@@ -1,4 +1,4 @@
-"""Invitation service — create, accept, and expire invite tokens."""
+"""Invitation service - create, accept, and expire invite tokens."""
 
 from __future__ import annotations
 
@@ -255,8 +255,8 @@ class InvitationService:
         """ACCEPTED Phase-1 bridge: mirror the grant into core's RBAC tables.
 
         The Kafka bus does not exist yet (``publish_event`` is a logging stub),
-        so core's ``require_permission`` — which resolves grants from
-        ``core_roles`` / ``core_user_roles`` — would never see invitees. Both
+        so core's ``require_permission`` - which resolves grants from
+        ``core_roles`` / ``core_user_roles`` - would never see invitees. Both
         services share one database, so this writes the same upserts core's
         own ``apply_role_grants`` consumer handler performs (same composite-PK
         shapes, same scope semantics: scope_id = tenant id).
@@ -311,7 +311,7 @@ class InvitationService:
                 if invitation_email:
                     # Bind the invited employee ONLY when the email match is
                     # unambiguous (exactly one unlinked candidate); ambiguous
-                    # or missing matches stay unbound — portal access then
+                    # or missing matches stay unbound - portal access then
                     # fails closed with a clear error.
                     await session.execute(
                         text(

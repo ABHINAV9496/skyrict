@@ -1,8 +1,8 @@
-"""erp_crm_contacts — people on a customer account, tenant-scoped with RLS.
+"""erp_crm_contacts - people on a customer account, tenant-scoped with RLS.
 
 A customer is the account; a contact is a person who works there. Tenant-scoped
 with the composite primary key ``(tenant_id, id)`` convention and soft-deleted
-via ``is_active`` (no status enum — mirrors ``erp_crm_customers``).
+via ``is_active`` (no status enum - mirrors ``erp_crm_customers``).
 ``customer_id`` is a plain UUID anchor with NO FK (same convention as
 ``source_opportunity_id`` in migration 0015).
 

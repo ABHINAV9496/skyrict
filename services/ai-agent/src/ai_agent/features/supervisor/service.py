@@ -1,17 +1,17 @@
-"""Supervisor service — intent classification + cross-module delegation (SKY-60).
+"""Supervisor service - intent classification + cross-module delegation (SKY-60).
 
 The supervisor is the Agents shell's router: one turn classifies the question
 into one or more module agents, streams each segment sequentially with per-agent
 attribution, and emits grounding citations. It is a STATELESS orchestration
-layer — unlike the checkpointed :class:`AgentRuntime` (SKY-59) there is no
+layer - unlike the checkpointed :class:`AgentRuntime` (SKY-59) there is no
 HITL pause; every segment streams and the shell renders tokens live.
 
 Routing contract:
-  * ``classify()`` → :class:`RouteDecision` — LLM intent classification (strict
+  * ``classify()`` → :class:`RouteDecision` - LLM intent classification (strict
     JSON) with a deterministic keyword fallback when no provider is configured
     or unavailable. Low confidence abstains (a normal explicit answer, never an
     error), mirroring the nl_query abstention pattern.
-  * ``stream_answer()`` → :class:`SupervisorEvent` stream — classification,
+  * ``stream_answer()`` → :class:`SupervisorEvent` stream - classification,
     then per agent: ``AgentStartEvent``, ``TokenEvent``*d, ``CitationsEvent``.
     Modules that registry marks disabled stream a clean "not provisioned yet"
     abstention (SKY-60 decision #6: crm/finance start disabled).
@@ -20,15 +20,17 @@ Routing contract:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
+from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
 from ai_agent.features.supervisor.delegates import (
     CrmAssistantDelegator,
     Delegator,
+    FinanceDelegator,
     ForecastPort,
     HrCopilotDelegator,
     HrCopilotPort,
@@ -63,9 +65,11 @@ if TYPE_CHECKING:
     import uuid
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 
+    from ai_agent.api.v1.schemas.chat import AttachmentData
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
+    from ai_agent.features.finance.gateway import FinanceGatewayPort
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
@@ -110,6 +114,15 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+class ConversationHistoryPort(Protocol):
+    async def get_messages(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> list[dict[str, Any]]: ...
+
+
 class SupervisorService:
     """Routes one Agents-shell question and streams the delegated answer."""
 
@@ -121,11 +134,14 @@ class SupervisorService:
         rag: RagSearchPort | None = None,
         hr_copilot: HrCopilotPort | None = None,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]] | None = None,
+        finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]] | None = None,
         memory_service: MemoryService | None = None,
         forecast: ForecastPort | None = None,
+        conversation_history: ConversationHistoryPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
     ) -> None:
+        self._conversation_history = conversation_history
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
@@ -146,10 +162,15 @@ class SupervisorService:
                 crm_gateway_factory=crm_gateway_factory,
                 memory_service=memory_service,
             )
+        if finance_gateway_factory is not None:
+            delegates[AGENT_FINANCE] = FinanceDelegator(
+                llm_router=llm_router,
+                finance_gateway_factory=finance_gateway_factory,
+            )
         self._delegates = delegates
 
     async def classify(self, query: str) -> RouteDecision:
-        """Route one question; never raises — falls back to keywords."""
+        """Route one question; never raises - falls back to keywords."""
         if not self._llm_router.has_providers:
             return _keyword_route(query)
         try:
@@ -184,10 +205,43 @@ class SupervisorService:
         self,
         *,
         query: str,
+        attachments: list[AttachmentData] | None = None,
+        conversation_id: uuid.UUID | None = None,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[SupervisorEvent]:
-        """Stream one full supervisor turn as ordered events."""
+        """Stream one full supervisor turn as ordered events.
+
+        When attachments are present, their text content is extracted and
+        appended to the query so the LLM has full context.  Images are passed
+        as multimodal content blocks to the vision-capable LLM.
+
+        When ``conversation_id`` is provided, the prior conversation history is
+        loaded from the database and injected into the supervisor system prompt
+        so the LLM has multi-turn context.
+        """
+        # --- Process attachments into LLM-ready format ---
+        processed = process_attachments(attachments) if attachments else ProcessedAttachments()
+
+        # Build the enhanced query: original question + extracted document text.
+        enhanced_query = query
+        if processed.extracted_text:
+            enhanced_query = (
+                f"{query}\n\n"
+                f"--- Attached file content ---\n"
+                f"{processed.extracted_text}\n"
+                f"--- End of attached content ---"
+            )
+
+        # --- Load conversation history for multi-turn context ---
+        conversation_history = ""
+        if conversation_id is not None:
+            conversation_history = await self._load_conversation_history(
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+            )
+
+        # --- Classify intent (uses original query for routing, not file content) ---
         decision = await self.classify(query)
         yield ClassificationEvent(
             agents=decision.agents,
@@ -208,7 +262,11 @@ class SupervisorService:
                 # A real question that did not route to a module: answer it as
                 # the supervisor instead of deflecting with canned text, so the
                 # response actually varies with what the user asked.
-                async for sup_event in self._supervisor_answer(query=query):
+                async for sup_event in self._supervisor_answer(
+                    query=enhanced_query,
+                    image_blocks=processed.image_blocks,
+                    conversation_history=conversation_history,
+                ):
                     yield sup_event
             yield CitationsEvent(agent="supervisor", citations=())
             yield DoneEvent(agents=("supervisor",))
@@ -238,7 +296,7 @@ class SupervisorService:
             citations: list[Citation] = []
             try:
                 async for delta in delegator.stream(
-                    query=query.strip(),
+                    query=enhanced_query.strip(),
                     tenant_id=tenant_id,
                     user_id=user_id,
                     citations=citations,
@@ -252,25 +310,46 @@ class SupervisorService:
 
         yield DoneEvent(agents=tuple(handled))
 
-    async def _supervisor_answer(self, *, query: str) -> AsyncIterator[SupervisorEvent]:
+    async def _supervisor_answer(
+        self,
+        *,
+        query: str,
+        image_blocks: list[dict[str, object]] | None = None,
+        conversation_history: str = "",
+    ) -> AsyncIterator[SupervisorEvent]:
         """Answer as the general supervisor, varying with the actual question.
 
         Used when a real request does not clearly route to a module agent. The
         supervisor answers from its own knowledge so the reply differs with the
         input, instead of returning one fixed canned string. Degrades to the
         short abstention text only when no LLM provider can be reached.
+
+        When ``image_blocks`` are present (user attached images), the request
+        is sent as a multimodal/vision call so the LLM can see the images.
+
+        When ``conversation_history`` is provided, it is prepended to the
+        system prompt so the LLM has multi-turn context.
         """
         if not self._llm_router.has_providers:
             for event in _yield_text(agent="supervisor", text=ABSTENTION):
                 yield event
             return
         try:
+            system_prompt = SUPERVISOR_SYSTEM_PROMPT
+            if conversation_history:
+                system_prompt = (
+                    f"{SUPERVISOR_SYSTEM_PROMPT}\n\n"
+                    f"--- Conversation history ---\n"
+                    f"{conversation_history}\n"
+                    f"--- End of conversation history ---"
+                )
             completion = await self._llm_router.complete(
                 LlmRequest(
-                    system_prompt=SUPERVISOR_SYSTEM_PROMPT,
+                    system_prompt=system_prompt,
                     user_prompt=query.strip(),
                     max_tokens=512,
                     temperature=0.3,
+                    image_blocks=image_blocks,
                 )
             )
         except AiUnavailableError as exc:
@@ -281,6 +360,44 @@ class SupervisorService:
         text = (completion.text or "").strip()
         for event in _yield_text(agent="supervisor", text=text or ABSTENTION):
             yield event
+
+    async def _load_conversation_history(
+        self,
+        *,
+        conversation_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> str:
+        """Load conversation messages and format them as multi-turn context.
+
+        Returns a formatted string of prior messages (up to the last 20) for
+        injection into the supervisor system prompt. Returns empty string on
+        any failure - history is best-effort and must never block the turn.
+        """
+        if self._conversation_history is None:
+            return ""
+
+        try:
+            messages = await self._conversation_history.get_messages(
+                tenant_id=tenant_id,
+                conversation_id=conversation_id,
+            )
+            if not messages:
+                return ""
+
+            # Take the last 20 messages to stay within token limits.
+            recent = messages[-20:]
+            lines: list[str] = []
+            for msg in recent:
+                role = "User" if msg["role"] == "user" else "Assistant"
+                lines.append(f"{role}: {msg['content']}")
+            return "\n".join(lines)
+        except Exception:
+            logger.warning(
+                "supervisor.history_load_failed",
+                conversation_id=str(conversation_id),
+                exc_info=True,
+            )
+            return ""
 
 
 def _parse_classification(text: str) -> tuple[tuple[str, ...], float]:

@@ -1,4 +1,4 @@
-"""TTL sweep runner — composition root for ``ai-agent sweep-caches``.
+"""TTL sweep runner - composition root for ``ai-agent sweep-caches``.
 
 Expired ``ai_query_cache`` rows are purged from every tenant. The table is
 covered by row-level security (``tenant_id = current_tenant_id()``), so a

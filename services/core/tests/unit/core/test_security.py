@@ -1,4 +1,4 @@
-"""verify_jwt tests — RS256, algorithm whitelist, issuer/audience, expiry."""
+"""verify_jwt tests - RS256, algorithm whitelist, issuer/audience, expiry."""
 
 from __future__ import annotations
 

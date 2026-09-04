@@ -183,7 +183,7 @@ export function ListPageSkeleton() {
 }
 
 /* ---------------------------------------------------------------------------
- * AI Agents world — chat application
+ * AI Agents world - chat application
  * ------------------------------------------------------------------------- */
 
 /** The conversations rail (New chat, Recents, History, account footer). */
@@ -310,7 +310,7 @@ export function AgentsWorldSkeleton() {
 }
 
 /* ---------------------------------------------------------------------------
- * ERP world — conventional operations app
+ * ERP world - conventional operations app
  * ------------------------------------------------------------------------- */
 
 /** The ERP sidebar (brand, Operations nav, back link, account footer). */
@@ -392,7 +392,7 @@ export function ErpWorldSkeleton() {
 }
 
 /* ---------------------------------------------------------------------------
- * Market Intelligence (Skyrict GMIE) world — search engine
+ * Market Intelligence (Skyrict GMIE) world - search engine
  * ------------------------------------------------------------------------- */
 
 /** The GMIE navbar (menu button, wordmark, routes, country, profile). */

@@ -1,11 +1,11 @@
-# Inventory AI Features — Technical Specification
+# Inventory AI Features - Technical Specification
 
 This document specifies the AI-powered features being added to the SKY-42
-inventory module.  Every feature is designed as an **advisor** — it suggests,
+inventory module.  Every feature is designed as an **advisor** - it suggests,
 never executes.  All mutations require human approval through the existing
 permission system.
 
-> **Status:** Planned — not yet implemented.
+> **Status:** Planned - not yet implemented.
 > **Security posture:** Read-only by default; mutations only on explicit human
 > approval through the existing RBAC layer.
 
@@ -14,9 +14,9 @@ permission system.
 ## Table of contents
 
 1. [Overview](#1-overview)
-2. [Feature 1 — Natural language queries](#2-feature-1--natural-language-queries)
-3. [Feature 2 — Smart restock suggestions](#3-feature-2--smart-restock-suggestions)
-4. [Feature 3 — Anomaly detection](#4-feature-3--anomaly-detection)
+2. [Feature 1 - Natural language queries](#2-feature-1--natural-language-queries)
+3. [Feature 2 - Smart restock suggestions](#3-feature-2--smart-restock-suggestions)
+4. [Feature 3 - Anomaly detection](#4-feature-3--anomaly-detection)
 5. [Security architecture](#5-security-architecture)
 6. [Implementation plan](#6-implementation-plan)
 7. [Risk assessment](#7-risk-assessment)
@@ -44,7 +44,7 @@ Three AI capabilities to the inventory module:
   scans all products, considers demand patterns, and surfaces what needs
   attention.
 - **Anomaly detection:** Stock theft, data-entry errors, and double-posting
-  should be caught early — before they compound.
+  should be caught early - before they compound.
 
 ### 1.3 Architecture summary
 
@@ -92,7 +92,7 @@ Three AI capabilities to the inventory module:
 
 ---
 
-## 2. Feature 1 — Natural language queries
+## 2. Feature 1 - Natural language queries
 
 ### 2.1 What it does
 
@@ -114,10 +114,10 @@ backed by real inventory data.
 ### 2.3 How it works
 
 ```
-Step 1 — User types question
+Step 1 - User types question
   "How many laptop chargers do we have in Bangalore?"
 
-Step 2 — NL Engine (local Ollama) parses into structured JSON
+Step 2 - NL Engine (local Ollama) parses into structured JSON
   {
     "action": "count",
     "product": "laptop charger",
@@ -125,16 +125,16 @@ Step 2 — NL Engine (local Ollama) parses into structured JSON
     "confidence": 0.95
   }
 
-Step 3 — Backend validates and executes read-only query
+Step 3 - Backend validates and executes read-only query
   - Search products matching "laptop charger"
   - Search warehouses matching "Bangalore"
   - GET /stock?product_id=<id>&warehouse_id=<id>
 
-Step 4 — Formats answer in natural language
+Step 4 - Formats answer in natural language
   "You have 45 laptop chargers in Bangalore warehouse.
    Reorder point: 5. Status: In stock."
 
-Step 5 — Logs the query
+Step 5 - Logs the query
   INSERT INTO ai_query_log (tenant_id, user_id, query_text, parsed_intent, ...)
 ```
 
@@ -144,7 +144,7 @@ Step 5 — Logs the query
 |---------|---------------|
 | Authentication | JWT required (same as all inventory endpoints) |
 | Authorization | `erp.inventory.read` permission required |
-| Mutations | **None** — NL queries are strictly read-only |
+| Mutations | **None** - NL queries are strictly read-only |
 | Data isolation | All queries scoped to `tenant_id` from JWT |
 | Sensitive fields | `cost_price` and `sell_price` parsed locally only (never sent to cloud LLM) |
 | Audit | Every query logged in `ai_query_log` with user_id, parsed intent, result, latency |
@@ -159,14 +159,14 @@ Step 5 — Logs the query
 | `/ai/query` | POST | `erp.inventory.read` | Submit a natural language question |
 | `/ai/query/history` | GET | `erp.inventory.read` | View recent queries |
 
-**POST /ai/query — Request:**
+**POST /ai/query - Request:**
 ```json
 {
   "query": "How many laptop chargers in Bangalore?"
 }
 ```
 
-**POST /ai/query — Response:**
+**POST /ai/query - Response:**
 ```json
 {
   "answer": "You have 45 laptop chargers in Bangalore warehouse. Reorder point: 5. Status: In stock.",
@@ -202,7 +202,7 @@ CREATE INDEX idx_ai_query_log_tenant ON ai_query_log(tenant_id, created_at DESC)
 
 ---
 
-## 3. Feature 2 — Smart restock suggestions
+## 3. Feature 2 - Smart restock suggestions
 
 ### 3.1 What it does
 
@@ -278,7 +278,7 @@ Manager sees "Restock Suggestions" panel with cards
 | `/ai/suggestions/{id}/reject` | POST | `erp.inventory.ai.approve` | Reject a suggestion |
 | `/ai/suggestions/scan` | POST | `erp.inventory.ai.approve` | Trigger manual scan |
 
-**GET /ai/suggestions — Response:**
+**GET /ai/suggestions - Response:**
 ```json
 {
   "data": [
@@ -337,7 +337,7 @@ CREATE UNIQUE INDEX idx_ai_suggestions_pending_unique
 
 ---
 
-## 4. Feature 3 — Anomaly detection
+## 4. Feature 3 - Anomaly detection
 
 ### 4.1 What it does
 
@@ -422,7 +422,7 @@ Anomaly detected → status: open
 | `/ai/anomalies/{id}/dismiss` | POST | `erp.inventory.write` | Mark as false positive |
 | `/ai/anomalies/{id}/escalate` | POST | `erp.inventory.write` | Escalate to admin |
 
-**GET /ai/anomalies — Response:**
+**GET /ai/anomalies - Response:**
 ```json
 {
   "data": [
@@ -481,7 +481,7 @@ AI Agent Service
   ├── Authenticates via same JWT as human users
   │   (issued by identity service, same token format)
   │
-  ├── No special "AI token" — uses existing identity infrastructure
+  ├── No special "AI token" - uses existing identity infrastructure
   │
   ├── Every request carries tenant_id from JWT claims
   │
@@ -528,11 +528,11 @@ Every AI action logs:
 
 | Scope | Limit | Window |
 |-------|-------|--------|
-| Per user — NL queries | 30 | 1 minute |
-| Per user — suggestion approvals | 10 | 1 minute |
-| Per user — anomaly dismissals | 10 | 1 minute |
-| Per tenant — total AI calls | 100 | 1 minute |
-| Per tenant — background scans | 1 | 1 hour |
+| Per user - NL queries | 30 | 1 minute |
+| Per user - suggestion approvals | 10 | 1 minute |
+| Per user - anomaly dismissals | 10 | 1 minute |
+| Per tenant - total AI calls | 100 | 1 minute |
+| Per tenant - background scans | 1 | 1 hour |
 
 ### 5.5 Data residency
 
@@ -649,17 +649,17 @@ services:
 | Unauthorized AI mutations | Low | Critical | AI uses same RBAC as humans; no bypass; every action audited |
 | Cost explosion (excessive LLM calls) | Medium | Low | Rate limiting; caching frequent queries; background scans limited to 1/hour |
 | False anomaly alerts | High | Low | Tunable sensitivity; feedback loop (dismissals reduce sensitivity); false positive rate tracked |
-| Over-reliance on AI suggestions | Medium | Medium | UI always shows "AI suggestion — please verify" disclaimer; confidence scores prominent |
+| Over-reliance on AI suggestions | Medium | Medium | UI always shows "AI suggestion - please verify" disclaimer; confidence scores prominent |
 | Stale suggestions (outdated data) | Low | Low | Suggestions auto-expire after 7 days; daily re-scan refreshes |
 
 ### 7.2 Mitigations summary
 
-1. **Human in the loop** — No AI action executes without human approval
-2. **Same security as humans** — JWT, RBAC, audit trail, rate limiting
-3. **Local-first** — Sensitive data never leaves the server
-4. **Structured output** — No free-text SQL; validated JSON only
-5. **Expiry** — Old suggestions auto-expire; anomalies auto-close
-6. **Feedback loop** — False positives tune future detection
+1. **Human in the loop** - No AI action executes without human approval
+2. **Same security as humans** - JWT, RBAC, audit trail, rate limiting
+3. **Local-first** - Sensitive data never leaves the server
+4. **Structured output** - No free-text SQL; validated JSON only
+5. **Expiry** - Old suggestions auto-expire; anomalies auto-close
+6. **Feedback loop** - False positives tune future detection
 
 ### 7.3 Monitoring
 
@@ -705,7 +705,7 @@ services:
 
 ---
 
-## Appendix A — Permission keys
+## Appendix A - Permission keys
 
 | Key | Description | Used by |
 |-----|-------------|---------|
@@ -715,7 +715,7 @@ services:
 | `erp.inventory.adjust.approve` | Approve large adjustments | Large adjustment approval |
 | `erp.inventory.ai.approve` | Approve/reject AI restock suggestions | Suggestion workflow |
 
-## Appendix B — Audit event constants
+## Appendix B - Audit event constants
 
 | Constant | Value | Trigger |
 |----------|-------|---------|
@@ -727,17 +727,17 @@ services:
 | `AI_ANOMALY_RESOLVED` | `ai.anomaly.resolved` | Human resolves anomaly |
 | `AI_ANOMALY_DISMISSED` | `ai.anomaly.dismissed` | Human marks false positive |
 
-## Appendix C — Environment variables
+## Appendix C - Environment variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OLLAMA_BASE_URL` | Yes | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | No | `llama3` | Local LLM model name |
-| `AZURE_OPENAI_KEY` | No | — | Azure OpenAI API key (for complex reasoning) |
-| `AZURE_OPENAI_ENDPOINT` | No | — | Azure OpenAI endpoint |
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `AZURE_OPENAI_KEY` | No | - | Azure OpenAI API key (for complex reasoning) |
+| `AZURE_OPENAI_ENDPOINT` | No | - | Azure OpenAI endpoint |
+| `DATABASE_URL` | Yes | - | PostgreSQL connection string |
 | `INVENTORY_SERVICE_URL` | Yes | `http://localhost:8000` | Core service URL |
-| `JWT_SECRET` | Yes | — | JWT verification secret |
+| `JWT_SECRET` | Yes | - | JWT verification secret |
 | `AI_RATE_LIMIT_PER_USER` | No | `30` | Max NL queries per minute per user |
 | `AI_SUGGESTION_EXPIRY_DAYS` | No | `7` | Days before suggestion auto-expires |
 | `AI_ANOMALY_AUTO_CLOSE_DAYS` | No | `30` | Days before open anomaly auto-closes |

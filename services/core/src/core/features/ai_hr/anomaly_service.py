@@ -1,13 +1,13 @@
-"""Leave-pattern anomaly service (HR-AI-002, 8.2.1 — the anomaly inbox).
+"""Leave-pattern anomaly service (HR-AI-002, 8.2.1 - the anomaly inbox).
 
 Lazy-on-read TTL scan (mirrors the quality/utilization services), then:
 
   - ``org_feed`` (L1, ``erp.hr.ai.read``): aggregate counts by anomaly type and
-    severity plus a deterministic narrative — never per-person data.
+    severity plus a deterministic narrative - never per-person data.
   - ``employee_anomalies`` (L2, ``erp.hr.ai.individual``): one employee's
     findings with the stored title/description/evidence.
   - ``own_anomalies`` (self-scoped, ``erp.leave.self``): the employee's own
-    findings for the portal surface — bound to the caller's employee record.
+    findings for the portal surface - bound to the caller's employee record.
 """
 
 from __future__ import annotations

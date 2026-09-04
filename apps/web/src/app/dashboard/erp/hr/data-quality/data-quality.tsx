@@ -41,7 +41,7 @@ function GradeBadge({ grade }: { grade: QualityGrade }) {
   );
 }
 
-/** "missing_email" → "missing email" — the raw codes shown in the tooltip. */
+/** "missing_email" → "missing email" the raw codes shown in the tooltip. */
 function humanizeIssue(issue: string): string {
   const [, qualifier] = issue.split(":", 2);
   const code = qualifier ?? issue;
@@ -99,7 +99,7 @@ export function DataQualityClient() {
       const error = listResult.reason;
       if (error instanceof ApiError && error.status === 403) {
         individualBlocked =
-          "Per-employee scores need the erp.hr.ai.individual permission — the aggregate view below is still available.";
+          "Per-employee scores need the erp.hr.ai.individual permission the aggregate view below is still available.";
       } else {
         listError =
           error instanceof ApiError ? error.message : "Could not load the employee table.";
@@ -196,7 +196,7 @@ export function DataQualityClient() {
       <div className="space-y-6">
         <PageHeader
           title="Data quality"
-          description="How complete every employee's record is — identity, contact, and documents."
+          description="How complete every employee's record is identity, contact, and documents."
           icon={ClipboardCheck}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,7 +215,7 @@ export function DataQualityClient() {
       <div className="space-y-6">
         <PageHeader
           title="Data quality"
-          description="How complete every employee's record is — identity, contact, and documents."
+          description="How complete every employee's record is identity, contact, and documents."
           icon={ClipboardCheck}
         />
         <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-4 py-10 text-center">
@@ -235,7 +235,7 @@ export function DataQualityClient() {
     <div className="space-y-6">
       <PageHeader
         title="Data quality"
-        description="How complete every employee's record is — identity, contact, and documents."
+        description="How complete every employee's record is identity, contact, and documents."
         icon={ClipboardCheck}
       />
 
@@ -249,14 +249,14 @@ export function DataQualityClient() {
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs font-medium text-muted-foreground">Average score</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">
-                {kpi.totalScored > 0 ? percent(kpi.averageScore, 1) : "—"}
+                {kpi.totalScored > 0 ? percent(kpi.averageScore, 1) : "-"}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs font-medium text-muted-foreground">Lowest grade present</p>
               <p className="mt-2 text-2xl font-semibold">
                 {[...gradeOrder].reverse().find((grade) => (kpi.gradeDistribution[grade] ?? 0) > 0) ??
-                  "—"}
+                  "-"}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">

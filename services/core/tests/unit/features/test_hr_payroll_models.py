@@ -1,9 +1,9 @@
-"""HR/Payroll ORM models (HR-DATA-001) — metadata contract checks.
+"""HR/Payroll ORM models (HR-DATA-001) - metadata contract checks.
 
 Pure unit tests (no database). They pin the model metadata that migration
 0005 and the integration tests rely on: table names, the ``(tenant_id, id)``
 composite-PK convention, the immutability of ledger/entry tables, and native
-enum usage (``create_type=False`` — the enum types are created by the
+enum usage (``create_type=False`` - the enum types are created by the
 migration, never by the models).
 """
 

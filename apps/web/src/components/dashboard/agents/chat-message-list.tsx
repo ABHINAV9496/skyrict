@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Check, Copy, Pencil, RefreshCw, RotateCw } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, Check, Copy, FileText, Image, Pencil, RefreshCw, RotateCw } from "lucide-react";
 import Markdown from "react-markdown";
 
 import { AiGlyph } from "@/components/brand/logo";
@@ -11,18 +11,6 @@ import type { AgentChatMessage } from "@/lib/chat/use-agent-chat";
 /* ------------------------------------------------------------------ */
 /*  Utility helpers                                                    */
 /* ------------------------------------------------------------------ */
-
-/** Format an ISO timestamp to a short time like "6:23 PM". */
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
 
 /** Return a date-group label: "Today", "Yesterday", or "Aug 31, 2026". */
 function dateGroupLabel(iso: string): string {
@@ -47,6 +35,50 @@ function differentDay(a: string, b: string): boolean {
     da.getFullYear() !== db.getFullYear() ||
     da.getMonth() !== db.getMonth() ||
     da.getDate() !== db.getDate()
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  File attachment cards                                              */
+/* ------------------------------------------------------------------ */
+
+function fileTypeLabel(mimeType: string): string {
+  if (mimeType.startsWith("image/")) return "Image";
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.includes("spreadsheet") || mimeType.includes("csv") || mimeType.includes("excel"))
+    return "Spreadsheet";
+  if (mimeType.includes("text/")) return "Document";
+  if (mimeType.includes("word") || mimeType.includes("document")) return "Document";
+  return "File";
+}
+
+function AttachmentCard({ attachment }: { attachment: { name: string; type: string; previewUrl?: string } }) {
+  return (
+    <div className="flex min-w-0 max-w-[260px] items-center gap-2.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-sm backdrop-blur-sm">
+      {attachment.previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={attachment.previewUrl}
+          alt=""
+          className="size-8 shrink-0 rounded-md object-cover"
+        />
+      ) : (
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+          {attachment.type === "application/pdf" ? (
+            <span className="text-[10px] font-bold text-red-500">PDF</span>
+          ) : attachment.type.startsWith("image/") ? (
+            // eslint-disable-next-line jsx-a11y/alt-text -- lucide Image is an SVG icon, not <img>
+            <Image aria-hidden="true" className="size-4 text-muted-foreground" />
+          ) : (
+            <FileText aria-hidden="true" className="size-4 text-muted-foreground" />
+          )}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{attachment.name}</p>
+        <p className="text-[11px] text-muted-foreground">{fileTypeLabel(attachment.type)}</p>
+      </div>
+    </div>
   );
 }
 
@@ -172,7 +204,7 @@ function DateSeparator({ label }: { label: string }) {
 /*  Message bubble                                                     */
 /* ------------------------------------------------------------------ */
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
   onResend,
 }: {
@@ -191,12 +223,21 @@ export function MessageBubble({
         </div>
       ) : null}
       <div className={cn("relative flex max-w-[85%] flex-col sm:max-w-[75%]", isUser ? "items-end" : "items-start")}>
+        {/* File attachments - stacked above the message bubble */}
+        {isUser && message.attachments && message.attachments.length > 0 ? (
+          <div className="mb-1.5 flex flex-col gap-1.5">
+            {message.attachments.map((attachment) => (
+              <AttachmentCard key={attachment.id} attachment={attachment} />
+            ))}
+          </div>
+        ) : null}
+
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "border border-border bg-card text-foreground",
+          "rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+          isUser
+            ? "whitespace-pre-wrap bg-primary text-primary-foreground"
+            : "border border-border bg-card text-foreground",
             message.failed ? "text-muted-foreground italic" : null,
           )}
         >
@@ -221,12 +262,12 @@ export function MessageBubble({
           {!isUser && message.content ? <AgentCitations message={message} /> : null}
         </div>
 
-        {/* Action bar — visible on hover, positioned below without taking layout space */}
+        {/* Action bar - visible on hover, positioned below without taking layout space */}
         {!streaming && message.content ? (
           <div
             className={cn(
               "absolute -bottom-7 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
-              isUser ? "right-0" : "left-11",
+              isUser ? "right-0" : "left-0",
             )}
           >
             <CopyButton text={message.content} />
@@ -235,15 +276,15 @@ export function MessageBubble({
                 <EditButton onClick={() => setEditing(!editing)} />
                 {onResend ? <ResendButton onClick={() => onResend(message.content)} /> : null}
               </>
-            ) : message.failed ? (
+            ) : (
               onResend ? <RetryButton onClick={() => onResend(message.content)} /> : null
-            ) : null}
+            )}
           </div>
         ) : null}
       </div>
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /*  Message list                                                       */
@@ -259,17 +300,22 @@ export function MessageList({
   onResend?: (content: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageCountRef = useRef(messages.length);
 
+  // Auto-scroll on new messages (not on content updates during streaming).
   useEffect(() => {
-    const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [messages]);
+    if (messages.length > messageCountRef.current) {
+      const node = scrollRef.current;
+      if (node) node.scrollTop = node.scrollHeight;
+    }
+    messageCountRef.current = messages.length;
+  }, [messages.length]);
 
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
         <p className="text-sm text-muted-foreground">
-          Start the conversation — ask anything about your business or the market.
+          Start the conversation - ask anything about your business or the market.
         </p>
       </div>
     );

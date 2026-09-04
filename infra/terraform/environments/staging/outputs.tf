@@ -4,7 +4,7 @@ output "zone_id" {
 }
 
 output "nameservers" {
-  description = "Authoritative nameservers for staging.skyrict.com — add these as NS records in the parent skyrict.com zone once (first bootstrap only)."
+  description = "Authoritative nameservers for staging.skyrict.com - add these as NS records in the parent skyrict.com zone once (first bootstrap only)."
   value       = module.dns.nameservers
 }
 

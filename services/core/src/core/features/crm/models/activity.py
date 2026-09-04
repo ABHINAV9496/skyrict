@@ -1,7 +1,7 @@
-"""erp_crm_activities — unified CRM activity rows (task/call/meeting/etc.).
+"""erp_crm_activities - unified CRM activity rows (task/call/meeting/etc.).
 
 Tenant-scoped with RLS and the composite ``(tenant_id, id)`` primary key.
-Follow-ups are ``kind = 'follow_up'`` rows with a ``due_at`` — there is no
+Follow-ups are ``kind = 'follow_up'`` rows with a ``due_at`` - there is no
 separate follow-up table. Owner/team-scoped like leads/opportunities, so the
 repository reuses the same OWNER/TEAM/ALL filter on ``owner_id``/``team_id``;
 a row created without an owner is tenant-visible.

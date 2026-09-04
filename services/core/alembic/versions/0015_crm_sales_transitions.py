@@ -1,19 +1,19 @@
 """crm_sales_transitions: lead_id + source_opportunity_id anchor columns
 
-CRM-BE-002 (SKY-44). Two additive anchor columns on the existing CRM tables —
+CRM-BE-002 (SKY-44). Two additive anchor columns on the existing CRM tables -
 exactly what docs/modules/sales-crm.md §3.2 calls for:
 
-- ``erp_crm_opportunities.lead_id`` — the lead that qualified into this
+- ``erp_crm_opportunities.lead_id`` - the lead that qualified into this
   opportunity. Soft link: plain UUID with NO FK (a lead does not outlive its
   pipeline deal) plus ``UNIQUE (tenant_id, lead_id)`` so one lead can never
-  qualify twice — the idempotency stamp ``qualify_lead`` re-probes.
-- ``erp_crm_customers.source_opportunity_id`` — the won opportunity this
+  qualify twice - the idempotency stamp ``qualify_lead`` re-probes.
+- ``erp_crm_customers.source_opportunity_id`` - the won opportunity this
   customer was promoted from. Soft link, NO FK, plus ``UNIQUE (tenant_id,
-  source_opportunity_id)`` so one opportunity can never promote twice — the
+  source_opportunity_id)`` so one opportunity can never promote twice - the
   idempotency stamp ``promote_opportunity`` re-probes.
 
 Both columns are nullable: existing rows need no backfill and the service
-layer treats NULL as "not yet linked". No RLS policy change is needed — the
+layer treats NULL as "not yet linked". No RLS policy change is needed - the
 new columns carry no tenant identity (they are tenant-relative by
 construction, and the UNIQUE keys are composite with ``tenant_id``).
 

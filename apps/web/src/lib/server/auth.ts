@@ -6,7 +6,7 @@
  * (a) enforce the Origin/Referer CSRF check, (b) resolve the tenant slug
  * from the Host header the same way the backend does, and (c) write the
  * refresh token into an httpOnly cookie. The access token is returned in
- * the JSON body and kept in memory by the client — never in storage, never
+ * the JSON body and kept in memory by the client - never in storage, never
  * readable by third-party scripts.
  */
 
@@ -36,7 +36,7 @@ const SIGNIN_HOST = /^([a-z0-9-]+)\.signin\.(localhost|skyrict\.com)$/;
  *
  * The regexes are *parsers*, not gates: hosts that do not match an allowlisted
  * origin (dev: `*.localhost` + `localhost`; prod: `*.skyrict.com`,
- * `*.signin.skyrict.com`) resolve to `unknown` and are rejected downstream —
+ * `*.signin.skyrict.com`) resolve to `unknown` and are rejected downstream -
  * no acme fallback, no env fallback in the production posture.
  */
 export function hostSurface(
@@ -131,7 +131,7 @@ const TRUST_PROXY = process.env.TRUST_PROXY === "true";
  * Without a trusted proxy in front, forwarded headers come straight from the
  * client and must be ignored (spoofable). Behind a trusted proxy such as
  * ingress-nginx, the *rightmost* X-Forwarded-For entry is the one the proxy
- * appended — the left entries are attacker-controllable and never used.
+ * appended - the left entries are attacker-controllable and never used.
  */
 export function clientIp(request: NextRequest): string | null {
   if (!TRUST_PROXY) return null;
@@ -184,7 +184,7 @@ export async function callBackend(
  * Used by streaming relays (SSE): the caller returns ``upstream.body`` to the
  * browser and chunks flow through as they arrive. On network failure (or when
  * the body is already consumed) returns ``null`` so the route can answer its
- * own 502 — mirroring ``callBackend``'s ``status: 0`` contract.
+ * own 502 - mirroring ``callBackend``'s ``status: 0`` contract.
  */
 export async function callBackendStream(
   path: string,

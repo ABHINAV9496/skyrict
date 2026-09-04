@@ -4,7 +4,7 @@ Design (docs/modules/hr-payroll.md §4.9, gap #6): a compute may exclude roster
 employees that have no effective compensation or no payable days in the
 period. That exclusion list must be observable, so the run persists it as a
 nullable JSON array of ``{"employee_id": str, "reason": str}`` objects, set at
-compute time and carried through the run lifecycle. Purely additive — no data
+compute time and carried through the run lifecycle. Purely additive - no data
 migration, no backfill (``NULL`` means "not computed yet").
 
 Revision ID: 0012

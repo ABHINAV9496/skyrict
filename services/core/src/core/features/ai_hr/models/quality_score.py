@@ -1,4 +1,4 @@
-"""ai_hr_quality_scores — per-employee data-quality score (8.1.3).
+"""ai_hr_quality_scores - per-employee data-quality score (8.1.3).
 
 Written by the weekly (lazy-on-read TTL) quality recalc; read for the org KPI
 (L1) and the per-employee drill-down (L2, ``erp.hr.ai.individual``). Sub-scores

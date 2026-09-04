@@ -51,6 +51,10 @@ import { cn } from "@/lib/utils";
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import { LineItemsTable, type LineItemColumn } from "@/features/finance/components/line-items-table";
 import { TableToolbar } from "@/features/finance/components/table-toolbar";
+import {
+  AiDraftDialog,
+  type AppliedDraftLine,
+} from "@/features/finance/components/ai-draft-dialog";
 
 type Status =
   | { state: "loading" }
@@ -138,7 +142,14 @@ function AccountRow({
 interface CreateJournalEntryDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  initialValues?: { memo: string; accountCode: string; contraAccount: string; amount: number | null; side: "debit" | "credit" };
+  initialValues?: {
+    memo?: string;
+    accountCode?: string;
+    contraAccount?: string;
+    amount?: number | null;
+    side?: "debit" | "credit";
+    lines?: Array<{ account_code: string; debit?: number; credit?: number }>;
+  };
 }
 
 function CreateJournalEntryDialog({
@@ -210,6 +221,27 @@ function CreateJournalEntryDialog({
 
   useEffect(() => {
     if (!open || !initialValues || initialValuesAppliedRef.current) return;
+
+    if (initialValues.lines && initialValues.lines.length > 0) {
+      reset({
+        entry_date: new Date().toISOString().slice(0, 10),
+        memo: initialValues.memo ?? "",
+        lines: [],
+      });
+      for (const line of initialValues.lines) {
+        appendRef.current({
+          account_code: line.account_code,
+          debit: line.debit && line.debit > 0 ? line.debit.toFixed(2) : "",
+          credit: line.credit && line.credit > 0 ? line.credit.toFixed(2) : "",
+        });
+      }
+      if (initialValues.lines.length === 1) {
+        appendRef.current({ account_code: "", debit: "", credit: "" });
+      }
+      initialValuesAppliedRef.current = true;
+      return;
+    }
+
     if (initialValues.memo) {
       setValue("memo", initialValues.memo);
     }
@@ -237,7 +269,7 @@ function CreateJournalEntryDialog({
       }
       initialValuesAppliedRef.current = true;
     }
-  }, [open, initialValues, setValue, fields.length]);
+  }, [open, initialValues, setValue, fields.length, reset]);
 
   useEffect(() => {
     if (!open || !initialValuesAppliedRef.current || fields.length < 2) return;
@@ -627,7 +659,7 @@ function CreateJournalEntryDialog({
 
 const columns: FinanceColumn<JournalEntry>[] = [
   { label: "Date", render: (entry) => formatDate(entry.entry_date) },
-  { label: "Memo", render: (entry) => entry.memo ?? "—" },
+  { label: "Memo", render: (entry) => entry.memo ?? "-" },
   { label: "Status", render: (entry) => <EntryStatusBadge status={entry.status} /> },
   {
     label: "Debit",
@@ -684,6 +716,7 @@ function FinanceJournalEntries() {
   const [draftInitialValues, setDraftInitialValues] = useState<
     { memo: string; accountCode: string; contraAccount: string; amount: number | null; side: "debit" | "credit" } | undefined
   >(undefined);
+  const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const paramsAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -732,6 +765,18 @@ function FinanceJournalEntries() {
     void loadDuplicates();
   }, [loadDuplicates]);
 
+  const handleAiDraftApply = useCallback((lines: AppliedDraftLine[], memo: string) => {
+    setDraftInitialValues({
+      memo,
+      accountCode: "",
+      contraAccount: "",
+      amount: null,
+      side: "debit",
+      ...(lines.length > 0 ? { lines } : {}),
+    });
+    setDraftOpen(true);
+  }, []);
+
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
@@ -763,7 +808,7 @@ function FinanceJournalEntries() {
       <div className="space-y-6">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <TableSkeleton rows={6} />
@@ -776,7 +821,7 @@ function FinanceJournalEntries() {
       <div className="space-y-6">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <FinanceErrorState message={status.message} onRetry={() => void load()} />
@@ -789,7 +834,7 @@ function FinanceJournalEntries() {
       <div className="space-y-4">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <TableToolbar
@@ -812,7 +857,15 @@ function FinanceJournalEntries() {
               label="Entry period"
             />
           }
-          actions={canWrite ? <CreateJournalEntryDialog open={draftOpen} onOpenChange={(v) => { setDraftOpen(v); if (!v) setDraftInitialValues(undefined); }} initialValues={draftInitialValues} /> : null}
+          actions={canWrite ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setAiDraftOpen(true)}>
+                <Sparkles className="size-3.5" />
+                AI Draft
+              </Button>
+              <CreateJournalEntryDialog open={draftOpen} onOpenChange={(v) => { setDraftOpen(v); if (!v) setDraftInitialValues(undefined); }} initialValues={draftInitialValues} />
+            </div>
+          ) : null}
         />
       </div>
 
@@ -871,6 +924,14 @@ function FinanceJournalEntries() {
         />
         );
       })()}
+
+      {canWrite ? (
+        <AiDraftDialog
+          open={aiDraftOpen}
+          onOpenChange={setAiDraftOpen}
+          onApply={handleAiDraftApply}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-"""API v1 request/response schemas — HR & payroll (HR-BE-002)."""
+"""API v1 request/response schemas - HR & payroll (HR-BE-002)."""
 
 from core.api.v1.schemas.hr import (
     AttendanceRecordOut,

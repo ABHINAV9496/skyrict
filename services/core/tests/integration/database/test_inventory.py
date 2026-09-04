@@ -1,4 +1,4 @@
-"""Inventory data-layer integration tests — real Postgres, migrated schema.
+"""Inventory data-layer integration tests - real Postgres, migrated schema.
 
 Covers the INV-DATA-001 acceptance criteria at both layers:
 
@@ -163,7 +163,7 @@ def _u(value: str) -> uuid.UUID:
 
 
 class TestInventoryConstraints:
-    """DB-level invariant tests — run as owner, so only constraints bite."""
+    """DB-level invariant tests - run as owner, so only constraints bite."""
 
     async def test_negative_on_hand_rejected(self, inventory_world: dict[str, str]) -> None:
         async with engine.connect() as conn:

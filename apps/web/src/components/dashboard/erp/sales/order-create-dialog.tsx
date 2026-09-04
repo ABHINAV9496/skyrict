@@ -55,7 +55,7 @@ function nextLineKey(): string {
 
 /**
  * Create-order dialog. Fetches active customers and sellable products when it
- * opens, then builds a line item per product. Submitting is pessimistic —
+ * opens, then builds a line item per product. Submitting is pessimistic -
  * the button disables while the order is being created and errors render
  * inline instead of closing the dialog.
  */
@@ -177,7 +177,7 @@ export function OrderCreateDialog({ open, onOpenChange, onCreated }: OrderCreate
         ) : loadStatus.customers.length === 0 || loadStatus.products.length === 0 ? (
           <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
             {loadStatus.customers.length === 0
-              ? "There are no active customers yet — create one in CRM first."
+              ? "There are no active customers yet - create one in CRM first."
               : "There are no active products yet."}
           </p>
         ) : (

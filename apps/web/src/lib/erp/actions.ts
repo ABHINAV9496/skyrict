@@ -27,7 +27,7 @@ export function leadActions(status: LeadStatus): LeadActions {
   }
 }
 
-/** The pipeline columns in order — the board renders one per stage. */
+/** The pipeline columns in order - the board renders one per stage. */
 export const PIPELINE_STAGES: OpportunityStage[] = [
   "prospecting",
   "qualified",

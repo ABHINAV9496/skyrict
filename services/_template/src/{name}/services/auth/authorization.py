@@ -1,4 +1,4 @@
-"""Authorization service — permission checks, RBAC enforcement."""
+"""Authorization service - permission checks, RBAC enforcement."""
 
 from __future__ import annotations
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "skyrict-testing"
 version = "0.1.0"
-description = "Shared test utilities — fixtures, factories, and helpers for Skyrict services"
+description = "Shared test utilities - fixtures, factories, and helpers for Skyrict services"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"

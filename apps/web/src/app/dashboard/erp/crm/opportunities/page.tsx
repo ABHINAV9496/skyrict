@@ -2,7 +2,6 @@ import { TrendingUp } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
-import { CrmSectionTabs } from "@/components/dashboard/erp/crm/crm-section-tabs";
 import { OpportunitiesBoard } from "@/components/dashboard/erp/crm/opportunities-board";
 
 export default function CrmOpportunitiesPage() {
@@ -11,10 +10,9 @@ export default function CrmOpportunitiesPage() {
       <div className="space-y-6">
         <PageHeader
           title="Opportunities"
-          description="Deals move forward one stage at a time — winning one creates the customer automatically."
+          description="Deals move forward one stage at a time winning one creates the customer automatically."
           icon={TrendingUp}
         />
-        <CrmSectionTabs />
         <OpportunitiesBoard />
       </div>
     </RequirePermission>

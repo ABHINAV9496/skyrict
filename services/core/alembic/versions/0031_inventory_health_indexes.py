@@ -7,8 +7,8 @@ covering composite index so those reads stay sub-second on the seed dataset
 (ticket requirement), independent of the existing write-oriented
 ``ix_erp_stock_movements_product_warehouse`` index.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0031
+Revises: 0030
 Create Date: 2026-09-01
 """
 
@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0027"
-down_revision = "0026"
+revision = "0031"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

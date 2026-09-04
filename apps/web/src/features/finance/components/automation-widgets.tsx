@@ -21,6 +21,7 @@ import { ApiError } from "@/lib/api/http";
 import { ACCOUNT_TYPE_LABELS, extractAmountFromText, formatDate, formatMoney, toMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 import {
+  narrateAnomaly,
   suggestAccountCode,
   type Account,
   type AccountCodeSuggestion,
@@ -247,6 +248,24 @@ export function AnomalyFeed({
   onScan: () => void;
   scanning: boolean;
 }) {
+  const [narrations, setNarrations] = useState<Record<string, string>>({});
+  const [narrating, setNarrating] = useState<Record<string, boolean>>({});
+
+  async function loadNarration(anomalyId: string) {
+    if (narrations[anomalyId] || narrating[anomalyId]) return;
+    setNarrating((prev) => ({ ...prev, [anomalyId]: true }));
+    try {
+      const result = await narrateAnomaly(anomalyId);
+      if (result.narration) {
+        setNarrations((prev) => ({ ...prev, [anomalyId]: result.narration }));
+      }
+    } catch {
+      setNarrations((prev) => ({ ...prev, [anomalyId]: "Could not narrate this anomaly." }));
+    } finally {
+      setNarrating((prev) => ({ ...prev, [anomalyId]: false }));
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -295,6 +314,27 @@ export function AnomalyFeed({
               <p className="mt-1 text-xs text-muted-foreground">
                 {formatDate(anomaly.detected_at.slice(0, 10))} · {anomaly.entity_type}
               </p>
+              {narrations[anomaly.id] ? (
+                <p className="mt-2 border-l-2 border-primary/30 pl-2 text-xs italic text-muted-foreground">
+                  {narrations[anomaly.id]}
+                </p>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1"
+                  disabled={narrating[anomaly.id]}
+                  onClick={() => void loadNarration(anomaly.id)}
+                >
+                  {narrating[anomaly.id] ? (
+                    <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
+                  ) : (
+                    <Sparkles aria-hidden="true" className="size-3" />
+                  )}
+                  Narrate
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -408,7 +448,7 @@ export function CloseChecklistWidget({
         <ul className="space-y-2">
           {list?.items.map((item) => (
             <li key={item.label} className="flex items-start gap-2.5 text-sm">
-              {item.status === "pass" ? (
+              {item.status === "ok" ? (
                 <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-500" />
               ) : (
                 <CircleX aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-red-500" />
@@ -704,6 +744,15 @@ export function SuggestAccountCode({ accounts = [] }: { accounts?: Account[] }) 
               <span className="font-mono font-semibold text-foreground">
                 {formatMoney(suggestion.amount)}
               </span>
+            </p>
+          ) : null}
+          {suggestion.contra_code ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {suggestion.side === "credit" ? "Debit" : "Credit"} (contra):{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {suggestion.contra_code}
+              </span>
+              {suggestion.contra_name ? ` ${suggestion.contra_name}` : ""}
             </p>
           ) : null}
           <p className="mt-2 text-xs text-muted-foreground">

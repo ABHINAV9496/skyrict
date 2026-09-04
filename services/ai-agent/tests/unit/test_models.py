@@ -65,6 +65,9 @@ class TestRegistry:
             "ai_follow_up_suggestions",
             # SKY-61 memory persistence
             "ai_semantic_memory",
+            # Conversation persistence (SKY-60)
+            "ai_conversations",
+            "ai_conversation_messages",
         }
         assert expected == set(Base.metadata.tables.keys())
 
@@ -192,7 +195,7 @@ class TestAiDigest:
 
 class TestAiQueryCache:
     def test_tenant_hash_unique_index_is_tenant_scoped(self) -> None:
-        """One cache entry per tenant+query — never a global query hash."""
+        """One cache entry per tenant+query - never a global query hash."""
         index = next(
             index
             for index in AiQueryCacheModel.__table__.indexes

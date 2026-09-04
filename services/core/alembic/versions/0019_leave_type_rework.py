@@ -7,7 +7,7 @@ One-time hard-reset migration:
   4. Create ``erp_leave_policies`` table
   5. Seed one default policy row per tenant (casual=12, sick=8, effective_from=today)
 
-Balances are NOT bulk-inserted here — the lazy accrual mechanism (service layer)
+Balances are NOT bulk-inserted here - the lazy accrual mechanism (service layer)
 creates them on the first balance read per employee per year.
 
 Revision ID: 0019

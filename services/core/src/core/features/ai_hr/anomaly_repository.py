@@ -1,9 +1,9 @@
-"""Leave pattern anomaly repository (HR-AI-002, 8.2.1 — the anomaly inbox).
+"""Leave pattern anomaly repository (HR-AI-002, 8.2.1 - the anomaly inbox).
 
 Scans approved/pending leave requests in a trailing window and finds per-team
 pattern deviations. The detection itself lives in the PURE shared engine
-:mod:`skyrict_common.ai_hr_rules` — the ai-agent eval harness grades the exact
-same code — and this repository is the I/O boundary (projection + persistence):
+:mod:`skyrict_common.ai_hr_rules` - the ai-agent eval harness grades the exact
+same code - and this repository is the I/O boundary (projection + persistence):
 
   - ``leave_overuse``: consumes >= 3x the team's median leave-days.
   - ``frequent_absence``: files >= 3x the team's median request count.
@@ -13,7 +13,7 @@ same code — and this repository is the I/O boundary (projection + persistence)
     the median.
 
 The *team-size gate* abstains entirely for teams with fewer than 4 active
-members — thin baselines drive no persisted rows. Findings are persisted into
+members - thin baselines drive no persisted rows. Findings are persisted into
 ``ai_hr_leave_anomalies`` by replace-tenant scan.
 """
 

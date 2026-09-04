@@ -26,7 +26,7 @@ export function useAgentsUI(): AgentsUIContextValue {
 /**
  * The AI Agents "world": a chat application. The left rail is conversation
  * navigation (New chat / Recents / History), the main column is the chat
- * itself — deliberately a different shape from the ERP and Intelligence worlds.
+ * itself - deliberately a different shape from the ERP and Intelligence worlds.
  * Mirrors the assistant-ui chat chrome: a muted stage around a rounded card.
  */
 export function AgentsShell({ children }: { children: React.ReactNode }) {

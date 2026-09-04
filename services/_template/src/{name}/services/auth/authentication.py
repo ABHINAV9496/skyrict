@@ -1,10 +1,10 @@
-"""Authentication service — login, register, password verification."""
+"""Authentication service - login, register, password verification."""
 
 from __future__ import annotations
 
 
 class AuthenticationService:
-    """Handles user authentication — login, register, password verification."""
+    """Handles user authentication - login, register, password verification."""
 
     def __init__(self, user_repo, tenant_repo, token_service, audit_service) -> None:
         self.user_repo = user_repo

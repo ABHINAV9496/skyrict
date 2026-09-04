@@ -1,10 +1,10 @@
-# Development overrides — extends docker-compose.yml
+# Development overrides - extends docker-compose.yml
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 services:
   postgres:
     # pgvector runtime so ai-agent migrations (SKY-58/70 embedding columns)
-    # can CREATE EXTENSION vector. Dev-only override — production compose
+    # can CREATE EXTENSION vector. Dev-only override - production compose
     # keeps the stock image and loads the extension by other means.
     image: pgvector/pgvector:pg18
     ports:
@@ -20,12 +20,12 @@ services:
     ports:
       - "6379:6379"
 
-  # Kafka deferred — see docker-compose.yml
+  # Kafka deferred - see docker-compose.yml
   # kafka:
   #   ports:
   #     - "9092:9092"
 
-  # ---------- Identity Service (dev target — live reload) ----------
+  # ---------- Identity Service (dev target - live reload) ----------
   identity:
     image: skyrict-identity:latest
     build:
@@ -79,7 +79,7 @@ services:
       start_period: 15s
       retries: 3
 
-  # ---------- Core Service (dev target — live reload) ----------
+  # ---------- Core Service (dev target - live reload) ----------
   core:
     image: skyrict-core:latest
     build:
@@ -95,7 +95,7 @@ services:
       CORE_DEBUG: "true"
       CORE_LOG_LEVEL: DEBUG
       CORE_LOG_JSON: "false"
-      # Core shares the skyrict_identity Postgres database with identity —
+      # Core shares the skyrict_identity Postgres database with identity -
       # no separate DB container. Inside the compose network the DB hostname
       # is the service name, not localhost. These override the host-oriented
       # defaults in services/core/.env.
@@ -124,7 +124,7 @@ services:
       start_period: 15s
       retries: 3
 
-  # ---------- AI Agent Service (dev target — live reload) ----------
+  # ---------- AI Agent Service (dev target - live reload) ----------
   # Provider-agnostic AI infrastructure (SKY-57). Host 8002 → container 8000.
   # Reached only through the core monolith proxy (/api/v1/ai/*), never
   # exposed to the internet directly.
@@ -149,11 +149,11 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
-      # The groq fallback model was renamed — llama-3.1-8b-instant no longer
+      # The groq fallback model was renamed - llama-3.1-8b-instant no longer
       # exists. qwen/qwen3.8-27b is a 131k-context model that supports tools.
       AI_FALLBACK_MODEL: qwen/qwen3.8-27b
       AI_FALLBACK_PROVIDER: openrouter
-      # Core data plane for the inventory AI engines — the core container
+      # Core data plane for the inventory AI engines - the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001
       # Host-run .env uses ../../.dev/keys (host cwd = services/ai-agent); the
@@ -162,6 +162,7 @@ services:
       AI_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
     volumes:
       - ../../services/ai-agent/src:/app/services/ai-agent/src
+      - ../../services/ai-agent/alembic:/app/services/ai-agent/alembic
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/ai-agent, so the relative key path
@@ -179,7 +180,7 @@ services:
       start_period: 15s
       retries: 3
 
-  # ---------- Ollama (local embedding provider — SKY-58 / SKY-70) ----------
+  # ---------- Ollama (local embedding provider - SKY-58 / SKY-70) ----------
   # Free, local, keyless. Start alongside with `up -d ollama`; the ai-agent
   # only talks to it when AI_EMBEDDING_PROVIDER=ollama (boot never pings it,
   # so no depends_on is needed). One-time model pull:
@@ -222,7 +223,7 @@ services:
       start_period: 10s
       retries: 3
 
-  # ---------- pgAdmin (optional — dev only) ----------
+  # ---------- pgAdmin (optional - dev only) ----------
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: skyrict-pgadmin

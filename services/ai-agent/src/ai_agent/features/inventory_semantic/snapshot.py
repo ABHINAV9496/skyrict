@@ -1,4 +1,4 @@
-"""Inventory embedding snapshot writer (SKY-70) — feature layer.
+"""Inventory embedding snapshot writer (SKY-70) - feature layer.
 
 Builds and persists the per-product semantic snapshot that hybrid search
 reads. Two write surfaces share this service:
@@ -15,7 +15,7 @@ produce identical vectors for the same product.
 
 Degradation contract mirrors search: removes apply even when no embedding
 provider is configured (they need no vectors), while a missing/failed
-provider skips upserts and reports ``skipped=True`` instead of erroring —
+provider skips upserts and reports ``skipped=True`` instead of erroring -
 the core dispatch is best-effort by design. The reindex CLI is stricter and
 requires a provider before it starts (see ``ai_agent/inventory_reindex.py``).
 
@@ -40,7 +40,7 @@ logger = structlog.get_logger("ai_agent.inventory_snapshot")
 
 @dataclass(frozen=True, slots=True)
 class ProductSnapshot:
-    """One product's searchable catalog text — never money or PII (spec §5.5)."""
+    """One product's searchable catalog text - never money or PII (spec §5.5)."""
 
     product_id: uuid.UUID
     sku: str
@@ -180,7 +180,7 @@ def build_embedding_text(
 ) -> str:
     """Concatenate the existing catalog text exactly as migration 0012 documents.
 
-    ``"{sku} {name} {category} {unit}"`` with empty/None parts dropped — the
+    ``"{sku} {name} {category} {unit}"`` with empty/None parts dropped - the
     identical string embedded at every write so vectors stay reproducible.
     """
     return " ".join(part for part in (sku, name, category, unit) if part)

@@ -1,4 +1,4 @@
-"""erp_leave_policies — tenant-scoped leave policy (casual/sick days per year).
+"""erp_leave_policies - tenant-scoped leave policy (casual/sick days per year).
 
 One row per tenant. Defines annual allotments for casual and sick leave,
 with a chosen effective-from date. Policy changes apply at the next Jan-1

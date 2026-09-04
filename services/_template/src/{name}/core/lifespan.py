@@ -1,4 +1,4 @@
-"""Application lifespan — startup and graceful shutdown.
+"""Application lifespan - startup and graceful shutdown.
 
 Extracted from main.py for testability and separation of concerns.
 """
@@ -18,7 +18,7 @@ from {name}.core.logging import configure_{name}_logging, get_logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan — startup and graceful shutdown."""
+    """Application lifespan - startup and graceful shutdown."""
     configure_{name}_logging(log_level=settings.LOG_LEVEL, json_output=settings.LOG_JSON)
 
     logger = get_logger("{name}.startup")

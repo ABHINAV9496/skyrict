@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 type DateParts = { y: number; m: number; d: number };
 type ViewMonth = { y: number; m: number };
 
-/** Strict local-safe ISO parse — never UTC-parses "YYYY-MM-DD". */
+/** Strict local-safe ISO parse - never UTC-parses "YYYY-MM-DD". */
 function parseIso(iso: string): DateParts | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return null;
@@ -69,7 +69,7 @@ type Cell = { iso: string; label: number; inMonth: boolean };
 /**
  * Themed date picker replacing the native browser calendar popup. The month
  * grid renders inline (sibling of the trigger button) so it stays inside the
- * nearest DismissableLayer tree — Radix Dialog sees calendar interactions as
+ * nearest DismissableLayer tree - Radix Dialog sees calendar interactions as
  * "inside" and never dismisses the dialog. Position: absolute inside the
  * wrapper keeps the calendar anchored to its trigger regardless of whether
  * the wrapper lives inside a transformed DialogContent or on a scrollable
@@ -119,7 +119,7 @@ export function DatePicker({
   // Container-relative coords work inside both a transformed DialogContent
   // (where position:fixed degrades to absolute) and on a scrollable page
   // (where absolute scrolls with the wrapper).
-  const CALENDAR_HEIGHT = 320; // px — 5-row month grid + header + footer
+  const CALENDAR_HEIGHT = 320; // px - 5-row month grid + header + footer
   const CALENDAR_WIDTH = 288; // w-72 = 18rem = 288px
 
   function computePosition() {

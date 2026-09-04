@@ -66,7 +66,7 @@ function entityLabel(kind: CrmEntityType, option: EntityOption): string {
 /**
  * Create/edit activity dialog. Create needs an anchor (entity type + entity);
  * the entity list loads on demand when the type changes. Edit keeps the anchor
- * fixed — the backend only accepts anchor changes at creation.
+ * fixed - the backend only accepts anchor changes at creation.
  */
 export function ActivityFormDialog({
   open,
@@ -256,7 +256,7 @@ export function ActivityFormDialog({
               <span className="font-medium text-foreground">
                 {ENTITY_TYPE_LABELS[anchorType]}
               </span>
-              — the anchor cannot be moved.
+              - the anchor cannot be moved.
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -320,7 +320,7 @@ export function ActivityFormDialog({
               id="activity-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Optional context — shown in the timeline"
+              placeholder="Optional context - shown in the timeline"
               rows={3}
               maxLength={4000}
               disabled={saving}
@@ -333,7 +333,7 @@ export function ActivityFormDialog({
               id="activity-notes"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Private notes — only teammates with access see these"
+              placeholder="Private notes - only teammates with access see these"
               rows={2}
               maxLength={4000}
               disabled={saving}

@@ -1,4 +1,4 @@
-"""Unit tests for RAG source loaders (SKY-58) — docs FS and module API."""
+"""Unit tests for RAG source loaders (SKY-58) - docs FS and module API."""
 
 from __future__ import annotations
 

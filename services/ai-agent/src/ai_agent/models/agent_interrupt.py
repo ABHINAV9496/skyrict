@@ -1,4 +1,4 @@
-"""agent_interrupts — human-in-the-loop ledger (SKY-59, spec §3.9).
+"""agent_interrupts - human-in-the-loop ledger (SKY-59, spec §3.9).
 
 One row per interrupt raised by a graph before a write-action tool; the row
 carries the full tool payload so a reviewer can approve/deny without the
@@ -8,7 +8,7 @@ any read/resume/approval of an expired pending row computes ``denied`` + an
 audit row instead of a background sweeper.
 
 MITM defense: the payload is the tool call; the graph resumes only with the
-decision recorded here — an interrupt can never be answered except through
+decision recorded here - an interrupt can never be answered except through
 this row (same tenant, same graph run).
 """
 

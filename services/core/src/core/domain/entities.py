@@ -1215,4 +1215,3 @@ class AuditReadiness:
 
     ready: bool
     checks: tuple[AuditReadinessCheck, ...]
-

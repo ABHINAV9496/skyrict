@@ -542,9 +542,6 @@ async def test_core_audit_log_hashes_chain(wave2_world: dict[str, str]) -> None:
         second = await repo.add(
             AuditLogEntry(tenant_id=tenant_id, action="user.logout", target="auth")
         )
-        await session.refresh(first)
-        await session.refresh(second)
-        await session.flush()
         assert first.hash is not None
         assert second.prev_hash == first.hash
         await session.rollback()

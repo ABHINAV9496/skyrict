@@ -1504,8 +1504,8 @@ class FinanceRepository:
             .where(
                 ErpPaymentModel.tenant_id == tenant_id,
                 ErpPaymentModel.status == PaymentStatus.APPLIED,
-                ErpPaymentModel.paid_at.cast(date) >= from_date,
-                ErpPaymentModel.paid_at.cast(date) <= to_date,
+                func.date(ErpPaymentModel.paid_at) >= from_date,
+                func.date(ErpPaymentModel.paid_at) <= to_date,
             )
             .group_by(ErpPaymentModel.method)
             .order_by(func.coalesce(func.sum(ErpPaymentModel.amount), 0).desc())
@@ -1559,9 +1559,7 @@ class FinanceRepository:
                 label="No open anomalies",
                 status="ok" if not open_anomalies else "warning",
                 detail=(
-                    f"{len(open_anomalies)} open anomaly(s) to review"
-                    if open_anomalies
-                    else None
+                    f"{len(open_anomalies)} open anomaly(s) to review" if open_anomalies else None
                 ),
             ),
         ]

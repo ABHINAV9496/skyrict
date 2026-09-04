@@ -32,7 +32,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -299,6 +299,18 @@ def _end_of_month(month_start: date) -> date:
     if month_start.month == 12:
         return date(month_start.year + 1, 1, 1) - timedelta(days=1)
     return date(month_start.year, month_start.month + 1, 1) - timedelta(days=1)
+
+
+class _AuditReadinessFacts(TypedDict):
+    trial_balanced: bool
+    posted_count: int
+    unposted_count: int
+    open_anomaly_count: int
+    duplicate_group_count: int
+    over90_amount: Decimal
+    total_ar: Decimal
+    open_period_count: int
+    draft_invoice_count: int
 
 
 class FinanceRepository:
@@ -1532,39 +1544,137 @@ class FinanceRepository:
             entries=tuple(entries),
         )
 
+    # Config array of audit-readiness checks (B32). Each entry is
+    # ``(key, label, checker_method_name)``; tenants extend by adding entries
+    # here. The checker method receives the gathered ``facts`` dict.
+    _AUDIT_READINESS_CHECKS: tuple[tuple[str, str, str], ...] = (
+        ("trial_balance_balanced", "Trial balance balanced", "_readiness_trial_balanced"),
+        ("journal_entries_posted", "Journal entries posted", "_readiness_entries_posted"),
+        ("no_open_anomalies", "No open anomalies", "_readiness_no_open_anomalies"),
+        ("no_duplicate_entries", "No duplicate entries", "_readiness_no_duplicates"),
+        ("ar_overdue_monitored", "Overdue receivables monitored", "_readiness_ar_overdue"),
+        ("current_period_open", "Current fiscal period open", "_readiness_period_open"),
+        ("invoices_resolved", "No stale draft invoices", "_readiness_invoices_resolved"),
+        ("ledger_has_activity", "Ledger has activity", "_readiness_ledger_activity"),
+    )
+
     async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness:
         from datetime import date as _date
 
-        trial = await self.trial_balance(tenant_id, _date.today())
-        balanced = trial.total_debit == trial.total_credit
-        posted = await self.list_journal_entries(tenant_id, status=EntryStatus.POSTED)
-        has_unposted = any(e.status != EntryStatus.POSTED for e in posted)
+        today = _date.today()
+        trial = await self.trial_balance(tenant_id, today)
+        entries = await self.list_journal_entries(tenant_id, limit=1000)
+        posted_count = sum(1 for e in entries if e.status == EntryStatus.POSTED)
+        unposted_count = len(entries) - posted_count
         open_anomalies = await self.list_open_ai_anomalies(tenant_id)
+        dup_groups = await self.duplicates(tenant_id)
+        aging = await self.ar_aging(tenant_id, today)
+        over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
+        periods = await self.list_fiscal_periods(tenant_id)
+        draft_invoices = await self._count_invoice_status(tenant_id, InvoiceStatus.DRAFT)
 
-        checks = [
-            AuditReadinessCheck(
-                key="trial_balance_balanced",
-                label="Trial balance balanced",
-                status="ok" if balanced else "missing",
-                detail=None if balanced else "Debits and credits do not match",
-            ),
-            AuditReadinessCheck(
-                key="journal_entries_posted",
-                label="Journal entries posted",
-                status="ok" if posted and not has_unposted else "missing",
-                detail=None if posted and not has_unposted else "Unposted journal entries remain",
-            ),
-            AuditReadinessCheck(
-                key="no_open_anomalies",
-                label="No open anomalies",
-                status="ok" if not open_anomalies else "warning",
-                detail=(
-                    f"{len(open_anomalies)} open anomaly(s) to review" if open_anomalies else None
-                ),
-            ),
-        ]
+        facts: _AuditReadinessFacts = {
+            "trial_balanced": trial.total_debit == trial.total_credit,
+            "posted_count": posted_count,
+            "unposted_count": unposted_count,
+            "open_anomaly_count": len(open_anomalies),
+            "duplicate_group_count": sum(1 for g in dup_groups if len(g.entries) > 1),
+            "over90_amount": over_90.amount if over_90 else Decimal("0"),
+            "total_ar": aging.total_ar,
+            "open_period_count": sum(1 for p in periods if not p.is_closed and p.end_date >= today),
+            "draft_invoice_count": draft_invoices,
+        }
+
+        checks: list[AuditReadinessCheck] = []
+        for key, label, method in self._AUDIT_READINESS_CHECKS:
+            status, detail = getattr(self, method)(facts)
+            checks.append(AuditReadinessCheck(key=key, label=label, status=status, detail=detail))
         ready = all(c.status == "ok" for c in checks)
         return AuditReadiness(ready=ready, checks=tuple(checks))
+
+    async def _count_invoice_status(self, tenant_id: uuid.UUID, status: InvoiceStatus) -> int:
+        stmt = select(func.count(ErpInvoiceModel.id)).where(
+            ErpInvoiceModel.tenant_id == tenant_id,
+            ErpInvoiceModel.status == status,
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    @staticmethod
+    def _readiness_trial_balanced(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["trial_balanced"]
+        return ("ok" if ok else "missing"), (None if ok else "Debits and credits do not match")
+
+    @staticmethod
+    def _readiness_entries_posted(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["posted_count"] > 0 and facts["unposted_count"] == 0
+        return (
+            "ok" if ok else "missing",
+            None if ok else "Unposted journal entries remain or the ledger is empty",
+        )
+
+    @staticmethod
+    def _readiness_no_open_anomalies(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["open_anomaly_count"]
+        return (
+            "ok" if count == 0 else "warning",
+            None if count == 0 else f"{count} open anomaly(s) to review",
+        )
+
+    @staticmethod
+    def _readiness_no_duplicates(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["duplicate_group_count"]
+        return (
+            "ok" if count == 0 else "missing",
+            None if count == 0 else f"{count} duplicate entry group(s) to resolve",
+        )
+
+    @staticmethod
+    def _readiness_ar_overdue(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["total_ar"] == 0 or facts["over90_amount"] <= facts["total_ar"] * Decimal("0.2")
+        return (
+            "ok" if ok else "warning",
+            None if ok else "Receivables more than 90 days overdue exceed 20% of AR",
+        )
+
+    @staticmethod
+    def _readiness_period_open(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["open_period_count"]
+        return (
+            "ok" if count > 0 else "missing",
+            None if count > 0 else "No current fiscal period is open",
+        )
+
+    @staticmethod
+    def _readiness_invoices_resolved(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["draft_invoice_count"]
+        return (
+            "ok" if count == 0 else "warning",
+            None if count == 0 else f"{count} draft invoice(s) awaiting completion",
+        )
+
+    @staticmethod
+    def _readiness_ledger_activity(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["posted_count"]
+        return (
+            "ok" if count > 0 else "missing",
+            None if count > 0 else "No posted journal entries found",
+        )
 
     async def reverse_journal_entry(
         self,

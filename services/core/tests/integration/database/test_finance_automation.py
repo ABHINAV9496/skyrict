@@ -441,24 +441,176 @@ async def test_payment_method_analytics_groups_by_method(wave2_world: dict[str, 
     assert by_method["bank"].share == Decimal("0.2")
 
 
-async def test_audit_readiness_all_checks_ok(wave2_world: dict[str, str]) -> None:
+async def test_health_score_weights_snapshot(wave2_world: dict[str, str]) -> None:
+    """Pin SKY-64 health-score component weights to guard against drift."""
     tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        score = await repo.health_score(tenant_id, date(2026, 6, 30))
+        await session.rollback()
+
+    assert {component.name: component.weight for component in score.components} == {
+        "working_capital": Decimal("0.4"),
+        "receivables_aging": Decimal("0.3"),
+        "journal_cleanliness": Decimal("0.3"),
+    }
+    assert sum((component.weight for component in score.components), Decimal("0")) == Decimal("1.0")
+    assert Decimal("100.00") >= score.overall >= Decimal("0.00")
+
+
+@pytest.fixture(scope="module")
+def readiness_world(migrated_schema: None) -> dict[str, str]:
+    """Seed one fully audit-ready tenant for B32 checks.
+
+    Balanced posted entry, an open current fiscal period (covers today),
+    one approved invoice due within 90 days (non-overdue AR), and no
+    drafts/anomalies/duplicates.
+    """
+
+    async def _setup() -> dict[str, str]:
+        tenant_id = uuid.uuid4()
+        async with async_session_factory() as session:
+            session.add(
+                TenantModel(
+                    id=tenant_id,
+                    name="Readiness Tenant",
+                    slug=f"rdy-{tenant_id.hex[:8]}",
+                    plan_tier="free",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            account_ids: dict[str, uuid.UUID] = {}
+            for code, name, acct_type in [
+                ("1100", "Cash", AccountType.ASSET),
+                ("2100", "Accounts Payable", AccountType.LIABILITY),
+                ("4000", "Service Revenue", AccountType.REVENUE),
+            ]:
+                acc = ErpChartOfAccountModel(
+                    tenant_id=tenant_id, code=code, name=name, account_type=acct_type
+                )
+                session.add(acc)
+                await session.flush()
+                account_ids[code] = acc.id
+
+            session.add(
+                ErpFiscalPeriodModel(
+                    tenant_id=tenant_id,
+                    name="2026 Q3",
+                    start_date=date(2026, 7, 1),
+                    end_date=date(2026, 9, 30),
+                    is_closed=False,
+                )
+            )
+
+            je = ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                entry_date=date(2026, 7, 15),
+                memo="Q3 revenue",
+                status=EntryStatus.POSTED,
+                source="manual",
+                source_ref=None,
+                posted_at=datetime(2026, 7, 15, 12, 0, 0, tzinfo=UTC),
+            )
+            session.add(je)
+            await session.flush()
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=je.id,
+                    account_id=account_ids["1100"],
+                    debit=Decimal("1000"),
+                    credit=None,
+                )
+            )
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=je.id,
+                    account_id=account_ids["4000"],
+                    debit=None,
+                    credit=Decimal("1000"),
+                )
+            )
+
+            # Due within 90 days of today (Sep 2026) so AR is not over_90.
+            session.add(
+                ErpInvoiceModel(
+                    tenant_id=tenant_id,
+                    invoice_number="RDY-001",
+                    customer_id=uuid.uuid4(),
+                    invoice_date=date(2026, 7, 1),
+                    due_date=date(2026, 8, 20),
+                    status=InvoiceStatus.APPROVED,
+                    total=Decimal("400"),
+                    source="manual",
+                    source_ref=None,
+                )
+            )
+            await session.commit()
+            await engine.dispose()
+        return {"tenant_id": str(tenant_id)}
+
+    async def _teardown(created: str) -> None:
+        async with async_session_factory() as session:
+            await session.execute(
+                text("DELETE FROM tenants WHERE id = :tid"), {"tid": uuid.UUID(created)}
+            )
+            await session.commit()
+            await engine.dispose()
+
+    created = asyncio.run(_setup())
+    try:
+        yield created
+    finally:
+        asyncio.run(_teardown(created["tenant_id"]))
+
+
+async def test_audit_readiness_returns_eight_checks_all_ok(
+    readiness_world: dict[str, str],
+) -> None:
+    tenant_id = uuid.UUID(readiness_world["tenant_id"])
     async with async_session_factory() as session:
         repo = FinanceRepository(session)
         readiness = await repo.audit_readiness(tenant_id)
         await session.rollback()
 
     assert readiness.ready is True
-    assert {check.key: check.status for check in readiness.checks} == {
-        "trial_balance_balanced": "ok",
-        "journal_entries_posted": "ok",
-        "no_open_anomalies": "ok",
-    }
+    assert len(readiness.checks) >= 8
+    for check in readiness.checks:
+        assert check.status == "ok", f"{check.key}: {check.status} - {check.detail}"
 
 
-async def _seed_audit_entries(
-    tenant_id: uuid.UUID, repo: AuditLogRepository, n: int
+async def test_audit_readiness_flags_draft_journal_entry(
+    readiness_world: dict[str, str],
 ) -> None:
+    tenant_id = uuid.UUID(readiness_world["tenant_id"])
+    async with async_session_factory() as session:
+        session.add(
+            ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                entry_date=date(2026, 8, 1),
+                memo="Unposted draft",
+                status=EntryStatus.DRAFT,
+                source="manual",
+                source_ref=None,
+            )
+        )
+        await session.commit()
+        await engine.dispose()
+
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        readiness = await repo.audit_readiness(tenant_id)
+        await session.rollback()
+
+    by_key = {check.key: check for check in readiness.checks}
+    assert by_key["journal_entries_posted"].status == "missing"
+    assert by_key["journal_entries_posted"].detail
+    assert readiness.ready is False
+
+
+async def _seed_audit_entries(tenant_id: uuid.UUID, repo: AuditLogRepository, n: int) -> None:
     for i in range(n):
         await repo.add(
             AuditLogEntry(

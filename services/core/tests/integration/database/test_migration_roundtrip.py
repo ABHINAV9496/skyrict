@@ -157,8 +157,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0027", f"head is {version}, expected 0027"
-            assert version == "0026", f"head is {version}, expected 0026"
+            assert version == "0028", f"head is {version}, expected 0028"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -366,7 +365,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                 f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
             )
 
-            # 0026: stock-movement analytics index exists.
+            # 0027: stock-movement analytics index exists.
             mv_index_count = (
                 await conn.execute(
                     text(
@@ -377,12 +376,12 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one()
-            assert mv_index_count == 1, "0026 must create the movement analytics index"
+            assert mv_index_count == 1, "0027 must create the movement analytics index"
 
-            # 0027: stock-health snapshot table (tenant-scoped, RLS) + cost permission.
+            # 0028: stock-health snapshot table (tenant-scoped, RLS) + cost permission.
             assert (
                 await conn.execute(text("SELECT to_regclass('public.erp_report_snapshots')"))
-            ).scalar_one() is not None, "0027 must create erp_report_snapshots"
+            ).scalar_one() is not None, "0028 must create erp_report_snapshots"
             snapshot_rls = (
                 await conn.execute(
                     text(
@@ -401,7 +400,7 @@ async def _assert_upgraded_schema(url: str) -> None:
                     )
                 )
             ).scalar_one_or_none()
-            assert cost_perm is not None, "0027 must register erp.inventory.cost"
+            assert cost_perm is not None, "0028 must register erp.inventory.cost"
     finally:
         await engine.dispose()
 

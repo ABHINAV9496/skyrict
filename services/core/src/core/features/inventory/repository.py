@@ -21,7 +21,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import Select, and_, case, func, insert, or_, select, update
+from sqlalchemy import Select, and_, case, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 
 from core.domain.entities import (
@@ -757,7 +758,7 @@ class InventoryRepository:
     # ------------------------------------------------------------------
     # Stock-health analytics (INV-ANL-001) — read-only, tenant-scoped.
     #
-    # All queries are indexed for the analytics access path by migration 0026
+    # All queries are indexed for the analytics access path by migration 0027
     # (ix_erp_stock_movements_tenant_wh_type_created) and filter on tenant_id
     # first so RLS + index agree. Valuations are computed at cost_price on the
     # SERVER only; the router gates the money fields behind erp.inventory.cost.
@@ -1086,13 +1087,21 @@ class InventoryRepository:
         same definition+period in a closed period replaces the prior snapshot.
         """
         await self.session.execute(
-            insert(ErpReportSnapshotModel).values(
+            pg_insert(ErpReportSnapshotModel)
+            .values(
                 tenant_id=tenant_id,
                 id=uuid.uuid4(),
                 definition_slug=definition_slug,
                 period=period,
                 payload=payload,
                 generated_at=datetime.now(UTC),
+            )
+            .on_conflict_do_update(
+                constraint="uq_erp_report_snapshots_def_period",
+                set_={
+                    "payload": payload,
+                    "generated_at": datetime.now(UTC),
+                },
             )
         )
 

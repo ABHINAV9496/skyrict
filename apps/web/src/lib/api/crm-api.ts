@@ -7,7 +7,7 @@
  * routes `crm`/`sales`/`inventory` to the core service and unwraps the
  * `skyrict_common` envelope; list endpoints are offset/limit paged.
  *
- * Nothing in the UI calls the backend directly — everything goes through the
+ * Nothing in the UI calls the backend directly - everything goes through the
  * BFF so the tenant slug stays server-derived and token refresh keeps working.
  */
 
@@ -28,7 +28,7 @@ export type OpportunityStage =
 export type OrderStatus = "draft" | "confirmed" | "fulfilled" | "cancelled";
 export type CreditCheckResult = "pending" | "passed" | "failed";
 
-/** The unified activity catalog — follow-ups are `follow_up` rows, not a model. */
+/** The unified activity catalog - follow-ups are `follow_up` rows, not a model. */
 export type ActivityKind = "task" | "call" | "meeting" | "follow_up" | "email" | "note";
 
 /** CRM anchor entity types for activities, notes, and the timeline. */
@@ -41,7 +41,7 @@ export type CrmEntityType = "lead" | "opportunity" | "customer" | "contact";
  */
 export type ActivityStatus = "open" | "overdue" | "today" | "upcoming" | "completed";
 
-/** Merged timeline row provenance — the DB-layer UNION branch that emitted it. */
+/** Merged timeline row provenance - the DB-layer UNION branch that emitted it. */
 export type TimelineSource = "activity" | "note" | "event";
 
 // ---------------------------------------------------------------------------

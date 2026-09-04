@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 
 class HandoffIssueRequest(BaseModel):
-    """POST /handoffs — persist an in-flight wizard/BFF payload."""
+    """POST /handoffs - persist an in-flight wizard/BFF payload."""
 
     purpose: str
     payload: dict[str, Any] = {}
@@ -25,7 +25,7 @@ class HandoffIssueResponse(BaseModel):
 
 
 class HandoffRedeemRequest(BaseModel):
-    """POST /handoffs/redeem — consume a single-use token."""
+    """POST /handoffs/redeem - consume a single-use token."""
 
     token: str
     purpose: str | None = None

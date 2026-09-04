@@ -1,4 +1,4 @@
-"""Supervisor public types (SKY-60) — routing decisions, events, citations.
+"""Supervisor public types (SKY-60) - routing decisions, events, citations.
 
 The Agents shell streams an :class:`SupervisorEvent` sequence per turn:
 
@@ -7,7 +7,7 @@ The Agents shell streams an :class:`SupervisorEvent` sequence per turn:
 
 Cross-module questions fan out to several agents sequentially, each with its
 own attribution. Abstentions (low confidence, unprovisioned module) are
-ordinary events, never errors — the shell always renders text.
+ordinary events, never errors - the shell always renders text.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ class CitationsEvent:
 
 @dataclass(frozen=True, slots=True)
 class DoneEvent:
-    """Turn complete — the agents that contributed, in order."""
+    """Turn complete - the agents that contributed, in order."""
 
     agents: tuple[str, ...]
 

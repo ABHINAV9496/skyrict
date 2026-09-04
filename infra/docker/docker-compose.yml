@@ -1,4 +1,4 @@
-# Skyrict — Local Development Infrastructure
+# Skyrict - Local Development Infrastructure
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 name: skyrict
 
@@ -40,7 +40,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ---------- Mailpit (dev SMTP sink — capture outbound email) ----------
+  # ---------- Mailpit (dev SMTP sink - capture outbound email) ----------
   # Web UI at http://localhost:8025, SMTP relay on 1025. Drop-in replacement for
   # the abandoned MailHog; Mailpit is actively maintained, faster, full-text search.
   mailpit:
@@ -55,7 +55,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # ---------- Kafka (KRaft mode — no Zookeeper) ----------
+  # ---------- Kafka (KRaft mode - no Zookeeper) ----------
   # Kafka is intentionally DEFERRED until 3+ services need decoupled async
   # events (there is currently one real service). Uncomment this service and
   # the kafka_data volume below when it is brought into scope.

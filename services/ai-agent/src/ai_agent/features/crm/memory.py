@@ -1,11 +1,11 @@
-"""Memory service — recall context, store episodic memories, extract facts.
+"""Memory service - recall context, store episodic memories, extract facts.
 
 Orchestrates the LLM-based memory pipeline:
 1. After each chat turn: store the query-response pair (episodic)
 2. After each chat turn: extract key facts via LLM and store them (semantic)
 3. Before each chat turn: retrieve relevant memories and inject as context
 
-The service uses the same ``LlmRouter`` as the rest of the AI agent — no new
+The service uses the same ``LlmRouter`` as the rest of the AI agent - no new
 LLM dependency. Fact extraction uses a cheap model call (temperature=0.0).
 """
 
@@ -32,7 +32,7 @@ _EXTRACT_FACTS_SYSTEM_PROMPT = (
     "'category' (one of: preference, entity, context, instruction), "
     "'entity_type' (lead | opportunity | customer | contact | null), "
     "'entity_id' (UUID string or null), and 'confidence' (0.0-1.0). "
-    "Extract at most 5 facts. Only extract genuinely useful facts — "
+    "Extract at most 5 facts. Only extract genuinely useful facts - "
     "skip generic greetings, thanks, or filler."
 )
 
@@ -106,7 +106,7 @@ class MemoryService:
     ) -> None:
         """Store the conversation turn and extract facts.
 
-        This is fire-and-forget — failures are logged but never propagate.
+        This is fire-and-forget - failures are logged but never propagate.
         """
         try:
             # 1. Store episodic memory.

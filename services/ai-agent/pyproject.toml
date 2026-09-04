@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ai-agent"
 version = "0.1.0"
-description = "Skyrict AI agent service — provider-agnostic LLM routing, inventory AI features, shared AI tables, audit"
+description = "Skyrict AI agent service - provider-agnostic LLM routing, inventory AI features, shared AI tables, audit"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
@@ -84,4 +84,4 @@ exclude_lines = [
 ]
 
 # Ruff / mypy config intentionally lives in the ROOT pyproject.toml (with the
-# per-file-ignores for ai_agent paths) — mirroring services/core.
+# per-file-ignores for ai_agent paths) - mirroring services/core.

@@ -1,4 +1,4 @@
-"""Organization endpoints — tenant CRUD."""
+"""Organization endpoints - tenant CRUD."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Finance AR-aging report regression tests — verified against REAL Postgres.
+"""Finance AR-aging report regression tests - verified against REAL Postgres.
 
 ``ar_aging`` derives outstanding receivables from issued/approved (unpaid)
 invoices bucketed by ``due_date`` relative to an ``as_of`` date. Paid and
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.integration
 
 PIVOT = date(2026, 1, 31)
 
-# Every seeded invoice issues well before its earliest due date — the schema's
+# Every seeded invoice issues well before its earliest due date - the schema's
 # ck_erp_invoices_due_date_range check requires due_date >= invoice_date.
 _INVOICE_DATE = PIVOT - timedelta(days=220)
 

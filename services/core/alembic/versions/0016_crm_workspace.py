@@ -1,23 +1,23 @@
 """crm_workspace: contacts, activities, notes, timeline events
 
-CRM workspace upgrade — the unified CRM activity model plus the
+CRM workspace upgrade - the unified CRM activity model plus the
 customer-facing timeline. Four additive tables, each tenant-scoped with the
 composite ``(tenant_id, id)`` primary key convention and RLS (migration 0003
 pattern):
 
-- ``erp_crm_contacts`` — a person on a customer account (tenant-scoped like
+- ``erp_crm_contacts`` - a person on a customer account (tenant-scoped like
   customers; ``customer_id`` is a plain UUID soft link, no FK).
-- ``erp_crm_activities`` — unified activity rows (task/call/meeting/
+- ``erp_crm_activities`` - unified activity rows (task/call/meeting/
   follow_up/email/note). Follow-ups are ``kind = 'follow_up'`` rows with a
   ``due_at``; completion is ``completed_at`` + ``completed_by`` together
   (DB CHECK). Owner/team-scoped like leads/opportunities.
-- ``erp_crm_notes`` — persistent free-form notes anchored to one CRM entity.
-- ``erp_crm_timeline_events`` — the curated CRM business log (customer-facing
+- ``erp_crm_notes`` - persistent free-form notes anchored to one CRM entity.
+- ``erp_crm_timeline_events`` - the curated CRM business log (customer-facing
   timeline). Deliberately separate from the security ``audit_logs`` trail.
 
 Activities, notes, and timeline events anchor to exactly one CRM entity via
 the shared ``erp_crm_entity_type`` enum + ``entity_id``. Order creations are
-recorded as ``event_type = 'order.created'`` anchored to the customer —
+recorded as ``event_type = 'order.created'`` anchored to the customer -
 there is NO ``order`` entity type.
 
 Revision ID: 0016
@@ -129,7 +129,7 @@ def upgrade() -> None:
         "erp_crm_contacts",
         ["tenant_id", "customer_id"],
     )
-    # NON-unique dedupe probe index — like leads, contact dedupe is a soft
+    # NON-unique dedupe probe index - like leads, contact dedupe is a soft
     # service-layer operation, never a uniqueness constraint.
     op.create_index(
         "ix_erp_crm_contacts_tenant_email",

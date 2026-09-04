@@ -1,4 +1,4 @@
-"""ai_semantic_memory — extracted facts from conversations (SKY-61 memory persistence).
+"""ai_semantic_memory - extracted facts from conversations (SKY-61 memory persistence).
 
 Stores structured facts extracted from CRM chat exchanges (e.g. "User prefers
 email over call", "Deal X was discussed on 2026-08-30"). Facts are extracted

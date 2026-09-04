@@ -22,7 +22,7 @@ export interface PeriodValue {
 export interface PeriodRange {
   from: string | null;
   to: string | null;
-  /** The period end date — useful for "balances as of" style cutoffs. */
+  /** The period end date - useful for "balances as of" style cutoffs. */
   asOf: string;
 }
 

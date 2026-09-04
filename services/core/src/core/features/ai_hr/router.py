@@ -1,13 +1,13 @@
 """``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
 
 L1 aggregates (``/overview``, ``/tenure``) are computed in-core and never
-proxied — no employee row leaves the service. The attrition endpoints
+proxied - no employee row leaves the service. The attrition endpoints
 (``/attrition``, ``/attrition/{id}/acknowledge``) are the L1-L2 slice:
 
 - ``GET /attrition`` requires ``erp.ai.invoke`` + ``erp.hr.ai.read``. Callers
   holding ``erp.hr.ai.individual`` (owner + exec only) get the full per-employee
   L2 body; everyone else gets a **403 with an aggregates-only (L1) body** per
-  the Gherkin — never an empty failure. The lazy-on-read TTL re-score proxies
+  the Gherkin - never an empty failure. The lazy-on-read TTL re-score proxies
   anonymous feature vectors to ai-agent (Commit 3).
 - ``POST /attrition/{id}/acknowledge`` requires ``erp.hr.ai.acknowledge`` and
   appends an audited ``hr.ai.risk.acknowledged`` event.
@@ -249,7 +249,7 @@ async def quality_refresh(
 
     Re-scores and stores regardless of the 7-day TTL so a scheduled job always
     produces a fresh run. The response carries only the aggregate row count and
-    run time — never per-person data, so ``erp.hr.ai.read`` suffices.
+    run time - never per-person data, so ``erp.hr.ai.read`` suffices.
     """
     tenant_id = _tenant_id(current_user)
     recount = await quality_service.recalculate(tenant_id, force=True)
@@ -384,7 +384,7 @@ async def suggestion_employee(
 # --- AI pattern-engine config (holidays + blackouts; migration 0024) ---------
 # Tenant lookup data consumed server-side by the anomaly detector (8.2.1) and
 # the suggestion engine (8.2.4). Writes are the existing HR config gate
-# (``erp.hr.write`` — the same key that governs leave types/balances); reads
+# (``erp.hr.write`` - the same key that governs leave types/balances); reads
 # need ``erp.hr.read``. No AI-specific key: these are config rows, not signals.
 
 

@@ -443,7 +443,7 @@ def _mismatched_level() -> list[StockLevelRow]:
 
 
 class TestAdminNotification:
-    """Spec §4.3: email to admin — critical detections and escalations only."""
+    """Spec §4.3: email to admin - critical detections and escalations only."""
 
     def _service(
         self, *, enabled: bool = True, email: FakeEmail | None = None

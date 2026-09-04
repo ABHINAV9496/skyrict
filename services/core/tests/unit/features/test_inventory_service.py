@@ -1,12 +1,12 @@
-"""Inventory service unit tests — §4 business rules + §5.4 reservation port.
+"""Inventory service unit tests - §4 business rules + §5.4 reservation port.
 
 Fake repository (in-memory ledger) + fake audit service + patched event
 producer: no DB, no IO. Covers:
-  Rule 1 — every change is a ledger movement; levels recomputed.
-  Rule 2 — no negative stock (service pre-check -> InsufficientStockError).
-  Rule 3 — transfers atomic (two movements sharing one ref, or none).
-  Rule 4 — reorder alert fires once per breach crossing, never repeatedly.
-  §5.4  — qty_reserved never exceeds qty_on_hand; release never below zero;
+  Rule 1 - every change is a ledger movement; levels recomputed.
+  Rule 2 - no negative stock (service pre-check -> InsufficientStockError).
+  Rule 3 - transfers atomic (two movements sharing one ref, or none).
+  Rule 4 - reorder alert fires once per breach crossing, never repeatedly.
+  §5.4  - qty_reserved never exceeds qty_on_hand; release never below zero;
           fulfil consumes the reservation and writes the sale outflow.
 """
 
@@ -767,7 +767,7 @@ class TestDeactivateProduct:
         with pytest.raises(StockReservedError):
             await service.deactivate_product(TENANT, product.id)
         assert audit.actions() == []
-        assert repo.committed == 1  # only the reserve's commit — deactivate never commits
+        assert repo.committed == 1  # only the reserve's commit - deactivate never commits
         remaining = await repo.get_product(product.id, TENANT)
         assert remaining is not None and remaining.is_active is True
 

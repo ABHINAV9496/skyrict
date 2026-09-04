@@ -1,9 +1,9 @@
-"""Finance document-numbering regression tests — verified against REAL Postgres.
+"""Finance document-numbering regression tests - verified against REAL Postgres.
 
 ``next_invoice_number`` / ``next_payment_number`` call ``nextval()`` on the
 migration-0004 sequences. The sequence name MUST be passed as a quoted string
 literal (``nextval('seq_erp_invoice_number')``) so Postgres coerces it to a
-``regclass`` — a bare identifier is parsed as a *column* reference and fails
+``regclass`` - a bare identifier is parsed as a *column* reference and fails
 with ``UndefinedColumnError`` (regression: masked 500 on invoice/payment
 create).
 

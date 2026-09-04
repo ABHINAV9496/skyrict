@@ -1,4 +1,4 @@
-"""Alembic env.py — async migration runner for the core service.
+"""Alembic env.py - async migration runner for the core service.
 
 CRITICAL: core shares the ``skyrict_identity`` Postgres database with the
 identity service, so it MUST migrate under its own Alembic version table
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 from core.core.config import settings
 
-# Feature ORM models — imported for autogenerate/``target_metadata`` so the full
+# Feature ORM models - imported for autogenerate/``target_metadata`` so the full
 # schema is reflected. Models share the same ``core.models.base`` Base; import
 # order matters only for FK resolution (models use string table refs, so none).
 from core.features.ai_hr.models import (  # noqa: F401
@@ -98,7 +98,7 @@ VERSION_TABLE = "alembic_version_core"
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode — generate SQL without connecting."""
+    """Run migrations in 'offline' mode - generate SQL without connecting."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -123,7 +123,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """Run migrations in 'online' mode — connect to the database."""
+    """Run migrations in 'online' mode - connect to the database."""
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

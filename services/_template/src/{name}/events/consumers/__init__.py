@@ -1,4 +1,4 @@
-"""Kafka event consumers — subscribe to domain events."""
+"""Kafka event consumers - subscribe to domain events."""
 
 from __future__ import annotations
 

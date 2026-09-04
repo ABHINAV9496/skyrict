@@ -57,7 +57,7 @@ const EMPTY_FORM: EmployeeFormState = {
 
 /**
  * Seed values for the hire dialog: always India (+91 IN / INR), regardless
- * of the browser locale — the tenant's workforce is India-based, so the
+ * of the browser locale - the tenant's workforce is India-based, so the
  * defaults must not drift with whatever region the browser reports. The two
  * fields stay fully independent after seeding.
  */

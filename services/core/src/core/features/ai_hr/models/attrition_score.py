@@ -1,4 +1,4 @@
-"""ai_hr_attrition_scores — per-employee attrition risk.
+"""ai_hr_attrition_scores - per-employee attrition risk.
 
 Written by the attrition model (Commit 3); read for both the L1 team-risk
 list (grouped by department/band) and the L2 per-employee view. `department_id`

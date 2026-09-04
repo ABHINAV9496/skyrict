@@ -1,10 +1,10 @@
-"""Scoped tool registry — the runtime's permission gate for agent tools.
+"""Scoped tool registry - the runtime's permission gate for agent tools.
 
 Each tool in the registry declares the ERP permission its invocation requires.
 The runtime (``graphs/runtime.py``, SKY-59) builds a :class:`ToolContext` from
 the caller's resolved grants (``db/permission_repository.py``) and refuses any
-tool whose key is missing — or that the agent's ``agent_registry`` row does not
-list — BEFORE calling the handler. That is defense in depth on top of the core
+tool whose key is missing - or that the agent's ``agent_registry`` row does not
+list - BEFORE calling the handler. That is defense in depth on top of the core
 proxy edge checks (SKY-57: AI is a proxy, not a bypass).
 
 Handlers are plain async callables returning a JSON-safe payload dict; the
@@ -30,7 +30,7 @@ class ToolContext:
     """The identity a tool invocation is authorized under.
 
     ``granted_permissions`` is the caller's resolved grant set for this tenant
-    (from ``PermissionRepository``) — never derived from headers or claims.
+    (from ``PermissionRepository``) - never derived from headers or claims.
     """
 
     user_id: uuid.UUID

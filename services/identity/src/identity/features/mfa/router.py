@@ -1,4 +1,4 @@
-"""MFA endpoints — TOTP setup, verification, disable, and owner-assisted reset."""
+"""MFA endpoints - TOTP setup, verification, disable, and owner-assisted reset."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ async def setup_mfa(
     current_user: dict[str, Any] = Depends(get_current_user),
     mfa_service: MFAService = Depends(get_mfa_service),
 ) -> ResponseEnvelope[MFASetupResponse]:
-    """Initiate MFA setup — returns TOTP secret, otpauth URI, and 10 backup codes."""
+    """Initiate MFA setup - returns TOTP secret, otpauth URI, and 10 backup codes."""
     result = await mfa_service.setup_totp(current_user["user_id"])
     return ResponseEnvelope(data=MFASetupResponse(**result), message="MFA setup initiated")
 

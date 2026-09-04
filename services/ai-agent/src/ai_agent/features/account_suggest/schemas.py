@@ -4,7 +4,7 @@ Maps a free-text transaction description to the tenant's actual chart of
 accounts via an LLM. Core sends the description + the tenant's account list;
 this service asks the LLM to pick the single best account code/name and
 return strict JSON. Any unusable outcome (invalid JSON, missing fields, LLM
-failure) is an *abstention* -> ``None``, never a hard error — core falls back
+failure) is an *abstention* -> ``None``, never a hard error - core falls back
 to its deterministic matcher.
 """
 

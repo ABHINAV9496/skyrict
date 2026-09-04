@@ -1,4 +1,4 @@
-"""Invitation schemas — requests and responses."""
+"""Invitation schemas - requests and responses."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class InvitationCreateRequest(BaseModel):
     email: EmailStr
     role_name: str = Field(
         default=DEFAULT_INVITE_ROLE,
-        description="Role to assign on accept — must exist in the organization",
+        description="Role to assign on accept - must exist in the organization",
     )
     expires_in_hours: int | None = Field(
         default=None,
@@ -39,7 +39,7 @@ class InvitationVerifyResponse(BaseModel):
 
 class InvitationResponse(BaseModel):
     id: UUID
-    token: str = Field(..., description="Plaintext invite token — shown once at create only")
+    token: str = Field(..., description="Plaintext invite token - shown once at create only")
     email: EmailStr
     role_name: str
     expires_at: datetime
@@ -50,7 +50,7 @@ class InvitationResponse(BaseModel):
 
 
 class InvitationSummaryResponse(BaseModel):
-    """Invitation list item — never exposes the plaintext token."""
+    """Invitation list item - never exposes the plaintext token."""
 
     id: UUID
     email: EmailStr

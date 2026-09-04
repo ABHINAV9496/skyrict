@@ -45,7 +45,7 @@ def _make_token(
 
 def _make_hmac_confused_token(public_key_pem: str) -> str:
     """Forge a token with header alg=HS512, HMAC-signed with the RSA PUBLIC
-    key PEM as the shared secret — the classic RS256->HS512 algorithm
+    key PEM as the shared secret - the classic RS256->HS512 algorithm
     confusion payload.
 
     python-jose refuses to construct this itself (an asymmetric key cannot be

@@ -425,7 +425,7 @@ export function ActivitiesTable() {
           <DialogHeader>
             <DialogTitle>Delete this activity?</DialogTitle>
             <DialogDescription>
-              {deleting?.subject ?? "This activity"} is removed permanently — including from the
+              {deleting?.subject ?? "This activity"} is removed permanently - including from the
               relationship timeline.
             </DialogDescription>
           </DialogHeader>

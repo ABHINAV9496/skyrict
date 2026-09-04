@@ -1,4 +1,4 @@
-"""Membership repository port — dependency boundary for the membership feature."""
+"""Membership repository port - dependency boundary for the membership feature."""
 
 from __future__ import annotations
 

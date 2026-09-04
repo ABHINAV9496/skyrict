@@ -1,4 +1,4 @@
-"""Kafka event consumers — subscribe to domain events.
+"""Kafka event consumers - subscribe to domain events.
 
 The identity service has no consumers yet. When wired, consumers will subclass
 ``skyrict_events.BaseConsumer`` and implement ``handle()`` for each topic the

@@ -5,7 +5,7 @@ weighted quality score (mandatory 50% / contact 25% / document 25%) in the
 service, and persists/reads ``ai_hr_quality_scores`` rows idempotently per
 ``(tenant_id, employee_id, generated_at)`` (one scoring run per recalc).
 
-Signal mapping (the ticket's buckets reconciled to real columns — there is no
+Signal mapping (the ticket's buckets reconciled to real columns - there is no
 employee banking/payment table in the ERP schema):
 
   - mandatory (0.50): missing ``email`` / ``phone`` / ``job_title`` /

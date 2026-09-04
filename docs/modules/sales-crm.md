@@ -1,4 +1,4 @@
-# Skyrict — Sales & CRM Module (ERP Phase 1)
+# Skyrict - Sales & CRM Module (ERP Phase 1)
 
 ## Status
 
@@ -6,17 +6,17 @@ Approved to build · **Module owner: Swalih** · Phase-1 ERP module track (`docs
 
 ## Audience
 
-The whole Skyrict team (Swalih — Sales & CRM, Abinav — Inventory & Warehouse, Abhikrishna — HR & Payroll, Dennis — Finance & Accounting). Each owner builds their module end-to-end (database, backend, frontend). This document is written so that **the other three owners can understand the Sales & CRM module** — its shape, its rules, and exactly where it contracts with their modules — without reading the implementation.
+The whole Skyrict team (Swalih - Sales & CRM, Abinav - Inventory & Warehouse, Abhikrishna - HR & Payroll, Dennis - Finance & Accounting). Each owner builds their module end-to-end (database, backend, frontend). This document is written so that **the other three owners can understand the Sales & CRM module** - its shape, its rules, and exactly where it contracts with their modules - without reading the implementation.
 
 This module follows the **same architecture as the rest of Skyrict**. Nothing here invents a new convention: it mirrors `services/identity`'s feature-based layout, the existing BFF proxy + API client patterns in `apps/web`, the RLS tenancy model, the event envelope from `libs/skyrict-events`, and the RFC 7807 / permission conventions already in the repo.
 
 ---
 
-## 1. Overview — Why this module exists, and what it does
+## 1. Overview - Why this module exists, and what it does
 
 ### 1.1 Why
 
-The Skyrict Business Operating System is built on the "internal truth" pillar: *"A deliberately scoped ERP slice — inventory, sales, cash, orders — capturing what's actually happening inside your company… the ~20% of operations that 80% of SMBs actually use"* (`apps/web/src/config/index.ts`).
+The Skyrict Business Operating System is built on the "internal truth" pillar: *"A deliberately scoped ERP slice - inventory, sales, cash, orders - capturing what's actually happening inside your company… the ~20% of operations that 80% of SMBs actually use"* (`apps/web/src/config/index.ts`).
 
 **Sales & CRM is the revenue-facing slice of that pillar.** It answers, in one tenant-scoped place:
 
@@ -36,7 +36,7 @@ It is deliberately **not** a full enterprise CRM. Phase 1 covers the single flow
                 └──────────────────┬──────────────────────────┘
                                    │ same-origin /api/v1/*  (BFF proxy)
                 ┌──────────────────▼──────────────────────────┐
-                │   services/core  (ERP — all Phase-1 modules) │
+                │   services/core  (ERP - all Phase-1 modules) │
                 │   features/crm     features/sales            │
                 │   features/inventory (Abinav)   finance (Dennis) │
                 │   features/hr (Abhikrishna)   reporting       │
@@ -50,12 +50,12 @@ It is deliberately **not** a full enterprise CRM. Phase 1 covers the single flow
 
 Key architectural facts this module depends on:
 
-- **Auth & tenancy are owned by `services/identity`.** Sales & CRM never mints tokens, never resolves tenants on its own. It trusts the verified JWT for identity (user id, tenant) and the tenant context set for the request; **permissions are resolved from the database at request time** — not from the JWT.
+- **Auth & tenancy are owned by `services/identity`.** Sales & CRM never mints tokens, never resolves tenants on its own. It trusts the verified JWT for identity (user id, tenant) and the tenant context set for the request; **permissions are resolved from the database at request time** - not from the JWT.
 - **All Phase-1 ERP modules live in ONE service (`services/core`)** as sibling feature packages. Cross-module calls are in-process feature-to-feature calls through small **ports** (interfaces), so each owner stays in control of their own module's internals and the rest of the team codes against an interface, not someone else's tables.
 - **Tenant isolation is enforced by PostgreSQL Row-Level Security**, plus a repository-layer `tenant_id` filter as defense in depth. Cross-tenant data access is impossible at the SQL level.
-- **The browser never talks to the backend directly.** It goes through the same-origin BFF proxy (`apps/web/src/app/api/v1/[...path]/route.ts`) and the `apiFetch` client — exactly like identity does today.
+- **The browser never talks to the backend directly.** It goes through the same-origin BFF proxy (`apps/web/src/app/api/v1/[...path]/route.ts`) and the `apiFetch` client - exactly like identity does today.
 
-### 1.3 Usage — who uses it, and the daily flows
+### 1.3 Usage - who uses it, and the daily flows
 
 | Actor | What they do in the module |
 |---|---|
@@ -65,12 +65,12 @@ Key architectural facts this module depends on:
 
 Daily flows (Phase 1):
 
-1. **Lead capture** — a rep (or the owner) records a lead with a source (website, referral, call, social, event, partner, inbound).
-2. **Qualification** — the rep contacts the lead and either qualifies it (→ creates an **opportunity** at the *prospecting* stage) or disqualifies it (records the reason).
-3. **Pipeline movement** — the opportunity moves *prospecting → qualified → proposal → negotiation*, then terminates at *won* or *lost* (with a lost reason). Each move emits an event.
-4. **Customer creation** — a *won* opportunity is promoted to a **customer** record (or a customer is created directly for an existing account).
-5. **Ordering** — a rep drafts a **sales order** against a customer. Confirmation runs a credit check and **reserves stock** (contract with Abinav's inventory module). Fulfilment deducts stock and **creates an invoice** (contract with Dennis's finance module). Cancellation releases any reserved stock.
-6. **Reporting** — the reporting module (M-RPT) consumes this module's events and tables for pipeline value, orders by period, and top customers.
+1. **Lead capture** - a rep (or the owner) records a lead with a source (website, referral, call, social, event, partner, inbound).
+2. **Qualification** - the rep contacts the lead and either qualifies it (→ creates an **opportunity** at the *prospecting* stage) or disqualifies it (records the reason).
+3. **Pipeline movement** - the opportunity moves *prospecting → qualified → proposal → negotiation*, then terminates at *won* or *lost* (with a lost reason). Each move emits an event.
+4. **Customer creation** - a *won* opportunity is promoted to a **customer** record (or a customer is created directly for an existing account).
+5. **Ordering** - a rep drafts a **sales order** against a customer. Confirmation runs a credit check and **reserves stock** (contract with Abinav's inventory module). Fulfilment deducts stock and **creates an invoice** (contract with Dennis's finance module). Cancellation releases any reserved stock.
+6. **Reporting** - the reporting module (M-RPT) consumes this module's events and tables for pipeline value, orders by period, and top customers.
 
 ---
 
@@ -80,7 +80,7 @@ Daily flows (Phase 1):
 
 Sales & CRM is built as **two feature packages in `services/core`**: `features/crm` (leads, opportunities, customers) and `features/sales` (sales orders). They are separated because they have different lifecycle rules and different permission families (`erp.crm.*` vs `erp.sales.*`), even though sales orders *reference* CRM customers.
 
-The service mirrors `services/identity`'s feature-based layout (this is the contract — follow it exactly, not the `_template` scaffold):
+The service mirrors `services/identity`'s feature-based layout (this is the contract - follow it exactly, not the `_template` scaffold):
 
 ```
 services/core/
@@ -158,11 +158,11 @@ api (router.py)  →  features/<module>/service.py  →  features/<module>/repos
 ```
 
 - Controllers (routers) are thin: parse request → call service → map to response schema.
-- **Business rules live in the feature service.** Validation of money, state-machine transitions, credit checks, owner scoping — all here.
+- **Business rules live in the feature service.** Validation of money, state-machine transitions, credit checks, owner scoping - all here.
 - **Repositories are the only code that touches SQLAlchemy models.** They own tenant scoping (`WHERE tenant_id = ctx.tenant_id`) and RLS-compatible queries.
 - **No direct DB access from routers or event handlers.**
 - Cross-feature calls go through `ports.py` interfaces (see §2.7), implemented by the owning feature. Services never import another feature's repository or models.
-- Money is a domain value object (`Money(amount: Decimal, currency: str)`) — **never `float`**. Quantities are `Decimal`.
+- Money is a domain value object (`Money(amount: Decimal, currency: str)`) - **never `float`**. Quantities are `Decimal`.
 
 ### 2.3 Multi-tenancy and RLS
 
@@ -201,7 +201,7 @@ CONSTRAINT erp_sales_order_lines_order_fk
 ### 2.4 Authentication and authorization
 
 - `services/core` verifies the **identity-issued access JWT** (RS256, shared `JWT_PUBLIC_KEY`, same issuer/audience). It never issues tokens.
-- Permissions are **resolved from the database at request time** by a `require_permission("erp.crm.read")` dependency in `api/deps.py` — mirroring `services/identity/src/identity/api/deps.py:140`. That dependency loads the current user + their roles, then calls `AuthorizationService.require_permission(...)` against the DB-resolved grants. The JWT carries **no** `permissions` claim; role changes take effect immediately without re-login. Logging comes from `libs/skyrict-common` (`src/skyrict_common/logging.py`) — there is no separate `libs/skyrict-logging`.
+- Permissions are **resolved from the database at request time** by a `require_permission("erp.crm.read")` dependency in `api/deps.py` - mirroring `services/identity/src/identity/api/deps.py:140`. That dependency loads the current user + their roles, then calls `AuthorizationService.require_permission(...)` against the DB-resolved grants. The JWT carries **no** `permissions` claim; role changes take effect immediately without re-login. Logging comes from `libs/skyrict-common` (`src/skyrict_common/logging.py`) - there is no separate `libs/skyrict-logging`.
 - **Two permission families** (user-approved naming):
 
 | Key | Meaning |
@@ -237,7 +237,7 @@ Then update `core/constants.py` `SYSTEM_ROLE_DEFINITIONS` (this is the seeded ro
 
 And add a migration in identity that inserts the five keys into the permissions table (mirroring the existing permission migration).
 
-> **Team coordination:** the identity permission change is a shared dependency for all four modules. It should be one PR (or coordinated commits) so all five ERP permission families land together. Until then, the `core` service still works — it just rejects every ERP request with 403.
+> **Team coordination:** the identity permission change is a shared dependency for all four modules. It should be one PR (or coordinated commits) so all five ERP permission families land together. Until then, the `core` service still works - it just rejects every ERP request with 403.
 
 ### 2.5 Events
 
@@ -277,8 +277,8 @@ class SalesOrderConfirmed(BaseEvent):
 ### 2.6 Errors, pagination, idempotency
 
 - **Errors:** RFC 7807 `application/problem+json` via `core/exceptions.py` (mirrors identity). Problem URIs live in `core/constants.py` under `https://api.skyrict.io/problems/*`. Service raises domain exceptions; the API layer maps them to status codes.
-- **Pagination:** offset/limit via `?page=&page_size=` (default `page=1`, `page_size=20`, max 100) — the platform convention from `libs/skyrict-common/src/skyrict_common/pagination.py` (`PaginationParams`). List responses use the standard envelope: `ListResponse(data=[...], meta=PaginationMeta(total, page, page_size, total_pages))` from `libs/skyrict-common/src/skyrict_common/schemas.py`. There is **no** cursor pagination.
-- **Idempotency is probe-based + atomic state guards** (the platform convention — there is no `Idempotency-Key` header anywhere in the codebase). Side-effecting transitions (order confirm/fulfil/cancel) run a conditional UPDATE on the order status (`WHERE status = <expected>`); exactly one concurrent caller wins (rowcount 1), everyone else gets the current state. A replayed confirm of an already-confirmed order hits the state guard, reads the stored result, and returns it instead of double-executing. (Mechanism in §4.3.) An `Idempotency-Key` header is an optional future enhancement, not required.
+- **Pagination:** offset/limit via `?page=&page_size=` (default `page=1`, `page_size=20`, max 100) - the platform convention from `libs/skyrict-common/src/skyrict_common/pagination.py` (`PaginationParams`). List responses use the standard envelope: `ListResponse(data=[...], meta=PaginationMeta(total, page, page_size, total_pages))` from `libs/skyrict-common/src/skyrict_common/schemas.py`. There is **no** cursor pagination.
+- **Idempotency is probe-based + atomic state guards** (the platform convention - there is no `Idempotency-Key` header anywhere in the codebase). Side-effecting transitions (order confirm/fulfil/cancel) run a conditional UPDATE on the order status (`WHERE status = <expected>`); exactly one concurrent caller wins (rowcount 1), everyone else gets the current state. A replayed confirm of an already-confirmed order hits the state guard, reads the stored result, and returns it instead of double-executing. (Mechanism in §4.3.) An `Idempotency-Key` header is an optional future enhancement, not required.
 
 ### 2.7 Cross-module ports (the team contract)
 
@@ -391,54 +391,54 @@ erDiagram
     }
 ```
 
-> **Note on `product_id`:** products are owned by Abinav's inventory module (`erp_products`). Unlike the original plan, sales order lines carry a **real hard composite FK** `(tenant_id, product_id) → erp_products(tenant_id, id)` ON DELETE RESTRICT (locked SKY-43 decision) — a line can never point at a cross-tenant or non-existent product at the constraint level. `product_name` / `sku` are denormalized snapshots so order history stays stable if the product catalog changes.
+> **Note on `product_id`:** products are owned by Abinav's inventory module (`erp_products`). Unlike the original plan, sales order lines carry a **real hard composite FK** `(tenant_id, product_id) → erp_products(tenant_id, id)` ON DELETE RESTRICT (locked SKY-43 decision) - a line can never point at a cross-tenant or non-existent product at the constraint level. `product_name` / `sku` are denormalized snapshots so order history stays stable if the product catalog changes.
 
 ### 3.2 Table-by-table contract
 
 All tables: `id UUID PRIMARY KEY`, `tenant_id UUID NOT NULL`, RLS enabled with a tenant policy, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()` (and `updated_at` where mutable). All money columns are `NUMERIC(18, 4)`.
 
-**`erp_crm_leads`** — inbound inquiries before they have pipeline value.
+**`erp_crm_leads`** - inbound inquiries before they have pipeline value.
 
-- `source` — enum: `website | referral | cold_call | social | event | partner | inbound`
-- `status` — enum: `new | contacted | qualified | disqualified` (locked SKY-43: **no `converted`** — qualification creates an opportunity via the service, the lead keeps its own lifecycle)
-- `first_name` / `last_name` / `email` / `phone` / `company` — at least one contact channel required (DB CHECK `ck_erp_crm_leads_contact_present`: a lead row is always identifiable)
-- `owner_id UUID NULL` — identity user id; `team_id UUID NULL` — soft team reference (no FK; teams don't exist yet); `NULL` = unassigned
-- `email` — **non-unique** `(tenant_id, email)` index (locked SKY-43); dedupe is a soft service-layer probe (`find_leads_by_email`), never a uniqueness constraint
+- `source` - enum: `website | referral | cold_call | social | event | partner | inbound`
+- `status` - enum: `new | contacted | qualified | disqualified` (locked SKY-43: **no `converted`** - qualification creates an opportunity via the service, the lead keeps its own lifecycle)
+- `first_name` / `last_name` / `email` / `phone` / `company` - at least one contact channel required (DB CHECK `ck_erp_crm_leads_contact_present`: a lead row is always identifiable)
+- `owner_id UUID NULL` - identity user id; `team_id UUID NULL` - soft team reference (no FK; teams don't exist yet); `NULL` = unassigned
+- `email` - **non-unique** `(tenant_id, email)` index (locked SKY-43); dedupe is a soft service-layer probe (`find_leads_by_email`), never a uniqueness constraint
 - Indexes: `(tenant_id, email)`, `(tenant_id, owner_id)`
 
-**`erp_crm_opportunities`** — pipeline deals.
+**`erp_crm_opportunities`** - pipeline deals.
 
-- `stage` — enum: `prospecting | qualified | proposal | negotiation | won | lost`
-- **Customer-less in Phase 1** (locked SKY-43): there is **no** `customer_id` FK and **no** `lead_id` FK — a won opportunity is promoted to a customer by the service layer (`source_opportunity_id` on the customer is optional and deferred to CRM-BE-002)
-- `amount NUMERIC(18,4) NULL` + `currency` (Money) — DB CHECK: currency required iff amount present; amount must be >= 0
+- `stage` - enum: `prospecting | qualified | proposal | negotiation | won | lost`
+- **Customer-less in Phase 1** (locked SKY-43): there is **no** `customer_id` FK and **no** `lead_id` FK - a won opportunity is promoted to a customer by the service layer (`source_opportunity_id` on the customer is optional and deferred to CRM-BE-002)
+- `amount NUMERIC(18,4) NULL` + `currency` (Money) - DB CHECK: currency required iff amount present; amount must be >= 0
 - `probability INTEGER 0..100` (DB CHECK `ck_erp_crm_opportunities_probability_range`)
-- `won_at` / `lost_at` — DB CHECK `ck_erp_crm_opportunities_stage_outcome`: `won_at` required iff `stage='won'`, `lost_at` required iff `stage='lost'`, both forbidden together
+- `won_at` / `lost_at` - DB CHECK `ck_erp_crm_opportunities_stage_outcome`: `won_at` required iff `stage='won'`, `lost_at` required iff `stage='lost'`, both forbidden together
 - Indexes: `(tenant_id, stage)`, `(tenant_id, owner_id)`, `(tenant_id, team_id)`, `(tenant_id, expected_close_date)`
 
-**`erp_crm_customers`** — accounts we do business with.
+**`erp_crm_customers`** - accounts we do business with.
 
-- `customer_code` — stable per-tenant external key; unique `(tenant_id, customer_code)`
-- `credit_limit NUMERIC(18,4) NULL` + `currency` — DB CHECK: currency required iff a limit is present; `NULL` = no limit (credit check passes)
-- `is_active BOOLEAN` — **soft delete** (locked SKY-43: no customer status enum); default `true`; `list_customers` hides inactive by default
+- `customer_code` - stable per-tenant external key; unique `(tenant_id, customer_code)`
+- `credit_limit NUMERIC(18,4) NULL` + `currency` - DB CHECK: currency required iff a limit is present; `NULL` = no limit (credit check passes)
+- `is_active BOOLEAN` - **soft delete** (locked SKY-43: no customer status enum); default `true`; `list_customers` hides inactive by default
 - Indexes: `(tenant_id, name)`
 
-**`erp_sales_orders`** — customer commitments; the money record handed to finance.
+**`erp_sales_orders`** - customer commitments; the money record handed to finance.
 
-- `order_number` — `SO-{yyyy}-{seq}`, sequential per tenant; unique `(tenant_id, order_number)`
-- `status` — enum: `draft | confirmed | fulfilled | cancelled` (state machine in §3.3)
+- `order_number` - `SO-{yyyy}-{seq}`, sequential per tenant; unique `(tenant_id, order_number)`
+- `status` - enum: `draft | confirmed | fulfilled | cancelled` (state machine in §3.3)
 - `customer_id` with **composite FK** `(tenant_id, customer_id) → erp_crm_customers(tenant_id, id)` ON DELETE RESTRICT (customers are soft-deleted, never hard-deleted)
-- Money columns: `subtotal`, `discount`, `tax`, `total` (total = subtotal − discount + tax). The service recomputes totals from lines on every write (CRM-BE-002) — **the columns are a cached projection, never written by clients**; DB CHECK keeps them non-negative
-- `credit_check` — enum: `pending | passed | failed`; result of the confirm-time check (default `pending`)
-- `confirmed_at TIMESTAMPTZ NULL` — DB CHECK `ck_erp_sales_orders_status_confirmed_at`: present iff status is `confirmed` or `fulfilled`
-- Orders have **no owner/team columns** (locked SKY-43) — tenant-scoped only; RLS bounds the tenant
+- Money columns: `subtotal`, `discount`, `tax`, `total` (total = subtotal − discount + tax). The service recomputes totals from lines on every write (CRM-BE-002) - **the columns are a cached projection, never written by clients**; DB CHECK keeps them non-negative
+- `credit_check` - enum: `pending | passed | failed`; result of the confirm-time check (default `pending`)
+- `confirmed_at TIMESTAMPTZ NULL` - DB CHECK `ck_erp_sales_orders_status_confirmed_at`: present iff status is `confirmed` or `fulfilled`
+- Orders have **no owner/team columns** (locked SKY-43) - tenant-scoped only; RLS bounds the tenant
 - Indexes: `(tenant_id, status)`, `(tenant_id, customer_id)`
 
-**`erp_sales_order_lines`** — line items of an order.
+**`erp_sales_order_lines`** - line items of an order.
 
 - `order_id` with **composite FK** `(tenant_id, order_id) → erp_sales_orders(tenant_id, id)` ON DELETE CASCADE
 - `product_id` with **hard composite FK** `(tenant_id, product_id) → erp_products(tenant_id, id)` ON DELETE RESTRICT (see the note after the ERD)
-- `product_name` / `sku` — denormalized snapshots taken at order time
-- `quantity NUMERIC(18,4)` — DB CHECK `> 0`; `unit_price`, `discount`, `tax`, `line_total` (derived: `(unit_price − discount) × quantity`, cached projection) — all non-negative by DB CHECK
+- `product_name` / `sku` - denormalized snapshots taken at order time
+- `quantity NUMERIC(18,4)` - DB CHECK `> 0`; `unit_price`, `discount`, `tax`, `line_total` (derived: `(unit_price − discount) × quantity`, cached projection) - all non-negative by DB CHECK
 - Indexes: `(tenant_id, order_id)`
 
 ### 3.3 State machines
@@ -459,7 +459,7 @@ Sales order:    draft ──► confirmed ──► fulfilled
 
 Transition rules:
 
-- Lead: `qualified` / `disqualified` are reached from `new`/`contacted` via the service; qualification creates the opportunity in the same transaction. The DB enforces only the contact-channel CHECK — lifecycle rules live in the service (CRM-BE-002).
+- Lead: `qualified` / `disqualified` are reached from `new`/`contacted` via the service; qualification creates the opportunity in the same transaction. The DB enforces only the contact-channel CHECK - lifecycle rules live in the service (CRM-BE-002).
 - Opportunity: only one transition per call; `won`/`lost` are terminal (a later update on a won deal changes fields but never the stage). The DB CHECK ties each terminal stage to its timestamp.
 - Sales order: `confirm` only from `draft`; `fulfil` only from `confirmed`; `cancel` from `draft` or `confirmed` (a cancelled order's `confirmed_at` is cleared to satisfy the status CHECK). Fulfilling a cancelled order is impossible. **Guards are conditional SQL UPDATEs** (below), so two concurrent confirm requests cannot both succeed.
 
@@ -543,7 +543,7 @@ sequenceDiagram
     S--)S: emit sales.order.fulfilled
 ```
 
-### 4.3 Idempotent order confirmation (the tricky part — key sketch)
+### 4.3 Idempotent order confirmation (the tricky part - key sketch)
 
 The dangerous failure mode: the client retries `confirm` after a timeout and the retry reserves stock twice or double-confirms. Two mechanisms close it:
 
@@ -565,24 +565,24 @@ async def confirm_order(self, order_id: UUID, *, tenant_id: UUID) -> int:
     return result.rowcount  # 1 → we own the side effects; 0 → already confirmed
 ```
 
-2. **State-guard short-circuit on replay.** A confirm that **lost** the state guard (rowcount 0) checks the current order status: if it is already `confirmed` with a stored result (credit check, reserved stock, emitted event), it returns that stored result with 200 instead of erroring — no stock is reserved again. The endpoint is safe under retry by design, with no `Idempotency-Key` header needed.
+2. **State-guard short-circuit on replay.** A confirm that **lost** the state guard (rowcount 0) checks the current order status: if it is already `confirmed` with a stored result (credit check, reserved stock, emitted event), it returns that stored result with 200 instead of erroring - no stock is reserved again. The endpoint is safe under retry by design, with no `Idempotency-Key` header needed.
 
 Order of operations on confirm (all-or-nothing): **state guard → credit check → stock reserve → respond.** If stock reservation fails, the transaction rolls back (order stays `draft`), the client gets a 409 `problem+json` "insufficient stock", and a retry is legal.
 
 ### 4.4 Owner and team scoping
 
-Implemented in `core/db/rbac.py` — the ONE place a role name becomes a row-scoping rule:
+Implemented in `core/db/rbac.py` - the ONE place a role name becomes a row-scoping rule:
 
 - `standard_user` sees only rows where `owner_id = current_user` (**OWNER scope**).
 - `department_manager` sees rows where `owner_id = current_user` **OR** `team_id = current_user's team` (**TEAM scope**).
 - `organization_admin` / `tenant_owner` / `owner` / `auditor` see all rows (**ALL scope**).
-- Unknown roles **fail closed** to OWNER — a user can never see MORE than their role grants. When a user holds several roles, the highest scope wins (merged per request).
-- **Unassigned rows** (owner_id AND team_id NULL) are visible only to ALL scope — a deliberate strict default.
+- Unknown roles **fail closed** to OWNER - a user can never see MORE than their role grants. When a user holds several roles, the highest scope wins (merged per request).
+- **Unassigned rows** (owner_id AND team_id NULL) are visible only to ALL scope - a deliberate strict default.
 
-Scope is resolved once per request in `api/deps.py` via `RbacRepository.resolve_user_scope(...) -> (DataScope, team_id)` and passed to the repository — the repository never sees a role name:
+Scope is resolved once per request in `api/deps.py` via `RbacRepository.resolve_user_scope(...) -> (DataScope, team_id)` and passed to the repository - the repository never sees a role name:
 
 ```python
-# features/crm/repository.py (implemented — no hardcoded role names)
+# features/crm/repository.py (implemented - no hardcoded role names)
 def _scope_filter(*, scope: DataScope, owner, team, user_id, team_id) -> ColumnElement[bool] | None:
     if scope == DataScope.OWNER:
         if user_id is None:
@@ -600,7 +600,7 @@ def _scope_filter(*, scope: DataScope, owner, team, user_id, team_id) -> ColumnE
     return None                            # ALL -> tenant filter only (RLS bounds the tenant)
 ```
 
-**Enforcement is server-side in the repository.** The frontend may hide rows, but it can never broaden them. Customers and sales orders have no owner/team columns — they are tenant-scoped only (locked SKY-43 decision).
+**Enforcement is server-side in the repository.** The frontend may hide rows, but it can never broaden them. Customers and sales orders have no owner/team columns - they are tenant-scoped only (locked SKY-43 decision).
 
 ---
 
@@ -608,47 +608,47 @@ def _scope_filter(*, scope: DataScope, owner, team, user_id, team_id) -> ColumnE
 
 Step-by-step. Each step lists the file, its responsibility, and the acceptance point.
 
-### Step 1 — Service skeleton (coordinate with the other three owners)
+### Step 1 - Service skeleton (coordinate with the other three owners)
 
-`services/core` scaffolded from the identity layout (tree in §2.1), registered in the uv workspace, added to docker-compose. Verify: `uv run ruff check services/core`, pytest green with an empty-suite placeholder, `/api/v1/health` responds. (Shared step — one PR from whichever owner lands first, or agreed split.)
+`services/core` scaffolded from the identity layout (tree in §2.1), registered in the uv workspace, added to docker-compose. Verify: `uv run ruff check services/core`, pytest green with an empty-suite placeholder, `/api/v1/health` responds. (Shared step - one PR from whichever owner lands first, or agreed split.)
 
-### Step 2 — Core wiring (shared, but this module's dependency)
+### Step 2 - Core wiring (shared, but this module's dependency)
 
-- `core/config.py` — `CORE_` settings: `DATABASE_URL`, `JWT_PUBLIC_KEY`, `JWT_ISSUER`, `REDIS_URL`, `DEFAULT_CURRENCY=USD`, `SALES_ORDER_PREFIX="SO"`.
-- `core/security.py` — decode + verify identity JWT (RS256, issuer/audience check), extract `permissions`, `sub`, `sid`.
-- `core/tenant_resolver.py` + `core/tenant_context.py` — slug → tenant UUID; ContextVar. (Reuse identity's implementation shape; identity stays the tenant source of truth — `core` may cache the slug→UUID mapping in Redis with a short TTL.)
-- `api/deps.py` — `get_tenant_context`, `get_current_user`, `require_permission(...)` (resolves permissions from the DB at request time).
-- `db/base.py` — `DeclarativeBase` + `TenantScopedMixin` (`tenant_id` column + `update_tenant_id` RLS-helper).
-- `core/permissions.py` — this service's catalog constants (`ERP_CRM_READ` etc.) for readability; enforcement data still comes from the JWT.
+- `core/config.py` - `CORE_` settings: `DATABASE_URL`, `JWT_PUBLIC_KEY`, `JWT_ISSUER`, `REDIS_URL`, `DEFAULT_CURRENCY=USD`, `SALES_ORDER_PREFIX="SO"`.
+- `core/security.py` - decode + verify identity JWT (RS256, issuer/audience check), extract `permissions`, `sub`, `sid`.
+- `core/tenant_resolver.py` + `core/tenant_context.py` - slug → tenant UUID; ContextVar. (Reuse identity's implementation shape; identity stays the tenant source of truth - `core` may cache the slug→UUID mapping in Redis with a short TTL.)
+- `api/deps.py` - `get_tenant_context`, `get_current_user`, `require_permission(...)` (resolves permissions from the DB at request time).
+- `db/base.py` - `DeclarativeBase` + `TenantScopedMixin` (`tenant_id` column + `update_tenant_id` RLS-helper).
+- `core/permissions.py` - this service's catalog constants (`ERP_CRM_READ` etc.) for readability; enforcement data still comes from the JWT.
 
 Verify: a `require_permission("erp.crm.read")` protected endpoint returns 401 without token, 403 without the permission, 200 with it.
 
-### Step 3 — Models + migration
+### Step 3 - Models + migration
 
-Write the five models in `features/{crm,sales}/models/` per §2.1. Then `alembic revision` → `0003_crm_sales` implementing §3.4. **Verify the hard part:** run two-tenant integration assertions (below) against the migration — RLS policies must block cross-tenant writes and silently filter cross-tenant reads.
+Write the five models in `features/{crm,sales}/models/` per §2.1. Then `alembic revision` → `0003_crm_sales` implementing §3.4. **Verify the hard part:** run two-tenant integration assertions (below) against the migration - RLS policies must block cross-tenant writes and silently filter cross-tenant reads.
 
-### Step 4 — CRM feature
+### Step 4 - CRM feature
 
-- `features/crm/schemas.py` — Pydantic request/response: `LeadCreate/Update/Out`, `OpportunityCreate/Update/Out`, `CustomerCreate/Update/Out`; list envelopes; enums.
-- `features/crm/repository.py` — tenant-filtered CRUD + scope filter (§4.4) + the atomic `qualify` (update lead + insert opportunity in one transaction).
-- `features/crm/service.py` — rules: lead dedupe soft-check, qualification creates the opportunity, stage transitions, promote (won → customer), terminal-stage immutability, events after commit.
-- `features/crm/router.py` — endpoints (see §6); dependencies: `require_permission("erp.crm.read")` on reads, `.write` on writes.
-- `features/crm/ports.py` — `IdentityUserPort` (validate `owner_id` belongs to the tenant) — implemented against identity's public API via a small client, since identity owns users.
+- `features/crm/schemas.py` - Pydantic request/response: `LeadCreate/Update/Out`, `OpportunityCreate/Update/Out`, `CustomerCreate/Update/Out`; list envelopes; enums.
+- `features/crm/repository.py` - tenant-filtered CRUD + scope filter (§4.4) + the atomic `qualify` (update lead + insert opportunity in one transaction).
+- `features/crm/service.py` - rules: lead dedupe soft-check, qualification creates the opportunity, stage transitions, promote (won → customer), terminal-stage immutability, events after commit.
+- `features/crm/router.py` - endpoints (see §6); dependencies: `require_permission("erp.crm.read")` on reads, `.write` on writes.
+- `features/crm/ports.py` - `IdentityUserPort` (validate `owner_id` belongs to the tenant) - implemented against identity's public API via a small client, since identity owns users.
 
-### Step 5 — Sales feature
+### Step 5 - Sales feature
 
-- `features/sales/schemas.py` — `SalesOrderCreate/Out`, `SalesOrderLineIn/Out`, `OrderConfirmOut`, list envelope.
-- `features/sales/repository.py` — order + lines (one transaction), the conditional state transitions (§4.3), numbering (`SO-{year}-{seq}` inside the same transaction, unique `(tenant_id, order_number)`).
-- `features/sales/service.py` — recompute totals from lines (never trust client math), credit check, orchestrate confirm/fulfil/cancel against the ports, events after commit.
-- `features/sales/ports.py` — `StockReservationPort`, `InvoicePort`, `CustomerPort` (read customer + credit limit).
-- `features/sales/router.py` — endpoints (§6).
+- `features/sales/schemas.py` - `SalesOrderCreate/Out`, `SalesOrderLineIn/Out`, `OrderConfirmOut`, list envelope.
+- `features/sales/repository.py` - order + lines (one transaction), the conditional state transitions (§4.3), numbering (`SO-{year}-{seq}` inside the same transaction, unique `(tenant_id, order_number)`).
+- `features/sales/service.py` - recompute totals from lines (never trust client math), credit check, orchestrate confirm/fulfil/cancel against the ports, events after commit.
+- `features/sales/ports.py` - `StockReservationPort`, `InvoicePort`, `CustomerPort` (read customer + credit limit).
+- `features/sales/router.py` - endpoints (§6).
 - **Composition:** `api/deps.py` injects real implementations of `StockReservationPort` (from `features/inventory`) and `InvoicePort` (from `features/finance`). Until those modules land, inject **test doubles** behind the same interface so this module is buildable in parallel.
 
-### Step 6 — Events
+### Step 6 - Events
 
 `events/producers/crm_events.py` + `sales_events.py` per §2.5. Emit **after commit** (subscribe to the session's "committed" hook or emit in the service after repository commit returns). `correlation_id` flows from the request id / a client-generated `X-Request-Id`.
 
-### Step 7 — Tests
+### Step 7 - Tests
 
 ```
 services/core/tests/
@@ -727,7 +727,7 @@ Base path `/api/v1`. Every endpoint: requires valid identity access JWT + tenant
 | Illegal transition (confirm a fulfilled order) | 409 | `illegal-state-transition` |
 | Credit limit exceeded on confirm | 422 | `credit-limit-exceeded` |
 | Insufficient stock on confirm | 409 | `insufficient-stock` |
-| Replayed confirm (order already `confirmed`) | 200 | stored result — no double reservation |
+| Replayed confirm (order already `confirmed`) | 200 | stored result - no double reservation |
 | Rate limit | 429 | `rate-limit-exceeded` |
 
 ---
@@ -756,7 +756,7 @@ export async function callBackend(path, { target = routeTarget(path), ...options
 }
 ```
 
-Then in `[...path]/route.ts`, replace the hardcoded `callBackend(path, …)` — nothing else changes: same `assertSameOrigin` gate for state-changing methods, same `resolveTenantSlug` from Host (client `X-Tenant-Slug` stays ignored), same `no-store` discipline, same 502 message (parameterized: "ERP service is unavailable").
+Then in `[...path]/route.ts`, replace the hardcoded `callBackend(path, …)` - nothing else changes: same `assertSameOrigin` gate for state-changing methods, same `resolveTenantSlug` from Host (client `X-Tenant-Slug` stays ignored), same `no-store` discipline, same 502 message (parameterized: "ERP service is unavailable").
 
 > **Team coordination:** this one-route change is shared by all four modules. Keep the `CORE_SEGMENTS` set in one place and agree the segment names now (`crm`, `sales`, `inventory`, `hr`, `finance`, `reporting`).
 
@@ -800,7 +800,7 @@ Component conventions (follow the existing code):
 
 - Server components render the shell + `PageHeader` (`@/components/dashboard/shared/page-header`); client components ("use client") do data fetching with `useSession()` + the `crm-api` client.
 - Mutations: optimistic UI + `ApiError` (from `lib/api/http`) surface as inline/toast errors; retries are safe because transitions are state-guarded (a timed-out confirm can be re-issued as-is).
-- Status badges, empty states, and skeletons — reuse `@/components/ui/*` (shadcn), no bespoke styling.
+- Status badges, empty states, and skeletons - reuse `@/components/ui/*` (shadcn), no bespoke styling.
 - **Permission gating is UI-only here** (sidebar + route guards hide what the user can't see); the real gate is the backend `require_permission`.
 
 ### 7.4 Sidebar
@@ -809,7 +809,7 @@ Component conventions (follow the existing code):
 
 - *CRM* → shown when `permissions` contains `erp.crm.read`
 - *Orders* → shown when `erp.sales.read`
-- (Inventory / HR / Finance groups appear when their modules land — one shared section, one code path, five permission filters.)
+- (Inventory / HR / Finance groups appear when their modules land - one shared section, one code path, five permission filters.)
 
 ### 7.5 Plan gating
 
@@ -880,11 +880,11 @@ Verification checklist before review:
 
 ## 11. Related
 
-- `docs/architecture/erp-phase1.md` — parent architecture (all five modules, shared RLS/events/permissions/ports policy)
-- `docs/architecture/auth-production-model.md` — BFF discipline, `no-store`, CSRF gate, host allowlist
-- `services/identity/src/identity/` — feature-based layout reference; `core/permissions.py` + `core/constants.py` (permission + role seed to extend)
-- `apps/web/src/app/api/v1/[...path]/route.ts`, `apps/web/src/lib/server/auth.ts`, `apps/web/src/lib/api/{http,identity-api}.ts` — BFF/client patterns to extend
-- `libs/skyrict-events/src/skyrict_events/base.py` — event envelope
+- `docs/architecture/erp-phase1.md` - parent architecture (all five modules, shared RLS/events/permissions/ports policy)
+- `docs/architecture/auth-production-model.md` - BFF discipline, `no-store`, CSRF gate, host allowlist
+- `services/identity/src/identity/` - feature-based layout reference; `core/permissions.py` + `core/constants.py` (permission + role seed to extend)
+- `apps/web/src/app/api/v1/[...path]/route.ts`, `apps/web/src/lib/server/auth.ts`, `apps/web/src/lib/api/{http,identity-api}.ts` - BFF/client patterns to extend
+- `libs/skyrict-events/src/skyrict_events/base.py` - event envelope
 - `docs/architecture/adr/001-use-uv-workspaces.md`, `002-single-identity-service.md`, `003-staging-wildcard-dns-tls.md`, `004-login-security-posture.md`
 - Jira: SKY-30/31 (identity), SKY-32..36 (billing gating), ERP Phase-1 track (SKY-40+)
 

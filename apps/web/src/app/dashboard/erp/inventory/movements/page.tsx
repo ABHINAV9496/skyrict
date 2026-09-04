@@ -8,7 +8,7 @@ export default function ErpInventoryMovementsPage() {
         <div className="space-y-6">
             <PageHeader
                 title="Movements"
-                description="The immutable stock ledger — every change, newest first."
+                description="The immutable stock ledger every change, newest first."
                 icon={ArrowLeftRight}
             />
             <MovementsClient />

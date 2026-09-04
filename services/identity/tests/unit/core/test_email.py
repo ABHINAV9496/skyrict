@@ -110,7 +110,7 @@ async def test_smtp_service_swallows_delivery_failure(monkeypatch, capsys) -> No
     configure_identity_logging(log_level="INFO", json_output=True)
     email_mod.logger = structlog.get_logger("identity.email")
 
-    # Must not raise — auth flows tolerate a dead relay.
+    # Must not raise - auth flows tolerate a dead relay.
     await _service().send_otp(to="carol@test.com", code="000000")
 
     parsed = _capture_json_line(capsys)

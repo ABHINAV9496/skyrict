@@ -1,4 +1,4 @@
-"""Tenant-scoped ERP warehouse ORM model — RLS-protected, composite primary key."""
+"""Tenant-scoped ERP warehouse ORM model - RLS-protected, composite primary key."""
 
 from __future__ import annotations
 

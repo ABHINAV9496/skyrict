@@ -1,8 +1,8 @@
-# M-INV — Inventory & Warehouse Module (Phase 1)
+# M-INV - Inventory & Warehouse Module (Phase 1)
 
-> **Status:** Draft — approved scope. Target: `services/core`, starter plan.
+> **Status:** Draft - approved scope. Target: `services/core`, starter plan.
 > **Owner:** Abhinav
-> **Dependencies:** identity service (JWT verification, permissions, tenant context), `services/core` skeleton (M3), billing gating (SKY-32..36, enforced externally — does not block building the module).
+> **Dependencies:** identity service (JWT verification, permissions, tenant context), `services/core` skeleton (M3), billing gating (SKY-32..36, enforced externally - does not block building the module).
 
 This document is the complete, unambiguous specification for building the Inventory & Warehouse module. Follow sections in order; every task in the build checklist (§11) links back to the section that defines it.
 
@@ -52,7 +52,7 @@ Every table below carries the shared columns from the base mixins:
 
 Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are global, read-only, and have **no** `tenant_id` (see §6.5).
 
-### 3.1 `erp_products` — what a company sells
+### 3.1 `erp_products` - what a company sells
 
 | Column | Type / Constraint | Why it exists |
 |---|---|---|
@@ -61,30 +61,30 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 | `name` | String(256), NOT NULL | Display name |
 | `category` | String(128), nullable | Grouping for reporting/filtering |
 | `unit` | String(32), NOT NULL | Unit of measure ("pcs", "kg") |
-| `cost_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) — landed cost |
-| `sell_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) — selling price |
+| `cost_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) - landed cost |
+| `sell_price` | Numeric(18,4), NOT NULL default 0 | Money (§10.1) - selling price |
 | `reorder_point` | Integer, NOT NULL default 0 | Threshold that triggers the low-stock alert (§4.4) |
-| `is_active` | Boolean, NOT NULL, default `true` | Archive flag — never hard-delete (§10.6). See Rule 5 (§4.5) |
+| `is_active` | Boolean, NOT NULL, default `true` | Archive flag - never hard-delete (§10.6). See Rule 5 (§4.5) |
 
-### 3.2 `erp_warehouses` — where stock lives
+### 3.2 `erp_warehouses` - where stock lives
 
 | Column | Type / Constraint | Why it exists |
 |---|---|---|
 | `tenant_id` | UUID, NOT NULL, indexed | Ownership + RLS key |
 | `name` | String(256), NOT NULL | Warehouse display name |
 | `location` | String(256), nullable | Physical location |
-| `is_active` | Boolean, NOT NULL, default `true` | Archive flag — never hard-delete (§10.6). See Rule 5 (§4.5) |
+| `is_active` | Boolean, NOT NULL, default `true` | Archive flag - never hard-delete (§10.6). See Rule 5 (§4.5) |
 
 **Unique per tenant:** `UNIQUE (tenant_id, name)` named `uq_erp_warehouses_tenant_name`.
 
-### 3.3 `erp_stock_levels` — the materialized current count
+### 3.3 `erp_stock_levels` - the materialized current count
 
 | Column | Type / Constraint | Why it exists |
 |---|---|---|
 | `tenant_id` | UUID, NOT NULL, indexed | Ownership + RLS key |
-| `product_id` | UUID, NOT NULL | FK → `erp_products.id` (composite with tenant — §6.5) |
+| `product_id` | UUID, NOT NULL | FK → `erp_products.id` (composite with tenant - §6.5) |
 | `warehouse_id` | UUID, NOT NULL | FK → `erp_warehouses.id` (composite with tenant) |
-| `qty_on_hand` | Integer, NOT NULL default 0 | Current derived total — recomputed on write (§4.1) |
+| `qty_on_hand` | Integer, NOT NULL default 0 | Current derived total - recomputed on write (§4.1) |
 | `qty_reserved` | Integer, NOT NULL default 0 | Reserved for confirmed-but-unfulfilled orders (§5.4) |
 
 **Constraints:**
@@ -93,9 +93,9 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 - `CHECK (qty_reserved >= 0)` named `ck_erp_stock_levels_qty_reserved_non_negative`
 - `CHECK (qty_reserved <= qty_on_hand)` named `ck_erp_stock_levels_reserved_leq_hand`
 
-> This table is a **read optimization**. The source of truth is `erp_stock_movements`. Stock levels are recomputed after each movement (§4.1). No materialized view — decision recorded in ADR-000 (see §14.1).
+> This table is a **read optimization**. The source of truth is `erp_stock_movements`. Stock levels are recomputed after each movement (§4.1). No materialized view - decision recorded in ADR-000 (see §14.1).
 
-### 3.4 `erp_stock_movements` — the ledger (the most important table)
+### 3.4 `erp_stock_movements` - the ledger (the most important table)
 
 | Column | Type / Constraint | Why it exists |
 |---|---|---|
@@ -109,7 +109,7 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 | `reason` | String(255), nullable | **Required for `adjust`** (service-enforced) |
 | `occurred_at` | timestamptz, NOT NULL default now() | When the movement happened |
 
-**Rule: movements are immutable.** No UPDATE, no DELETE — enforced by service convention and never exposed via update/delete endpoints. The `qty != 0` guarantee is service-enforced (a `CHECK` is optional).
+**Rule: movements are immutable.** No UPDATE, no DELETE - enforced by service convention and never exposed via update/delete endpoints. The `qty != 0` guarantee is service-enforced (a `CHECK` is optional).
 
 ---
 
@@ -117,46 +117,46 @@ Table names use the `erp_` prefix. Reference tables (e.g. `erp_currencies`) are 
 
 All rules are implemented in the **service layer** (`features/inventory/service.py`). They execute inside a single DB transaction.
 
-### 4.1 Rule 1 — Stock is a ledger
+### 4.1 Rule 1 - Stock is a ledger
 1. Every change to stock writes exactly one `erp_stock_movements` row.
 2. After the movement row is written, `qty_on_hand` is **recomputed** on the affected `erp_stock_levels` row:
    `qty_on_hand = qty_on_hand + movement.qty` (signed).
 3. If no stock level row exists for `(product, warehouse)`, create one in the same transaction (with `qty_on_hand` seeded from the movement).
 4. Read endpoints always return the stored `qty_on_hand` (the recomputed value).
 
-### 4.2 Rule 2 — No negative stock
+### 4.2 Rule 2 - No negative stock
 1. **Service check:** before writing a movement with negative `qty`, verify `current_qty_on_hand + movement.qty >= 0`. If it would go negative → raise `InsufficientStockError` (409).
 2. **DB backup:** the `CHECK (qty_on_hand >= 0)` constraint (§3.3) rejects any write that violates it.
 3. Applies to `sale`, `transfer` (source side), and negative `adjust`.
 
-### 4.3 Rule 3 — Transfers are atomic
+### 4.3 Rule 3 - Transfers are atomic
 1. `transfer_stock` writes **two** movements in one transaction:
    - Source warehouse: `type="transfer"`, `qty = -amount`
    - Destination warehouse: `type="transfer"`, `qty = +amount`
 2. Both stock levels are recomputed in the same transaction.
-3. If either write fails (e.g. source would go negative), the **entire transaction rolls back** — no partial movements.
+3. If either write fails (e.g. source would go negative), the **entire transaction rolls back** - no partial movements.
 4. Source must be != destination (else 422).
 
-### 4.4 Rule 4 — Reorder alerts fire once per breach crossing
+### 4.4 Rule 4 - Reorder alerts fire once per breach crossing
 1. After recomputing `qty_on_hand`, compare against `product.reorder_point`.
 2. A **breach crossing** = level transitions from `> reorder_point` to `<= reorder_point`. Track the previous level (from before this movement).
 3. Fire **once** per crossing: emit `inventory.stock.level_changed` (§9) and write an audit row.
 4. Repeated writes while already `<= reorder_point` do **not** re-fire.
-5. `list_low_stock` / `count_low_stock` only consider **active** products — archived items never surface reorder alerts.
+5. `list_low_stock` / `count_low_stock` only consider **active** products - archived items never surface reorder alerts.
 
-### 4.5 Rule 5 — Archive semantics (production ERP model)
+### 4.5 Rule 5 - Archive semantics (production ERP model)
 Products and warehouses are **archived** (`is_active = false`), never hard-deleted. Deleting in a stock system must not strand money records or on-hand stock, so the deactivation rules mirror Odoo/NetSuite/SAP:
 
 1. **Deactivation** (`DELETE /products/{id}`, `DELETE /warehouses/{id}`):
-   - Succeeds (archives) even when the item still has on-hand stock — the write-off path stays available.
+   - Succeeds (archives) even when the item still has on-hand stock - the write-off path stays available.
    - **Blocked (409 `stock_reserved`)** while any open reservation (`qty_reserved > 0`) exists against the item. Reserved quantities are committed to confirmed orders; archiving would strand that commitment.
    - The audit row records `on_hand_qty` / `reserved_qty` at archive time.
    - Reorder alerts stop being emitted (§4.4.5) and the item disappears from default lists.
-2. **Posting block** — archived items reject new operational movements:
+2. **Posting block** - archived items reject new operational movements:
    - `transfer_stock`, `reserve_stock`, `release_reservation`, `fulfil_order` → 409 `item_inactive` when the product **or** warehouse is inactive.
-   - **`adjust_stock` remains allowed** — a negative adjustment is the sanctioned write-off that zeroes out archived stock; a positive one corrects count errors found after archiving.
-3. **Reactivate** (`POST /products/{id}/reactivate`, `POST /warehouses/{id}/reactivate`) — flips `is_active` back to `true`, restoring normal posting. Audit event: `inventory.product.reactivated` / `inventory.warehouse.reactivated`.
-4. **Visibility** — list endpoints default to active items only. Pass `?include_inactive=true` to include archived rows (needed to resolve names on the stock report and movement ledger).
+   - **`adjust_stock` remains allowed** - a negative adjustment is the sanctioned write-off that zeroes out archived stock; a positive one corrects count errors found after archiving.
+3. **Reactivate** (`POST /products/{id}/reactivate`, `POST /warehouses/{id}/reactivate`) - flips `is_active` back to `true`, restoring normal posting. Audit event: `inventory.product.reactivated` / `inventory.warehouse.reactivated`.
+4. **Visibility** - list endpoints default to active items only. Pass `?include_inactive=true` to include archived rows (needed to resolve names on the stock report and movement ledger).
 
 ---
 
@@ -242,11 +242,11 @@ No direct DB access from API or event handlers. Tenant scoping is enforced in th
 
 ### 5.3 Feature package files (copy identity's conventions)
 
-- **`router.py`** — FastAPI `APIRouter`, module-level permission dependency singletons (e.g. `_require_inventory_read = require_permission(INVENTORY_READ)`), delegate to service, wrap single-object responses in `ResponseEnvelope` and list responses in `ListResponse` (the platform convention from crm/sales/finance).
-- **`schemas.py`** — Pydantic request/response models (the API boundary).
-- **`service.py`** — takes ports + sibling services in the constructor (wired only in `api/deps.py`).
-- **`ports.py`** — `Protocol` classes; the service depends on these, not on the repository.
-- **`repository.py`** — subclasses `SqlRepository`; maps entity ↔ ORM; every query filters `.where(Model.tenant_id == tenant_id)`.
+- **`router.py`** - FastAPI `APIRouter`, module-level permission dependency singletons (e.g. `_require_inventory_read = require_permission(INVENTORY_READ)`), delegate to service, wrap single-object responses in `ResponseEnvelope` and list responses in `ListResponse` (the platform convention from crm/sales/finance).
+- **`schemas.py`** - Pydantic request/response models (the API boundary).
+- **`service.py`** - takes ports + sibling services in the constructor (wired only in `api/deps.py`).
+- **`ports.py`** - `Protocol` classes; the service depends on these, not on the repository.
+- **`repository.py`** - subclasses `SqlRepository`; maps entity ↔ ORM; every query filters `.where(Model.tenant_id == tenant_id)`.
 
 ### 5.4 Reservation port (called by CRM, built now)
 
@@ -256,9 +256,9 @@ Expose these service methods (CRM will call them via the same service object or 
 |---|---|
 | `reserve_stock(product_id, warehouse_id, qty)` | `qty_reserved += qty`; must satisfy `qty_reserved <= qty_on_hand` (else 409) |
 | `release_reservation(product_id, warehouse_id, qty)` | `qty_reserved -= qty` (never below 0) |
-| `fulfil_order(product_id, warehouse_id, qty)` | `qty_reserved -= qty`, write a `sale` movement, recompute level — one transaction |
+| `fulfil_order(product_id, warehouse_id, qty)` | `qty_reserved -= qty`, write a `sale` movement, recompute level - one transaction |
 
-Phase-1 semantics: **direct in-service call** (see §14.2 — confirm with team).
+Phase-1 semantics: **direct in-service call** (see §14.2 - confirm with team).
 
 ---
 
@@ -323,7 +323,7 @@ Apply to: `erp_stock_levels → erp_products`, `erp_stock_levels → erp_warehou
 ## 7. Auth & permissions
 
 ### 7.1 How permissions work (important)
-Permissions are **resolved from the database at request time** — they are **NOT** a JWT claim. `require_permission("erp.inventory.write")` resolves the user's roles → permissions on every request, fail-closed.
+Permissions are **resolved from the database at request time** - they are **NOT** a JWT claim. `require_permission("erp.inventory.write")` resolves the user's roles → permissions on every request, fail-closed.
 
 ### 7.2 New permission keys (add to identity's catalog + seed)
 | Key | Purpose |
@@ -333,9 +333,9 @@ Permissions are **resolved from the database at request time** — they are **NO
 | `erp.inventory.approve` | Approve large adjustments (delta above threshold, §14.3) |
 
 Where to add (identity service):
-- `services/identity/src/identity/core/permissions.py` — constants + `CATALOG` + `PERMISSION_MODULES`
+- `services/identity/src/identity/core/permissions.py` - constants + `CATALOG` + `PERMISSION_MODULES`
 - A new identity Alembic migration inserting the keys into `permissions` (`ON CONFLICT (key) DO NOTHING`)
-- Identity `core/constants.py` `SYSTEM_ROLE_DEFINITIONS` — `tenant_owner`/`organization_admin` get all three; `department_manager` gets `erp.inventory.*`; `standard_user`/`auditor` get `erp.inventory.read`.
+- Identity `core/constants.py` `SYSTEM_ROLE_DEFINITIONS` - `tenant_owner`/`organization_admin` get all three; `department_manager` gets `erp.inventory.*`; `standard_user`/`auditor` get `erp.inventory.read`.
 
 ### 7.3 Endpoint permission usage
 Module-level singleton dependencies in `router.py`:
@@ -353,10 +353,10 @@ Provisioning is **event-driven**:
 
 - **Identity emits** `identity.tenant.provisioned` (full role snapshot + owner
   grant) from `signup_create_organization`, and `identity.rbac.role_granted`
-  from role assignment — envelopes defined in
+  from role assignment - envelopes defined in
   `libs/skyrict-events/schemas` (`TenantProvisioned` / `RbacRoleGranted`, shared
   `RoleGrant` shape).
-- **Core consumes** them via `core/events/consumers/` — the idempotent
+- **Core consumes** them via `core/events/consumers/` - the idempotent
   `apply_role_grants` upsert (role by `(tenant_id, id)` with name-match
   fallback; grant by `(tenant_id, user_id, role_id, scope_id)`).
 
@@ -377,7 +377,7 @@ provisioned role+grant, every ERP endpoint returns 403 `PermissionDeniedError`.
 
 ## 8. API surface
 
-All endpoints are under `/api/v1/inventory`, require a valid access JWT + tenant context, and check permissions server-side. Single-object responses are wrapped in `ResponseEnvelope`; list endpoints return `ListResponse` directly with offset/limit pagination (§10.4) — matching the crm/sales/finance contract.
+All endpoints are under `/api/v1/inventory`, require a valid access JWT + tenant context, and check permissions server-side. Single-object responses are wrapped in `ResponseEnvelope`; list endpoints return `ListResponse` directly with offset/limit pagination (§10.4) - matching the crm/sales/finance contract.
 
 | # | Method & Path | Permission | Request → Response |
 |---|---|---|---|
@@ -412,18 +412,18 @@ StockTransferCreate    { product_id: UUID, from_warehouse_id: UUID,
 ## 9. Events
 
 ### 9.1 Topic constant
-Define once (new — no constants exist yet):
+Define once (new - no constants exist yet):
 ```python
 # core/events/constants.py
 INVENTORY_STOCK_LEVEL_CHANGED = "inventory.stock.level_changed"
 ```
 
 ### 9.2 Emit pattern (Phase 1)
-Phase 1 has **no Kafka** — identity's producers are structlog-only stubs. Emit after commit:
+Phase 1 has **no Kafka** - identity's producers are structlog-only stubs. Emit after commit:
 1. Write the movement + audit row in the transaction.
 2. Call `emit_stock_level_changed(product_id, warehouse_id, qty_on_hand, reorder_point, tenant_id)` in `events/producers/stock_events.py`.
 3. That helper logs the event via structlog (keyed by tenant) using the `skyrict_events.BaseEvent` envelope shape (`event_id, event_type, timestamp, tenant_id, version, correlation_id, metadata`).
-4. When Kafka wiring lands, this becomes a `BaseProducer.publish(...)` call — no call-site change.
+4. When Kafka wiring lands, this becomes a `BaseProducer.publish(...)` call - no call-site change.
 
 ### 9.3 Payload (event `details` / metadata)
 ```json
@@ -435,7 +435,7 @@ Phase 1 has **no Kafka** — identity's producers are structlog-only stubs. Emit
 
 ## 10. Cross-cutting
 
-### 10.1 Money value object (new — create it)
+### 10.1 Money value object (new - create it)
 ```python
 @dataclass(frozen=True)
 class Money:
@@ -469,10 +469,10 @@ Use **offset/limit** (matches identity; no cursor pagination exists):
 `PaginationParams(page=1, page_size=20)` from `skyrict-common`; list responses are `ListResponse(data, meta=PaginationMeta)` directly, single-object responses wrap in `ResponseEnvelope`.
 
 ### 10.5 Errors
-Reuse `skyrict_common` exceptions → RFC 7807 `{type, status, title, detail, instance}` via `core/exceptions.py`. Add service exceptions: `InsufficientStockError` (409), `DuplicateSkuError` (409), `MovementImmutableError` (409), `TransferRequiresDistinctWarehousesError` (422), `StockReservedError` (409, `stock_reserved` — Rule 5.1), `InactiveItemError` (409, `item_inactive` — Rule 5.2).
+Reuse `skyrict_common` exceptions → RFC 7807 `{type, status, title, detail, instance}` via `core/exceptions.py`. Add service exceptions: `InsufficientStockError` (409), `DuplicateSkuError` (409), `MovementImmutableError` (409), `TransferRequiresDistinctWarehousesError` (422), `StockReservedError` (409, `stock_reserved` - Rule 5.1), `InactiveItemError` (409, `item_inactive` - Rule 5.2).
 
 ### 10.6 Soft delete → archive
-Financial/order records are never hard-deleted. Products/warehouses are **archived** via `is_active = false` per Rule 5 — allowed with on-hand stock, blocked on open reservations, reversible via the reactivate endpoints, and subject to the posting block. Adjustments remain the sanctioned write-off path for archived stock.
+Financial/order records are never hard-deleted. Products/warehouses are **archived** via `is_active = false` per Rule 5 - allowed with on-hand stock, blocked on open reservations, reversible via the reactivate endpoints, and subject to the posting block. Adjustments remain the sanctioned write-off path for archived stock.
 
 ---
 
@@ -485,7 +485,7 @@ Financial/order records are never hard-deleted. Products/warehouses are **archiv
 | 3 | Add domain entities (`Product`, `Warehouse`, `StockLevel`, `StockMovement`) | §5.3 | dataclass invariant tests |
 | 4 | Write Alembic `0001_initial` (4 tables, enums, constraints, composite FKs, RLS policies §6, seed `erp_currencies`) | §3, §6 | `alembic upgrade head` against Postgres |
 | 5 | Build `repository.py` (tenant-scoped queries, `add_movement`, `recompute_stock_level`, `get_stock_level`, probes) | §5.2, §6.4 | repository integration tests |
-| 6 | Define `ports.py` Protocols | §5.3 | — |
+| 6 | Define `ports.py` Protocols | §5.3 | - |
 | 7 | Implement `service.py` business rules (§4) + reservation methods (§5.4) | §4, §5.4 | `test_service.py` (unit) |
 | 8 | Write `schemas.py` + `router.py` endpoints (§8) with permission deps (§7) | §7, §8 | contract tests via ASGI client |
 | 9 | Add `stock_events.py` emitter + topic constant + audit actions | §9, §10.3 | unit test assert event logged |
@@ -511,8 +511,8 @@ Mirror `test_tenant_isolation.py`: real Postgres + `alembic upgrade head`, provi
 - Cross-tenant token + slug → 401 `tenant-mismatch`
 
 ### 12.3 Acceptance criteria (Definition of Done)
-- [ ] No negative stock — enforced in service **and** DB
-- [ ] Movements immutable — no update/delete endpoints or repo methods
+- [ ] No negative stock - enforced in service **and** DB
+- [ ] Movements immutable - no update/delete endpoints or repo methods
 - [ ] Transfer is one atomic transaction (2 movements or none)
 - [ ] Reorder alert fires once per breach crossing
 - [ ] Tenant isolation + per-warehouse isolation verified with two tenants
@@ -527,7 +527,7 @@ Mirror `test_tenant_isolation.py`: real Postgres + `alembic upgrade head`, provi
 ## 13. Frontend / BFF (not your build, but be aware)
 
 - BFF route handlers proxy `/api/erp/inventory/*` same-origin (mirroring the auth BFF discipline)
-- Sidebar filter key: `erp.inventory.read` (UI only — enforcement is server-side)
+- Sidebar filter key: `erp.inventory.read` (UI only - enforcement is server-side)
 - Plan gating (billing) decides module visibility; enforced externally (SKY-32..36)
 
 ---
@@ -545,18 +545,18 @@ Mirror `test_tenant_isolation.py`: real Postgres + `alembic upgrade head`, provi
 
 ## 15. Corrections to the ERP plan (research findings)
 
-These differ from the Phase-1 plan document — follow this doc:
-1. **Permissions are NOT a JWT claim** — resolved from the DB at request time via `require_permission`.
-2. **No cursor pagination exists** — use offset/limit + `PaginationMeta`.
-3. **No `Idempotency-Key` pattern exists** — use naturally idempotent probe-based writes.
-4. **`libs/skyrict-logging` does not exist** — logging lives in `skyrict-common/logging.py`.
-5. **Kafka is stub/logging-only today** — emit events as structlog + audit rows; no hard Kafka dependency in Phase 1.
-6. **Tenant error codes are not all 403** — missing=400, mismatch=401, unknown=404, disabled=403.
+These differ from the Phase-1 plan document - follow this doc:
+1. **Permissions are NOT a JWT claim** - resolved from the DB at request time via `require_permission`.
+2. **No cursor pagination exists** - use offset/limit + `PaginationMeta`.
+3. **No `Idempotency-Key` pattern exists** - use naturally idempotent probe-based writes.
+4. **`libs/skyrict-logging` does not exist** - logging lives in `skyrict-common/logging.py`.
+5. **Kafka is stub/logging-only today** - emit events as structlog + audit rows; no hard Kafka dependency in Phase 1.
+6. **Tenant error codes are not all 403** - missing=400, mismatch=401, unknown=404, disabled=403.
 
 ---
 
 ## 16. Related documents
 - ERP Phase 1 plan (source of this spec)
-- `services/identity` — feature-package structure, RLS mechanics, permission/tenant source of truth
-- `docs/architecture/adr/*` — ADR-001 (uv workspaces), ADR-002 (single identity service), ADR-003 (staging DNS/TLS), ADR-004 (login security posture)
+- `services/identity` - feature-package structure, RLS mechanics, permission/tenant source of truth
+- `docs/architecture/adr/*` - ADR-001 (uv workspaces), ADR-002 (single identity service), ADR-003 (staging DNS/TLS), ADR-004 (login security posture)
 - `libs/skyrict-common`, `libs/skyrict-events` (`src/skyrict_events/base.py`)

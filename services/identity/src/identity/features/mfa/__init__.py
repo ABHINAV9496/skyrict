@@ -1,1 +1,1 @@
-"""MFA feature — TOTP setup and verification (planned)."""
+"""MFA feature - TOTP setup and verification (planned)."""

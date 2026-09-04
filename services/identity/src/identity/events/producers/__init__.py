@@ -1,4 +1,4 @@
-"""Kafka event producers — publish domain events.
+"""Kafka event producers - publish domain events.
 
 Currently a logging-only stub: no broker connection is made until the
 identity event wiring lands. The production path will publish
@@ -17,7 +17,7 @@ logger = structlog.get_logger("identity.events")
 
 
 async def publish_event(topic: str, key: str, payload: dict[str, Any]) -> None:
-    """Publish a domain event — logging only until Kafka wiring lands."""
+    """Publish a domain event - logging only until Kafka wiring lands."""
     logger.info(
         "event.published",
         topic=topic,

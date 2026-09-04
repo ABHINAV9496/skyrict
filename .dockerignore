@@ -1,4 +1,4 @@
-# Keep Docker build contexts small — the dev compose builds use the repo root
+# Keep Docker build contexts small - the dev compose builds use the repo root
 # as context while the Dockerfiles COPY only scoped paths. Without this file
 # every build ships the whole workspace (including the multi-GB root .venv)
 # to the daemon, stalling context transfer.
@@ -24,7 +24,7 @@ htmlcov/
 .local/
 .opencode/
 
-# Secrets — never baked into images (keys/env are runtime volumes/args)
+# Secrets - never baked into images (keys/env are runtime volumes/args)
 .env
 .env.*
 !.env.example

@@ -1,4 +1,4 @@
-"""Audit repository port — the persistence contract the audit service depends on.
+"""Audit repository port - the persistence contract the audit service depends on.
 
 Ports abstract persistence only (never business rules). SQLAlchemy lives in the
 concrete implementation ``core.features.audit.repository``.

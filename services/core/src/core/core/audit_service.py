@@ -1,4 +1,4 @@
-"""Audit service — the shared, tenant-scoped audit facade for core (ERP) actions.
+"""Audit service - the shared, tenant-scoped audit facade for core (ERP) actions.
 
 Every mutation goes through ``log`` (per docs/modules/hr-payroll.md §step 4);
 the repository appends to ``core_audit_logs`` where the DB trigger builds the

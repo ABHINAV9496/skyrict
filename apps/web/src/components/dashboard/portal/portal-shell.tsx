@@ -8,7 +8,7 @@ import { useSession } from "@/lib/auth/session";
 
 /**
  * The self-service leave portal chrome: brand, the signed-in identity and a
- * sign-out control only. Deliberately NOT the workspace dashboard — sole
+ * sign-out control only. Deliberately NOT the workspace dashboard - sole
  * holders of the employee_self_service role land here with no ERP navigation
  * to bounce off, matching their single permission.
  */

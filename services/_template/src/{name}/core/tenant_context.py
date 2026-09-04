@@ -1,4 +1,4 @@
-"""ContextVar-based TenantContext — request-scoped tenant isolation.
+"""ContextVar-based TenantContext - request-scoped tenant isolation.
 
 This is the FIXED version: uses ContextVar (not threading.local), properly
 cleaned up on request end, and never silently defaults to a wrong tenant.
@@ -42,7 +42,7 @@ class TenantContext:
 
     @staticmethod
     def reset() -> None:
-        """Reset the context var — called by middleware at request end."""
+        """Reset the context var - called by middleware at request end."""
         _current_tenant_id.set(None)
 
 

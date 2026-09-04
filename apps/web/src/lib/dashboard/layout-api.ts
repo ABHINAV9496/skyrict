@@ -2,10 +2,10 @@
  * API client for the dashboard layout CRUD endpoints.
  *
  * Endpoints (core service):
- *   GET    /api/v1/dashboards/me          — read effective layout
- *   PUT    /api/v1/dashboards/me          — save user layout
- *   POST   /api/v1/dashboards/me/reset    — reset to tenant default
- *   POST   /api/v1/dashboards/me/events   — record widget interaction events
+ *   GET    /api/v1/dashboards/me          - read effective layout
+ *   PUT    /api/v1/dashboards/me          - save user layout
+ *   POST   /api/v1/dashboards/me/reset    - reset to tenant default
+ *   POST   /api/v1/dashboards/me/events   - record widget interaction events
  */
 
 import type { LayoutItem } from "@/components/dashboard/erp/widget-grid";

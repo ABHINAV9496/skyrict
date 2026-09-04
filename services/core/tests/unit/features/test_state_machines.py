@@ -1,4 +1,4 @@
-"""State machine tests — employee, leave request, and payroll run lifecycles.
+"""State machine tests - employee, leave request, and payroll run lifecycles.
 
 Pure logic: the transition tables live in the services (docs/hr-payroll.md
 §3.3 / §4.10) and configure the shared ``StateMachine`` from

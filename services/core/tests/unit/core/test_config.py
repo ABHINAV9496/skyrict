@@ -1,4 +1,4 @@
-"""Config tests — CORE_ prefix, defaults, and production-safety guards."""
+"""Config tests - CORE_ prefix, defaults, and production-safety guards."""
 
 from __future__ import annotations
 

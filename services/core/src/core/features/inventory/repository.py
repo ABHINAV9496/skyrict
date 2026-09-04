@@ -1,11 +1,11 @@
-"""Inventory repository — DB operations for products, warehouses, stock, movements.
+"""Inventory repository - DB operations for products, warehouses, stock, movements.
 
 Stock is the ledger: ``add_movement`` appends an immutable movement row and then
 recomputes the materialized ``erp_stock_levels`` row from the ledger in the SAME
 transaction. The level's CHECK constraints (``qty_on_hand >= 0`` and
 ``0 <= qty_reserved <= qty_on_hand``) are evaluated by the database when the
 materialized row is written, so an oversell or over-reservation fails the whole
-transaction — including the movement insert — independent of service logic.
+transaction - including the movement insert - independent of service logic.
 
 All probes are tenant-scoped: lookups take an explicit ``tenant_id`` and every
 session is additionally bound by RLS (``app.current_tenant_id``), so a tenant
@@ -625,7 +625,7 @@ class InventoryRepository:
         return await self.apply_release_qty(product_id, warehouse_id, qty, tenant_id)
 
     # ------------------------------------------------------------------
-    # Movements (immutable — no update, no delete)
+    # Movements (immutable - no update, no delete)
     # ------------------------------------------------------------------
 
     async def add_movement(self, movement: StockMovement) -> StockMovement:
@@ -724,5 +724,5 @@ class InventoryRepository:
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def commit(self) -> None:
-        """Commit the current transaction — services own the transaction lifecycle."""
+        """Commit the current transaction - services own the transaction lifecycle."""
         await self.session.commit()

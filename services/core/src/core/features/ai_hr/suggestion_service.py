@@ -4,7 +4,7 @@ Lazy-on-read TTL scan of pending suggestions (mirrors quality/utilization/
 anomaly services), then:
 
   - ``org_feed`` (L1, ``erp.hr.ai.read``): aggregate counts by leave type and
-    status plus a deterministic narrative — never per-person data.
+    status plus a deterministic narrative - never per-person data.
   - ``employee_suggestions`` (L2, ``erp.hr.ai.individual``): one employee's
     suggestions.
   - ``own_suggestions`` (self-scoped, ``erp.leave.self``): the employee's own

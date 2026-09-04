@@ -1,1 +1,1 @@
-"""API composition layer — middleware, readiness gate, lifespan, dependencies."""
+"""API composition layer - middleware, readiness gate, lifespan, dependencies."""

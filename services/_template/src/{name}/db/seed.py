@@ -1,4 +1,4 @@
-"""Database seeding — bootstrap default tenants, roles, and admin users.
+"""Database seeding - bootstrap default tenants, roles, and admin users.
 
 Usage:
     python -m {name}.db.seed

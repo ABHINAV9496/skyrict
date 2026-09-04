@@ -1,4 +1,4 @@
-"""Inventory HTTP router — thin marshalling, business rules live in the service.
+"""Inventory HTTP router - thin marshalling, business rules live in the service.
 
 Endpoints follow docs/modules/inventory-warehouse.md §8. Every route requires a
 valid access JWT + tenant context (via shared deps) and a module-level

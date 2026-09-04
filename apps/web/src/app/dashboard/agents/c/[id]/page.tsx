@@ -9,7 +9,19 @@ import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { appendAgentMessage, getConversation, saveUserMessage } from "@/lib/api/agents-api";
 import type { ChatMessage, Conversation } from "@/lib/api/agents-api";
 import { useSession } from "@/lib/auth/session";
+import {
+  CONVERSATION_LIST_CHANGED_EVENT,
+  notifyConversationListChanged,
+} from "@/lib/chat/conversation-list-events";
 import { useAgentChat, type AgentChatMessage } from "@/lib/chat/use-agent-chat";
+
+/**
+ * How long to wait before broadcasting the list-refresh after a turn. The AI
+ * title is generated in a background task just after the agent message is
+ * persisted, so the first broadcast (right after persistence) lands before
+ * the title exists; this second one catches it.
+ */
+const TITLE_REFRESH_DELAY_MS = 3500;
 
 function toAgentMessage(message: ChatMessage): AgentChatMessage {
   return {
@@ -27,11 +39,12 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
  * The live conversation view. The first prompt (arriving from the New Chat
  * suggestion) is answered automatically by streaming one real supervisor turn;
  * every subsequent send streams too. Conversations remain in the mock store
- * for navigation/history — SKY-60 replaces SIMULATED ANSWERS with real ones,
+ * for navigation/history - SKY-60 replaces SIMULATED ANSWERS with real ones,
  * not the sidebar.
  */
 function ConversationView({ conversation }: { conversation: Conversation }) {
   const { user, status } = useSession();
+  const refreshTimerRef = useRef<number | null>(null);
   const { messages, sending, activeAgent, send, stop } = useAgentChat(
     (conversation.messages ?? []).map(toAgentMessage),
     {
@@ -41,11 +54,26 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
         void saveUserMessage(conversation.id, content);
       },
       onComplete: (content) => {
-        void appendAgentMessage(conversation.id, content);
+        void appendAgentMessage(conversation.id, content).then(() => {
+          notifyConversationListChanged();
+        });
+        // The AI title lands a moment later; broadcast again so the sidebar
+        // and header pick it up without a manual refresh.
+        if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = window.setTimeout(
+          notifyConversationListChanged,
+          TITLE_REFRESH_DELAY_MS,
+        );
       },
     },
   );
   const autoStarted = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (autoStarted.current || sending || status !== "authenticated") return;
@@ -60,7 +88,7 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
     // remount on the first commit; the synthetic unmount runs useAgentChat's
     // cleanup, which aborts any in-flight stream. If we called send() here
     // synchronously, that first auto-start stream would be cancelled before it
-    // could produce a response — leaving only the persisted user message with
+    // could produce a response - leaving only the persisted user message with
     // no assistant bubble. Deferring (and not setting autoStarted until the
     // timer actually fires) lets the strict double-invoke complete first so the
     // stream starts exactly once on the surviving mount and is never aborted.
@@ -108,6 +136,32 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       });
     return () => {
       cancelled = true;
+    };
+  }, [params]);
+
+  // Reflect server-side metadata changes (e.g. the AI title landing right
+  // after a turn) by refreshing ONLY the header fields - the live message
+  // list stays untouched so streaming is never disrupted.
+  useEffect(() => {
+    let cancelled = false;
+    const onConversationListChanged = () => {
+      void params
+        .then(({ id }) => getConversation(id))
+        .then((data) => {
+          if (!cancelled) {
+            setConversation((previous) =>
+              previous
+                ? { ...previous, title: data.title, updated_at: data.updated_at }
+                : previous,
+            );
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(CONVERSATION_LIST_CHANGED_EVENT, onConversationListChanged);
     };
   }, [params]);
 

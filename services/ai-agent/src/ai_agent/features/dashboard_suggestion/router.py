@@ -1,7 +1,7 @@
 """Dashboard layout suggestion router.
 
 Endpoint:
-    POST /api/v1/ai/dashboards/suggest — AI-powered layout suggestion
+    POST /api/v1/ai/dashboards/suggest - AI-powered layout suggestion
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ async def suggest_layout(
     service = DashboardSuggestionService(llm_router=llm_router)
 
     # TODO: Fetch event_summary from core service via HTTP gateway
-    # For now, pass empty summary — the LLM will use layout order only.
+    # For now, pass empty summary - the LLM will use layout order only.
     event_summary: list[dict[str, Any]] = []
 
     result = await service.suggest(

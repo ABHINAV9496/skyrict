@@ -1,5 +1,5 @@
 # =============================================================================
-# Skyrict Identity Service — Dev Dockerfile
+# Skyrict Identity Service - Dev Dockerfile
 #
 # Local development: dev dependencies, tests, and uvicorn live reload.
 # Used by docker-compose.dev.yml (the `identity` service build).
@@ -24,7 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Copy every workspace member pyproject.toml file (for dependency resolution).
-# The workspace glob is services/* and libs/* — uv --frozen refuses to resolve
+# The workspace glob is services/* and libs/* - uv --frozen refuses to resolve
 # if a member manifest is missing. READMEs too: hatchling requires the `readme`
 # file declared in each pyproject.toml to be present when building the members.
 COPY services/identity/pyproject.toml services/identity/
@@ -38,7 +38,7 @@ COPY libs/skyrict-events/README.md libs/skyrict-events/
 COPY libs/skyrict-testing/pyproject.toml libs/skyrict-testing/
 COPY libs/skyrict-testing/README.md libs/skyrict-testing/
 
-# Install all deps (dev group included — pytest, mypy, ruff, testcontainers)
+# Install all deps (dev group included - pytest, mypy, ruff, testcontainers)
 RUN uv sync --frozen --directory services/identity
 
 # Make venv entry points (alembic, uvicorn, etc.) available on PATH
@@ -50,7 +50,7 @@ COPY services/identity/src services/identity/src
 COPY libs/skyrict-common/src libs/skyrict-common/src
 COPY libs/skyrict-events/src libs/skyrict-events/src
 
-# Copy tests (dev only — never reaches production)
+# Copy tests (dev only - never reaches production)
 COPY services/identity/tests services/identity/tests
 
 # Copy alembic config and migrations

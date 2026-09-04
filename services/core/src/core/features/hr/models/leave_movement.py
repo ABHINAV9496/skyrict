@@ -1,4 +1,4 @@
-"""erp_leave_movements — the immutable leave ledger.
+"""erp_leave_movements - the immutable leave ledger.
 
 Every balance-affecting event writes ONE row here; balances are recomputed
 from this ledger (spec §3.2), never stored as a mutable counter. IMMUTABLE
@@ -57,7 +57,7 @@ class LeaveMovementModel(Base):
     ref_type: Mapped[str] = mapped_column(String(32), nullable=False)
     # The reference id: the leave_year for ``annual_accrual`` (a plain string,
     # e.g. "2025"), a leave request id for ``leave_request``, or an adjustment
-    # id for ``manual_adjustment`` — mirrors the inventory ledger's String(64).
+    # id for ``manual_adjustment`` - mirrors the inventory ledger's String(64).
     ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(

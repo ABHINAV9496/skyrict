@@ -1,4 +1,4 @@
-"""MFA service package — TOTP, backup codes."""
+"""MFA service package - TOTP, backup codes."""
 
 from __future__ import annotations
 

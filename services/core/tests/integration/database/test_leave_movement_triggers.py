@@ -1,11 +1,11 @@
 """Behavioral DB tests for the leave-ledger triggers (gap item 11).
 
 Proves the append-only and non-negative guarantees at the SQL layer against
-REAL Postgres — not through the service:
+REAL Postgres - not through the service:
 
   - a positive accrual INSERT succeeds;
   - an INSERT that would push the per-(tenant, employee, leave_type) SUM
-    negative is rejected and fully rolled back — for ACCRUAL leave types;
+    negative is rejected and fully rolled back - for ACCRUAL leave types;
   - non-accrual (ledger-only) types such as sick are NOT guarded: their first
     approval may take the ledger negative (migration 0014), matching the
     service, which only pre-checks balances for accrual types;

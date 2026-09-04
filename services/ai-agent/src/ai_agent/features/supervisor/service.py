@@ -1,17 +1,17 @@
-"""Supervisor service — intent classification + cross-module delegation (SKY-60).
+"""Supervisor service - intent classification + cross-module delegation (SKY-60).
 
 The supervisor is the Agents shell's router: one turn classifies the question
 into one or more module agents, streams each segment sequentially with per-agent
 attribution, and emits grounding citations. It is a STATELESS orchestration
-layer — unlike the checkpointed :class:`AgentRuntime` (SKY-59) there is no
+layer - unlike the checkpointed :class:`AgentRuntime` (SKY-59) there is no
 HITL pause; every segment streams and the shell renders tokens live.
 
 Routing contract:
-  * ``classify()`` → :class:`RouteDecision` — LLM intent classification (strict
+  * ``classify()`` → :class:`RouteDecision` - LLM intent classification (strict
     JSON) with a deterministic keyword fallback when no provider is configured
     or unavailable. Low confidence abstains (a normal explicit answer, never an
     error), mirroring the nl_query abstention pattern.
-  * ``stream_answer()`` → :class:`SupervisorEvent` stream — classification,
+  * ``stream_answer()`` → :class:`SupervisorEvent` stream - classification,
     then per agent: ``AgentStartEvent``, ``TokenEvent``*d, ``CitationsEvent``.
     Modules that registry marks disabled stream a clean "not provisioned yet"
     abstention (SKY-60 decision #6: crm/finance start disabled).
@@ -30,7 +30,7 @@ from ai_agent.features.attachments.processor import ProcessedAttachments, proces
 from ai_agent.features.supervisor.delegates import (
     CrmAssistantDelegator,
     Delegator,
-    FinanceAssistantDelegator,
+    FinanceDelegator,
     ForecastPort,
     HrCopilotDelegator,
     HrCopilotPort,
@@ -69,8 +69,8 @@ if TYPE_CHECKING:
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
+    from ai_agent.features.finance.gateway import FinanceGatewayPort
     from ai_agent.features.nl_query.gateway import InventoryGatewayPort
-    from ai_agent.features.supervisor.finance_gateway import FinanceGatewayPort
 
 logger = structlog.get_logger("ai_agent.supervisor")
 
@@ -163,14 +163,14 @@ class SupervisorService:
                 memory_service=memory_service,
             )
         if finance_gateway_factory is not None:
-            delegates[AGENT_FINANCE] = FinanceAssistantDelegator(
+            delegates[AGENT_FINANCE] = FinanceDelegator(
                 llm_router=llm_router,
                 finance_gateway_factory=finance_gateway_factory,
             )
         self._delegates = delegates
 
     async def classify(self, query: str) -> RouteDecision:
-        """Route one question; never raises — falls back to keywords."""
+        """Route one question; never raises - falls back to keywords."""
         if not self._llm_router.has_providers:
             return _keyword_route(query)
         try:
@@ -371,7 +371,7 @@ class SupervisorService:
 
         Returns a formatted string of prior messages (up to the last 20) for
         injection into the supervisor system prompt. Returns empty string on
-        any failure — history is best-effort and must never block the turn.
+        any failure - history is best-effort and must never block the turn.
         """
         if self._conversation_history is None:
             return ""

@@ -1,13 +1,13 @@
 // Auto-generated from data/codes-all.csv (datasets/country-codes) plus a
-// hand-built phone supplement. Do not edit the data by hand — regenerate
+// hand-built phone supplement. Do not edit the data by hand - regenerate
 // instead.
 //
 // Provenance per field:
-//   code     — CSV column "ISO3166-1-Alpha-2" (rows with an empty code are skipped)
-//   name     — CSV column "CLDR display name"
-//   currency — first entry of CSV column "ISO4217-currency_alphabetic_code"
+//   code     - CSV column "ISO3166-1-Alpha-2" (rows with an empty code are skipped)
+//   name     - CSV column "CLDR display name"
+//   currency - first entry of CSV column "ISO4217-currency_alphabetic_code"
 //              (comma-separated values take the first; empty -> null)
-//   dialCode / phoneMin / phoneMax — hand-built supplement keyed on alpha-2
+//   dialCode / phoneMin / phoneMax - hand-built supplement keyed on alpha-2
 //              (ITU/libphonenumber-style national significant digit ranges,
 //              conservative/wide where variable). Missing supplement rows get
 //              explicit nulls; consumers must skip length-locking for them.

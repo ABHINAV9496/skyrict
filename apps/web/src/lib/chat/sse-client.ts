@@ -4,7 +4,7 @@
  * POSTs one turn to the web BFF `/api/v1/ai/agents/chat/stream` (which relays
  * the core monolith's `text/event-stream` chunk-by-chunk without buffering),
  * parses the SSE frames incrementally, and dispatches typed events to the
- * caller as they arrive — so the shell renders tokens live instead of waiting
+ * caller as they arrive - so the shell renders tokens live instead of waiting
  * for a whole answer.
  *
  * Event contract (matches ai-agent `api/v1/routers/chat.py`):
@@ -150,7 +150,7 @@ export interface StreamAttachment {
   name: string;
   type: string;
   size: number;
-  /** Base64-encoded file content (data-URL stripped — pure base64). */
+  /** Base64-encoded file content (data-URL stripped - pure base64). */
   base64: string;
 }
 

@@ -1,7 +1,7 @@
 """Unit tests for the restock-advisor demo agent (SKY-59 / SKY-68 touch).
 
 These run the REAL ``ai_agent.features.restock_agent.graph`` through the real
-runtime against an ``InMemorySaver`` — so the demo's read gate, the
+runtime against an ``InMemorySaver`` - so the demo's read gate, the
 interrupt/pause, the approval persistence (SuggestionRepository +
 ai.suggestion.created audit) and the write-failure capture are all exercised
 with real LangGraph semantics. Only the session (ledger/suggestion writes)
@@ -250,7 +250,7 @@ async def test_invoke_without_read_permission_fails_with_permission_denied() -> 
 
 async def test_approve_with_write_failure_is_captured_in_state() -> None:
     """The decision commits (decision-first), but the apply write failure is
-    captured into state — never raised into the checkpoint."""
+    captured into state - never raised into the checkpoint."""
 
     class _FailingSuggestions:
         def __init__(self, session: object) -> None:

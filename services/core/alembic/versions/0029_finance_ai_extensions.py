@@ -1,4 +1,4 @@
-"""0027_finance_ai_extensions — add lines_json + explanation to ai_finance_suggestions.
+"""0029_finance_ai_extensions — add lines_json + explanation to ai_finance_suggestions.
 
 Stores multi-line draft entries and the LLM's relationship explanation,
 so every AI-generated draft can be audited and reviewed later (FIN-AI-001).
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0027"
-down_revision = "0026"
+revision = "0029"
+down_revision = "0028"
 
 
 def upgrade() -> None:

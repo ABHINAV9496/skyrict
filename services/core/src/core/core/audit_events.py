@@ -1,14 +1,14 @@
 """Canonical audit event keys for the core (ERP) domain.
 
 Single source of truth for the free-form ``action`` strings written to the
-core audit trails — ``core_audit_logs`` (HR/payroll, see ``core.core.
+core audit trails - ``core_audit_logs`` (HR/payroll, see ``core.core.
 audit_service``) and ``audit_logs`` (the shared ``features.audit`` trail used
 by finance/inventory). Services must reference these constants instead of
 hardcoding strings so the event vocabulary stays greppable and drift-checked
 against the catalog grouping below.
 
 Vocabulary is defined by the HR & Payroll design doc (``docs/modules/
-hr-payroll.md``, step 4) and the finance/inventory modules — ``{domain}.
+hr-payroll.md``, step 4) and the finance/inventory modules - ``{domain}.
 {entity}.{action}``, e.g. ``hr.leave.approved``, ``finance.invoice.issued``.
 """
 

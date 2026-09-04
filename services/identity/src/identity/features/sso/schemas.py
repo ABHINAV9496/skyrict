@@ -19,14 +19,14 @@ class SSOProviderResponse(BaseModel):
 
 
 class SSOInitiateRequest(BaseModel):
-    """POST /sso/initiate — start SSO login flow."""
+    """POST /sso/initiate - start SSO login flow."""
 
     provider_id: str = Field(..., description="SSO provider ID")
     redirect_uri: str = Field(..., description="Where to redirect after auth")
 
 
 class SSOCallbackRequest(BaseModel):
-    """POST /sso/callback — handle SSO callback."""
+    """POST /sso/callback - handle SSO callback."""
 
     code: str = Field(..., description="Authorization code from IdP")
     state: str = Field(..., description="State parameter for CSRF protection")
@@ -34,7 +34,7 @@ class SSOCallbackRequest(BaseModel):
 
 
 class SSOLinkAccountRequest(BaseModel):
-    """POST /sso/link — link SSO to existing account."""
+    """POST /sso/link - link SSO to existing account."""
 
     provider_id: str
     external_id: str
@@ -42,7 +42,7 @@ class SSOLinkAccountRequest(BaseModel):
 
 
 class SSOConfigurationRequest(BaseModel):
-    """POST /organizations/{id}/sso — configure SSO for an organization."""
+    """POST /organizations/{id}/sso - configure SSO for an organization."""
 
     name: str = Field(..., min_length=1, max_length=256)
     provider_type: str = Field(..., pattern=r"^(oidc|saml)$")

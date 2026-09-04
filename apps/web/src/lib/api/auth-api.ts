@@ -3,7 +3,7 @@
  *
  * Every call goes through the same-origin BFF route handlers (/api/auth/*),
  * which enforce the Origin/Referer CSRF gate, resolve the tenant slug from
- * the Host header, and proxy to the identity service — the browser never
+ * the Host header, and proxy to the identity service - the browser never
  * talks to the identity service directly. Login/MFA set the httpOnly
  * refresh-token cookie and return the access token in the body; the browser
  * keeps it in memory only.
@@ -46,7 +46,7 @@ async function bffPost<T>(path: string, body: unknown): Promise<T> {
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -84,7 +84,7 @@ export async function loginEmailPassword(input: {
       body: JSON.stringify(input),
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await response.json().catch(() => ({}))) as BffLoginResponse;
@@ -139,7 +139,7 @@ export async function verifyMfa(input: {
       body: JSON.stringify({ mfa_token: input.mfaToken, code: input.code }),
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await response.json().catch(() => ({}))) as BffMfaVerifyResponse;
@@ -244,7 +244,7 @@ export async function getCaptcha(): Promise<{ captchaId: string; image: string }
   try {
     res = await fetch("/api/auth/captcha", { cache: "no-store" });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await res.json().catch(() => ({}))) as {
@@ -356,7 +356,7 @@ export async function setupMfa(): Promise<MfaSetup> {
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await res.json().catch(() => ({}))) as {
@@ -385,7 +385,7 @@ export async function regenerateBackupCodes(): Promise<{ backupCodes: string[] }
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await res.json().catch(() => ({}))) as {
@@ -412,7 +412,7 @@ export async function regenerateBackupCodes(): Promise<{ backupCodes: string[] }
  * Complete a finished auth flow: mint a single-use handoff token on the auth
  * origin, POST it (body only) to the workspace origin's /api/auth/handoff to
  * establish the host-scoped session cookie, then navigate to the workspace
- * root. The URL bar ends on {slug}.localhost — never signin.
+ * root. The URL bar ends on {slug}.localhost - never signin.
  */
 export async function completeHandoff(redirect = "/"): Promise<void> {
   const mint = await bffPost<{
@@ -423,7 +423,7 @@ export async function completeHandoff(redirect = "/"): Promise<void> {
 
   // Redeem via a top-level form POST navigation, not fetch. The workspace
   // origin sets the host-scoped session cookie during a first-party navigation
-  // and 302s to the redirect target — no CORS, no third-party-cookie blocking.
+  // and 302s to the redirect target - no CORS, no third-party-cookie blocking.
   // (A cross-site fetch would drop the Set-Cookie under Chrome's third-party
   // cookie blocking, bouncing the user straight back to signin.)
   const form = document.createElement("form");
@@ -451,7 +451,7 @@ export async function confirmMfaSetup(input: {
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
 
   const payload = (await res.json().catch(() => ({}))) as {
@@ -501,7 +501,7 @@ export async function uploadAvatar(file: File): Promise<AuthUser> {
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
   return bffAvatarResult(res);
 }
@@ -515,7 +515,7 @@ export async function removeAvatar(): Promise<AuthUser> {
       cache: "no-store",
     });
   } catch {
-    throw new ApiError(0, "Network error — check your connection and try again.");
+    throw new ApiError(0, "Network error - check your connection and try again.");
   }
   return bffAvatarResult(res);
 }

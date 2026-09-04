@@ -1,4 +1,4 @@
-"""HR ORM models — one file per ``erp_*`` table (HR-DATA-001)."""
+"""HR ORM models - one file per ``erp_*`` table (HR-DATA-001)."""
 
 from core.features.hr.models.attendance_record import AttendanceRecordModel
 from core.features.hr.models.department import DepartmentModel

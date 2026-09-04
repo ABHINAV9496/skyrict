@@ -37,11 +37,11 @@ make lint
 
 ## Branch Strategy
 
-- `main` — stable, deployable at all times
-- `feat/{short-description}` — new features
-- `fix/{short-description}` — bug fixes
-- `refactor/{short-description}` — code structure changes
-- `docs/{short-description}` — documentation only
+- `main` - stable, deployable at all times
+- `feat/{short-description}` - new features
+- `fix/{short-description}` - bug fixes
+- `refactor/{short-description}` - code structure changes
+- `docs/{short-description}` - documentation only
 
 Rebase on `main` before opening a PR. No merge commits.
 
@@ -86,28 +86,28 @@ strict = true
 - No `# type: ignore` without a linked issue number
 - Prefer `async def` over `def` for I/O-bound operations
 - Use Pydantic v2 models for all data validation
-- Use SQLAlchemy 2.0 async patterns — no legacy `session.query()`
+- Use SQLAlchemy 2.0 async patterns - no legacy `session.query()`
 
 ### TypeScript / React
 
 - **Formatter:** Prettier
 - **Linter:** ESLint with Next.js config
-- Functional components only — no class components
+- Functional components only - no class components
 - Use TanStack Query for server state, Zustand for client state
 
 ### Domain Logic
 
 - Every business operation must emit a domain event
-- No direct database reads across service boundaries — use events or query APIs
-- All monetary values use `Decimal(19,4)` — never floats
+- No direct database reads across service boundaries - use events or query APIs
+- All monetary values use `Decimal(19,4)` - never floats
 - UUIDs for all primary keys (v7 preferred for sortability)
-- Soft deletes only — no hard deletes on business data
+- Soft deletes only - no hard deletes on business data
 - Audit columns on every table: `created_by`, `created_at`, `updated_by`, `updated_at`
 
 ### Database
 
-- Migrations via Alembic — every schema change gets a migration file
-- No raw SQL in application code — always through the ORM or parameterized queries
+- Migrations via Alembic - every schema change gets a migration file
+- No raw SQL in application code - always through the ORM or parameterized queries
 - Index naming convention: `ix_{table}_{columns}`
 - Foreign key naming convention: `fk_{table}_{referenced_table}`
 
@@ -215,9 +215,9 @@ When adding new scoring algorithms:
 When adding new agent capabilities:
 
 1. Define the tool interface with strict input/output schemas
-2. Implement guardrails — every agent action must have a policy check
+2. Implement guardrails - every agent action must have a policy check
 3. Log all agent actions with full context for audit
-4. Test with adversarial inputs — try to break the guardrails
+4. Test with adversarial inputs - try to break the guardrails
 5. Document failure modes and fallback behavior
 
 ## Questions?

@@ -1,4 +1,4 @@
-"""Handoff service — issue and redeem single-use onboarding handoff tokens.
+"""Handoff service - issue and redeem single-use onboarding handoff tokens.
 
 The wizard and BFF pass control across requests by exchanging an opaque,
 single-use token that carries the in-flight payload so the exact step can be

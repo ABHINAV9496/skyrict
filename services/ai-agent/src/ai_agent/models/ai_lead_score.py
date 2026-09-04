@@ -1,6 +1,6 @@
 """ai_lead_scores - one row per deterministic lead scoring run (SKY-61 Part 11).
 
-``score`` is the weighted sum (0-100) produced by the CRM AI scoring engine —
+``score`` is the weighted sum (0-100) produced by the CRM AI scoring engine -
 never an LLM number. ``factors`` is the JSONB breakdown the UI shows in the
 badge tooltip (e.g. ``["engagement 80 x 0.25", ...]``). ``confidence`` reflects
 how much source data the engine had to work with (0 when a lead has no
@@ -8,7 +8,7 @@ activity/contact data yet). ``UNIQUE (tenant_id, lead_id, computed_at)`` lets a
 lead carry a history: a re-score INSERTs a new version rather than clobbering.
 
 ``lead_id`` is a plain UUID with NO FK: the lead row is owned by the core
-service in the shared database (cross-service idiom — integrity is validated by
+service in the shared database (cross-service idiom - integrity is validated by
 looking the lead up through core's CRM API before scoring).
 """
 

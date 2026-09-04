@@ -96,7 +96,7 @@ export function LeavePortal() {
         result.filter((suggestion) => suggestion.status === "pending"),
       );
     } catch {
-      // Suggestions are optional polish — the form still works without them.
+      // Suggestions are optional polish the form still works without them.
       setSuggestions([]);
     }
   }, []);
@@ -122,7 +122,7 @@ export function LeavePortal() {
     void loadAll();
   }, [loadAll]);
 
-  /** Prefill the form from a suggestion — never auto-submits a request. */
+  /** Prefill the form from a suggestion never auto-submits a request. */
   async function applySuggestion(suggestion: PortalLeaveSuggestion) {
     setSubmitError(null);
     setSubmitSuccess(false);
@@ -240,7 +240,7 @@ export function LeavePortal() {
               >
                 <p className="text-sm font-medium">{type.name}</p>
                 <p className="mt-2 text-2xl font-semibold tabular-nums">
-                  {type.isAccrual && balance !== undefined ? balance : "—"}
+                  {type.isAccrual && balance !== undefined ? balance : "-"}
                   {type.isAccrual && balance !== undefined ? (
                     <span className="ml-1 text-xs font-normal text-muted-foreground">
                       days
@@ -313,7 +313,7 @@ export function LeavePortal() {
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">
-            A suggestion only fills the form below — it never submits anything.
+            A suggestion only fills the form below it never submits anything.
           </p>
         </section>
       ) : null}
@@ -392,7 +392,7 @@ export function LeavePortal() {
           ) : null}
           {submitSuccess ? (
             <p role="status" className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              Request submitted — it now shows as pending below.
+              Request submitted it now shows as pending below.
             </p>
           ) : null}
           <div className="mt-4 flex justify-end">
@@ -421,7 +421,7 @@ export function LeavePortal() {
           <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-4 py-12 text-center">
             <CalendarDays aria-hidden="true" className="size-6 text-muted-foreground" />
             <p className="mt-3 text-sm text-muted-foreground">
-              No requests yet — submit your first one above.
+              No requests yet submit your first one above.
             </p>
           </div>
         ) : (

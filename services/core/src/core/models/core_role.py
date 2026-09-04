@@ -1,4 +1,4 @@
-"""Tenant-scoped ERP role model — RLS-protected, composite primary key.
+"""Tenant-scoped ERP role model - RLS-protected, composite primary key.
 
 Composite PK ``(tenant_id, id)`` is part of the RLS convention: ``tenant_id``
 is both the isolation column and a member of the key, so a row's tenant can

@@ -1,9 +1,9 @@
-"""Parent-child chunking (SKY-58) — embed small, retrieve, return big.
+"""Parent-child chunking (SKY-58) - embed small, retrieve, return big.
 
 Why parent-child: retrieval precision comes from small (~400 token) child
 chunks; answer quality comes from larger (~2000 token) parent context. The
 parent text is returned to the LLM for generation while only child vectors are
-embedded and searched — the highest-leverage RAG accuracy pattern per
+embedded and searched - the highest-leverage RAG accuracy pattern per
 2025-2026 benchmarks (+10-15% over flat chunking).
 
 Algorithm (token-accurate, deterministic):
@@ -15,7 +15,7 @@ Algorithm (token-accurate, deterministic):
    would make every window restart inside its predecessor and waste tokens).
 3. Greedily group children into parents while the joined parent text stays
    under ``parent_tokens``. A child that alone exceeds the parent budget
-   becomes a single-child parent — content is NEVER dropped and never split
+   becomes a single-child parent - content is NEVER dropped and never split
    mid-sentence (chunk boundaries only ever fall between tokens).
 
 The separator between child texts inside a parent is ``"\\n\\n"`` so decoded

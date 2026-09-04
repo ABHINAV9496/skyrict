@@ -6,7 +6,7 @@ import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
   title: "Secure your account",
-  description: "Step 3 of 5 — choose a strong password.",
+  description: "Step 3 of 5 - choose a strong password.",
 };
 
 export default async function SecurityPage({

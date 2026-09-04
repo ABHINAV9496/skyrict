@@ -1,4 +1,4 @@
-"""SequenceService unit tests — port double, no database."""
+"""SequenceService unit tests - port double, no database."""
 
 from __future__ import annotations
 

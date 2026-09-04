@@ -1,7 +1,7 @@
 """Unit tests for the attrition service: lazy TTL + acknowledge (Commit 3).
 
 Pure unit tests with fakes for the attrition repository, the ai-agent scorer
-port, the L1 repository, and the audit service — no database, no network.
+port, the L1 repository, and the audit service - no database, no network.
 """
 
 from __future__ import annotations

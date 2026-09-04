@@ -1,4 +1,4 @@
-"""Inventory schema tests — the HTTP boundary (requests and responses).
+"""Inventory schema tests - the HTTP boundary (requests and responses).
 
 Money is a pure-domain value object, so inputs carry ``(amount, currency)``
 tuples and outputs serialize amounts as strings (JSON never loses precision).

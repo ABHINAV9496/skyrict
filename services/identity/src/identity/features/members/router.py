@@ -1,4 +1,4 @@
-"""Member management endpoints — list, re-role, remove, and manage sessions."""
+"""Member management endpoints - list, re-role, remove, and manage sessions."""
 
 from __future__ import annotations
 

@@ -87,7 +87,7 @@ export function ErpTable<T>({
                     >
                       {column.render
                         ? column.render(row)
-                        : String((row as Record<string, unknown>)[column.key] ?? "—")}
+                        : String((row as Record<string, unknown>)[column.key] ?? "-")}
                     </td>
                   ))}
                 </tr>

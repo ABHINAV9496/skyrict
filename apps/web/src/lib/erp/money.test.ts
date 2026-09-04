@@ -20,13 +20,13 @@ describe("formatMoney", () => {
   });
 
   it("renders an em dash for missing amounts", () => {
-    expect(formatMoney(null, "USD")).toBe("—");
-    expect(formatMoney(undefined, "USD")).toBe("—");
-    expect(formatMoney("", "USD")).toBe("—");
+    expect(formatMoney(null, "USD")).toBe("-");
+    expect(formatMoney(undefined, "USD")).toBe("-");
+    expect(formatMoney("", "USD")).toBe("-");
   });
 
   it("renders an em dash for non-numeric input", () => {
-    expect(formatMoney("not-a-number", "USD")).toBe("—");
+    expect(formatMoney("not-a-number", "USD")).toBe("-");
   });
 });
 
@@ -40,8 +40,8 @@ describe("formatNumber", () => {
   });
 
   it("renders an em dash for missing or bad input", () => {
-    expect(formatNumber(null)).toBe("—");
-    expect(formatNumber("oops")).toBe("—");
+    expect(formatNumber(null)).toBe("-");
+    expect(formatNumber("oops")).toBe("-");
   });
 });
 
@@ -60,8 +60,8 @@ describe("formatDate", () => {
   });
 
   it("renders an em dash for missing dates", () => {
-    expect(formatDate(null)).toBe("—");
-    expect(formatDate(undefined)).toBe("—");
+    expect(formatDate(null)).toBe("-");
+    expect(formatDate(undefined)).toBe("-");
   });
 
   it("returns the raw value when it is not parseable", () => {
@@ -75,7 +75,7 @@ describe("formatPercent", () => {
   });
 
   it("renders an em dash for missing or bad input", () => {
-    expect(formatPercent(null)).toBe("—");
-    expect(formatPercent(Number.NaN)).toBe("—");
+    expect(formatPercent(null)).toBe("-");
+    expect(formatPercent(Number.NaN)).toBe("-");
   });
 });

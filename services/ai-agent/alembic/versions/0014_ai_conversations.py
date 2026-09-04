@@ -1,17 +1,17 @@
-"""ai_conversations — durable conversation storage for the Agents shell (SKY-60).
+"""ai_conversations - durable conversation storage for the Agents shell (SKY-60).
 
 Replaces the in-memory mock store with PostgreSQL-backed persistence so
 conversations survive server restarts.  Two tables:
 
-  * ``ai_conversations`` — one row per chat session (title, pin state, owner).
-  * ``ai_conversation_messages`` — ordered message log per conversation.
+  * ``ai_conversations`` - one row per chat session (title, pin state, owner).
+  * ``ai_conversation_messages`` - ordered message log per conversation.
 
 Both use the repo-wide composite ``(tenant_id, id)`` primary key and
 row-level security against ``public.current_tenant_id()`` (same pattern as
 migration 0001).  Messages cascade-delete when a conversation is removed.
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-09-02
 """
 
@@ -21,8 +21,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0015"
-down_revision: str | None = "0014"
+revision: str = "0014"
+down_revision: str | None = "0013"
 branch_labels: str | None = None
 depends_on: str | None = None
 
@@ -143,7 +143,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        # Parent PK is composite (tenant_id, id) — the FK must be composite
+        # Parent PK is composite (tenant_id, id) - the FK must be composite
         # too; a single-column FK to id alone would fail DDL on Postgres.
         sa.ForeignKeyConstraint(
             ["tenant_id", "conversation_id"],

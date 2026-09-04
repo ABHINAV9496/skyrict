@@ -1,4 +1,4 @@
-"""TenantContext tests — request-scoped contextvar lifecycle."""
+"""TenantContext tests - request-scoped contextvar lifecycle."""
 
 from __future__ import annotations
 

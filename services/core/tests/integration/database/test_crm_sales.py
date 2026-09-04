@@ -1,4 +1,4 @@
-"""CRM & Sales integration tests (CRM-DATA-001) — real Postgres, real migrations.
+"""CRM & Sales integration tests (CRM-DATA-001) - real Postgres, real migrations.
 
 Covers what a model/unit test cannot:
 
@@ -111,7 +111,7 @@ def crm_world(migrated_schema: None) -> dict[str, str]:
                 ]
             )
             await session.flush()
-            # Same SKU in both tenants — uniqueness is per-tenant, and both
+            # Same SKU in both tenants - uniqueness is per-tenant, and both
             # tenants have a valid product so FK tests differ only by tenant.
             session.add_all(
                 [
@@ -731,7 +731,7 @@ class TestCrmRepository:
     async def test_find_leads_by_email_is_a_soft_dedupe_probe(
         self, migrated_schema: None, crm_world: dict[str, str]
     ) -> None:
-        # Locked SKY-43 decision: the (tenant_id, email) index is NON-unique —
+        # Locked SKY-43 decision: the (tenant_id, email) index is NON-unique -
         # the probe answers "has anyone here been approached", and the service
         # layer decides how to act. Duplicates must be allowed.
         tenant_a = uuid.UUID(crm_world["tenant_a"])
@@ -1062,7 +1062,7 @@ class TestSalesRepository:
             assert fulfilled is not None
             assert fulfilled.status == OrderStatus.FULFILLED
 
-            # fulfilled is terminal — cancel must lose the guard.
+            # fulfilled is terminal - cancel must lose the guard.
             assert await repo.cancel_order(draft.id, tenant_id=tenant_a) is None
 
             # A cancelled draft stays cancelled; the guard wins exactly once.
@@ -1113,7 +1113,7 @@ class TestSalesRepository:
 
 
 class TestDowngradeRoundTrip:
-    """Module-scoped downgrade round-trip — MUST stay the last class here.
+    """Module-scoped downgrade round-trip - MUST stay the last class here.
 
     ``alembic downgrade`` walks back to just before migration 0003 (its parent
     revision, resolved dynamically), then ``upgrade head`` re-applies the

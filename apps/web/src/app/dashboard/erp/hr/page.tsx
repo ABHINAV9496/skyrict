@@ -10,7 +10,7 @@ export default function HrHomePage() {
       <div className="space-y-6">
         <PageHeader
           title="HR"
-          description="The people behind the business — employees, departments, and leave."
+          description="The people behind the business employees, departments, and leave."
           icon={Users}
         />
         <HrOverview />

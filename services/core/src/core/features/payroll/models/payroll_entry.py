@@ -1,4 +1,4 @@
-"""erp_payroll_entries — one immutable result row per (run, employee).
+"""erp_payroll_entries - one immutable result row per (run, employee).
 
 A payroll computation snapshot: once a run is computed, every entry is frozen.
 IMMUTABLE RECORD: no ``updated_at``, no update/delete endpoints in later

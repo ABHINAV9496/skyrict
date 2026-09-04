@@ -1,4 +1,4 @@
-"""ai_finance_suggestions — persisted account-code suggestion rows.
+"""ai_finance_suggestions - persisted account-code suggestion rows.
 
 Upserted on duplicate scan (deduped on tenant + description hash) and
 accepted/dismissed later by humans (SKY-66)."""

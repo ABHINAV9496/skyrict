@@ -1,4 +1,4 @@
-"""erp_leave_balances — materialized current balance per (employee, leave_type).
+"""erp_leave_balances - materialized current balance per (employee, leave_type).
 
 The CHECK ``balance >= 0`` is the integrity backstop for the no-negative-balance
 rule; the service recomputes these rows from ``erp_leave_movements``. Only

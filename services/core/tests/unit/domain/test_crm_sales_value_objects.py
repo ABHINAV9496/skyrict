@@ -1,4 +1,4 @@
-"""CRM/sales value object tests — enum members mirror the locked SKY-43 enums.
+"""CRM/sales value object tests - enum members mirror the locked SKY-43 enums.
 
 These are the DB-level truth for the native PostgreSQL enums created by
 migration 0003: changing a member here without a matching migration breaks
@@ -64,7 +64,7 @@ class TestCreditCheckResult:
 
 class TestDataScope:
     def test_members_and_privilege_ordering(self) -> None:
-        # OWNER < TEAM < ALL is the ordering core/db/rbac.py merges with —
+        # OWNER < TEAM < ALL is the ordering core/db/rbac.py merges with -
         # the highest scope a user holds wins.
         assert DataScope.OWNER.value == "owner"
         assert DataScope.TEAM.value == "team"

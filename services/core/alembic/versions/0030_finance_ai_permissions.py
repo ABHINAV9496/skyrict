@@ -7,16 +7,16 @@ runtime catalog (``core_permissions``) exactly like the ``erp.hr.ai.*`` keys in
 migration 0021/0023. The owner ``*`` wildcard covers them; specific roles
 grant them via the platform's role-grant tooling.
 
-Revision ID: 0028
-Revises: 0027
+Revision ID: 0030
+Revises: 0029
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0028"
-down_revision = "0027"
+revision = "0030"
+down_revision = "0029"
 branch_labels = None
 depends_on = None
 

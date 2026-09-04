@@ -6,17 +6,17 @@ vector search → parent fetch), generates an answer from the retrieved context,
 and scores the pair with RAGAS. ``module`` routes the case to the matching
 corpus slice so docs questions never search product chunks and vice versa.
 
-Ground-truth answers are phrased as claims the corpus should contain —
+Ground-truth answers are phrased as claims the corpus should contain -
 ``context_recall`` measures what fraction of those claims the retriever found.
 Tuning notes for operators:
 
 - Cases whose answers describe PROCESS (policies, formats, retention rules)
-  are answerable from any well-ingested docs corpus — they never change.
+  are answerable from any well-ingested docs corpus - they never change.
 - Cases whose answers name SPECIFIC records (a product, a SKU, a reorder
   point) gate corpus freshness: a nightly failure on one of these means the
   ingested snapshot is stale or missing that record.
 
-Keep at least 20+ cases and spread them across ingested modules — a smaller
+Keep at least 20+ cases and spread them across ingested modules - a smaller
 or single-module set produces noisy metric means.
 """
 
@@ -36,7 +36,7 @@ class RagEvalCase:
 
 RAG_EVAL_CASES: tuple[RagEvalCase, ...] = (
     # ------------------------------------------------------------------
-    # docs module — processes, policies, and platform guarantees (16)
+    # docs module - processes, policies, and platform guarantees (16)
     # ------------------------------------------------------------------
     RagEvalCase(
         question="What is the approval workflow for purchase orders above $10,000?",
@@ -172,7 +172,7 @@ RAG_EVAL_CASES: tuple[RagEvalCase, ...] = (
         module="docs",
     ),
     # ------------------------------------------------------------------
-    # products module — product records rendered from the core catalog (8)
+    # products module - product records rendered from the core catalog (8)
     # ------------------------------------------------------------------
     RagEvalCase(
         question="Which product records include a reorder point?",

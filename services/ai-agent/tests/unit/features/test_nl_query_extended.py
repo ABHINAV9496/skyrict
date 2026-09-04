@@ -1,4 +1,4 @@
-"""Extended NL query tests — 7 actions, new engine result methods, prompt content."""
+"""Extended NL query tests - 7 actions, new engine result methods, prompt content."""
 
 from __future__ import annotations
 

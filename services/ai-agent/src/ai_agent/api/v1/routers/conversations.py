@@ -1,4 +1,4 @@
-"""/ai/agents/conversations — CRUD for agent-shell conversation persistence.
+"""/ai/agents/conversations - CRUD for agent-shell conversation persistence.
 
 Replaces the in-memory mock store with PostgreSQL-backed storage so
 conversations survive server restarts (SKY-60 durability fix).
@@ -9,14 +9,68 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
 from ai_agent.db.conversation_repository import ConversationRepository
+from ai_agent.features.supervisor.title import (
+    TitleStore,
+    is_conversation_title_retryable,
+    schedule_title_generation,
+)
 
 router = APIRouter(prefix="/ai/agents/conversations", tags=["ai-agent-conversations"])
+
+
+class _ConversationTitleStore:
+    """API-layer adapter from :class:`ConversationRepository` to TitleStore.
+
+    Owns the fresh background session (created by the store factory) and its
+    commit, so the ``features`` layer never imports ``ai_agent.db`` (import-
+    linter contract: only repositories touch the database layer).
+    """
+
+    def __init__(self, repo: ConversationRepository, session: AsyncSession) -> None:
+        self._repo = repo
+        self._session = session
+
+    async def get_conversation(
+        self, *, tenant_id: Any, conversation_id: Any
+    ) -> dict[str, Any] | None:
+        return await self._repo.get_conversation(
+            tenant_id=tenant_id, conversation_id=conversation_id
+        )
+
+    async def get_messages(self, *, tenant_id: Any, conversation_id: Any) -> list[dict[str, Any]]:
+        return await self._repo.get_messages(tenant_id=tenant_id, conversation_id=conversation_id)
+
+    async def mark_title_generated(
+        self,
+        *,
+        tenant_id: Any,
+        conversation_id: Any,
+        title: str,
+        finalize: bool,
+    ) -> bool:
+        return await self._repo.mark_title_generated(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            title=title,
+            finalize=finalize,
+        )
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
+
+async def _title_store_factory() -> TitleStore:
+    """Open a fresh session and bind it to a conversation title store."""
+    from ai_agent.db.session import async_session_factory
+
+    session = async_session_factory()
+    return _ConversationTitleStore(ConversationRepository(session), session)
 
 
 # ------------------------------------------------------------------
@@ -97,6 +151,7 @@ async def get_conversation(
     conversation_id: uuid.UUID,
     user: Annotated[dict[str, Any], Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> dict[str, Any]:
     """Fetch a single conversation with its messages."""
     repo = ConversationRepository(session)
@@ -112,6 +167,22 @@ async def get_conversation(
         conversation_id=conversation_id,
     )
     conversation["messages"] = messages
+
+    # Retry-on-read: a background title generation may have failed or been
+    # skipped. When the title is still retryable, try again on page load so
+    # a real title eventually appears even if no new message arrives.
+    roles = {message["role"] for message in messages}
+    if {"user", "agent"} <= roles and is_conversation_title_retryable(
+        conversation["title"],
+        conversation["title_generated_at"],
+    ):
+        schedule_title_generation(
+            conversation_id=conversation_id,
+            tenant_id=user["tenant_id"],
+            llm_router=request.app.state.llm_router,
+            store_factory=_title_store_factory,
+        )
+
     return {"data": conversation}
 
 
@@ -121,6 +192,7 @@ async def append_message(
     body: AppendMessageRequest,
     user: Annotated[dict[str, Any], Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> dict[str, Any]:
     """Append a message to a conversation."""
     repo = ConversationRepository(session)
@@ -150,6 +222,21 @@ async def append_message(
             tenant_id=user["tenant_id"],
             conversation_id=conversation_id,
             title=title,
+        )
+
+    # Schedule AI title generation after an agent reply. Unconditional for
+    # every module path (supervisor, module agent, greeting, abstention):
+    # the generator produces the deterministic greeting title when the
+    # exchange has no topic and keeps non-final states retryable.
+    if body.role == "agent" and is_conversation_title_retryable(
+        conversation["title"],
+        conversation["title_generated_at"],
+    ):
+        schedule_title_generation(
+            conversation_id=conversation_id,
+            tenant_id=user["tenant_id"],
+            llm_router=request.app.state.llm_router,
+            store_factory=_title_store_factory,
         )
 
     # Return the full conversation (with updated title) so the frontend

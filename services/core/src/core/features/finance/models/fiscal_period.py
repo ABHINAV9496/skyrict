@@ -1,4 +1,4 @@
-"""erp_fiscal_periods — accounting periods that can be closed to freeze history.
+"""erp_fiscal_periods - accounting periods that can be closed to freeze history.
 
 An entry belongs to a period by date (``entry_date`` falls within start/end),
 not by FK; the closed-period gate in the service compares dates. The database

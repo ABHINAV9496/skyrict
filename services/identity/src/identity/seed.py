@@ -1,4 +1,4 @@
-"""Database seeding — bootstrap default tenants, roles, and admin users.
+"""Database seeding - bootstrap default tenants, roles, and admin users.
 
 Usage:
     python -m identity.seed
@@ -110,7 +110,7 @@ async def seed_admin_membership() -> None:
 
     The admin user alone is not enough: membership scopes RBAC reads and the
     role carries the wildcard ``*`` permission (plus ``invitations:send``)
-    that the members dashboard needs. Idempotent — safe to re-run.
+    that the members dashboard needs. Idempotent - safe to re-run.
     """
     from identity.features.users.repository import UserRepository
 

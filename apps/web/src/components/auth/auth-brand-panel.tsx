@@ -6,7 +6,7 @@ const authValueProps = [
   {
     icon: Boxes,
     title: "One source of internal truth",
-    body: "Inventory, sales, cash, and orders — a deliberately scoped ERP slice. Not a bloated replacement; the ~20% that 80% of SMBs actually use.",
+    body: "Inventory, sales, cash, and orders - a deliberately scoped ERP slice. Not a bloated replacement; the ~20% that 80% of SMBs actually use.",
   },
   {
     icon: Globe,
@@ -16,7 +16,7 @@ const authValueProps = [
   {
     icon: Sparkles,
     title: "Agents that act",
-    body: "AI that reasons across both sides at once — and answers what no single tool can.",
+    body: "AI that reasons across both sides at once - and answers what no single tool can.",
   },
 ] as const;
 
@@ -53,7 +53,7 @@ function AuthBrandPanel() {
           Internal truth × external truth
         </p>
         <h2 className="font-display text-3xl font-semibold leading-snug text-[#f4fafd]">
-          Your operations meet the market — in one plane.
+          Your operations meet the market - in one plane.
         </h2>
         <ul className="space-y-5">
           {authValueProps.map(({ icon: Icon, title, body }) => (
@@ -80,7 +80,7 @@ function AuthBrandPanel() {
           <span className="relative inline-flex size-2.5 rounded-full bg-[#87ceeb]" />
         </span>
         <p className="font-mono text-xs text-[#aedef1]/80">
-          inventory · market · agents — online
+          inventory · market · agents - online
         </p>
       </div>
     </aside>

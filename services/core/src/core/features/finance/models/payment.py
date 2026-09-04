@@ -1,4 +1,4 @@
-"""erp_payments — cash receipts applied to an invoice.
+"""erp_payments - cash receipts applied to an invoice.
 
 RESTRICT on the invoice FK: payments are history and a paid invoice is never
 deleted. ``UNIQUE (tenant_id, source, source_ref)`` is the second idempotency

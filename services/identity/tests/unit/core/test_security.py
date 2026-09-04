@@ -1,4 +1,4 @@
-"""Unit tests for security utilities — JWT (RS256) and password hashing (Argon2id).
+"""Unit tests for security utilities - JWT (RS256) and password hashing (Argon2id).
 
 Includes adversarial tests: expired / wrong-issuer / wrong-audience / future-nbf
 tokens, alg:none forgery, HS256 algorithm-confusion with the public key, tokens
@@ -34,7 +34,7 @@ from skyrict_common.exceptions import TokenExpiredError, TokenInvalidError, Vali
 
 
 # ---------------------------------------------------------------------------
-# Helpers — craft JWTs to probe verify_jwt's validation logic
+# Helpers - craft JWTs to probe verify_jwt's validation logic
 # ---------------------------------------------------------------------------
 def _valid_claims(**overrides) -> dict:
     """Return a claims dict that verify_jwt accepts (correct iss/aud, valid exp)."""
@@ -54,7 +54,7 @@ def _valid_claims(**overrides) -> dict:
 
 
 def _sign(payload: dict, private_key_pem: str, algorithm: str = "RS256") -> str:
-    """Sign claims with python-jose — used to build adversarial tokens."""
+    """Sign claims with python-jose - used to build adversarial tokens."""
     return jose_jwt.encode(payload, private_key_pem, algorithm=algorithm)
 
 
@@ -93,7 +93,7 @@ def _hmac_token(payload: dict, secret: str) -> str:
     """Manually sign an HS256 token with an HMAC secret.
 
     python-jose's cryptography backend refuses to construct an HMAC key from an
-    asymmetric PEM, so this builds the token directly — reproducing the real
+    asymmetric PEM, so this builds the token directly - reproducing the real
     algorithm-confusion attack where the attacker uses the public key as the
     HMAC secret.
     """
@@ -106,7 +106,7 @@ def _hmac_token(payload: dict, secret: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Password hashing — Argon2id
+# Password hashing - Argon2id
 # ---------------------------------------------------------------------------
 class TestPasswordHashing:
     """Test Argon2id password hashing."""
@@ -130,7 +130,7 @@ class TestPasswordHashing:
         assert verify_password("WrongPassword!1", hashed) is False
 
     def test_verify_password_malformed_hash(self):
-        # A corrupted/malformed stored hash must never raise — just return False.
+        # A corrupted/malformed stored hash must never raise - just return False.
         assert verify_password("Anything!1", "not-a-valid-argon2-hash") is False
 
     def test_different_hashes_for_same_password(self):
@@ -267,7 +267,7 @@ class TestJWTVerification:
 
 
 # ---------------------------------------------------------------------------
-# Adversarial — token forgery and algorithm confusion
+# Adversarial - token forgery and algorithm confusion
 # ---------------------------------------------------------------------------
 class TestJWTAdversarial:
     """Attack vectors that must always be rejected."""
@@ -281,7 +281,7 @@ class TestJWTAdversarial:
             verify_jwt(token)
 
     def test_rejects_missing_algorithm_header(self):
-        # Header with no alg — the code must not default to trusting anything.
+        # Header with no alg - the code must not default to trusting anything.
         token = _bare_token({"typ": "JWT"}, {"sub": "user-123"})
         with pytest.raises(TokenInvalidError):
             verify_jwt(token)
@@ -326,7 +326,7 @@ class TestJWTAdversarial:
 
 
 # ---------------------------------------------------------------------------
-# Startup key validation — verify_jwt_keys_usable
+# Startup key validation - verify_jwt_keys_usable
 # ---------------------------------------------------------------------------
 def _pem_private(key) -> str:
     """Serialize a private key object to PKCS8 PEM."""

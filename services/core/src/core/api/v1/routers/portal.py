@@ -1,9 +1,9 @@
-"""Employee self-service portal — own leave balances and requests.
+"""Employee self-service portal - own leave balances and requests.
 
 Endpoints live under ``/api/v1/portal/*`` and are gated by
 :func:`core.api.deps.require_employee_self_service`, which checks the
 ``erp.leave.self`` permission AND resolves the caller's linked employee row.
-Every query forces ``employee_id`` server-side — a portal user can only ever
+Every query forces ``employee_id`` server-side - a portal user can only ever
 see or create their own data; HR's admin endpoints are not reused for reads.
 """
 
@@ -100,7 +100,7 @@ async def submit_my_leave_request(
     leave_svc: LeaveService = Depends(get_leave_service),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ) -> ResponseEnvelope[LeaveRequestOut]:
-    """Submit an own leave request — reuses HR's request() rules verbatim."""
+    """Submit an own leave request - reuses HR's request() rules verbatim."""
     try:
         request = await leave_svc.request(
             tenant_id=tenant_id,

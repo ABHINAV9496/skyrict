@@ -1,9 +1,9 @@
-"""Shared integration fixtures — real Postgres required (skipped when unavailable).
+"""Shared integration fixtures - real Postgres required (skipped when unavailable).
 
 The session-scoped ``migrated_schema`` fixture applies the identity migration
 chain FIRST (core's 0001 FKs ``tenant_id -> tenants(id)`` and the shared
 ``current_tenant_id()`` function, so identity's base schema must exist), then
-core's own chain under its ``alembic_version_core`` version table — real
+core's own chain under its ``alembic_version_core`` version table - real
 migrations against real Postgres, not ``create_all``.
 
 Event-loop discipline: pytest-asyncio gives every function-scoped async test
@@ -12,7 +12,7 @@ a connection pool. Any pooled connection is bound to the loop that created it,
 so a connection created on one loop and reused on another dies with
 "Future attached to a different loop". The rule for every fixture wider than
 function scope is therefore: do all DB work inside a single ``asyncio.run()``
-and ``await engine.dispose()`` BEFORE that run's loop closes — the pool is
+and ``await engine.dispose()`` BEFORE that run's loop closes - the pool is
 empty when tests on their own loops start.
 """
 

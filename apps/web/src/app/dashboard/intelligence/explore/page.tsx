@@ -27,7 +27,7 @@ const CATEGORIES: ExploreCategory[] = [
   },
   {
     title: "Winning products",
-    description: "Products gaining share — and why buyers pick them.",
+    description: "Products gaining share and why buyers pick them.",
     query: "winning products in AI infrastructure",
     icon: BadgeCheck,
   },

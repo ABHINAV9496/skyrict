@@ -1,4 +1,4 @@
-"""Authentication schemas — re-exports for backward-compatible imports."""
+"""Authentication schemas - re-exports for backward-compatible imports."""
 
 from {name}.schemas.auth.requests import (
     LoginRequest,

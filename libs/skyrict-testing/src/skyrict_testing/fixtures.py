@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 # ---------------------------------------------------------------------------
 # RSA key fixtures (for RS256 JWT testing)
 #
-# Keys are generated fresh in memory for every test session — no key material
+# Keys are generated fresh in memory for every test session - no key material
 # is ever stored in or committed to the repository.
 # ---------------------------------------------------------------------------
 

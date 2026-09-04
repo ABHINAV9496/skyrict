@@ -1,8 +1,8 @@
-"""Data-scope resolution tests — role -> DataScope mapping (core/db/rbac.py).
+"""Data-scope resolution tests - role -> DataScope mapping (core/db/rbac.py).
 
 The mapping is the ONE place role names become row-scoping rules; feature
 repositories only ever receive a resolved :class:`DataScope`. Unknown roles
-must fail closed to OWNER — a user can never see MORE than their role grants.
+must fail closed to OWNER - a user can never see MORE than their role grants.
 """
 
 from __future__ import annotations

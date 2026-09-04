@@ -1,4 +1,4 @@
-"""CRM ORM models — one file per ``erp_*`` table (CRM-DATA-001).
+"""CRM ORM models - one file per ``erp_*`` table (CRM-DATA-001).
 
 Feature models are NOT re-exported from ``core.models``: importing that
 package from ``core.features`` would violate the import-linter layering

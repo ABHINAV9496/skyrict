@@ -107,7 +107,7 @@ export function ErpDashboardClient() {
         confidence: result.confidence,
       });
     } catch {
-      // AI suggestion failed — stay in customize mode
+      // AI suggestion failed - stay in customize mode
     } finally {
       setAiLoading(false);
     }
@@ -142,7 +142,7 @@ export function ErpDashboardClient() {
       <div className="space-y-8">
         <PageHeader
           title="Business Operations"
-          description="Operations management — inventory, sales, cash, and orders, all on one source of truth."
+          description="Operations management inventory, sales, cash, and orders, all on one source of truth."
           icon={Blocks}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -159,7 +159,7 @@ export function ErpDashboardClient() {
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="Business Operations"
-          description="Operations management — inventory, sales, cash, and orders, all on one source of truth."
+          description="Operations management inventory, sales, cash, and orders, all on one source of truth."
           icon={Blocks}
         />
         <Button

@@ -1,4 +1,4 @@
-"""Sales API routes — thin wrappers over :class:`SalesService`.
+"""Sales API routes - thin wrappers over :class:`SalesService`.
 
 Authorization uses the ``erp.sales.*`` keys resolved at request time: ``read``
 for reads, ``write`` for order creation/editing, ``approve`` for the money

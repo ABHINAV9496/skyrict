@@ -1,4 +1,4 @@
-# Gitleaks allowlist — see https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+# Gitleaks allowlist - see https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
 #
 # test_security.py contains an intentionally-malformed `alg:none` JWT fixture
 # ({"alg":"none"}.{"sub":"a"}) used by test_none_algorithm_rejected to verify

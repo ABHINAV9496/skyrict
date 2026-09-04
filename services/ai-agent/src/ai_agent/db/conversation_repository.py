@@ -1,4 +1,4 @@
-"""Conversation repository — CRUD for agent-shell conversations.
+"""Conversation repository - CRUD for agent-shell conversations.
 
 Handles creating, listing, updating, and deleting conversations and their
 messages.  All methods are tenant-scoped via ``tenant_id``.
@@ -10,7 +10,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from sqlalchemy import delete, desc, select, update
+from sqlalchemy import delete, desc, or_, select, update
 
 from ai_agent.models.ai_conversation import AiConversation
 from ai_agent.models.ai_conversation_message import AiConversationMessage
@@ -19,6 +19,12 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger("ai_agent.conversation_repo")
+
+# Conversations finalized BEFORE the non-finalizing greeting title existed may
+# still carry this literal placeholder with a set ``title_generated_at``.
+# Such rows must stay retryable so a real exchange can replace the
+# placeholder (see ai_agent.features.supervisor.title).
+LEGACY_PLACEHOLDER_TITLE = "New conversation"
 
 
 class ConversationRepository:
@@ -93,14 +99,23 @@ class ConversationRepository:
         conversation_id: uuid.UUID,
         title: str,
     ) -> bool:
-        """Update the conversation title. Returns True if a row was updated."""
+        """Update the conversation title. Returns True if a row was updated.
+
+        A user rename is final: ``title_generated_at`` is recorded so the AI
+        title generator never overwrites the user's choice.
+        """
+        from datetime import UTC, datetime
+
         stmt = (
             update(AiConversation)
             .where(
                 AiConversation.tenant_id == tenant_id,
                 AiConversation.id == conversation_id,
             )
-            .values(title=title)
+            .values(
+                title=title,
+                title_generated_at=datetime.now(UTC),
+            )
         )
         result = await self._session.execute(stmt)
         return bool(result.rowcount)  # type: ignore[attr-defined]
@@ -243,6 +258,44 @@ class ConversationRepository:
         )
         await self._session.execute(stmt)
 
+    async def mark_title_generated(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str,
+        finalize: bool = True,
+    ) -> bool:
+        """Persist the AI title, optionally recording the generation time.
+
+        Idempotent: the write only applies while the conversation title is
+        still retryable - no final title exists yet, or the row still holds
+        the legacy ``New conversation`` placeholder (rows that predate the
+        non-finalizing greeting title). ``finalize=False`` is used for
+        greeting-only titles and LLM-failure fallbacks: the readable title is
+        persisted but ``title_generated_at`` is cleared/kept NULL so a later
+        substantive generation can still replace it.
+        """
+        from datetime import UTC, datetime
+
+        values: dict[str, Any] = {"title": title}
+        values["title_generated_at"] = datetime.now(UTC) if finalize else None
+
+        stmt = (
+            update(AiConversation)
+            .where(
+                AiConversation.tenant_id == tenant_id,
+                AiConversation.id == conversation_id,
+                or_(
+                    AiConversation.title_generated_at.is_(None),
+                    AiConversation.title == LEGACY_PLACEHOLDER_TITLE,
+                ),
+            )
+            .values(**values)
+        )
+        result = await self._session.execute(stmt)
+        return bool(result.rowcount)  # type: ignore[attr-defined]
+
 
 # ------------------------------------------------------------------
 # Helpers
@@ -255,6 +308,9 @@ def _conversation_to_dict(row: AiConversation) -> dict[str, Any]:
         "tenant_id": str(row.tenant_id),
         "user_id": str(row.user_id),
         "title": row.title,
+        "title_generated_at": row.title_generated_at.isoformat()
+        if row.title_generated_at
+        else None,
         "pinned": row.pinned,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,

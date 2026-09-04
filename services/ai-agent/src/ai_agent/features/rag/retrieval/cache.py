@@ -5,7 +5,7 @@ the normalized text is the cache key per tenant. Hashing happens BEFORE any
 embedding call, so identical queries skip embedding entirely.
 
 Fail-open posture mirrors the rate limiter: a Redis blip must never take
-semantic search down — ``get`` returns None (treated as a miss) and ``put``
+semantic search down - ``get`` returns None (treated as a miss) and ``put``
 logs + swallows, so retrieval still works while caching degrades gracefully.
 """
 
@@ -36,12 +36,12 @@ def hash_query(text: str) -> str:
 
 
 def cache_key(tenant_id: uuid.UUID, query_hash: str, prefix: str = "ai:rag:cache:") -> str:
-    """Redis key: never contains query text (PII) — hash + tenant only."""
+    """Redis key: never contains query text (PII) - hash + tenant only."""
     return f"{prefix}{tenant_id}:{query_hash}"
 
 
 class QueryCache(Protocol):
-    """Hot-path cache contract — implemented by RedisQueryCache."""
+    """Hot-path cache contract - implemented by RedisQueryCache."""
 
     async def get(self, *, tenant_id: uuid.UUID, query_hash: str) -> list[dict[str, object]] | None:
         """Return cached items or None on miss/infra error."""

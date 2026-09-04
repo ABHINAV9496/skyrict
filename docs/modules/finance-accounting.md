@@ -1,8 +1,8 @@
-# M-FIN — Finance & Accounting Module (Phase 1)
+# M-FIN - Finance & Accounting Module (Phase 1)
 
-> **Status:** Draft — approved scope. Target: `services/core`, starter plan.
+> **Status:** Draft - approved scope. Target: `services/core`, starter plan.
 > **Owner:** Dennis
-> **Dependencies:** identity service (JWT verification, permissions, tenant context), `services/core` skeleton ([ERP-FND-001]), ERP permission + BFF wiring ([ERP-FND-002]), billing gating (SKY-32..36 — enforced externally, does not block building).
+> **Dependencies:** identity service (JWT verification, permissions, tenant context), `services/core` skeleton ([ERP-FND-001]), ERP permission + BFF wiring ([ERP-FND-002]), billing gating (SKY-32..36 - enforced externally, does not block building).
 
 This document is the complete, unambiguous specification for building the Finance & Accounting module. Follow sections in order; every task in the build checklist (§12) links back to the section that defines it.
 
@@ -15,7 +15,7 @@ This document is the complete, unambiguous specification for building the Financ
 
 ### 1.1 What this module is
 
-Finance is the **system of record for money**. Other modules *promise* things (an order promises a sale; a delivery promises stock movement). Finance records the *truth*: every dollar of revenue, expense, asset, and liability — under double-entry bookkeeping, so the books always balance.
+Finance is the **system of record for money**. Other modules *promise* things (an order promises a sale; a delivery promises stock movement). Finance records the *truth*: every dollar of revenue, expense, asset, and liability - under double-entry bookkeeping, so the books always balance.
 
 Three rules govern everything here:
 
@@ -25,7 +25,7 @@ Three rules govern everything here:
 
 ### 1.2 Module architecture
 
-Finance lives inside the shared ERP service `services/core`, as one feature package beside the other Phase-1 modules. It is a **sibling** — it never reaches into another module's tables.
+Finance lives inside the shared ERP service `services/core`, as one feature package beside the other Phase-1 modules. It is a **sibling** - it never reaches into another module's tables.
 
 ```
 services/core
@@ -39,7 +39,7 @@ services/core
 
 Cross-module money flows go through **ports** (interfaces), never direct table access (see §2.7).
 
-### 1.3 Scope — Phase 1 vs deferred
+### 1.3 Scope - Phase 1 vs deferred
 
 **In scope (Phase 1):** chart of accounts, double-entry journal entries (draft → posted), fiscal periods with close/lock, invoices (accounts receivable), payments, trial balance, P&L, balance sheet.
 
@@ -59,7 +59,7 @@ services/core/src/core/
 ├── domain/               # value objects: Money, AccountType, EntryStatus
 ├── events/               # finance event producers
 └── features/
-    └── finance/          # ★ THIS MODULE — owns all 7 tables
+    └── finance/          # ★ THIS MODULE - owns all 7 tables
         ├── models/
         │   ├── chart_of_account.py
         │   ├── journal_entry.py
@@ -94,9 +94,9 @@ Every table has a `tenant_id` column and a database-level rule:
 Row is visible/editable only when:  row.tenant_id == the tenant on the current session
 ```
 
-- Reading another tenant's rows returns **zero rows** (never an error — errors leak existence).
+- Reading another tenant's rows returns **zero rows** (never an error - errors leak existence).
 - Writing another tenant's rows is **blocked** by the database.
-- All foreign keys between tenant-scoped tables are **composite** — they include `tenant_id`, so a row can never reference another tenant's parent row.
+- All foreign keys between tenant-scoped tables are **composite** - they include `tenant_id`, so a row can never reference another tenant's parent row.
 
 Same mechanism the sales module uses. The database enforces it even if application code has a bug.
 
@@ -106,7 +106,7 @@ Same mechanism the sales module uses. The database enforces it even if applicati
 - **Tenant check:** the token's tenant must match the routed tenant. A token can never be used against a different business.
 - **Authorization (RBAC):** permission checks gate every endpoint.
 
-**Permissions used by this module** (registered in identity in the shared permissions PR — the same one that adds `erp.crm.*` and `erp.sales.*`):
+**Permissions used by this module** (registered in identity in the shared permissions PR - the same one that adds `erp.crm.*` and `erp.sales.*`):
 
 | Key | Role holders | Unlocks |
 |---|---|---|
@@ -120,7 +120,7 @@ Same mechanism the sales module uses. The database enforces it even if applicati
 
 ### 2.5 Events
 
-Finance announces what it did — but only **after** the database commit succeeds. A failed transaction never emits an event.
+Finance announces what it did - but only **after** the database commit succeeds. A failed transaction never emits an event.
 
 | Event | When it fires | Meaning |
 |---|---|---|
@@ -133,9 +133,9 @@ Dev: `KAFKA_BROKERS` unset → producers just log (no-op). Later: real Kafka.
 
 ### 2.6 Errors, pagination, idempotency
 
-- **Errors:** RFC 7807 envelopes — code, message, details, request_id.
-- **Pagination:** repo's existing offset/limit `ListResponse` convention (matches identity). *(Sales doc proposes cursor-based — flag for a team decision.)*
-- **Idempotency — the "never record money twice" rule.** Three layers:
+- **Errors:** RFC 7807 envelopes - code, message, details, request_id.
+- **Pagination:** repo's existing offset/limit `ListResponse` convention (matches identity). *(Sales doc proposes cursor-based - flag for a team decision.)*
+- **Idempotency - the "never record money twice" rule.** Three layers:
   1. Every automatically-created entry is stamped with **where it came from** (e.g. `source='invoice'` + invoice id). The database refuses to create two entries with the same stamp.
   2. State transitions only succeed if the row is still in the expected state (e.g. only a *draft* can be *issued*). Replays find the state already changed and return the existing result.
   3. Re-requesting an invoice for the same order returns the **existing** invoice.
@@ -147,18 +147,18 @@ Dev: `KAFKA_BROKERS` unset → producers just log (no-op). Later: real Kafka.
         |  calls the Invoicing port (implemented by finance)
         v
 [features/finance]  creates invoice (issued) + lines + numbering, returns invoice id
-        |  (revenue is NOT touched here — that happens at approval)
+        |  (revenue is NOT touched here - that happens at approval)
         v
 [features/sales]  emits sales.order.fulfilled {order_id, invoice_id}
 ```
 
 > **Open point (with Swalih):** the port currently passes only `(tenant_id, order_id)`, which forces finance to read sales' tables. Recommend a shared `SalesOrderForInvoicing` DTO (order id, customer id, lines, amounts, terms) so finance never touches sales tables.
 
-### 2.8 API schemas — request/response examples
+### 2.8 API schemas - request/response examples
 
 #### create_chart_of_account
 
-`POST /api/v1/finance/chart-of-accounts` — `erp.finance.write`
+`POST /api/v1/finance/chart-of-accounts` - `erp.finance.write`
 
 ```json
 # request
@@ -179,11 +179,11 @@ Dev: `KAFKA_BROKERS` unset → producers just log (no-op). Later: real Kafka.
 }
 ```
 
-Validation: `account_type` in {asset, liability, equity, revenue, expense}; `code` unique per tenant — else 409.
+Validation: `account_type` in {asset, liability, equity, revenue, expense}; `code` unique per tenant - else 409.
 
 #### create_journal_entry
 
-`POST /api/v1/finance/journal-entries` — `erp.finance.write`
+`POST /api/v1/finance/journal-entries` - `erp.finance.write`
 
 ```json
 # request
@@ -210,11 +210,11 @@ Validation: `account_type` in {asset, liability, equity, revenue, expense}; `cod
 }
 ```
 
-Validation: every `account_code` exists + is active in the tenant's COA (else 404); each line **debit XOR credit** (exactly one set, non-zero); sum(debit) == sum(credit) (else 422). Entries are created as `draft` — nothing real yet. *(Rent is accrued to Accounts Payable — expense recognized now, paid later.)*
+Validation: every `account_code` exists + is active in the tenant's COA (else 404); each line **debit XOR credit** (exactly one set, non-zero); sum(debit) == sum(credit) (else 422). Entries are created as `draft` - nothing real yet. *(Rent is accrued to Accounts Payable - expense recognized now, paid later.)*
 
 #### post_journal_entry
 
-`POST /api/v1/finance/journal-entries/{id}/post` — `erp.finance.approve`
+`POST /api/v1/finance/journal-entries/{id}/post` - `erp.finance.approve`
 
 ```json
 # response - 200
@@ -226,22 +226,22 @@ Validation: every `account_code` exists + is active in the tenant's COA (else 40
 }
 ```
 
-Errors: 422 unbalanced, 409 entry_date in a closed period, 409 not draft. Already posted → **200 with existing result** (idempotent — never a 409 for a replay).
+Errors: 422 unbalanced, 409 entry_date in a closed period, 409 not draft. Already posted → **200 with existing result** (idempotent - never a 409 for a replay).
 
 #### void_journal_entry
 
-`POST /api/v1/finance/journal-entries/{id}/void` — `erp.finance.write`
+`POST /api/v1/finance/journal-entries/{id}/void` - `erp.finance.write`
 
 ```json
 # response - 200
 { "id": "7a12...", "status": "voided", "voided_at": "2026-08-11T09:12:00Z" }
 ```
 
-Rule: `draft` → `voided` only in v1. **Posted history is never deleted or reversed in v1** — v1.1 adds reversal entries. Voiding a posted entry → 409.
+Rule: `draft` → `voided` only in v1. **Posted history is never deleted or reversed in v1** - v1.1 adds reversal entries. Voiding a posted entry → 409.
 
 #### get_journal_entry
 
-`GET /api/v1/finance/journal-entries/{id}` — `erp.finance.read`
+`GET /api/v1/finance/journal-entries/{id}` - `erp.finance.read`
 
 ```json
 # response - 200
@@ -262,7 +262,7 @@ Rule: `draft` → `voided` only in v1. **Posted history is never deleted or reve
 
 #### list_journal_entries
 
-`GET /api/v1/finance/journal-entries?status=posted&from=2026-08-01&to=2026-08-31&limit=50&offset=0` — `erp.finance.read`
+`GET /api/v1/finance/journal-entries?status=posted&from=2026-08-01&to=2026-08-31&limit=50&offset=0` - `erp.finance.read`
 
 ```json
 # response - 200
@@ -280,7 +280,7 @@ Rule: `draft` → `voided` only in v1. **Posted history is never deleted or reve
 
 #### deactivate_chart_of_account
 
-`POST /api/v1/finance/chart-of-accounts/{id}/deactivate` — `erp.finance.write`
+`POST /api/v1/finance/chart-of-accounts/{id}/deactivate` - `erp.finance.write`
 
 ```json
 # response - 200
@@ -291,7 +291,7 @@ Rule: **never hard-delete** accounts referenced by history; deactivate only. Del
 
 #### get_trial_balance
 
-`GET /api/v1/finance/trial-balance?as_of=2026-08-31` — `erp.finance.read`
+`GET /api/v1/finance/trial-balance?as_of=2026-08-31` - `erp.finance.read`
 
 ```json
 # response - 200
@@ -312,11 +312,11 @@ Rule: **never hard-delete** accounts referenced by history; deactivate only. Del
 }
 ```
 
-The ledger proof — DEALER-based; total_debit == total_credit is an invariant. *(Example uses two transactions: 5000 rent accrued to AP, and a 1250 invoice approval; §5.2.)*
+The ledger proof - DEALER-based; total_debit == total_credit is an invariant. *(Example uses two transactions: 5000 rent accrued to AP, and a 1250 invoice approval; §5.2.)*
 
 #### get_pnl_report
 
-`GET /api/v1/finance/reports/pnl?from=2026-08-01&to=2026-08-31` — `erp.finance.read`
+`GET /api/v1/finance/reports/pnl?from=2026-08-01&to=2026-08-31` - `erp.finance.read`
 
 ```json
 # response - 200
@@ -337,7 +337,7 @@ The ledger proof — DEALER-based; total_debit == total_credit is an invariant. 
 
 #### get_balance_sheet
 
-`GET /api/v1/finance/reports/balance-sheet?as_of=2026-08-31` — `erp.finance.read`
+`GET /api/v1/finance/reports/balance-sheet?as_of=2026-08-31` - `erp.finance.read`
 
 ```json
 # response - 200
@@ -358,11 +358,11 @@ The ledger proof — DEALER-based; total_debit == total_credit is an invariant. 
 }
 ```
 
-Invariant: assets == liabilities + equity (`1250 == 5000 + (-3750)`). Reports are **derived from entries, never stored** — same as-of date as the trial balance above, so the two agree.
+Invariant: assets == liabilities + equity (`1250 == 5000 + (-3750)`). Reports are **derived from entries, never stored** - same as-of date as the trial balance above, so the two agree.
 
 #### create_invoice (manual)
 
-`POST /api/v1/finance/invoices` — `erp.finance.write`
+`POST /api/v1/finance/invoices` - `erp.finance.write`
 
 ```json
 # request
@@ -394,7 +394,7 @@ Invariant: assets == liabilities + equity (`1250 == 5000 + (-3750)`). Reports ar
 
 #### issue_invoice
 
-`POST /api/v1/finance/invoices/{id}/issue` — `erp.finance.write`
+`POST /api/v1/finance/invoices/{id}/issue` - `erp.finance.write`
 
 ```json
 # response - 200
@@ -410,7 +410,7 @@ Rule: `draft` → `issued`. This is the "bill exists" moment (emits `finance.inv
 
 #### approve_invoice
 
-`POST /api/v1/finance/invoices/{id}/approve` — `erp.finance.approve`
+`POST /api/v1/finance/invoices/{id}/approve` - `erp.finance.approve`
 
 ```json
 # response - 200
@@ -423,11 +423,11 @@ Rule: `draft` → `issued`. This is the "bill exists" moment (emits `finance.inv
 }
 ```
 
-**This is the revenue moment.** Approving runs the posting gate and creates the accrual entry (DR AR / CR Revenue; `source='invoice'`). Invoice must be `issued` — a draft is 409 (issue it first). Already approved/paid/voided → 409 (idempotent replay → 200 with existing result).
+**This is the revenue moment.** Approving runs the posting gate and creates the accrual entry (DR AR / CR Revenue; `source='invoice'`). Invoice must be `issued` - a draft is 409 (issue it first). Already approved/paid/voided → 409 (idempotent replay → 200 with existing result).
 
 #### apply_payment
 
-`POST /api/v1/finance/payments` — `erp.finance.write`
+`POST /api/v1/finance/payments` - `erp.finance.write`
 
 ```json
 # request
@@ -450,11 +450,11 @@ Rule: `draft` → `issued`. This is the "bill exists" moment (emits `finance.inv
 }
 ```
 
-Posts DR Cash / CR AR — **never touches revenue**. Amount > outstanding → 422. Invoice must be `approved` → else 409.
+Posts DR Cash / CR AR - **never touches revenue**. Amount > outstanding → 422. Invoice must be `approved` → else 409.
 
 #### fiscal periods
 
-`GET/POST /api/v1/finance/fiscal-periods` — read/write; `POST /api/v1/finance/fiscal-periods/{id}/close` — approve
+`GET/POST /api/v1/finance/fiscal-periods` - read/write; `POST /api/v1/finance/fiscal-periods/{id}/close` - approve
 
 ```json
 # create request
@@ -476,7 +476,7 @@ All tables: `id UUID`, `tenant_id UUID NOT NULL`, `created_at`, `updated_at`; mo
 |---|---|---|
 | `erp_chart_of_accounts` | `code`, `name`, `account_type`, `is_active` | UNIQUE(tenant_id, code); type in 5 categories |
 | `erp_fiscal_periods` | `name`, `start_date`, `end_date`, `is_closed` | UNIQUE(tenant_id, name) |
-| `erp_journal_entries` | `entry_date`, `memo`, `status`, `source`, `source_ref`, `posted_at`, `posted_by_user_id` | UNIQUE(tenant_id, source, source_ref) — the idempotency lock |
+| `erp_journal_entries` | `entry_date`, `memo`, `status`, `source`, `source_ref`, `posted_at`, `posted_by_user_id` | UNIQUE(tenant_id, source, source_ref) - the idempotency lock |
 | `erp_journal_lines` | `entry_id`, `account_id`, `debit`, `credit`, `currency`, `exchange_rate` | composite FK (tenant_id, entry_id), (tenant_id, account_id); CHECK debit XOR credit; no zero lines; `currency` = tenant default in v1 (reserved for multi-currency) |
 | `erp_invoices` | `invoice_number`, `customer_id` (UUID ref), `invoice_date`, `due_date`, `status`, `total` | UNIQUE(tenant_id, invoice_number) |
 | `erp_invoice_lines` | `line_no`, `description`, `account_id`, `quantity`, `unit_price`, `amount` | composite FK (tenant_id, invoice_id) + (tenant_id, account_id) |
@@ -520,11 +520,11 @@ Draft saved (unbalanced OK) → `post` runs three gates: **balance**, **period o
   -> later: [Finance] apply_payment -> DR Cash / CR AR -> invoice paid
 ```
 
-**Revenue is touched only at approval; payment only moves assets.** `create_from_order` is idempotent — replay returns the existing invoice. This matches rule #2 (accrual) and `approve_invoice` (which returns `revenue_entry_id`).
+**Revenue is touched only at approval; payment only moves assets.** `create_from_order` is idempotent - replay returns the existing invoice. This matches rule #2 (accrual) and `approve_invoice` (which returns `revenue_entry_id`).
 
 ### 5.3 Void
 
-From `draft`/`issued` only in v1. Posted history is never deleted — v1.1 adds reversal entries (DR Revenue / CR AR, source=`reversal`).
+From `draft`/`issued` only in v1. Posted history is never deleted - v1.1 adds reversal entries (DR Revenue / CR AR, source=`reversal`).
 
 ---
 
@@ -581,7 +581,7 @@ Frontend calls `/api/*`; the BFF routes the `finance` segment to `services/core:
 
 ## 10. Development environment
 
-- Mirror identity layout inside `services/core`. Alembic: `version_table = alembic_version_core` (identity uses the default `alembic_version` — must not collide). Core migrations: `0001_initial` (RLS base, [ERP-FND-001]), `0002_inventory`, `0003_crm_sales`, **`0004_finance`** (this module: all `erp_*` finance tables + composite FKs + CHECKs + RLS policies).
+- Mirror identity layout inside `services/core`. Alembic: `version_table = alembic_version_core` (identity uses the default `alembic_version` - must not collide). Core migrations: `0001_initial` (RLS base, [ERP-FND-001]), `0002_inventory`, `0003_crm_sales`, **`0004_finance`** (this module: all `erp_*` finance tables + composite FKs + CHECKs + RLS policies).
 - Env: DB URL, `KAFKA_BROKERS` (optional), JWT public key, dev port 8001.
 - Make targets: `dev-core`, `test-core`, `migrate-core`.
 
@@ -590,7 +590,7 @@ Frontend calls `/api/*`; the BFF routes the `finance` segment to `services/core:
 ## 11. Testing
 
 - **Unit** (`tests/unit/features/test_finance_service.py`): balance gate, zero-line, closed-period, idempotent post/issue/approve, DEALER trial balance, accrual-on-approve (never at issue/payment). Fake repository, no DB.
-- **Integration** (`tests/integration/api/test_finance_api.py`): full HTTP flows — create draft → post → create/issue/approve invoice → apply payment.
+- **Integration** (`tests/integration/api/test_finance_api.py`): full HTTP flows - create draft → post → create/issue/approve invoice → apply payment.
 - **Tenant isolation** (`test_tenant_isolation.py`): two tenants; each sees zero rows of the other; cross-tenant writes blocked by RLS; composite FKs hold.
 - **Factories** (`tests/factories/finance_factories.py`) mirroring sales.
 - CI: lint → typecheck (mypy) → build (existing pipeline); `lint-imports` guard: features never import another feature's models.
@@ -612,43 +612,43 @@ Frontend calls `/api/*`; the BFF routes the `finance` segment to `services/core:
 
 ## 13. Open points (to raise with team)
 
-1. **Permissions source** — DB per request (recommended; matches identity) vs JWT claim (sales doc 2.4).
-2. **`create_from_order` payload** — propose shared `SalesOrderForInvoicing` DTO so finance never reads sales tables.
-3. **Pagination** — offset/limit (existing lib) vs cursor (sales doc 2.6).
-4. **Legacy `erp.invoice.*` keys** — replace/alias to `erp.finance.*`?
-5. **`erp.finance.approve` registration** — add to [ERP-FND-002] follow-up or the finance identity migration.
-6. **Payments-to-order reconciliation** — out of scope v1 (finance invoices only).
-7. **Basis decision** — this module is **accrual-always** (matches ERP Handbook Ch.05). Product roadmap (`docs/handbooks/01-product-overview.md`) once suggested cash-basis for initial users with accrual at month 5-6; this doc commits to accrual. Confirm with product.
+1. **Permissions source** - DB per request (recommended; matches identity) vs JWT claim (sales doc 2.4).
+2. **`create_from_order` payload** - propose shared `SalesOrderForInvoicing` DTO so finance never reads sales tables.
+3. **Pagination** - offset/limit (existing lib) vs cursor (sales doc 2.6).
+4. **Legacy `erp.invoice.*` keys** - replace/alias to `erp.finance.*`?
+5. **`erp.finance.approve` registration** - add to [ERP-FND-002] follow-up or the finance identity migration.
+6. **Payments-to-order reconciliation** - out of scope v1 (finance invoices only).
+7. **Basis decision** - this module is **accrual-always** (matches ERP Handbook Ch.05). Product roadmap (`docs/handbooks/01-product-overview.md`) once suggested cash-basis for initial users with accrual at month 5-6; this doc commits to accrual. Confirm with product.
 
 ---
 
 ## 14. Build order
 
 **Block A (shared / team):**
-1. `services/core` skeleton PR — [ERP-FND-001] (already tracked)
-2. Identity permissions PR — [ERP-FND-002] registers `erp.{crm,sales,finance,inventory,hr}.*` (read/write families; finance `approve` lands per open point 5)
-3. BFF routing — `finance` segment → core:8001 (landed in FIN-UI-003)
+1. `services/core` skeleton PR - [ERP-FND-001] (already tracked)
+2. Identity permissions PR - [ERP-FND-002] registers `erp.{crm,sales,finance,inventory,hr}.*` (read/write families; finance `approve` lands per open point 5)
+3. BFF routing - `finance` segment → core:8001 (landed in FIN-UI-003)
 
 **Block B (Dennis-owned):**
 
 | # | Deliverable | Contains | Verify by |
 |---|---|---|---|
 | F1 | Domain value objects | Money (Decimal, never float), AccountType (5 types), EntryStatus, InvoiceStatus | unit tests: money math, type rules |
-| F2 | Database models + migration 0004 | All 7 `erp_*` tables — composite FKs, CHECKs (debit XOR credit), RLS policies, UNIQUE constraints | `alembic upgrade head`; two-tenant row visibility |
+| F2 | Database models + migration 0004 | All 7 `erp_*` tables - composite FKs, CHECKs (debit XOR credit), RLS policies, UNIQUE constraints | `alembic upgrade head`; two-tenant row visibility |
 | F3 | Repository + service | atomic state transitions (`WHERE status=...`), posting gates (balance, closed period), numbering INV-/PMT- | unit tests with a fake repository |
-| F4 | HTTP layer | schemas.py, router.py, deps wiring (require_permission, tenant context) — COA, journal entries, fiscal periods, trial balance, reports | integration API tests |
+| F4 | HTTP layer | schemas.py, router.py, deps wiring (require_permission, tenant context) - COA, journal entries, fiscal periods, trial balance, reports | integration API tests |
 | F5 | Cross-module invoicing | create_from_order (idempotent, issued only), issue, approve (accrual entry), apply payment | integration: sales fulfil → invoice → revenue → payment |
-| F6 | Events | finance.journal_entry.posted, invoice.created, invoice.approved, payment.applied — after commit, no-op producers in dev | unit: event fires only after commit |
+| F6 | Events | finance.journal_entry.posted, invoice.created, invoice.approved, payment.applied - after commit, no-op producers in dev | unit: event fires only after commit |
 | F7 | Tests + CI + Makefile | unit / integration / two-tenant isolation suites, factories, dev-core / test-core / migrate-core, import-lint guard | full CI green |
 
-**Sequencing note:** F5 is the integration point with Swalih — his "fulfil" flow calls your `create_from_order` (issued only; revenue happens at his later `approve` or the finance API). Coordinate so his fulfil and your invoicing land together or behind the agreed contract.
+**Sequencing note:** F5 is the integration point with Swalih - his "fulfil" flow calls your `create_from_order` (issued only; revenue happens at his later `approve` or the finance API). Coordinate so his fulfil and your invoicing land together or behind the agreed contract.
 
 ---
 
 ## 15. What you need to decide before starting
 
-1. Permissions source (DB per request vs JWT claim) — recommend **DB**, matches identity.
-2. `create_from_order` payload — recommend the shared DTO so you never read sales tables.
-3. Pagination — offset/limit (matches existing libs) vs cursor (sales doc).
-4. Legacy `erp.invoice.*` keys — replace/alias to `erp.finance.*`.
+1. Permissions source (DB per request vs JWT claim) - recommend **DB**, matches identity.
+2. `create_from_order` payload - recommend the shared DTO so you never read sales tables.
+3. Pagination - offset/limit (matches existing libs) vs cursor (sales doc).
+4. Legacy `erp.invoice.*` keys - replace/alias to `erp.finance.*`.
 5. `erp.finance.approve` registration timing (open point 5).

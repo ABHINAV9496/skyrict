@@ -1,11 +1,11 @@
-"""Health check endpoints — /health and /ready.
+"""Health check endpoints - /health and /ready.
 
 Required for Kubernetes liveness and readiness probes:
-  - /health — liveness: the process is up (no dependency checks).
-  - /ready  — readiness: 503 until the lifespan has verified every required
+  - /health - liveness: the process is up (no dependency checks).
+  - /ready  - readiness: 503 until the lifespan has verified every required
     dependency (database, Redis, JWT keys) at startup, then runs lightweight
     live probes (DB SELECT 1 + Redis PING) before returning 200. The
-    one-time startup verification itself runs in the lifespan — /ready never
+    one-time startup verification itself runs in the lifespan - /ready never
     re-runs it, it only reports state and performs cheap probes.
 """
 
@@ -26,13 +26,13 @@ logger = get_logger("identity.health")
 
 @router.get("/health")
 async def health_check() -> dict[str, Any]:
-    """Liveness probe — is the service running?"""
+    """Liveness probe - is the service running?"""
     return {"status": "healthy", "service": "identity"}
 
 
 @router.get("/ready")
 async def readiness_check() -> JSONResponse:
-    """Readiness probe — is the service ready to accept traffic?
+    """Readiness probe - is the service ready to accept traffic?
 
     Returns 503 until startup dependency verification has succeeded (the
     readiness gate is closed). Once verified, performs lightweight live

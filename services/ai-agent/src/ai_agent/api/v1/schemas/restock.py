@@ -48,7 +48,7 @@ class ScanResponse(BaseModel):
 
 
 class RestockSettingsResponse(BaseModel):
-    """GET /ai/suggestions/settings — the tenant's full AI settings snapshot."""
+    """GET /ai/suggestions/settings - the tenant's full AI settings snapshot."""
 
     tenant_id: uuid.UUID
     lead_time_days: Decimal
@@ -60,7 +60,7 @@ class RestockSettingsResponse(BaseModel):
 
 
 class RestockSettingsUpdate(BaseModel):
-    """PATCH /ai/suggestions/settings body — every field optional.
+    """PATCH /ai/suggestions/settings body - every field optional.
 
     Bounds mirror the ai_restock_settings CHECK constraints so invalid values
     are rejected at the schema before they reach Postgres.

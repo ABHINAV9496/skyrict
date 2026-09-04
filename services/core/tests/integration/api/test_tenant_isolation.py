@@ -129,7 +129,7 @@ class TestContextLifecycle:
         assert first.status_code == 200
 
         # The context must be fully cleared: a follow-up request without a
-        # routable tenant is rejected — it must NOT inherit the previous one.
+        # routable tenant is rejected - it must NOT inherit the previous one.
         second = await client.get("/api/v1/me")
         assert second.status_code == 400
         assert second.json()["type"].endswith("/tenant-context-missing")

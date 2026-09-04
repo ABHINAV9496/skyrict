@@ -1,4 +1,4 @@
-"""Sequence service — tenant-scoped monotonic counters for document numbering.
+"""Sequence service - tenant-scoped monotonic counters for document numbering.
 
 The service is a thin facade over :class:`SequenceRepositoryPort` so producers
 (HR/payroll/finance document numbering) depend on the port, not SQLAlchemy.

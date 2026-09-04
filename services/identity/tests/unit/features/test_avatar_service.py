@@ -1,4 +1,4 @@
-"""Unit tests for the avatar feature — processing, storage, and service."""
+"""Unit tests for the avatar feature - processing, storage, and service."""
 
 from __future__ import annotations
 

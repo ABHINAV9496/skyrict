@@ -1,4 +1,4 @@
-"""Handoff endpoints — issue and redeem single-use onboarding handoff tokens.
+"""Handoff endpoints - issue and redeem single-use onboarding handoff tokens.
 
 These endpoints are part of the pre-auth wizard surface (the wizard hands off
 to the BFF before a session exists), so they are deliberately unauthenticated

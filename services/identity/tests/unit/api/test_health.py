@@ -1,11 +1,11 @@
-"""Unit tests for identity/api/v1/health.py — /health and the hybrid /ready probe.
+"""Unit tests for identity/api/v1/health.py - /health and the hybrid /ready probe.
 
 Uses a dedicated FastAPI app with only the health router (no middleware, no
 lifespan) so the handler logic is tested in isolation. Dependency probes are
 stubbed; the readiness gate is reset per test because it is module-global.
 
 Verifies:
-  - /health always reports 200 healthy (liveness — no dependency checks)
+  - /health always reports 200 healthy (liveness - no dependency checks)
   - /ready returns 503 until the gate opens (startup verification)
   - once the gate opens, /ready runs live probes and returns 200 only when
     database AND redis succeed; a failed probe returns 503 with a checks map
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture(autouse=True)
 def _reset_gate():
-    """The gate is module-global — reset it so tests are order-independent."""
+    """The gate is module-global - reset it so tests are order-independent."""
     readiness.reset()
 
 
@@ -47,7 +47,7 @@ async def _ok_probe() -> None:
 
 
 class TestHealthCheck:
-    """Liveness — process up, no dependency checks."""
+    """Liveness - process up, no dependency checks."""
 
     async def test_health_returns_200(self, http_client: httpx.AsyncClient):
         response = await http_client.get("/health")
@@ -56,7 +56,7 @@ class TestHealthCheck:
 
 
 class TestReadinessCheck:
-    """Readiness — gated on startup verification, then live probes."""
+    """Readiness - gated on startup verification, then live probes."""
 
     async def test_ready_returns_503_before_startup_verification(
         self, http_client: httpx.AsyncClient

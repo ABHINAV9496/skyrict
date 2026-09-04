@@ -31,7 +31,7 @@ def make_tenant_headers(
 
     ``tenant_id`` must be the tenant's row UUID (from ``integration_db``);
     ``slug`` is the routing header the middleware uses to resolve it. ``sub``
-    pins the token's user id — pass it to get a stable identity for permission
+    pins the token's user id - pass it to get a stable identity for permission
     seeding; defaults to a fresh random user (no grants).
     """
     now = int(time.time())

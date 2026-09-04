@@ -1,4 +1,4 @@
-"""Redis-backed text-CAPTCHA store — issue, verify (single-use), attempt caps.
+"""Redis-backed text-CAPTCHA store - issue, verify (single-use), attempt caps.
 
 Follows the OTP store's keying and hashing conventions. The answer is stored
 as a SHA-256 digest (never plaintext), keys auto-expire via ``SET ... EX``,

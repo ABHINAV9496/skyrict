@@ -320,7 +320,7 @@ export function WarehousesClient() {
                                             {warehouse.name}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {warehouse.location ?? "—"}
+                                            {warehouse.location ?? "-"}
                                         </td>
                                         <td className="px-4 py-3">
                                             {warehouse.isActive ? (
@@ -490,7 +490,7 @@ export function WarehousesClient() {
                         <DialogTitle>Archive warehouse?</DialogTitle>
                         <DialogDescription>
                             {deleting
-                                ? `${deleting.name} will be archived and hidden from the list. Remaining stock can be written off via Adjust stock, but it cannot be archived while reservations are open — and it stops receiving new stock movements until reactivated.`
+                                ? `${deleting.name} will be archived and hidden from the list. Remaining stock can be written off via Adjust stock, but it cannot be archived while reservations are open - and it stops receiving new stock movements until reactivated.`
                                 : ""}
                         </DialogDescription>
                     </DialogHeader>

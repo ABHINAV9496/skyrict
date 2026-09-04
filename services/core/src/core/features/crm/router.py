@@ -1,8 +1,8 @@
-"""CRM API routes — thin wrappers over :class:`CrmService`.
+"""CRM API routes - thin wrappers over :class:`CrmService`.
 
 Authorization uses the ``erp.crm.*`` keys resolved at request time (read for
 reads, write for mutations). Leads and opportunities are owner/team/all-scoped
-— the request-resolved :class:`DataScope` (``core.db.rbac.resolve_user_scope``)
+- the request-resolved :class:`DataScope` (``core.db.rbac.resolve_user_scope``)
 is passed straight to the service, which can only narrow it. Responses use the
 standard ``skyrict_common`` envelope; list endpoints are offset/limit paged.
 """
@@ -494,5 +494,5 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def _money_from_request(amount: Decimal, currency: str) -> Money:
-    """Build a :class:`Money` — currency validation happens in the constructor."""
+    """Build a :class:`Money` - currency validation happens in the constructor."""
     return Money(amount=amount, currency=currency)

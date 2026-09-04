@@ -88,7 +88,7 @@ export function ProductTour() {
     try {
       localStorage.setItem(SEEN_KEY, "true");
     } catch {
-      // Storage unavailable (private mode) — tour just closes for this session.
+      // Storage unavailable (private mode) - tour just closes for this session.
     }
   }, []);
 

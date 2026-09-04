@@ -223,7 +223,7 @@ export const MessageBubble = memo(function MessageBubble({
         </div>
       ) : null}
       <div className={cn("relative flex max-w-[85%] flex-col sm:max-w-[75%]", isUser ? "items-end" : "items-start")}>
-        {/* File attachments — stacked above the message bubble */}
+        {/* File attachments - stacked above the message bubble */}
         {isUser && message.attachments && message.attachments.length > 0 ? (
           <div className="mb-1.5 flex flex-col gap-1.5">
             {message.attachments.map((attachment) => (
@@ -262,7 +262,7 @@ export const MessageBubble = memo(function MessageBubble({
           {!isUser && message.content ? <AgentCitations message={message} /> : null}
         </div>
 
-        {/* Action bar — visible on hover, positioned below without taking layout space */}
+        {/* Action bar - visible on hover, positioned below without taking layout space */}
         {!streaming && message.content ? (
           <div
             className={cn(
@@ -315,7 +315,7 @@ export function MessageList({
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
         <p className="text-sm text-muted-foreground">
-          Start the conversation — ask anything about your business or the market.
+          Start the conversation - ask anything about your business or the market.
         </p>
       </div>
     );

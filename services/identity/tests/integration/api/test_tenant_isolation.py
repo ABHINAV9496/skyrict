@@ -340,7 +340,7 @@ class TestContextLifecycle:
         assert first.status_code == 200
 
         # The context must be fully cleared: a follow-up request without a
-        # routable tenant is rejected as unresolved — it must NOT inherit the
+        # routable tenant is rejected as unresolved - it must NOT inherit the
         # previous request's tenant.
         second = await client.get("/api/v1/users/me")
         assert second.status_code == 400

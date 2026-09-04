@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export type SearchableSelectOption = {
   /** Value emitted by onValueChange (an id, code, or enum value). */
   value: string;
-  /** Main row text — also the committed/resting input label. */
+  /** Main row text - also the committed/resting input label. */
   label: string;
   /** Optional secondary text shown at the row end. */
   hint?: string;
@@ -23,7 +23,7 @@ export type SearchableSelectOption = {
  * Mirrors the battle-tested CountryCombobox interaction: the listbox renders
  * inline under the input (staying inside Radix's scroll-lock scope), typing
  * filters case-insensitively with prefix matches ranked first, and the
- * committed value is always an option id — the visible text is just its
+ * committed value is always an option id - the visible text is just its
  * resting label, reset on blur.
  *
  * Escape handling mirrors CountryCombobox: a document-capture listener

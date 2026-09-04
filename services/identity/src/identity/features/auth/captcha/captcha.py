@@ -1,4 +1,4 @@
-"""Server-side text CAPTCHA generation — text, styles, noise, and PNG export.
+"""Server-side text CAPTCHA generation - text, styles, noise, and PNG export.
 
 Pipeline (one instance of each component, per the design):
 
@@ -8,7 +8,7 @@ Pipeline (one instance of each component, per the design):
 Everything renders with Pillow. Challenge text uses ``secrets`` (it is the
 secret that gates the password step); visual distortion uses ``random`` (it
 is purely cosmetic). The plaintext answer never leaves this module except
-through :func:`generate_captcha`, whose caller hashes it before storage —
+through :func:`generate_captcha`, whose caller hashes it before storage -
 the store never sees the raw text.
 
 The renderer recreates the philosophy of classic enterprise CAPTCHA libraries
@@ -17,7 +17,7 @@ printer/scanner texture, and retro OCR-style typography.
 
 Segmentation resistance comes from the *algorithm*, not from unreadable text:
 
-* every character is rendered independently — random font, stroke, shear,
+* every character is rendered independently - random font, stroke, shear,
   perspective, scale, rotation, baseline and kerning per glyph;
 * the ``overlap`` layout advances glyphs past each other so their separation
   outlines (in the background color) intersect without the glyph bodies
@@ -25,11 +25,11 @@ Segmentation resistance comes from the *algorithm*, not from unreadable text:
 * guide lines are drawn *through* the text, and some characters carry broken
   strokes (internal cuts), top-edge clipping and partial mask bands;
 * the background is a structured tiled pattern (hatch / grid / plus / scan)
-  plus layered artifacts — dust, dashes, ink blobs, edge fragments, paper
-  grain — drawn both behind and above the characters.
+  plus layered artifacts - dust, dashes, ink blobs, edge fragments, paper
+  grain - drawn both behind and above the characters.
 
 All distortion is lightweight (per-glyph perspective and a small local wave,
-plus a subtle final skew) — no giant warps that destroy the glyphs. Output is
+plus a subtle final skew) - no giant warps that destroy the glyphs. Output is
 strictly grayscale. The single rendering pipeline is reused by every style
 preset.
 """
@@ -87,7 +87,7 @@ class _StyleConfig(TypedDict):
 
 
 _STYLES: Final[dict[str, _StyleConfig]] = {
-    "classic": {  # Wave — hatch paper, light warp, thin guide lines
+    "classic": {  # Wave - hatch paper, light warp, thin guide lines
         "bg": (247, 247, 245),
         "fg": (22, 22, 22),
         "stroke": 0,
@@ -107,7 +107,7 @@ _STYLES: Final[dict[str, _StyleConfig]] = {
         "jail_bars": False,
         "ink_blobs": False,
     },
-    "outline": {  # Halo — outlined glyphs on a clean white halo over a grid
+    "outline": {  # Halo - outlined glyphs on a clean white halo over a grid
         "bg": (255, 255, 255),
         "fg": (255, 255, 255),
         "stroke": 2,
@@ -167,7 +167,7 @@ _STYLES: Final[dict[str, _StyleConfig]] = {
         "jail_bars": False,
         "ink_blobs": True,
     },
-    "neon": {  # Inverted — bright glyphs on dark pixel noise
+    "neon": {  # Inverted - bright glyphs on dark pixel noise
         "bg": (12, 12, 12),
         "fg": (235, 235, 235),
         "stroke": 0,
@@ -191,13 +191,13 @@ _STYLES: Final[dict[str, _StyleConfig]] = {
 
 # Bundled fonts restricted to simple, high-weight faces: bold sans/serif,
 # monospace, stencil, and heavy display fonts. Script, engraved, distressed,
-# and decorative faces are excluded — they read as damaged glyphs rather than
+# and decorative faces are excluded - they read as damaged glyphs rather than
 # OCR-averse type, and hurt human legibility (the real requirement is that a
 # person can reliably transcribe the code).
 _EXCLUDED_FONTS: Final[frozenset[str]] = frozenset(
     {
-        "OLDENGL.TTF",  # blackletter — unreadable
-        "MATURASC.TTF",  # matura script — cursive
+        "OLDENGL.TTF",  # blackletter - unreadable
+        "MATURASC.TTF",  # matura script - cursive
         "VINERITC.TTF",  # cursive vine
         "CHILLER.TTF",  # distressed
         "HATTEN.TTF",  # distressed
@@ -222,7 +222,7 @@ def png_data_uri(image_png: bytes) -> str:
 
 @dataclass(frozen=True)
 class RenderedCaptcha:
-    """A generated challenge — the answer and its PNG encoding."""
+    """A generated challenge - the answer and its PNG encoding."""
 
     text: str
     image_png: bytes
@@ -233,7 +233,7 @@ class FontManager:
     """Loads the bundled TrueType fonts once and caches them for the process.
 
     Font files ship inside this package (``fonts/*.ttf``) so they travel with
-    the source and the wheel. Fonts are loaded lazily on first use — never
+    the source and the wheel. Fonts are loaded lazily on first use - never
     re-read from disk per request. Each font must cover the whole challenge
     alphabet; fonts with missing glyphs (e.g. scripts without digits) are
     skipped so a random pick can never produce a "tofu" box.
@@ -292,7 +292,7 @@ class FontManager:
 
 
 class NoiseEngine:
-    """Reusable layered noise primitives — drawn behind and above the text."""
+    """Reusable layered noise primitives - drawn behind and above the text."""
 
     def add_lines(
         self,
@@ -382,7 +382,7 @@ class NoiseEngine:
         color: tuple[int, int, int],
         width: int = 1,
     ) -> None:
-        """Short strokes hugging the borders — photocopy edge artifacts."""
+        """Short strokes hugging the borders - photocopy edge artifacts."""
         draw = ImageDraw.Draw(image)
         for _ in range(count):
             edge = random.choice(("top", "bottom", "left", "right"))
@@ -409,7 +409,7 @@ class NoiseEngine:
         count: int,
         color: tuple[int, int, int],
     ) -> None:
-        """Small solid blotches — photocopy toner artifacts."""
+        """Small solid blotches - photocopy toner artifacts."""
         draw = ImageDraw.Draw(image)
         for _ in range(count):
             x = random.randint(0, image.width)
@@ -473,7 +473,7 @@ def _glyph_perspective(layer: Image.Image, *, spread: int = 1) -> Image.Image:
 
 
 def _apply_cuts(layer: Image.Image, cuts: list[tuple[int, int, int, int]]) -> None:
-    """Erase short segments across a glyph — broken strokes / internal cuts."""
+    """Erase short segments across a glyph - broken strokes / internal cuts."""
     if not cuts:
         return
     mask = Image.new("L", layer.size, 0)
@@ -780,7 +780,7 @@ def _render(text: str, style: str) -> Image.Image:
 
 
 def generate_captcha(style: str | None = None) -> RenderedCaptcha:
-    """Generate a CAPTCHA — the plaintext answer plus its PNG bytes.
+    """Generate a CAPTCHA - the plaintext answer plus its PNG bytes.
 
     ``style`` selects one of the five looks; ``None`` picks a random one per
     challenge. The answer is returned to the caller ONLY so it can be stored

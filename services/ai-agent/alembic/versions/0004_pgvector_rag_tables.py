@@ -145,7 +145,7 @@ def upgrade() -> None:
         sa.Column("parent_id", sa.Uuid(), nullable=False),
         sa.Column("source_ref", sa.Text(), nullable=False),
         sa.Column("chunk_text", sa.Text(), nullable=False),
-        # pgvector vector column — dimensions match the embedding model config.
+        # pgvector vector column - dimensions match the embedding model config.
         # Using 512 for Matryoshka-reduced text-embedding-3-small (3x storage
         # savings vs 1536d with ~2% quality drop, well within noise for ERP).
         sa.Column("embedding", Vector(512), nullable=False),
@@ -155,7 +155,7 @@ def upgrade() -> None:
         sa.Column("embedding_model", sa.String(100), nullable=False),
         sa.Column("embedding_dims", sa.Integer(), nullable=False, server_default=sa.text("512")),
         _created_at(),
-        # Parent PK is composite (tenant_id, id) — the FK must be composite
+        # Parent PK is composite (tenant_id, id) - the FK must be composite
         # too; a single-column FK to id alone would fail DDL on Postgres.
         sa.ForeignKeyConstraint(
             ["tenant_id", "parent_id"],

@@ -1,4 +1,4 @@
-# ai-agent service import-linter configuration — enforced architecture.
+# ai-agent service import-linter configuration - enforced architecture.
 #
 # Run from the repo root:
 #   uv run lint-imports --config services/ai-agent/import-linter.toml
@@ -29,7 +29,7 @@ type = "forbidden"
 source_modules = ["ai_agent.features"]
 forbidden_modules = ["ai_agent.models", "ai_agent.db"]
 # Feature ORM MODELS are the one sanctioned exception: they must inherit the
-# shared declarative Base/mixins from ai_agent.models.base (core convention —
+# shared declarative Base/mixins from ai_agent.models.base (core convention -
 # no db/base.py), so importing ai_agent.models.** from features/**/models/** is
 # allowed. Repositories and everything else under ai_agent.features stay
 # forbidden. When the first slice ships ORM models (SKY-57 engine commits), add

@@ -659,7 +659,7 @@ function CreateJournalEntryDialog({
 
 const columns: FinanceColumn<JournalEntry>[] = [
   { label: "Date", render: (entry) => formatDate(entry.entry_date) },
-  { label: "Memo", render: (entry) => entry.memo ?? "—" },
+  { label: "Memo", render: (entry) => entry.memo ?? "-" },
   { label: "Status", render: (entry) => <EntryStatusBadge status={entry.status} /> },
   {
     label: "Debit",
@@ -808,7 +808,7 @@ function FinanceJournalEntries() {
       <div className="space-y-6">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <TableSkeleton rows={6} />
@@ -821,7 +821,7 @@ function FinanceJournalEntries() {
       <div className="space-y-6">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <FinanceErrorState message={status.message} onRetry={() => void load()} />
@@ -834,7 +834,7 @@ function FinanceJournalEntries() {
       <div className="space-y-4">
         <PageHeader
           title="Journal Entries"
-          description="The general ledger — every debit and credit the business posts."
+          description="The general ledger - every debit and credit the business posts."
           icon={NotebookPen}
         />
         <TableToolbar

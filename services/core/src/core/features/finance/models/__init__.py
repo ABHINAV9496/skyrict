@@ -1,4 +1,4 @@
-"""Finance ORM models — one file per ``erp_*`` table (FIN-DATA-001).
+"""Finance ORM models - one file per ``erp_*`` table (FIN-DATA-001).
 
 Feature models are NOT re-exported from ``core.models``: importing that
 package from ``core.features`` would violate the import-linter layering

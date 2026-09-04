@@ -230,7 +230,7 @@ def detect_transfer_without_receipt(movements: list[MovementRow]) -> list[Anomal
     findings: list[AnomalyFinding] = []
     for ref_id, rows in transfers_by_ref.items():
         if len(rows) < 2:
-            # Only one side of the transfer exists — possible mismatch.
+            # Only one side of the transfer exists - possible mismatch.
             only = rows[0]
             findings.append(
                 AnomalyFinding(
@@ -239,7 +239,7 @@ def detect_transfer_without_receipt(movements: list[MovementRow]) -> list[Anomal
                     title=f"Transfer '{ref_id}' missing paired movement",
                     description=(
                         f"Transfer ref '{ref_id}' has only {only.movement_type} "
-                        f"({only.qty} units) at warehouse {only.warehouse_id} — "
+                        f"({only.qty} units) at warehouse {only.warehouse_id} - "
                         f"the counter-movement appears missing."
                     ),
                     affected_product_id=only.product_id,
@@ -270,7 +270,7 @@ def detect_reorder_alert_ignored(movements: list[MovementRow]) -> list[AnomalyFi
         receipts = [m for m in rows if m.movement_type == "receipt"]
         issues = [m for m in rows if m.movement_type == "issue"]
         if receipts or not issues:
-            continue  # has inflow or no outflow — not "ignored"
+            continue  # has inflow or no outflow - not "ignored"
         oldest_issue = min(_as_utc(m.created_at) for m in issues)
         days_without_receipt = (now - oldest_issue).days
         if days_without_receipt < _REORDER_IGNORED_DAYS:
@@ -282,7 +282,7 @@ def detect_reorder_alert_ignored(movements: list[MovementRow]) -> list[AnomalyFi
                 title=f"Reorder alert ignored for {days_without_receipt} days",
                 description=(
                     f"Product {product_id} has had {len(issues)} issue(s) but no "
-                    f"receipts for {days_without_receipt} days — reorder appears ignored."
+                    f"receipts for {days_without_receipt} days - reorder appears ignored."
                 ),
                 affected_product_id=product_id,
                 affected_warehouse_id=rows[-1].warehouse_id,
@@ -323,7 +323,7 @@ def detect_negative_adjustment_spike(movements: list[MovementRow]) -> list[Anoma
                 description=(
                     f"{len(rows)} negative adjustments detected for product "
                     f"{product_id} at warehouse {warehouse_id} within "
-                    f"{_NEGATIVE_SPIKE_WINDOW_DAYS} days — possible systematic issue."
+                    f"{_NEGATIVE_SPIKE_WINDOW_DAYS} days - possible systematic issue."
                 ),
                 affected_product_id=product_id,
                 affected_warehouse_id=warehouse_id,

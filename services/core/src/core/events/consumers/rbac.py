@@ -1,14 +1,14 @@
-"""Cross-service RBAC provisioning — consume identity tenant/role-grant events.
+"""Cross-service RBAC provisioning - consume identity tenant/role-grant events.
 
-Identity owns tenancy + roles; the core service mirrors the subset it needs —
-``core_roles`` + ``core_user_roles`` — so ``require_permission`` can resolve
+Identity owns tenancy + roles; the core service mirrors the subset it needs -
+``core_roles`` + ``core_user_roles`` - so ``require_permission`` can resolve
 ERP grants at request time. This module applies the ``identity.tenant.provisioned``
 and ``identity.rbac.role_granted`` payloads (see ``skyrict_events.schemas``),
 idempotently: a role is upserted by ``(tenant_id, id)`` with a name-match
 fallback, and a grant by ``(tenant_id, user_id, role_id, scope_id)``.
 
 Phase 1: Kafka is not wired, so there is no broker consumer loop. The handler
-is invoked directly — from the ``core provision-rbac`` CLI, from tests, and
+is invoked directly - from the ``core provision-rbac`` CLI, from tests, and
 when the platform Kafka consumer lands.
 """
 

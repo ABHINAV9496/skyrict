@@ -1,10 +1,10 @@
-"""erp_attendance_records — one attendance row per employee per work day
+"""erp_attendance_records - one attendance row per employee per work day
 
 Attendance is recorded daily per employee with a status of ``on_time``,
 ``late``, or ``absent``. The payroll-facing ``pay_impact`` column is derived
 by the service from the status (on_time -> full, late -> half, absent ->
 none) and stored for queryability; it is never trusted from clients. One
-record per ``(tenant_id, employee_id, work_date)`` — corrections upsert the
+record per ``(tenant_id, employee_id, work_date)`` - corrections upsert the
 existing day instead of adding history rows.
 
 Revision ID: 0017

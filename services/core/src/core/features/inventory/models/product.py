@@ -1,9 +1,9 @@
-"""Tenant-scoped ERP product ORM model — RLS-protected, composite primary key.
+"""Tenant-scoped ERP product ORM model - RLS-protected, composite primary key.
 
 Follows the 0001 composite-FK convention: ``tenant_id`` is both the RLS column
 and a member of the primary key, so ``(tenant_id, id)`` can be referenced by
 child tables with a composite FK that keeps referential integrity aligned with
-RLS. Prices are stored as ``Numeric(18,4)`` + an ISO 4217 currency code FK —
+RLS. Prices are stored as ``Numeric(18,4)`` + an ISO 4217 currency code FK -
 never floats.
 """
 

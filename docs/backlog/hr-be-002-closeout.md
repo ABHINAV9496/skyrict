@@ -1,4 +1,4 @@
-# HR-BE-002 — Close-out
+# HR-BE-002 - Close-out
 
 HR + Payroll backend API and business rules: leave ledger, payroll runs, state
 machines, RLS isolation, audit + events, and the concurrency hardening that
@@ -9,7 +9,7 @@ final gate.
 Verification status: **all items closed, all gates green** as of
 `e267d3d` (see [Verification gate](#verification-gate)), and re-verified
 after the `nkswalih/dev` merge (see
-[Post-merge gate — dev merge](#post-merge-gate--dev-merge)).
+[Post-merge gate - dev merge](#post-merge-gate--dev-merge)).
 
 ---
 
@@ -18,7 +18,7 @@ after the `nkswalih/dev` merge (see
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
 | 1 | Pending cancellation emits `hr.leave.cancelled` and removes the request from the pending queue | Done | `test_cancel_from_pending_cancels_without_movement` (`tests/unit/features/test_leave_service.py`); `test_pending_cancel_emits_leave_cancelled` (`tests/unit/features/test_feature_events.py`); `cancel_leave_request` pending branch (`services/core/src/core/features/hr/service.py`) |
-| 2 | Repository-level payroll-entry immutability (four scenarios) | Done | `TestRepositoryLevelEntryImmutability` (`tests/integration/api/test_payroll_api.py:319`) — see [Item 2 detail](#item-2---repository-level-entry-immutability-four-cases) |
+| 2 | Repository-level payroll-entry immutability (four scenarios) | Done | `TestRepositoryLevelEntryImmutability` (`tests/integration/api/test_payroll_api.py:319`) - see [Item 2 detail](#item-2---repository-level-entry-immutability-four-cases) |
 | 3 | Accrual runs at compute time (per-period, for the whole roster) | Done | `test_concurrent_compute_idempotent` and `test_concurrent_compute_with_approval_no_deadlock` (`tests/integration/api/test_concurrency_atomicity.py`); accrual loop in `compute_run` (`services/core/src/core/features/payroll/service.py:308`) |
 | 4 | Adjustments apply as net adjustments to the computed entry | Done | `test_adjustment_is_flat_amount` (`tests/unit/features/test_payroll_compute.py`); adjustment wiring in compute entry assembly |
 | 5 | Roster scope: everyone hired by period end, minus terminations (earn through termination date) | Done | `TestRosterScope::test_terminated_mid_period_included_and_others_excluded` (`tests/integration/api/test_payroll_api.py:271`); `list_active_employees` (`services/core/src/core/features/payroll/repository.py:647`) |
@@ -32,7 +32,7 @@ after the `nkswalih/dev` merge (see
 | 13 | Employee state machine tightened: termination only from `active` | Done | `test_status_transitions_and_termination` (`tests/integration/api/test_hr_api.py:117`); `test_approve_rejected_for_terminated_employee` (`tests/unit/features/test_leave_service.py`), `0757814` |
 | 14 | Department update emits changed fields | Done | `test_department_update_emits_changed_fields` (`tests/unit/features/test_feature_events.py`) |
 
-### Item 2 — repository-level entry immutability (four cases)
+### Item 2 - repository-level entry immutability (four cases)
 
 Canonical four scenarios, all green at the repository layer (direct repo calls,
 bypassing the service):
@@ -47,36 +47,36 @@ bypassing the service):
 Classification (verified with `git log -p`): a select-then-raise backstop
 predated these tests (`65249aa`), and the tests (`9545006`) formalized that
 coverage. The backstop was then hardened from select-then-raise to an **atomic**
-conditional-UPDATE guard (`9cb80d5`) — a real correctness improvement beyond a
+conditional-UPDATE guard (`9cb80d5`) - a real correctness improvement beyond a
 pure test gap. Net: **0 code defects** in the four cases; 1 hardening commit
 and 4 tests.
 
 Out-of-scope finding from this exercise: the DELETE path had **no** immutability
-guard at all — `delete_entries_for_run` would happily drop entries from an
+guard at all - `delete_entries_for_run` would happily drop entries from an
 approved/paid/voided run. That was a real correctness gap and is closed by
 `9071545` + the two delete tests (`test_payroll_api.py:446`, `:467`).
 
 ---
 
-## The stale-balance race — unplanned discovery
+## The stale-balance race - unplanned discovery
 
 Discovered, not designed, and **outside** the 14-item list: two concurrent
 approvals on different requests for the same employee could both read the same
 pre-approval balance, both pass the negative-balance check, and both write a
-materialized `erp_leave_balances` row from their own transaction's view — the
+materialized `erp_leave_balances` row from their own transaction's view - the
 ledger went negative while the materialized balance read `>= 0`, invisible to
 `ck_erp_leave_balances_non_negative`.
 
 **Lifecycle**
 
-1. **Discovered** during concurrency hardening review (item 9) — initial
+1. **Discovered** during concurrency hardening review (item 9) - initial
    reproduction: `test_concurrent_approve_cross_requests_invariant`, shipped
    `xfail` (`79e43b7`).
 2. **Tracked** in this doc's predecessor, §4.3 item 5 of
-   `docs/modules/hr-payroll.md`, as a known, unresolved, tracked defect — not an
+   `docs/modules/hr-payroll.md`, as a known, unresolved, tracked defect - not an
    accepted tradeoff.
-3. **Fixed** — row-level locking, see below.
-4. **Closed** — §4.3 rewritten to RESOLVED (`e267d3d`); the `xfail` is a
+3. **Fixed** - row-level locking, see below.
+4. **Closed** - §4.3 rewritten to RESOLVED (`e267d3d`); the `xfail` is a
    deterministic pass; stress/deadlock/first-grant regressions added.
 
 **Fix mechanism.** Every balance-mutating path takes a row lock on
@@ -88,8 +88,8 @@ rechecking the balance:
   balance 0) then `SELECT ... FOR UPDATE`. Seeding is required: FOR UPDATE on a
   missing row locks nothing, and the row would otherwise only be created by
   `upsert_balance`.
-- After the lock, the service **re-probes with a fresh recompute** — never the
-  pre-lock value — so the `>= 0` check runs against the serialized state
+- After the lock, the service **re-probes with a fresh recompute** - never the
+  pre-lock value - so the `>= 0` check runs against the serialized state
   (`hr/repository.py:518`, re-probe used by approve/accrual).
 - `approve_leave_request` locks before its §4.2 check (`hr/service.py:521`);
   cancellation of an approved request locks before the reversal
@@ -100,26 +100,26 @@ rechecking the balance:
   `list_active_employees`, which sorts by `employee_number`
   (`payroll/repository.py:647`). The LOCK-ORDERING CONTRACT is documented at the
   call site (`payroll/service.py:308`) and on `lock_leave_balance`
-  (`hr/repository.py:518`). No code change was needed for ordering — the roster
+  (`hr/repository.py:518`). No code change was needed for ordering - the roster
   query was already deterministic; the contract is now load-bearing and
   documented.
 
 **Regression coverage** (`tests/integration/api/test_concurrency_atomicity.py`):
 
-- `test_concurrent_approve_cross_requests_invariant` — passes deterministically,
+- `test_concurrent_approve_cross_requests_invariant` - passes deterministically,
   no longer `xfail`.
-- `test_concurrent_approve_cross_requests_stress_balance_exact` — 10 concurrent
+- `test_concurrent_approve_cross_requests_stress_balance_exact` - 10 concurrent
   approvals; materialized balance == ledger == 0, movements == approvals.
-- `test_concurrent_compute_with_approval_no_deadlock` — compute racing an
+- `test_concurrent_compute_with_approval_no_deadlock` - compute racing an
   approval; run computed, grants + approval movement settle, materialized ==
   ledger.
-- `test_concurrent_first_grant_single_movement` — two concurrent first-grant
+- `test_concurrent_first_grant_single_movement` - two concurrent first-grant
   accruals produce exactly one grant movement; proves the post-lock re-probe.
 
 Related anomalies logged (not fixed here, out of scope): migration 0009's
 `erp_leave_movements_guard_negative` trigger applies to **all** leave types, so
 a *serial* negative non-accrual approval already 500s at INSERT while the
-service allows it by design — a pre-existing inconsistency to be reconciled in a
+service allows it by design - a pre-existing inconsistency to be reconciled in a
 follow-up.
 
 ---
@@ -141,7 +141,7 @@ All commands run at `services/core` (or repo root where noted), live Postgres on
 
 ---
 
-## Post-merge gate — dev merge
+## Post-merge gate - dev merge
 
 `nkswalih/dev` merged as `af2dd4d` (parents `e09550a9c` + `f7e1f666b`).
 The 14 items and the race fix were re-verified against the merged tree, then
@@ -152,9 +152,9 @@ All numbers below are the post-merge, post-fix results.
 |-------|--------|
 | `pytest tests/ -q` (core) | **441 passed, 0 failed, 0 skipped** (fresh DB; per-test tenant isolation) |
 | `pytest tests/unit -q` + `pytest tests/integration/api -q` (identity) | **580 passed** (511 unit + 69 integration) |
-| `ruff check services/ libs/` | **clean (0 findings)** — 13 violations fixed in `f2c0ed8` (12 TC001/TC003 type-only imports in the audit/sequence feature moved into `TYPE_CHECKING` blocks, 1 I001 in `features/payroll/repository.py`), incl. one I001 the `d2c941c` `CursorResult` import had introduced |
-| `ruff format --check services/ libs/` | **clean (202 files formatted)** — 6 HR/payroll source + test files formatted in `29651a6` |
-| `mypy` core + identity | clean (core 124 files, identity 152 files) — the 6 pre-existing baseline errors fixed in `d2c941c` |
+| `ruff check services/ libs/` | **clean (0 findings)** - 13 violations fixed in `f2c0ed8` (12 TC001/TC003 type-only imports in the audit/sequence feature moved into `TYPE_CHECKING` blocks, 1 I001 in `features/payroll/repository.py`), incl. one I001 the `d2c941c` `CursorResult` import had introduced |
+| `ruff format --check services/ libs/` | **clean (202 files formatted)** - 6 HR/payroll source + test files formatted in `29651a6` |
+| `mypy` core + identity | clean (core 124 files, identity 152 files) - the 6 pre-existing baseline errors fixed in `d2c941c` |
 | `import-linter lint` | 5 contracts kept, 0 broken (dev merge added one contract) |
 | Alembic chain | renumbered core head `0013`, identity head `0017`; `alembic current` = `0013 (head)`; round-trip covered by `test_migration_roundtrip.py` |
 
@@ -166,7 +166,7 @@ All numbers below are the post-merge, post-fix results.
 `tests/unit/core/test_audit_events.py` (kept dev's inventory catalog test).
 
 **Gate fixes shipped in `d2c941c`:**
-- identity `test_mfa.py` — `/api/v1/invitations/accept` is now multipart/form-data;
+- identity `test_mfa.py` - `/api/v1/invitations/accept` is now multipart/form-data;
   test switched from `json=` to `data=` (dev added the avatar `UploadFile` field).
 - mypy strict typing: `domain/entities.py`, `models/core_audit_log.py`,
   `alembic/versions/0010_...py`, `api/v1/schemas/payroll.py`
@@ -177,7 +177,7 @@ All numbers below are the post-merge, post-fix results.
 
 **Test-isolation note.** The core API suite shares permanent tenants
 `olympus`/`globex`/`disabledco`, created on demand and cleaned up per test by
-the `integration_db` fixture — but only when the fixture itself created them.
+the `integration_db` fixture - but only when the fixture itself created them.
 After the dev merge these tenant rows persisted in the identity-owned
 `tenants` table (core's `downgrade base` does not drop identity data), so
 employee counters and payroll runs leaked between tests (19 failures, e.g.
@@ -192,12 +192,12 @@ recreates them per test. The full suite then passes (441/441).
 `git log --oneline 0f2021e..HEAD` = **32 commits** = 28 implementation commits
 plus 4 close-out meta-commits. **The counts in this section are accurate as of
 the reconciliation commit (this one).** Because this document lists its own
-history, it can never include the commits that create and correct it — any
+history, it can never include the commits that create and correct it - any
 future edit to this file is a fifth meta-commit that moves the live count
 again, so re-run `git log --oneline 0f2021e..HEAD` rather than trusting these
 numbers once the file has changed since this commit.
 
-### Implementation commits — `git log --oneline 0f2021e..e267d3d` (28)
+### Implementation commits - `git log --oneline 0f2021e..e267d3d` (28)
 
 Pinned at `e267d3d` so this table is deterministic and never disturbed by
 later edits to this record:
@@ -213,13 +213,13 @@ e267d3d docs(core): [HR-BE-002] mark leave-approval atomicity race RESOLVED in h
 9cb80d5 fix(core): [HR-BE-002] make entry updates atomically guarded instead of select-then-raise
 dc77e45 fix(core): [HR-BE-002] make compute persist via atomic run-status CAS
 4cdf622 test(core): [HR-BE-002] DB behavioral tests for the leave-ledger triggers
-1345071 feat(core): [HR-BE-002] migration 0009 — DB-level leave-ledger hardening (append-only + non-negative)
-0757814 fix(core): [HR-BE-002] align employee state machine with docs — termination only from active
+1345071 feat(core): [HR-BE-002] migration 0009 - DB-level leave-ledger hardening (append-only + non-negative)
+0757814 fix(core): [HR-BE-002] align employee state machine with docs - termination only from active
 233bda7 fix(core): [HR-BE-002] emit the real entry count on payroll-run approval
 79e43b7 docs(core): [HR-BE-002] document the unresolved cross-request stale-balance race and cite it as the xfail reason
 9545006 test(core): [HR-BE-002] add repository-level entry immutability test
 004f7e3 test(core): [HR-BE-002] add roster-scope integration test for terminated/pre-hire employees
-65249aa feat(core): [HR-BE-002] land gap-audit working tree — 16-row reconstruction + migration 0008
+65249aa feat(core): [HR-BE-002] land gap-audit working tree - 16-row reconstruction + migration 0008
 5213dd4 feat(core): close HR-BE-002 gap-audit findings + DoD tests + migration 0007
 f666c9f feat(core): checkpoint - HR/payroll API routers, schemas, service wiring (pre gap-audit baseline)
 8bfcc08 feat(core): implement HR + payroll repositories (leave ledger, runs, entries, settings)
@@ -240,10 +240,10 @@ These commits only create and maintain this close-out record; each lands after
 is the self-reference stated above: a doc listing its own history cannot
 include the commits that create and correct it.
 
-- `aab0b07` — add close-out record with item citations, race lifecycle, and gate evidence (creates this file)
-- `9054673` — finalize close-out commit range with this commit included
-- `12f348e` — make close-out commit range self-consistent snapshot
-- `e09550a` — reconcile close-out commit accounting — pinned implementation range + meta-commit list (this commit, which thus lands fourth)
-- `e0de91c` — post-merge gate amendment — dev-merge verification evidence + isolation note (fifth meta-commit)
-- `cd64f83` — ruff gate correction — `ruff check services/ libs/` clean after `f2c0ed8` (sixth meta-commit)
-- `HEAD` — format-gate correction — `ruff format --check services/ libs/` clean after `29651a6` (seventh meta-commit)
+- `aab0b07` - add close-out record with item citations, race lifecycle, and gate evidence (creates this file)
+- `9054673` - finalize close-out commit range with this commit included
+- `12f348e` - make close-out commit range self-consistent snapshot
+- `e09550a` - reconcile close-out commit accounting - pinned implementation range + meta-commit list (this commit, which thus lands fourth)
+- `e0de91c` - post-merge gate amendment - dev-merge verification evidence + isolation note (fifth meta-commit)
+- `cd64f83` - ruff gate correction - `ruff check services/ libs/` clean after `f2c0ed8` (sixth meta-commit)
+- `HEAD` - format-gate correction - `ruff format --check services/ libs/` clean after `29651a6` (seventh meta-commit)

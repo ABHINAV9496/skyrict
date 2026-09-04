@@ -2,7 +2,7 @@
 
 Adds the ``memberships`` table (invited/active/suspended), enables Row-Level
 Security on it, and backfills one active membership per existing user so the
-table is consistent from day one. ``user_id`` is NULL while INVITED — no
+table is consistent from day one. ``user_id`` is NULL while INVITED - no
 placeholder users; ``invited_email`` reserves the email within the tenant.
 ``users.tenant_id`` stays as-is for RLS simplicity; membership becomes the
 single source of truth as the auth pipeline lands.

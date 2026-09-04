@@ -1,4 +1,4 @@
-"""MFA service — TOTP setup, verification, backup codes, owner-assisted reset.
+"""MFA service - TOTP setup, verification, backup codes, owner-assisted reset.
 
 TOTP secrets are encrypted at rest (``core.security.encrypt_mfa_secret``) and
 decrypted only on read. Backup codes are single-use Argon2id hashes: the same
@@ -41,7 +41,7 @@ BACKUP_CODE_COUNT = 10
 
 
 def hash_backup_code(code: str) -> str:
-    """Hash a backup code with Argon2id — the ONE hashing primitive for codes.
+    """Hash a backup code with Argon2id - the ONE hashing primitive for codes.
 
     Used identically at generation (setup) and at rest. Verification goes
     through :func:`verify_backup_code`, which is the inverse of this function.
@@ -55,7 +55,7 @@ def verify_backup_code(code: str, stored_hash: str) -> bool:
 
 
 def generate_backup_codes(n: int = BACKUP_CODE_COUNT) -> tuple[list[str], list[str | None]]:
-    """Return ``(plaintext_codes, hashes)`` — each code has 64 bits of entropy.
+    """Return ``(plaintext_codes, hashes)`` - each code has 64 bits of entropy.
 
     The hashes are produced with :func:`hash_backup_code`, the identical
     function the redemption path verifies against. The hash list is typed to
@@ -86,7 +86,7 @@ class MFAService:
         call, replacing all ten slots.
 
         A pending (not yet enabled) secret is reused so revisiting the setup
-        page — reload, remount, retry after a bad code — does not invalidate a
+        page - reload, remount, retry after a bad code - does not invalidate a
         secret the user has already scanned into their authenticator app.
         """
         user = await self.user_repo.get_by_id(user_id)

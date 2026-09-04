@@ -2,7 +2,7 @@
 
 Postgres-specific constructs (INSERT ... ON CONFLICT, RETURNING, JSONB) are
 asserted by compiling the statements against the PostgreSQL dialect rather
-than running a database — string-level verification of the conflict target
+than running a database - string-level verification of the conflict target
 and expiry filter is the contract that matters here.
 """
 
@@ -75,7 +75,7 @@ class TestPut:
 
         sql = _compile(session.executed[0])
         # DO UPDATE must refresh response/expiry and increment the counter
-        # (NOT replace the row) — repeat queries stay one row per tenant+hash.
+        # (NOT replace the row) - repeat queries stay one row per tenant+hash.
         assert "ai_query_cache.hit_count +" in sql
         assert "expires_at" in sql
 

@@ -1,7 +1,7 @@
 """Unit tests for the parent-child chunker (SKY-58).
 
 Uses a deterministic in-memory tiktoken encoding (tokens 'aa','ab','cb',' ')
-so chunk boundaries, overlaps, and grouping can be asserted on exact ids —
+so chunk boundaries, overlaps, and grouping can be asserted on exact ids -
 no network, no flakiness.
 """
 
@@ -89,7 +89,7 @@ class TestChunkDocument:
     def test_giant_children_never_dropped_when_over_parent_budget(self) -> None:
         # 101 tokens, child=50 -> 3 children, parent budget 5: every child
         # exceeds the budget, so each becomes a single-child parent. Content
-        # is preserved exactly once — nothing is dropped, nothing is split
+        # is preserved exactly once - nothing is dropped, nothing is split
         # mid-token.
         text = " ".join(["aa"] * 50) + " cb"
         counter, tokens = _counter_for(text)

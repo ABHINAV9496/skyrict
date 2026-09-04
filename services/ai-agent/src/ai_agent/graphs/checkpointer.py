@@ -2,7 +2,7 @@
 
 Implements ``langgraph.checkpoint.base.BaseCheckpointSaver`` against
 ``graph_checkpoints`` / ``graph_checkpoint_writes`` (migration 0008) so the
-ai-agent service needs no psycopg or msgpack sidecar — every payload travels
+ai-agent service needs no psycopg or msgpack sidecar - every payload travels
 as JSONB.
 
 Serialization
@@ -20,7 +20,7 @@ Tenant scoping
   request-scoped ``TenantContext`` (see db/session.py ``after_begin`` hook)
   pins ``app.current_tenant_id`` before the first statement. The RLS policies
   on both tables then bound every read/write to the current tenant. Any graph
-  invocation/resume therefore runs inside one request's tenant context —
+  invocation/resume therefore runs inside one request's tenant context -
   the saver can never read or overwrite another tenant's run.
 
 Threads
@@ -72,7 +72,7 @@ def encode_typed(serde: SerializerProtocol, value: Any) -> tuple[str, str]:
 
 
 def decode_typed(serde: SerializerProtocol, write_type: str, data: str) -> Any:
-    """Reverse :func:`encode_typed` — ``data`` is text (json) or base64."""
+    """Reverse :func:`encode_typed` - ``data`` is text (json) or base64."""
     blob = data.encode("utf-8") if write_type == "json" else base64.b64decode(data)
     return serde.loads_typed((write_type, blob))
 
@@ -101,7 +101,7 @@ def _checkpoint_id(config: RunnableConfig) -> str | None:
 
 
 def _current_tenant() -> uuid.UUID:
-    """The request tenant — MUST be set before any graph run starts."""
+    """The request tenant - MUST be set before any graph run starts."""
     return uuid.UUID(TenantContext.get())
 
 

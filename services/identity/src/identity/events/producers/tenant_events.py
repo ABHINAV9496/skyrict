@@ -1,4 +1,4 @@
-"""Tenant/RBAC event producers — tenant provisioning + role grants.
+"""Tenant/RBAC event producers - tenant provisioning + role grants.
 
 Emits ``skyrict_events`` envelopes through the process-wide producer, which in
 Phase 1 is a logging-only stub (see ``identity.events.producers``). Identity

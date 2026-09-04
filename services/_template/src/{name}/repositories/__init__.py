@@ -1,1 +1,1 @@
-"""{name} database repositories — DB access only, no business logic."""
+"""{name} database repositories - DB access only, no business logic."""

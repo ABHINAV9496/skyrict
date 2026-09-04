@@ -1,7 +1,7 @@
 """ai_rag_parents - parent chunks (~2000 tokens, not embedded).
 
 Parent chunks store the full section of text returned to the LLM for generation
-context. They are NOT embedded — only their child chunks are vectorized. Each
+context. They are NOT embedded - only their child chunks are vectorized. Each
 parent links to one or more child chunks via ``ai_rag_chunks.parent_id``.
 
 The parent-child split means retrieval is precise (small child vectors) while
@@ -9,7 +9,7 @@ generation has full context (large parent text). This is the highest-leverage
 RAG accuracy pattern per 2025-2026 benchmarks (+10-15% over flat chunking).
 
 Source references point at the originating document or transactional record;
-cross-service UUID references (product, warehouse) carry no FK — integrity is
+cross-service UUID references (product, warehouse) carry no FK - integrity is
 validated through service ports (repo convention).
 """
 

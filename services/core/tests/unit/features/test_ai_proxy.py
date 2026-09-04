@@ -1,6 +1,6 @@
 """Unit tests for the AI proxy transport layer (core.features.ai.proxy).
 
-Uses ``httpx.MockTransport`` — no FastAPI client, matching the repo's
+Uses ``httpx.MockTransport`` - no FastAPI client, matching the repo's
 unit-test style (pure logic, real dependency stacks covered by the
 integration suite).
 """
@@ -127,7 +127,7 @@ class TestForwardToAiAgent:
         assert seen["auth"] is None  # nothing fabricated upstream
 
     async def test_target_on_non_configured_host_is_refused(self) -> None:
-        """An absolute upstream target escapes base_url — never relayed."""
+        """An absolute upstream target escapes base_url - never relayed."""
 
         def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
             return httpx.Response(200)
@@ -162,7 +162,7 @@ class TestRelayResponse:
 
 
 class TestStreamingRelay:
-    """The SSE chat relay — chunks forwarded live, never buffered."""
+    """The SSE chat relay - chunks forwarded live, never buffered."""
 
     _SSE = (
         'event: token\ndata: {"agent": "inventory_monitor", "delta": "Hello"}\n\n'

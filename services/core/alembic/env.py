@@ -69,6 +69,13 @@ from core.features.payroll.models import (  # noqa: F401
     PayrollRunModel,
     PayrollSettingsModel,
 )
+from core.features.reporting.models import (  # noqa: F401
+    ErpDashboardModel,
+    ErpReportDefinitionModel,
+    ErpReportSnapshotModel,
+    UserDashboardLayoutModel,
+    WidgetEventModel,
+)
 from core.features.sales.models import (  # noqa: F401
     ErpSalesOrderLineModel,
     ErpSalesOrderModel,

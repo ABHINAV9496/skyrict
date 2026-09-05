@@ -198,7 +198,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
-exclude = ['services/_template/', '(^|/)tests/']
+exclude = ['services/_template/', '(^|/)tests/', 'alembic/env\.py']
 
 [[tool.mypy.overrides]]
 # Third-party packages without type stubs - treat as Any.

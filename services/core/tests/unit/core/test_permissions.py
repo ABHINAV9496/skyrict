@@ -10,6 +10,7 @@ from core.core.permissions import (
     ERP_INVOICE_APPROVE,
     ERP_INVOICE_READ,
     ERP_PURCHASE_APPROVE,
+    ERP_REPORTS_READ,
     ERP_SALES_APPROVE,
     PERMISSION_MODULES,
     WILDCARD,
@@ -58,3 +59,9 @@ class TestCatalog:
         assert ERP_CRM_READ == "erp.crm.read"
         assert ERP_CRM_WRITE == "erp.crm.write"
         assert ERP_SALES_APPROVE == "erp.sales.approve"
+
+    def test_reporting_key_is_catalogued(self) -> None:
+        # RPT-DATA-001: erp.reports.read, seeded by migration 0036; every
+        # report definition references it via its permission_key.
+        assert ERP_REPORTS_READ == "erp.reports.read"
+        assert ERP_REPORTS_READ in CATALOG

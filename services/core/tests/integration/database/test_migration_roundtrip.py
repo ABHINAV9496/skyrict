@@ -150,6 +150,34 @@ async def _drop_scratch_db(maint_dsn: str, dbname: str) -> None:
         await conn.close()
 
 
+async def _insert_tenants(url: str) -> list[str]:
+    """Insert two tenants BEFORE the core chain runs (RPT-DATA-001 seeding probe).
+
+    Identity's chain creates ``tenants`` but no rows; 0036 seeds the Phase-1
+    report pack into tenants that already exist at migration time. Two rows
+    here let the round-trip assert each of them gets exactly the 12-definition
+    pack - once, idempotently, on both the first and the re-run upgrade.
+    """
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+        async with engine.connect() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO tenants (id, name, slug, plan_tier, is_active) "
+                    "VALUES (:id, :name, :slug, 'free', true)"
+                ),
+                [
+                    {"id": uuid.UUID(tenant_a), "name": "Tenant A", "slug": f"rt-a-{tenant_a[:8]}"},
+                    {"id": uuid.UUID(tenant_b), "name": "Tenant B", "slug": f"rt-b-{tenant_b[:8]}"},
+                ],
+            )
+            await conn.commit()
+        return [tenant_a, tenant_b]
+    finally:
+        await engine.dispose()
+
+
 def _run_alembic(ini: Path, cmd: list[str], overrides: dict[str, str], *, cwd: Path) -> None:
     """Run alembic in a fresh interpreter with env overrides (mirrors migrated_schema)."""
     env = {**os.environ, **overrides}
@@ -166,15 +194,19 @@ def _run_alembic(ini: Path, cmd: list[str], overrides: dict[str, str], *, cwd: P
     )
 
 
-async def _assert_upgraded_schema(url: str) -> None:
-    """One probe per migration artefact after ``upgrade head``."""
+async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None) -> None:
+    """One probe per migration artefact after ``upgrade head``.
+
+    ``tenant_ids`` (when given) are tenants that already existed when the core
+    chain ran - 0036 must have seeded the Phase-1 report pack into each.
+    """
     engine = create_async_engine(url, poolclass=NullPool)
     try:
         async with engine.connect() as conn:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0035", f"head is {version}, expected 0035"
+            assert version == "0036", f"head is {version}, expected 0036"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -661,6 +693,66 @@ async def _assert_upgraded_schema(url: str) -> None:
             assert review_status_check == 1, (
                 "0035 must add the payslip review status check constraint"
             )
+
+            # 0036: reporting data layer (RPT-DATA-001).
+            for table in ("erp_report_definitions", "erp_report_snapshots"):
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0036 must create {table}"
+
+            for policy_name in (
+                "tenant_isolation_erp_report_definitions",
+                "tenant_isolation_erp_report_snapshots",
+            ):
+                policy_count = (
+                    await conn.execute(
+                        text(
+                            "SELECT count(*) FROM pg_policies "
+                            "WHERE schemaname = 'public' AND policyname = :name"
+                        ),
+                        {"name": policy_name},
+                    )
+                ).scalar_one()
+                assert policy_count == 1, f"0036 must create RLS policy {policy_name}"
+
+            reports_perm = (
+                await conn.execute(
+                    text("SELECT description FROM core_permissions WHERE key = 'erp.reports.read'")
+                )
+            ).scalar_one_or_none()
+            assert reports_perm is not None, "0036 must register erp.reports.read"
+
+            for constraint in (
+                "uq_erp_report_definitions_tenant_slug",
+                "uq_erp_report_snapshots_tenant_definition_period",
+                "fk_erp_report_snapshots_definition",
+            ):
+                snip_constraint = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM pg_constraint WHERE conname = :name"),
+                        {"name": constraint},
+                    )
+                ).scalar_one()
+                assert snip_constraint == 1, f"0036 must add {constraint}"
+
+            if tenant_ids is not None:
+                # 0036 seeds the Phase-1 pack into tenants that existed at
+                # migration time - 12 definitions each, gated by erp.reports.read.
+                rows = (
+                    await conn.execute(
+                        text(
+                            "SELECT tenant_id, count(*), min(permission_key), max(permission_key) "
+                            "FROM erp_report_definitions "
+                            "GROUP BY tenant_id ORDER BY tenant_id"
+                        )
+                    )
+                ).all()
+                assert {str(r[0]) for r in rows} == set(tenant_ids)
+                for r in rows:
+                    assert r[1] == 12, f"tenant {r[0]} has {r[1]} report definitions"
+                    assert r[2] == "erp.reports.read", r
+                    assert r[3] == "erp.reports.read", r
     finally:
         await engine.dispose()
 
@@ -681,6 +773,8 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_employees",
                 "public.core_permissions",
                 "public.erp_sequences",
+                "public.erp_report_definitions",
+                "public.erp_report_snapshots",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
@@ -722,13 +816,17 @@ def test_core_migration_chain_round_trips_up_down_up() -> None:
             cwd=_IDENTITY_ALEMBIC_INI.parent,
         )
 
+        # Two tenants pre-date 0036, so the migration's per-tenant report
+        # seeding is exercised (RPT-DATA-001).
+        tenant_ids = asyncio.run(_insert_tenants(scratch_url))
+
         _run_alembic(
             _CORE_ALEMBIC_INI,
             ["upgrade", "head"],
             {"CORE_DATABASE_URL": scratch_url},
             cwd=_CORE_ALEMBIC_INI.parent,
         )
-        asyncio.run(_assert_upgraded_schema(scratch_url))
+        asyncio.run(_assert_upgraded_schema(scratch_url, tenant_ids))
 
         _run_alembic(
             _CORE_ALEMBIC_INI,
@@ -744,6 +842,6 @@ def test_core_migration_chain_round_trips_up_down_up() -> None:
             {"CORE_DATABASE_URL": scratch_url},
             cwd=_CORE_ALEMBIC_INI.parent,
         )
-        asyncio.run(_assert_upgraded_schema(scratch_url))
+        asyncio.run(_assert_upgraded_schema(scratch_url, tenant_ids))
     finally:
         asyncio.run(_drop_scratch_db(maint_dsn, dbname))

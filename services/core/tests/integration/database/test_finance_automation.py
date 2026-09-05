@@ -285,9 +285,7 @@ async def test_scan_closes_resolved_duplicate_anomaly(
         )
         await svc.run_anomaly_scan(tenant_id)
         open_anomalies = await repo.list_open_ai_anomalies(tenant_id)
-        assert not [
-            a for a in open_anomalies if a.anomaly_type == "duplicate_entry"
-        ]
+        assert not [a for a in open_anomalies if a.anomaly_type == "duplicate_entry"]
         await session.rollback()
 
 

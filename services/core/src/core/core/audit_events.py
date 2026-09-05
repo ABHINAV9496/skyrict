@@ -31,6 +31,11 @@ HR_LEAVE_ACCRUED = "hr.leave.accrued"
 HR_LEAVE_POLICY_UPDATED = "hr.leave.policy.updated"
 HR_ATTENDANCE_RECORDED = "hr.attendance.recorded"
 HR_AI_RISK_ACKNOWLEDGED = "hr.ai.risk.acknowledged"
+HR_AI_ANOMALY_ACKNOWLEDGED = "hr.ai.anomaly.acknowledged"
+HR_AI_ANOMALY_DISMISSED = "hr.ai.anomaly.dismissed"
+HR_AI_ANOMALY_RESOLVED = "hr.ai.anomaly.resolved"
+HR_AI_COMPLIANCE_ACKNOWLEDGED = "hr.ai.compliance.acknowledged"
+HR_AI_COMPLIANCE_RESOLVED = "hr.ai.compliance.resolved"
 
 # ---------------------------------------------------------------------------
 # Payroll
@@ -43,6 +48,14 @@ PAYROLL_RUN_VOIDED = "payroll.run.voided"
 PAYROLL_ENTRY_ADJUSTED = "payroll.entry.adjusted"
 PAYROLL_SETTINGS_UPDATED = "payroll.settings.updated"
 PAYROLL_COMPENSATION_RECORDED = "payroll.compensation.recorded"
+PAYROLL_AUTO_NOTIFICATIONS_SENT = "payroll.automation.notifications.sent"
+PAYROLL_AUTO_SCHEDULE_CREATED = "payroll.automation.schedule.created"
+PAYROLL_AUTO_SCHEDULE_UPDATED = "payroll.automation.schedule.updated"
+PAYROLL_AUTO_SCHEDULE_DELETED = "payroll.automation.schedule.deleted"
+PAYROLL_AUTO_SCHEDULE_FIRED = "payroll.automation.schedule.fired"
+# 0030: per-payslip review lifecycle (draft -> approved | rejected).
+PAYROLL_PAYSLIP_APPROVED = "payroll.payslip.approved"
+PAYROLL_PAYSLIP_REJECTED = "payroll.payslip.rejected"
 
 # ---------------------------------------------------------------------------
 # Finance
@@ -83,6 +96,11 @@ CATALOG: tuple[str, ...] = (
     HR_LEAVE_POLICY_UPDATED,
     HR_ATTENDANCE_RECORDED,
     HR_AI_RISK_ACKNOWLEDGED,
+    HR_AI_ANOMALY_ACKNOWLEDGED,
+    HR_AI_ANOMALY_DISMISSED,
+    HR_AI_ANOMALY_RESOLVED,
+    HR_AI_COMPLIANCE_ACKNOWLEDGED,
+    HR_AI_COMPLIANCE_RESOLVED,
     PAYROLL_RUN_CREATED,
     PAYROLL_RUN_COMPUTED,
     PAYROLL_RUN_APPROVED,
@@ -91,6 +109,13 @@ CATALOG: tuple[str, ...] = (
     PAYROLL_ENTRY_ADJUSTED,
     PAYROLL_SETTINGS_UPDATED,
     PAYROLL_COMPENSATION_RECORDED,
+    PAYROLL_PAYSLIP_APPROVED,
+    PAYROLL_PAYSLIP_REJECTED,
+    PAYROLL_AUTO_NOTIFICATIONS_SENT,
+    PAYROLL_AUTO_SCHEDULE_CREATED,
+    PAYROLL_AUTO_SCHEDULE_UPDATED,
+    PAYROLL_AUTO_SCHEDULE_DELETED,
+    PAYROLL_AUTO_SCHEDULE_FIRED,
     FINANCE_CHART_OF_ACCOUNTS_CREATED,
     FINANCE_CHART_OF_ACCOUNTS_DEACTIVATED,
     FINANCE_JOURNAL_ENTRY_POSTED,
@@ -135,6 +160,11 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_LEAVE_POLICY_UPDATED,
             HR_ATTENDANCE_RECORDED,
             HR_AI_RISK_ACKNOWLEDGED,
+            HR_AI_ANOMALY_ACKNOWLEDGED,
+            HR_AI_ANOMALY_DISMISSED,
+            HR_AI_ANOMALY_RESOLVED,
+            HR_AI_COMPLIANCE_ACKNOWLEDGED,
+            HR_AI_COMPLIANCE_RESOLVED,
         ),
     ),
     (
@@ -149,6 +179,13 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             PAYROLL_ENTRY_ADJUSTED,
             PAYROLL_SETTINGS_UPDATED,
             PAYROLL_COMPENSATION_RECORDED,
+            PAYROLL_AUTO_NOTIFICATIONS_SENT,
+            PAYROLL_AUTO_SCHEDULE_CREATED,
+            PAYROLL_AUTO_SCHEDULE_UPDATED,
+            PAYROLL_AUTO_SCHEDULE_DELETED,
+            PAYROLL_AUTO_SCHEDULE_FIRED,
+            PAYROLL_PAYSLIP_APPROVED,
+            PAYROLL_PAYSLIP_REJECTED,
         ),
     ),
     (
@@ -218,6 +255,11 @@ __all__ = [
     "FINANCE_JOURNAL_ENTRY_REVERSED",
     "FINANCE_JOURNAL_ENTRY_VOIDED",
     "FINANCE_PAYMENT_APPLIED",
+    "HR_AI_ANOMALY_ACKNOWLEDGED",
+    "HR_AI_ANOMALY_DISMISSED",
+    "HR_AI_ANOMALY_RESOLVED",
+    "HR_AI_COMPLIANCE_ACKNOWLEDGED",
+    "HR_AI_COMPLIANCE_RESOLVED",
     "HR_AI_RISK_ACKNOWLEDGED",
     "HR_DEPARTMENT_CREATED",
     "HR_DEPARTMENT_UPDATED",
@@ -231,8 +273,15 @@ __all__ = [
     "HR_LEAVE_POLICY_UPDATED",
     "HR_LEAVE_REJECTED",
     "HR_LEAVE_REQUESTED",
+    "PAYROLL_AUTO_NOTIFICATIONS_SENT",
+    "PAYROLL_AUTO_SCHEDULE_CREATED",
+    "PAYROLL_AUTO_SCHEDULE_DELETED",
+    "PAYROLL_AUTO_SCHEDULE_FIRED",
+    "PAYROLL_AUTO_SCHEDULE_UPDATED",
     "PAYROLL_COMPENSATION_RECORDED",
     "PAYROLL_ENTRY_ADJUSTED",
+    "PAYROLL_PAYSLIP_APPROVED",
+    "PAYROLL_PAYSLIP_REJECTED",
     "PAYROLL_RUN_APPROVED",
     "PAYROLL_RUN_COMPUTED",
     "PAYROLL_RUN_CREATED",

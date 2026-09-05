@@ -6,9 +6,10 @@
  * and every failure surfaces an `ApiError` the UI can render inline.
  */
 
-import { ApiError, apiFetch, apiList, apiPost, buildQueryString, type Paginated } from "@/lib/api/http";
+import { ApiError, apiFetch, apiFetchRaw, apiList, apiPost, buildQueryString, type Paginated } from "@/lib/api/http";
 
 export type PayrollRunStatus = "draft" | "computed" | "approved" | "paid" | "void";
+export type PayrollJeBridgeStatus = "none" | "pending" | "draft";
 
 export type PayrollRounding = "nearest" | "up" | "down";
 
@@ -23,6 +24,8 @@ export interface PayrollSettings {
   pfRate: string;
   taxRate: string;
   rounding: PayrollRounding;
+  aiAutomationEnabled: boolean;
+  jeBridgeEnabled: boolean;
 }
 
 export interface PayrollRun {
@@ -41,6 +44,7 @@ export interface PayrollRun {
   paidAt: string | null;
   voidReason: string | null;
   skippedEmployees: SkippedEmployee[];
+  jeBridgeStatus: PayrollJeBridgeStatus;
   createdAt: string;
 }
 
@@ -76,6 +80,36 @@ export interface Compensation {
   createdAt: string;
 }
 
+export interface Payslip {
+  employeeId: string;
+  employeeNumber: string;
+  employeeName: string;
+  gross: Money;
+  deductions: Money;
+  net: Money;
+}
+
+export type PayslipReviewStatus = "draft" | "approved" | "rejected";
+
+export interface PayslipReview {
+  id: string;
+  runId: string;
+  employeeId: string;
+  employeeNumber: string;
+  employeeName: string;
+  gross: Money;
+  deductions: Money;
+  net: Money;
+  status: PayslipReviewStatus;
+  version: number;
+  rejectedReason: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectedBy: string | null;
+  rejectedAt: string | null;
+  createdAt: string;
+}
+
 interface MoneyPayload {
   amount?: unknown;
   currency?: unknown;
@@ -87,6 +121,8 @@ interface PayrollSettingsPayload {
   pf_rate?: unknown;
   tax_rate?: unknown;
   rounding?: unknown;
+  ai_automation_enabled?: unknown;
+  je_bridge_enabled?: unknown;
 }
 
 interface PayrollRunPayload {
@@ -105,6 +141,7 @@ interface PayrollRunPayload {
   paid_at?: unknown;
   void_reason?: unknown;
   skipped_employees?: unknown;
+  je_bridge_status?: unknown;
   created_at?: unknown;
 }
 
@@ -129,6 +166,34 @@ interface CompensationPayload {
   created_at?: unknown;
 }
 
+interface PayslipPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  employee_name?: unknown;
+  gross?: MoneyPayload | null;
+  deductions?: MoneyPayload | null;
+  net?: MoneyPayload | null;
+}
+
+interface PayslipReviewPayload {
+  id?: unknown;
+  run_id?: unknown;
+  employee_id?: unknown;
+  employee_number?: unknown;
+  employee_name?: unknown;
+  gross?: MoneyPayload | null;
+  deductions?: MoneyPayload | null;
+  net?: MoneyPayload | null;
+  status?: unknown;
+  version?: unknown;
+  rejected_reason?: unknown;
+  reviewed_by?: unknown;
+  reviewed_at?: unknown;
+  rejected_by?: unknown;
+  rejected_at?: unknown;
+  created_at?: unknown;
+}
+
 function mapMoney(payload: MoneyPayload | null | undefined): Money | null {
   if (!payload) return null;
   return {
@@ -145,6 +210,8 @@ function mapPayrollSettings(payload: PayrollSettingsPayload | null): PayrollSett
     pfRate: String(payload.pf_rate ?? "0"),
     taxRate: String(payload.tax_rate ?? "0"),
     rounding: String(payload.rounding ?? "nearest") as PayrollRounding,
+    aiAutomationEnabled: payload.ai_automation_enabled !== false,
+    jeBridgeEnabled: payload.je_bridge_enabled !== false,
   };
 }
 
@@ -173,6 +240,7 @@ function mapPayrollRun(payload: PayrollRunPayload): PayrollRun {
     paidAt: typeof payload.paid_at === "string" ? payload.paid_at : null,
     voidReason: typeof payload.void_reason === "string" ? payload.void_reason : null,
     skippedEmployees: mapSkippedEmployees(payload.skipped_employees),
+    jeBridgeStatus: String(payload.je_bridge_status ?? "none") as PayrollJeBridgeStatus,
     createdAt: String(payload.created_at ?? ""),
   };
 }
@@ -205,6 +273,38 @@ function mapCompensation(payload: CompensationPayload): Compensation {
   };
 }
 
+function mapPayslip(payload: PayslipPayload): Payslip {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: String(payload.employee_number ?? ""),
+    employeeName: String(payload.employee_name ?? ""),
+    gross: mapMoney(payload.gross) ?? { amount: "0", currency: "USD" },
+    deductions: mapMoney(payload.deductions) ?? { amount: "0", currency: "USD" },
+    net: mapMoney(payload.net) ?? { amount: "0", currency: "USD" },
+  };
+}
+
+function mapPayslipReview(payload: PayslipReviewPayload): PayslipReview {
+  return {
+    id: String(payload.id ?? ""),
+    runId: String(payload.run_id ?? ""),
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: String(payload.employee_number ?? ""),
+    employeeName: String(payload.employee_name ?? ""),
+    gross: mapMoney(payload.gross) ?? { amount: "0", currency: "USD" },
+    deductions: mapMoney(payload.deductions) ?? { amount: "0", currency: "USD" },
+    net: mapMoney(payload.net) ?? { amount: "0", currency: "USD" },
+    status: String(payload.status ?? "draft") as PayslipReviewStatus,
+    version: typeof payload.version === "number" ? payload.version : 1,
+    rejectedReason: typeof payload.rejected_reason === "string" ? payload.rejected_reason : null,
+    reviewedBy: typeof payload.reviewed_by === "string" ? payload.reviewed_by : null,
+    reviewedAt: typeof payload.reviewed_at === "string" ? payload.reviewed_at : null,
+    rejectedBy: typeof payload.rejected_by === "string" ? payload.rejected_by : null,
+    rejectedAt: typeof payload.rejected_at === "string" ? payload.rejected_at : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
 export async function getPayrollSettings(): Promise<PayrollSettings | null> {
   const raw = await apiFetch<PayrollSettingsPayload | null>("/api/v1/payroll/settings");
   return mapPayrollSettings(raw ?? null);
@@ -215,6 +315,8 @@ export async function updatePayrollSettings(input: {
   pfRate?: string;
   taxRate?: string;
   rounding?: PayrollRounding;
+  aiAutomationEnabled?: boolean;
+  jeBridgeEnabled?: boolean;
 }): Promise<PayrollSettings> {
   const raw = await apiFetch<PayrollSettingsPayload>("/api/v1/payroll/settings", {
     method: "PUT",
@@ -223,6 +325,8 @@ export async function updatePayrollSettings(input: {
       pf_rate: input.pfRate,
       tax_rate: input.taxRate,
       rounding: input.rounding,
+      ai_automation_enabled: input.aiAutomationEnabled,
+      je_bridge_enabled: input.jeBridgeEnabled,
     }),
   });
   const settings = mapPayrollSettings(raw ?? null);
@@ -300,6 +404,11 @@ export async function listRunEntries(
   return (items ?? []).map(mapPayrollEntry);
 }
 
+export async function getRunPayslips(runId: string): Promise<Payslip[]> {
+  const items = await apiFetch<PayslipPayload[]>(`/api/v1/payroll/runs/${runId}/payslips`);
+  return (items ?? []).map(mapPayslip);
+}
+
 export async function updateRunEntry(
   runId: string,
   entryId: string,
@@ -335,4 +444,60 @@ export async function createCompensationChange(input: {
     currency: input.currency,
   });
   return mapCompensation(raw ?? {});
+}
+
+export async function listPayslipReviews(input: {
+  status?: PayslipReviewStatus;
+  runId?: string;
+} = {}): Promise<PayslipReview[]> {
+  const items = await apiFetch<PayslipReviewPayload[]>(
+    `/api/v1/payroll/payslips/reviews${buildQueryString({
+      status: input.status,
+      run_id: input.runId,
+    })}`,
+  );
+  return (items ?? []).map(mapPayslipReview);
+}
+
+export async function approvePayslipReview(payslipId: string): Promise<PayslipReview> {
+  const raw = await apiPost<PayslipReviewPayload>(
+    `/api/v1/payroll/payslips/reviews/${payslipId}/approve`,
+    {},
+  );
+  return mapPayslipReview(raw ?? {});
+}
+
+export async function rejectPayslipReview(
+  payslipId: string,
+  reason: string,
+): Promise<PayslipReview> {
+  const raw = await apiPost<PayslipReviewPayload>(
+    `/api/v1/payroll/payslips/reviews/${payslipId}/reject`,
+    { reason },
+  );
+  return mapPayslipReview(raw ?? {});
+}
+
+export async function downloadPayslipPdf(payslipId: string): Promise<void> {
+  const response = await apiFetchRaw(`/api/v1/payroll/payslips/reviews/${payslipId}/pdf`);
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      detail?: { error?: { message?: string }; message?: string } | string;
+    };
+    const message =
+      (typeof payload.detail === "object" && payload.detail?.error?.message) ||
+      (typeof payload.detail === "object" && payload.detail?.message) ||
+      (typeof payload.detail === "string" ? payload.detail : null) ||
+      "Could not download the payslip PDF.";
+    throw new ApiError(response.status, message);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `payslip-${payslipId}.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

@@ -480,3 +480,295 @@ class TestRepositoryLevelEntryImmutability:
         # the number of stale entries dropped (gap #10 recompute path).
         deleted = await self._repo_delete(tenant_id, run_id, keep=[])
         assert deleted == 1
+
+
+async def _seed_payroll_accrual_chart(integration_db: dict[str, str]) -> uuid.UUID:
+    """Insert the payroll accrual accounts (5010/2010/2020) for the olympus tenant.
+
+    The API integration DB provisions no finance chart by design — tenants only
+    get one via the demo seeding script — so JE bridge tests seed the fixture
+    tenant's chart explicitly (one of the Commit 4 acceptance criteria).
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from core.db.session import async_session_factory
+    from core.domain.value_objects import AccountType
+    from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+
+    tenant_id = uuid.UUID(integration_db["acme_id"])
+    rows = [
+        ("5010", "Salaries Expense", AccountType.EXPENSE),
+        ("2010", "Accrued Salaries Payable", AccountType.LIABILITY),
+        ("2020", "Payroll Deductions Payable", AccountType.LIABILITY),
+    ]
+    async with async_session_factory() as session:
+        for code, name, account_type in rows:
+            await session.execute(
+                pg_insert(ErpChartOfAccountModel)
+                .values(
+                    tenant_id=tenant_id,
+                    id=uuid.uuid4(),
+                    code=code,
+                    name=name,
+                    account_type=account_type,
+                    is_active=True,
+                )
+                .on_conflict_do_nothing()
+            )
+        await session.commit()
+    return tenant_id
+
+
+async def _fetch_payroll_journal_entry(
+    tenant_id: uuid.UUID, run_id: str
+) -> dict[str, object] | None:
+    """The payroll accrual JE (source='payroll', source_ref=run_id), if any."""
+    from sqlalchemy import func, select
+
+    from core.db.session import async_session_factory
+    from core.features.finance.models.journal_entry import ErpJournalEntryModel
+    from core.features.finance.models.journal_line import ErpJournalLineModel
+
+    async with async_session_factory() as session:
+        stmt = (
+            select(
+                ErpJournalEntryModel,
+                func.count(ErpJournalLineModel.id).label("line_count"),
+            )
+            .outerjoin(ErpJournalLineModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.source == "payroll",
+                ErpJournalEntryModel.source_ref == run_id,
+            )
+            .group_by(ErpJournalEntryModel.tenant_id, ErpJournalEntryModel.id)
+        )
+        row = (await session.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        entry, line_count = row
+        return {
+            "entry_id": str(entry.id),
+            "status": entry.status.value,
+            "line_count": line_count,
+        }
+
+
+class TestJeBridge:
+    """Commit 4 — mark-paid handshakes a DRAFT payroll accrual JE into Finance."""
+
+    async def _paid_run(
+        self,
+        client: AsyncClient,
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        await hire_employee(client, headers, hire_date="2026-01-05")
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        run_id = run["id"]
+        result = await _compute(client, headers, run_id)
+        assert len(result["entries"]) == 1
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
+        assert approved.status_code == 200, approved.text
+        paid = await client.post(f"/api/v1/payroll/runs/{run_id}/pay", headers=headers)
+        assert paid.status_code == 200, paid.text
+        return cast("dict[str, Any]", paid.json()["data"])
+
+    async def test_mark_paid_drafts_accrual_when_chart_seeded(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        tenant_id = await _seed_payroll_accrual_chart(integration_db)
+        headers = tenant_headers("olympus")
+        # Non-zero deductions exercise the 3-leg entry (gross = net + deductions).
+        response = await client.put(
+            "/api/v1/payroll/settings",
+            json={"pf_rate": 0.05, "tax_rate": 0.10},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+
+        paid = await self._paid_run(client, headers)
+
+        assert paid["status"] == "paid"
+        assert paid["je_bridge_status"] == "draft"
+        je = await _fetch_payroll_journal_entry(tenant_id, paid["id"])
+        assert je is not None
+        assert je["status"] == "draft"
+        assert je["line_count"] == 3
+
+    async def test_full_cycle_schedule_to_accrual_draft(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        """HR-AUT-001 full-cycle demo (Gherkin 3) across every deliverable.
+
+        batch computes payslips -> run approved -> payslip-review approve gates
+        the employee's ``payslip_ready`` notification (no duplicates) -> paying
+        drafts the Finance accrual JE. Chains the previously isolated
+        notification orchestrator and JE-bridge paths into one cross-module
+        proof.
+        """
+        from sqlalchemy import text as sa_text
+
+        from core.db.session import async_session_factory
+
+        tenant_id = await _seed_payroll_accrual_chart(integration_db)
+        headers = tenant_headers("olympus")
+
+        # Non-zero deductions exercise the 3-leg accrual entry.
+        settings_resp = await client.put(
+            "/api/v1/payroll/settings",
+            json={"pf_rate": 0.05, "tax_rate": 0.10},
+            headers=headers,
+        )
+        assert settings_resp.status_code == 200, settings_resp.text
+
+        # Batch completes -> exactly one computed payslip queued for review.
+        employee = await hire_employee(client, headers, hire_date="2026-01-05")
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        run_id = run["id"]
+        result = await _compute(client, headers, run_id)
+        assert len(result["entries"]) == 1
+
+        # Link a portal user so payroll-review approval gates their delivery.
+        linked_user = uuid.uuid4()
+        async with async_session_factory() as session:
+            await session.execute(
+                sa_text(
+                    "UPDATE erp_employees SET user_id = :uid WHERE id = :eid AND tenant_id = :tid"
+                ),
+                {"uid": linked_user, "eid": uuid.UUID(employee["id"]), "tid": tenant_id},
+            )
+            await session.commit()
+
+        approved = await client.post(f"/api/v1/payroll/runs/{run_id}/approve", headers=headers)
+        assert approved.status_code == 200, approved.text
+
+        # Approval releases the employee's payslip_ready notification (0030).
+        reviews_resp = await client.get("/api/v1/payroll/payslips/reviews", headers=headers)
+        assert reviews_resp.status_code == 200, reviews_resp.text
+        reviews = reviews_resp.json()["data"]
+        assert len(reviews) == 1
+        review_id = reviews[0]["id"]
+        approve_resp = await client.post(
+            f"/api/v1/payroll/payslips/reviews/{review_id}/approve", headers=headers
+        )
+        assert approve_resp.status_code == 200, approve_resp.text
+        assert approve_resp.json()["data"]["status"] == "approved"
+
+        async with async_session_factory() as session:
+            count = (
+                await session.execute(
+                    sa_text(
+                        "SELECT count(*) FROM ai_payroll_notifications "
+                        "WHERE tenant_id = :tid AND recipient_user_id = :uid "
+                        "AND event_type = 'payslip_ready'"
+                    ),
+                    {"tid": tenant_id, "uid": linked_user},
+                )
+            ).scalar_one()
+            assert count == 1  # exactly one: the dedupe key prevents re-delivery
+
+        # Mark-paid cross-module bridge -> accrual JE draft appears in Finance.
+        paid = await client.post(f"/api/v1/payroll/runs/{run_id}/pay", headers=headers)
+        assert paid.status_code == 200, paid.text
+        paid_data = paid.json()["data"]
+        assert paid_data["status"] == "paid"
+        assert paid_data["je_bridge_status"] == "draft"
+        je = await _fetch_payroll_journal_entry(tenant_id, run_id)
+        assert je is not None
+        assert je["status"] == "draft"
+        assert je["line_count"] == 3
+
+    async def test_mark_paid_pending_when_chart_missing(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        tenant_id = uuid.UUID(integration_db["acme_id"])
+
+        paid = await self._paid_run(client, tenant_headers("olympus"))
+
+        # No chart in the API integration DB → paid succeeds but no JE is
+        # drafted; the run exposes the queryable pending state (FIN-AI-001).
+        assert paid["status"] == "paid"
+        assert paid["je_bridge_status"] == "pending"
+        assert await _fetch_payroll_journal_entry(tenant_id, paid["id"]) is None
+
+    async def test_mark_paid_no_bridge_when_flag_disabled(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+        integration_db: dict[str, str],
+    ) -> None:
+        tenant_id = await _seed_payroll_accrual_chart(integration_db)
+        headers = tenant_headers("olympus")
+        response = await client.put(
+            "/api/v1/payroll/settings",
+            json={"je_bridge_enabled": False},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["je_bridge_enabled"] is False
+
+        paid = await self._paid_run(client, headers)
+
+        assert paid["status"] == "paid"
+        assert paid["je_bridge_status"] == "none"
+        assert await _fetch_payroll_journal_entry(tenant_id, paid["id"]) is None
+
+
+class TestRunPayslips:
+    async def test_payslips_endpoint_returns_employee_rows(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        await hire_employee(client, headers, hire_date="2026-01-01", monthly_salary="4000.00")
+        await hire_employee(
+            client,
+            headers,
+            first_name="Grace",
+            last_name="Hopper",
+            hire_date="2026-01-01",
+            monthly_salary="6000.00",
+        )
+        run = await create_payroll_run(client, headers, "2026-01-01", "2026-01-31")
+        run_id = run["id"]
+        result = await _compute(client, headers, run_id)
+        assert len(result["entries"]) == 2
+
+        response = await client.get(f"/api/v1/payroll/runs/{run_id}/payslips", headers=headers)
+        assert response.status_code == 200, response.text
+        payslips = response.json()["data"]
+        assert len(payslips) == 2
+        assert [p["employee_name"] for p in payslips] == [
+            "Ada Lovelace",
+            "Grace Hopper",
+        ]
+        assert payslips[0]["gross"]["amount"] == "4000.00"
+        assert payslips[0]["deductions"]["amount"] == "0.00"
+        assert payslips[0]["net"]["amount"] == "4000.00"
+
+    async def test_payslips_endpoint_empty_on_draft_run(
+        self,
+        client: AsyncClient,
+        tenant_headers: Callable[[str], dict[str, str]],
+        seeded_hr_defaults: None,
+    ) -> None:
+        headers = tenant_headers("olympus")
+        run = await create_payroll_run(client, headers, "2026-02-01", "2026-02-28")
+        response = await client.get(f"/api/v1/payroll/runs/{run['id']}/payslips", headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["data"] == []

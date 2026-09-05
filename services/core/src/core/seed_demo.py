@@ -277,6 +277,25 @@ EMPLOYEE_ROWS: tuple[dict[str, object], ...] = (
     },
 )
 
+# Benefit plans (pre-flight ``benefit_elections`` warning stays quiet when every
+# seeded employee is enrolled). ``monthly_cost_cents`` is integer cents.
+BENEFIT_PLANS: tuple[dict[str, object], ...] = (
+    {
+        "code": "MED-BRONZE",
+        "name": "Medical — Bronze",
+        "plan_type": "medical",
+        "monthly_cost_cents": 150000,
+        "effective_days_ago": 3650,
+    },
+    {
+        "code": "RET-401K",
+        "name": "Retirement — 401(k) Match",
+        "plan_type": "retirement",
+        "monthly_cost_cents": None,
+        "effective_days_ago": 3650,
+    },
+)
+
 LEAVE_REQUEST_ROWS: tuple[dict[str, object], ...] = (
     {
         "emp": 0,
@@ -1700,11 +1719,31 @@ async def _resolve_owner_id(session: AsyncSession, tenant_id: uuid.UUID) -> uuid
     return row if row is None else uuid.UUID(str(row))
 
 
-async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[str, int]:
-    """Seed demo data for all ERP modules. Idempotent unless force=True."""
+async def seed_demo_data(
+    tenant_id: uuid.UUID,
+    *,
+    force: bool = False,
+    employees: int = 15,
+) -> dict[str, int]:
+    """Seed demo data for all ERP modules. Idempotent unless force=True.
+
+    ``employees`` sizes the HR/payroll roster: the first ``employees`` rows of
+    ``EMPLOYEE_ROWS`` plus synthetic extras when larger. Compensation follows
+    the same cut (base rows for indices 0-12 and 14, so employee index 13 is
+    ALWAYS uncompensated — the demo's "skipped" employee), then synthetic rows
+    for indices >= 15. The payroll automation acceptance scrub seeds 50. Every
+    seeded employee also gets bank details and enrolled benefit elections so the
+    pre-flight ``banking``/``benefit_elections`` warnings stay quiet on demos.
+    """
+    from core.features.ai_hr.models.attrition_score import AttritionScoreModel
+    from core.features.ai_hr.models.compliance_check import ComplianceCheckModel
+    from core.features.ai_hr.models.employee_document import DocumentType, EmployeeDocumentModel
     from core.features.ai_hr.models.leave_anomaly import LeaveAnomalyModel
     from core.features.ai_hr.models.leave_blackout_period import AiHrLeaveBlackoutPeriodModel
+    from core.features.ai_hr.models.leave_suggestion import LeaveSuggestionModel
+    from core.features.ai_hr.models.payroll_anomaly import PayrollAnomalyModel
     from core.features.ai_hr.models.public_holiday import AiHrPublicHolidayModel
+    from core.features.ai_hr.models.quality_score import QualityScoreModel
     from core.features.ai_hr.models.utilization_alert import (
         UtilizationAlertModel,
         UtilizationAlertType,
@@ -1726,11 +1765,60 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
     from core.features.inventory.models.stock_level import ErpStockLevelModel
     from core.features.inventory.models.stock_movement import ErpStockMovementModel
     from core.features.inventory.models.warehouse import ErpWarehouseModel
+    from core.features.payroll.models.benefits import (
+        BenefitElectionModel,
+        BenefitPlanModel,
+    )
     from core.features.payroll.models.compensation import CompensationModel
     from core.features.payroll.models.payroll_entry import PayrollEntryModel
     from core.features.payroll.models.payroll_run import PayrollRunModel, PayrollRunStatus
+    from core.features.payroll.models.payslip_review import PayslipReviewModel
+    from core.features.payroll_automation.models import (
+        PayrollBatchItemModel,
+        PayrollBatchRunModel,
+        PayrollNotificationModel,
+        PayrollNotificationPrefModel,
+        PayrollScheduleModel,
+    )
     from core.features.sales.models.order import ErpSalesOrderModel
     from core.features.sales.models.order_line import ErpSalesOrderLineModel
+
+    if employees < 1:
+        raise ValueError("employees must be positive")
+
+    # Roster cut + synthetic extras for employees beyond the static rows.
+    employee_rows: list[dict[str, object]] = list(EMPLOYEE_ROWS[:employees])
+    for idx in range(len(EMPLOYEE_ROWS), employees):
+        employee_rows.append(
+            {
+                "num": f"E-{idx + 1:04d}",
+                "first": f"Ext{idx + 1}",
+                "last": f"Employee{idx + 1}",
+                "email": f"ext{idx + 1}@skyrict.com",
+                "phone": f"+1 415 555 {9000 + idx}",
+                "dept": idx % 7,
+                "title": f"Operations Associate {idx % 7 + 1}",
+                "status": "active",
+                "hire_days_ago": 120 + (idx % 90),
+            }
+        )
+
+    # Compensation cut: base rows kept up to the roster, then synthetic rows
+    # for indices >= 15 (5000 + (idx % 10) * 500). Employee index 13 stays
+    # permanently uncompensated so every seeded roster exercises the skip path.
+    compensation_rows: list[dict[str, object]] = [
+        row for row in COMPENSATION_ROWS if int(str(row["emp"])) < employees
+    ]
+    for idx in range(15, employees):
+        compensation_rows.append(
+            {
+                "emp": idx,
+                "monthly": Decimal(f"{5000 + (idx % 10) * 500}"),
+                "currency": "USD",
+                "effective_days_ago": 420,
+            }
+        )
+    comp_by_emp = {int(str(row["emp"])): row for row in compensation_rows}
 
     async with async_session_factory() as session:
         if force:
@@ -1758,9 +1846,18 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 ErpStockLevelModel,
                 ErpWarehouseModel,
                 ErpProductModel,
+                PayrollBatchItemModel,
+                PayrollBatchRunModel,
+                PayrollNotificationModel,
+                PayrollNotificationPrefModel,
+                PayrollScheduleModel,
                 PayrollEntryModel,
+                PayslipReviewModel,
+                PayrollAnomalyModel,
                 PayrollRunModel,
                 CompensationModel,
+                BenefitElectionModel,
+                BenefitPlanModel,
                 ErpPaymentModel,
                 ErpInvoiceLineModel,
                 ErpInvoiceModel,
@@ -1776,6 +1873,11 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 AiHrPublicHolidayModel,
                 UtilizationAlertModel,
                 LeaveAnomalyModel,
+                LeaveSuggestionModel,
+                EmployeeDocumentModel,
+                AttritionScoreModel,
+                ComplianceCheckModel,
+                QualityScoreModel,
                 EmployeeModel,
                 DepartmentModel,
             ):
@@ -1821,7 +1923,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
 
         # ── EMPLOYEES ────────────────────────────────────────────────
         emp_ids: list[uuid.UUID] = []
-        for row in EMPLOYEE_ROWS:
+        for idx, row in enumerate(employee_rows):
             dept_idx = int(str(row["dept"]))
             term_date = None
             if row["status"] == "terminated":
@@ -1838,11 +1940,48 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 employment_status=row["status"],
                 hire_date=_date_ago(int(str(row["hire_days_ago"]))),
                 termination_date=term_date,
+                bank_account=f"US{90000000000 + idx + 1}",
+                bank_name="SkyRict Demo Bank",
             )
             session.add(emp)
             await session.flush()
             emp_ids.append(emp.id)
         counts["employees"] = len(emp_ids)
+
+        # ── BENEFITS ───────────────────────────────────────────────────
+        # Every seeded employee is enrolled in both seeded plans so the payroll
+        # pre-flight ``benefit_elections`` warning stays quiet on demos; the
+        # ``banking`` warning stays quiet via the bank fields above and the
+        # ``termination`` warning never fires (seed sets termination_date only
+        # for status "terminated" rows, which pre-flight deliberately ignores).
+        _plan_ids: list[uuid.UUID] = []
+        for plan in BENEFIT_PLANS:
+            plan_cents = plan.get("monthly_cost_cents")
+            plan_model = BenefitPlanModel(
+                tenant_id=tenant_id,
+                plan_code=str(plan["code"]),
+                name=str(plan["name"]),
+                plan_type=str(plan["plan_type"]),
+                monthly_cost_cents=(Decimal(str(plan_cents)) if plan_cents is not None else None),
+                is_active=True,
+                effective_from=_date_ago(int(str(plan["effective_days_ago"]))),
+            )
+            session.add(plan_model)
+            await session.flush()
+            _plan_ids.append(plan_model.id)
+        for emp_id in emp_ids:
+            for plan_id in _plan_ids:
+                session.add(
+                    BenefitElectionModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_id,
+                        plan_id=plan_id,
+                        status="enrolled",
+                        effective_from=_date_ago(3650),
+                    )
+                )
+        counts["benefit_plans"] = len(_plan_ids)
+        counts["benefit_elections"] = len(emp_ids) * len(_plan_ids)
 
         # Update department managers
         depts_with_managers = [
@@ -2200,7 +2339,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
         counts["products"] = len(product_ids)
 
         # ── COMPENSATION ─────────────────────────────────────────────
-        for row in COMPENSATION_ROWS:
+        for row in compensation_rows:
             emp_idx = int(str(row["emp"]))
             comp = CompensationModel(
                 tenant_id=tenant_id,
@@ -2211,7 +2350,7 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 is_active=True,
             )
             session.add(comp)
-        counts["compensation"] = len(COMPENSATION_ROWS)
+        counts["compensation"] = len(compensation_rows)
 
         # ── PAYROLL RUNS + ENTRIES ───────────────────────────────────
         for run_row in PAYROLL_RUN_ROWS:
@@ -2240,10 +2379,11 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             await session.flush()
 
             if run_row["status"] in ("paid", "approved", "computed"):
-                for emp_idx, comp_row in enumerate(COMPENSATION_ROWS):
-                    if emp_idx >= len(emp_ids):
-                        break
-                    emp_status = EMPLOYEE_ROWS[emp_idx]["status"]
+                for emp_idx in range(len(emp_ids)):
+                    comp_row = comp_by_emp.get(emp_idx)
+                    if comp_row is None:
+                        continue
+                    emp_status = employee_rows[emp_idx]["status"]
                     if emp_status == "terminated":
                         continue
                     base = Decimal(str(comp_row["monthly"]))
@@ -2268,6 +2408,162 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
             run.total_net = net if net > 0 else None
 
         counts["payroll_runs"] = len(PAYROLL_RUN_ROWS)
+
+        # ── PAYROLL ANOMALY FIXTURE (HR-AI-001, Unit B) ─────────────────────
+        # The DEMO payroll data is deliberately CLEAN: every eligible employee
+        # is paid a flat 0.85x of base each run, every employee has a unique
+        # bank account, and terminated/uncompensated employees are never paid.
+        # The detection engine therefore finds ZERO anomalies against the raw
+        # seed. To make the demo (and the Unit B live gate) deterministic we
+        # introduce THREE controlled findings, all scoped to the LATEST run
+        # that holds entries (PR-2026-04) so the lazy scan reproduces them:
+        #   ghost_employee (critical): EMP-0014 (employee index 13) is
+        #     terminated AND uncompensated, so the seed never gives it an
+        #     entry. We add a phantom payable entry to PR-2026-04 only.
+        #   net_pay_delta (medium): employee index 0's PR-2026-04 net is
+        #     bumped 2.5x via an ``adjustments`` bonus (~2.5x the prior run's
+        #     flat net) -> ratio_severity rules it medium.
+        #   duplicate_account (medium): employees index 1 and index 2 are made
+        #     to share the SAME normalised bank account (2 members -> medium).
+        # Hitting exactly these keeps the inbox deterministic on ANY seed day.
+        latest_run = (
+            (
+                await session.execute(
+                    select(PayrollRunModel)
+                    .where(
+                        PayrollRunModel.tenant_id == tenant_id,
+                        PayrollRunModel.status != PayrollRunStatus.VOID,
+                        PayrollRunModel.period_start
+                        < date.fromisoformat(str(PAYROLL_RUN_ROWS[-1]["start"])),
+                    )
+                    .order_by(PayrollRunModel.period_start.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if latest_run is not None and len(emp_ids) > 13:
+            # ghost: pay the terminated + uncompensated EMP-0014 in the latest run.
+            ghost_base = Decimal("7000")
+            ghost_net = ghost_base - ghost_base * Decimal("0.15")
+            session.add(
+                PayrollEntryModel(
+                    tenant_id=tenant_id,
+                    run_id=latest_run.id,
+                    employee_id=emp_ids[13],
+                    base_salary=ghost_base,
+                    pay_days=22,
+                    gross=ghost_base,
+                    deductions=ghost_base * Decimal("0.15"),
+                    net=ghost_net,
+                    adjustments={"fixture": "ghost_employee"},
+                )
+            )
+            # net_pay_delta: bump employee 0's latest-run net 2.5x (medium).
+            latest_run_code = str(latest_run.run_code or "")
+            e0_entry = (
+                (
+                    await session.execute(
+                        select(PayrollEntryModel).where(
+                            PayrollEntryModel.tenant_id == tenant_id,
+                            PayrollEntryModel.run_id == latest_run.id,
+                            PayrollEntryModel.employee_id == emp_ids[0],
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if e0_entry is not None:
+                base_net = Decimal(str(e0_entry.net))
+                tripled_net = base_net * Decimal("2.5")
+                e0_entry.net = tripled_net
+                e0_entry.gross = tripled_net + e0_entry.deductions
+                e0_entry.adjustments = {"fixture": "net_pay_delta", "run": latest_run_code}
+            # duplicate_account: employee 1 reuses employee 2's bank account.
+            if len(emp_ids) > 2:
+                emp_1 = (
+                    (
+                        await session.execute(
+                            select(EmployeeModel).where(
+                                EmployeeModel.tenant_id == tenant_id,
+                                EmployeeModel.id == emp_ids[1],
+                            )
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                emp_2 = (
+                    (
+                        await session.execute(
+                            select(EmployeeModel).where(
+                                EmployeeModel.tenant_id == tenant_id,
+                                EmployeeModel.id == emp_ids[2],
+                            )
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if emp_1 is not None and emp_2 is not None:
+                    emp_1.bank_account = emp_2.bank_account
+
+        # ── COMPLIANCE FIXTURE (HR-AI-001, Unit C) ──────────────────────────
+        # Same philosophy as the payroll fixture: the raw seed has NO employee
+        # documents (so the compliance engine finds nothing) and every employee
+        # has complete HR fields. Introduce four deterministic findings across
+        # the v1 rule pack, all anchored to ``date.today()`` so they reproduce
+        # on ANY seed day:
+        #   document_expiry (medium): EMP-0004 WORK_PERMIT expiring in 20 days.
+        #   document_expiry (high):   EMP-0005 VISA already expired 5 days ago.
+        #   training_overdue (medium): EMP-0006 required CERTIFICATION expired
+        #    14 days ago (requires_training is derived from holding a cert).
+        #   contract_missing_field (low): EMP-0007 has no phone on file.
+        if len(emp_ids) > 6:
+            today = date.today()
+            session.add_all(
+                [
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[3],
+                        doc_type=DocumentType.WORK_PERMIT,
+                        expiry_date=today + timedelta(days=20),
+                        is_required=True,
+                        status="active",
+                    ),
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[4],
+                        doc_type=DocumentType.VISA,
+                        expiry_date=today - timedelta(days=5),
+                        is_required=True,
+                        status="active",
+                    ),
+                    EmployeeDocumentModel(
+                        tenant_id=tenant_id,
+                        employee_id=emp_ids[5],
+                        doc_type=DocumentType.CERTIFICATION,
+                        expiry_date=today - timedelta(days=14),
+                        is_required=True,
+                        status="active",
+                    ),
+                ]
+            )
+            emp_6 = (
+                (
+                    await session.execute(
+                        select(EmployeeModel).where(
+                            EmployeeModel.tenant_id == tenant_id,
+                            EmployeeModel.id == emp_ids[6],
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if emp_6 is not None:
+                emp_6.phone = None
 
         # ── SALES ORDERS + LINES ─────────────────────────────────────
         for idx, row in enumerate(SALES_ORDER_ROWS):
@@ -2380,6 +2676,39 @@ async def seed_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> dict[s
                 )
             )
         counts["stock_movements"] = len(STOCK_MOVEMENT_ROWS) + len(opening_rows)
+
+        # ── PAYROLL AUTOMATION (HR-AUT-001) ───────────────────────────
+        # One monthly schedule (fires on the 1st at 18:00 UTC, submitting the
+        # previous fully-elapsed month) plus an email opt-in for the tenant
+        # owner so the demo exercises the notification-preference path.
+        from core.features.payroll_automation.cron import parse_cron as _parse_cron
+        from core.features.payroll_automation.models import (
+            PayrollNotificationPrefModel,
+            PayrollScheduleModel,
+        )
+
+        _demo_schedule_cron = "0 18 1 * *"
+        session.add(
+            PayrollScheduleModel(
+                tenant_id=tenant_id,
+                name="Monthly payroll",
+                cron_expression=_demo_schedule_cron,
+                enabled=True,
+                next_run_at=_parse_cron(_demo_schedule_cron).next_match_after(datetime.now(UTC)),
+            )
+        )
+        counts["payroll_schedules"] = 1
+        counts["notification_prefs"] = 0
+        if owner_id is not None:
+            session.add(
+                PayrollNotificationPrefModel(
+                    tenant_id=tenant_id,
+                    user_id=owner_id,
+                    in_app_on=True,
+                    email_on=True,
+                )
+            )
+            counts["notification_prefs"] = 1
 
         await session.commit()
         logger.info("seed.demo.complete", tenant_id=str(tenant_id), **counts)

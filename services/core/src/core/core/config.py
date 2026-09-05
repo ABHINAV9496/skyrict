@@ -153,6 +153,25 @@ class Settings(BaseSettings):
             "the latest scan is older than this many days."
         ),
     )
+    AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the payroll anomaly detector (HR-AI-001, Unit B): "
+            "the payroll-anomaly inbox is regenerated from the latest non-void "
+            "payroll run when it is read and the latest scan is older than this "
+            "many days."
+        ),
+    )
+    AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "lazy-on-read TTL for the compliance engine v1 (HR-AI-001, Unit C): "
+            "the compliance inbox is regenerated from current people + documents "
+            "when it is read and the latest scan is older than this many days."
+        ),
+    )
     AI_SYNC_TOKEN: str = Field(
         default="",
         description=(
@@ -170,6 +189,31 @@ class Settings(BaseSettings):
             "AI_INGEST_TOKEN; empty disables the machine-to-machine branch so "
             "only JWT + erp.inventory.read reads succeed. Never logged."
         ),
+    )
+
+    # --- Payroll automation worker (HR-AUT-001, Commit 1) ---
+    PAYROLL_AUTO_WORKER_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "run the in-process payroll batch worker (a background asyncio "
+            "loop that claims and drains queued batches). Disabled under the "
+            "test environment so integration tests drive process_once() directly."
+        ),
+    )
+    PAYROLL_AUTO_POLL_SECONDS: float = Field(
+        default=0.25,
+        gt=0,
+        description="interval between worker claim passes when the queue is idle",
+    )
+    PAYROLL_AUTO_ITEMS_PER_TICK: int = Field(
+        default=10,
+        ge=1,
+        description="max payroll items one claim pass processes before committing/yielding",
+    )
+    PAYROLL_AUTO_MAX_RETRIES: int = Field(
+        default=2,
+        ge=1,
+        description="per-item retry budget before an item is marked failed permanently",
     )
 
     # --- Derived (loaded from files at validation time) ---

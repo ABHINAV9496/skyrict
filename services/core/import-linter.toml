@@ -35,6 +35,16 @@ forbidden_modules = ["core.models", "core.db"]
 ignore_imports = [
     "core.features.**.models.** -> core.models.**",
     "core.features.inventory.models.** -> core.models.base",
+    # payroll_automation/model.py is a single-file feature ORM models module
+    # (not a models/ package), so it isn't caught by the generic models glob;
+    # it needs the shared declarative Base/mixins like every other feature model.
+    "core.features.payroll_automation.models -> core.models.base",
+    # notifications_repository joins the shared identity RBAC tables (role +
+    # user_role) to resolve which users hold the payroll-notification
+    # permission. Repositories are the sanctioned ORM gateway, so these
+    # shared-model imports are allowed.
+    "core.features.payroll_automation.notifications_repository -> core.models.core_role",
+    "core.features.payroll_automation.notifications_repository -> core.models.core_user_role",
 ]
 # Repositories are the ORM gateway: services/routers/schemas must never import
 # SQLAlchemy models or the db layer directly. Persistence stays in repository.py.

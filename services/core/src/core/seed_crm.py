@@ -48,6 +48,8 @@ from core.features.crm.models.lead import ErpCrmLeadModel
 from core.features.crm.models.note import ErpCrmNoteModel
 from core.features.crm.models.opportunity import ErpCrmOpportunityModel
 from core.features.crm.models.timeline_event import ErpCrmTimelineEventModel
+from core.features.sales.models.order import ErpSalesOrderModel
+from core.features.sales.models.order_line import ErpSalesOrderLineModel
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -793,6 +795,8 @@ async def seed_crm_demo_data(tenant_id: uuid.UUID, *, force: bool = False) -> di
                 ErpCrmNoteModel,
                 ErpCrmActivityModel,
                 ErpCrmContactModel,
+                ErpSalesOrderLineModel,
+                ErpSalesOrderModel,
                 ErpCrmCustomerModel,
                 ErpCrmOpportunityModel,
                 ErpCrmLeadModel,

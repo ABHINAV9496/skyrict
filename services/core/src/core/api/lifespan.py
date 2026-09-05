@@ -22,7 +22,7 @@ import httpx
 from fastapi import FastAPI
 
 from core.api import readiness
-from core.core.config import settings
+from core.core.config import Environment, settings
 from core.core.logging import configure_logging, get_logger
 
 
@@ -64,6 +64,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     readiness.mark_ready()
     logger.info("service.started", environment=settings.ENVIRONMENT.value)
 
+    # Payroll automation worker (HR-AUT-001): a background asyncio loop that
+    # drains the queue. Disabled under the test environment so integration
+    # tests drive process_once() directly through POST /ai/payroll/tick.
+    if settings.PAYROLL_AUTO_WORKER_ENABLED and settings.ENVIRONMENT != Environment.TEST:
+        from core.db.session import async_session_factory
+        from core.features.payroll_automation.worker import PayrollAutomationWorker
+
+        app.state.payroll_automation_worker = PayrollAutomationWorker(
+            async_session_factory,
+            poll_seconds=settings.PAYROLL_AUTO_POLL_SECONDS,
+            max_retries=settings.PAYROLL_AUTO_MAX_RETRIES,
+            items_per_tick=settings.PAYROLL_AUTO_ITEMS_PER_TICK,
+        )
+        app.state.payroll_automation_worker.start()
+    else:
+        app.state.payroll_automation_worker = None
+
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate, the AI
     # client and the DB engine so in-flight work can drain cleanly.
@@ -74,5 +91,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from core.db.session import engine
 
+    worker = getattr(app.state, "payroll_automation_worker", None)
+    if worker is not None:
+        await worker.stop()
     await app.state.ai_client.aclose()
     await engine.dispose()

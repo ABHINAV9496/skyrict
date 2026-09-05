@@ -8,6 +8,7 @@ from core.features.payroll.models.payroll_run import (
     PayrollRunStatus,
 )
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
+from core.features.payroll.models.payslip_review import PayslipReviewModel
 
 __all__ = [
     "CompensationModel",
@@ -16,4 +17,5 @@ __all__ = [
     "PayrollRunModel",
     "PayrollRunStatus",
     "PayrollSettingsModel",
+    "PayslipReviewModel",
 ]

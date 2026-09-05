@@ -33,6 +33,9 @@ own.
 12. [Model eval harness (HR-AI-002 / SKY-72)](#12-model-eval-harness-hr-ai-002--sky-72)
 13. [HR-AI wave 2 - Leave anomaly inbox, calendar-aware suggestions & pattern data](#13-hr-ai-wave-2--leave-anomaly-inbox-calendar-aware-suggestions--pattern-data)
 14. [Test strategy](#14-test-strategy)
+15. [HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)](#15-hr-aut-001--payroll-automation-batches-schedules-notifications--digests)
+16. [HR-AI-001 Unit B — Payroll anomaly engine (implemented)](#16-hr-ai-001-unit-b--payroll-anomaly-engine-implemented)
+17. [HR-AI-001 Unit C — Compliance engine v1 (implemented)](#17-hr-ai-001-unit-c--compliance-engine-v1-implemented)
 
 ---
 
@@ -577,3 +580,259 @@ computed or unit-pinned as marked.
 | Leave anomaly inbox (unit) | 12 tests over all four types incl. the two wave-2 patterns at high severity |
 | Suggestion planner (unit) | calendar-aware `_plan_best_block`: load/blackout/own-request windows, holiday ties, forfeit fallback; legacy `_plan_block` kept |
 | Pattern data (integration) | round-trip sentinels 0024 + endpoint read/write via `erp.hr.read`/`erp.hr.write` |
+
+---
+
+## 15. HR-AUT-001 — Payroll automation (batches, schedules, notifications & digests)
+
+Companion feature to the HR-AI slice, delivered by ticket **HR-AUT-001** in the
+same payroll-AI module family. It makes payroll run *processing* automatic:
+submissions queue into batches a background worker drains deterministically,
+recurring cron schedules feed the queue, and users get payslip-ready / batch
+digest notifications — all audited and all tenant-scoped.
+
+> **Status:** Implemented (HR-AUT-001). Backend + migration `0028` +
+> frontend automation page shipped. The Finance **payslip surface + accrual
+> JE bridge** (the FIN-AI-001 seam) landed in Commit 4 of HR-AUT-001 — the
+> `payroll.run.paid` mark-paid path now drafts the salary-accrual journal
+> entry through `PayrollAccrualPort` (assets: DRAFT, status `draft`/`pending`
+> on the run), and payslips are served by `GET /payroll/runs/{id}/payslips`.
+> Only **automated approve** remains unwired (`erp.payroll.ai.approve` still
+> reserved — the bridge is a synchronous seam, not the automation path).
+
+### 15.1 Deliverables vs ticket scope (reconciliation)
+
+| Ticket scope | Delivered | Where |
+|--------------|-----------|-------|
+| Automated batch run processing (backend) | shipped | `features/payroll_automation/` (service, repository, ports, worker, cron), `api/deps.py`, lifespan worker drain |
+| Notifications & digests (payslip-ready, batch digest) | shipped | `features/payroll_automation/notifications*`, `ai_payroll_notifications` + prefs table |
+| Recurring submission scheduler | shipped | `features/payroll_automation/schedules*`, `ai_payroll_schedules`, due-schedule fire in worker + tick |
+| **Schedule calendar view (Scope — Frontend)** | shipped | `/dashboard/erp/payroll/automation` — month-at-a-glance calendar marking enabled schedules' next runs + schedules CRUD table |
+| Notifications/preferences frontend | shipped | same automation page — notification inbox with event-type filter + per-user delivery preferences |
+| Manual/CI run trigger | shipped | `POST /api/v1/ai/payroll/tick` + "Run now" button on the automation page |
+| Automated approve/payslip (Finance bridge) | **partially shipped (Commit 4)** | the accrual JE bridge (§15.6) is live behind `je_bridge_enabled`; payslips are served via `GET /payroll/runs/{id}/payslips` (API + run-detail); **automated approve is still deferred** — `erp.payroll.ai.approve` reserved, not wired |
+
+### 15.2 Permissions (`erp.payroll.ai.*`, registered in core `PERMISSION_MODULES` + identity)
+
+| Key | Meaning |
+|-----|---------|
+| `erp.payroll.ai.read` | View batches, schedules, notifications, digests |
+| `erp.payroll.ai.run` | Enqueue batches, manual tick, create/update/delete schedules |
+| `erp.payroll.ai.notify` | Read/update own notification delivery preferences |
+| `erp.payroll.ai.approve` | Reserved (future automated approve) — the Commit-4 JE bridge (§15.6) is a **synchronous seam**, not the automation path; the key stays unwired |
+
+Role wiring mirrors the core payroll keys (`organization_admin` full; read for
+`auditor`). UI: sidebar *Automation* item and the page are gated by
+`erp.payroll.ai.read`; management/preference actions check `run` / `notify`
+client-side, with the backend as the real gate.
+
+### 15.3 Data model (migration `0033_payroll_notifications_schedules`)
+
+- **`ai_payroll_schedules`** — `name?`, `cron_expression`, `enabled`,
+  `last_fired_at`, `next_run_at`; index `(tenant_id, enabled, next_run_at)` for
+  the due scan.
+- **`ai_payroll_notifications`** — `recipient_user_id`, `event_type`
+  (`payslip_ready | payroll_batch_digest`, CHECK), **`dedupe_key` UNIQUE**
+  (idempotent composition — retries never duplicate an inbox row), `in_app`,
+  `email_stub`, `subject`, `body`, optional `batch_id`/`run_id`/`employee_id`;
+  inbox index `(tenant_id, recipient_user_id, created_at)`.
+- **`ai_payroll_notification_prefs`** — per-user `in_app_on` (default true),
+  `email_on` (default false); `user_id` PK, self-scoped.
+
+All are RLS tenant-scoped (`_enable_rls`) like every other `erp_*`/`ai_*`
+table; batch run/item tables (`ai_payroll_batch_runs`, `ai_payroll_batch_items`)
+predate `0028` from HR-AUT-001's earlier commits.
+
+### 15.4 API surface
+
+See the API table in `docs/modules/hr-payroll.md` §7 (Payroll automation). Key
+invariants: enqueue is idempotent per run; notification composition is
+deduplicated by `dedupe_key`; `POST /tick` returns `items_processed` +
+`status_changed` + `schedules_fired` so a manual/CI run is observable.
+
+### 15.5 Test strategy
+
+| Area | Coverage |
+|------|----------|
+| Notifications (unit) | routing by linked user, defaults, dedupe (`test_payroll_automation_notifications.py`) |
+| Schedules/batches (integration) | create/enable/toggle/delete schedule round-trip, enqueue→drain→completed, tick determinism, migration round-trip incl. `0028`, RLS isolation (`test_payroll_automation.py`, `test_migration_roundtrip.py`) |
+| Frontend client (unit) | `payroll-automation-api.test.ts` — snake_case→camelCase mapping, URL/filter behavior for schedules, notifications, preferences, tick |
+
+### 15.6 FIN-AI-001 seam — accrual JE bridge (HR-AUT-001, Commit 4)
+
+The Finance integration ships as a **synchronous, DRAFT-only** seam on
+`mark_paid`, not an AI decision. Specification lives in `hr-payroll.md`
+§4.10 (Rule 10); this section pins the automation-relevant precision:
+
+- **Where it plugs in:** `PayrollService.mark_paid` →
+  `PayrollAccrualPort` (interface in `features/finance/ports.py`,
+  implemented in-process by `features/finance/service.py` ·
+  `create_payroll_accrual_draft`). Composition root
+  `services/core/src/core/api/deps.py:get_payroll_service` wires Finance;
+  worker/scheduler constructions pass `finance=None` and never pay.
+- **Trigger/mapping:** `je_bridge_enabled` AND `total_gross > 0` on
+  `approved → paid`. Account codes 5010 (salaries, DR gross) / 2010
+  (accrued, CR net) / 2020 (deductions, CR gross−net, **only when
+  deductions > 0**). `missing_accounts` → run `je_bridge_status=pending`
+  (tied to `docs/backlog/finance-chart-of-accounts-gap.md`);
+  created/already-booked → `draft`; else `none`. Idempotent via
+  `UNIQUE (tenant_id, source, source_ref)`.
+- **What stays for future FIN-AI-001 work:** automated **approve**,
+  payroll-sourced post/void of the DRAFT entry, and any AI-driven
+  decisioning — the existing Finance JE inbox (draft/post/void) is the
+  human path today. `erp.payroll.ai.approve` remains reserved.
+
+---
+
+## 16. HR-AI-001 Unit B — Payroll anomaly engine (implemented)
+
+**Unit B** ships the payroll-anomaly engine as a real deployed surface (the
+ticket's Feature 3). It is a lazy-on-read TTL scan plus a **deterministic
+demo fixture** — see §16.3 for exactly which seed rows must fire.
+
+### 16.1 Engine & lifecycle
+
+- **Location:** pure engine `libs/skyrict-common/skyrict_common/ai_hr_rules.py`
+  (`detect_payroll_anomalies`) — the literal code core deploys. It lives in the
+  shared lib alongside the leave-anomaly rules (which the ai-agent eval
+  harness already grades via `anomaly_precision`), so a future payroll eval
+  set can reuse the exact same engine. The repository layer is
+  `core/features/ai_hr/payroll_anomaly_repository.py`
+  (projection + `replace_tenant_anomalies` regenerate) and the service is
+  `payroll_anomaly_service.py` (lazy TTL
+  `AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS`, default 7).
+- **Scan scope:** the tenant's **latest non-void run that holds payroll
+  entries** (a DRAFT run has no entries and is skipped) vs the **immediately
+  preceding** entry-bearing run. The inbox is regenerated per tenant each scan
+  (replace-tenant), so dispositions survive only until the next regeneration —
+  the same documented tradeoff as the leave-anomaly inbox.
+- **Rules (all scoped to the latest run):**
+
+| Anomaly | Detection | Severity |
+|---------|-----------|----------|
+| `net_pay_delta` | per-day net (`net/pay_days`) swings ≥ `delta_ratio` (default 1.5×) vs the prior run's per-day net | `ratio_severity`: ≥5 critical, ≥4 high, else medium |
+| `duplicate_account` | one normalized (case/punctuation-insensitive) payout account shared by 2+ employees in the latest run | medium (2 members), high (3+), **critical if a terminated employee is in the group** |
+| `ghost_employee` | latest run pays an employee whose employment is **terminated**, or who has **no bank account on file** | critical (terminated) / medium (no account) |
+
+- **Evidence hygiene:** `employee_id` is the finding's primary subject (for
+  `duplicate_account`, the group's highest-net member; all members are listed
+  in `evidence['employee_ids']`). Payout accounts are **masked to the last
+  four digits** — never a full account number — inside `evidence`. `title` and
+  `description` have no dedicated columns on `ai_payroll_anomaly_log`, so they
+  are persisted under the `evidence` keys and re-surfaced as first-class
+  fields on read.
+- **Lifecycle:** `open → acknowledged | dismissed | resolved`, each transition
+  emitting an audited event
+  (`hr.ai.anomaly.acknowledged/dismissed/resolved`). Rediposition of a
+  terminal state or an unknown status is rejected
+  (`IllegalStateTransitionError` → 409).
+
+### 16.2 API surface
+
+| Endpoint | Permission | Output |
+|----------|-----------|--------|
+| `GET /alerts/payroll` | `erp.ai.invoke` + `erp.hr.ai.read` | **L1** org feed (counts by type/severity, open count, deterministic narrative) |
+| `GET /alerts/payroll/{employee_id}` | + `erp.hr.ai.individual` | **L2** per-employee findings (403 + L1 403 body without the key) |
+| `POST /alerts/payroll/{anomaly_id}/disposition` | + `erp.hr.ai.acknowledge` | body `{status}` in `acknowledged\|dismissed\|resolved` → updated finding; audited |
+
+All under `/api/v1/ai/hr`. The BFF surface is `apps/web` → `hr-api.ts`
+(`getPayrollAnomalySummary` / `getEmployeePayrollAnomalies` /
+`disposePayrollAnomaly`) and the dashboard page at
+`/dashboard/erp/hr/payroll-anomalies`.
+
+### 16.3 Deterministic demo fixture
+
+The raw seed payroll is deliberately **clean**: every eligible employee is
+paid a flat `0.85×` of base each run, every employee has a unique bank
+account, and terminated/uncompensated employees never receive entries. The
+detector therefore finds **zero** anomalies against the unmodified seed. To
+keep the demo (and the Unit B live gate) reproducible on *any* seed day,
+`seed_demo.py` applies a scoped fixture to the **latest entry-bearing
+non-void run** (PR-2026-04) and the lazy scan rebuilds the inbox on the
+admin's first read because `latest_generated_at` starts `NULL`:
+
+| Finding | Exact seed construction | Expected result |
+|---------|-------------------------|-----------------|
+| `ghost_employee` (critical) | EMP-0014 (employee index 13, terminated + uncompensated, never seeded an entry) gets a **phantom entry** in PR-2026-04 only | one critical `ghost_employee` finding; `employee_id` = EMP-0014 |
+| `net_pay_delta` (medium) | employee index 0's PR-2026-04 `net` is bumped to `2.5×` its prior-run flat net via an `adjustments` bonus | `ratio` ≈ 2.5 → `ratio_severity` → medium |
+| `duplicate_account` (medium) | employee index 1's `bank_account` is rewritten to employee index 2's account | 2-member group → medium, masked `****xxxx`, both employee ids in evidence |
+
+These three fixtures are documented here so the live-gate expectations match
+the seed rows exactly; if the seed ever changes, the fixture block
+(`# ── PAYROLL ANOMALY FIXTURE` in `seed_demo.py`) must be reviewed with it.
+
+## 17. HR-AI-001 Unit C — Compliance engine v1 (implemented)
+
+**Unit C** ships the Feature 4 compliance rule pack (§8.1) as a deployed
+surface: a lazy-on-read TTL scan over `erp_employee_documents` +
+`erp_employees`, plus a **deterministic demo fixture** — see §17.3 for exactly
+which seed rows must fire.
+
+### 17.1 Engine & lifecycle
+
+- **Location:** pure engine `libs/skyrict-common/skyrict_common/ai_hr_rules.py`
+  (`detect_compliance_findings`) — the literal code core deploys and the
+  ai-agent eval harness can grade. The repository layer is
+  `core/features/ai_hr/compliance_repository.py` (projection +
+  `replace_tenant_findings` regenerate) and the service is
+  `compliance_service.py` (lazy TTL
+  `AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS`, default 7).
+- **Scan scope:** the tenant's **current** people + documents (no payroll-run
+  coupling). The inbox is regenerated per tenant each scan (replace-tenant), so
+  dispositions survive only until the next regeneration — the same documented
+  tradeoff as the leave/payroll inboxes.
+- **Rules (from §8.1):**
+
+| Check | Signal | Severity |
+|-------|--------|----------|
+| `document_expiry` | an active `work_permit`/`visa`/`passport`/`national_id` document whose `expiry_date` is within 30 days → medium, or already past → high | high (past) / medium (within 30 d) |
+| `training_overdue` | a **required** `certification` that is expired → medium; or absent for an employee who holds a certification (training-mandated) → medium | medium |
+| `contract_missing_field` | an active employee missing `email` / `department_id` / `job_title` / `phone` → one low finding per missing field | low |
+
+- **Owner routing:** `document_expiry`/`training_overdue` → `compliance_officer`;
+  `contract_missing_field` → `hr_admin` (`owner_rule` column).
+- **Evidence hygiene:** `evidence` carries only document types, dates, and field
+  **names** — never employee email/phone/job values (no PII). `title`/
+  `description` have no columns on `ai_compliance_checks`, so they are persisted
+  under the `evidence` keys and re-surfaced as first-class fields on read.
+- **Lifecycle:** `open → acknowledged → resolved`; `acknowledged` records
+  `owner_user_id` (the actor). Each transition emits an audited event
+  (`hr.ai.compliance.acknowledged` / `hr.ai.compliance.resolved`). Moving a
+  terminal state or an unknown status is rejected
+  (`IllegalStateTransitionError` → 409). `requires_training` is derived in the
+  repository as "holds a certification document" — there is no native column —
+  so the missing-document training branch stays exercised by the pure engine's
+  unit tests.
+
+### 17.2 API surface
+
+| Endpoint | Permission | Output |
+|----------|-----------|--------|
+| `GET /alerts/compliance` | `erp.ai.invoke` + `erp.hr.ai.read` | **L1** org feed (counts by check type/severity, open count, deterministic narrative) |
+| `GET /alerts/compliance/{employee_id}` | + `erp.hr.ai.individual` | **L2** per-employee findings (403 + L1 403 body without the key) |
+| `POST /alerts/compliance/{check_id}/status` | + `erp.hr.ai.acknowledge` | body `{status}` in `acknowledged\|resolved` → updated finding; audited |
+
+All under `/api/v1/ai/hr`. The BFF surface is `apps/web` → `hr-api.ts`
+(`getComplianceSummary` / `getEmployeeComplianceFindings` /
+`setComplianceStatus`) and the dashboard page at
+`/dashboard/erp/hr/compliance`.
+
+### 17.3 Deterministic demo fixture
+
+The raw seed has **no** `erp_employee_documents` rows and every employee has
+complete HR fields, so the compliance engine finds **zero** findings against the
+unmodified seed. To keep the demo (and the Unit C live gate) reproducible on
+*any* seed day, `seed_demo.py` applies a scoped fixture anchored to
+`date.today()` (the lazy scan rebuilds the inbox on first read because
+`latest_generated_at` starts `NULL`):
+
+| Finding | Exact seed construction | Expected result |
+|---------|-------------------------|-----------------|
+| `document_expiry` (medium) | employee index 3 (EMP-0004) gets an active required `work_permit` expiring in **20 days** | one medium finding, `owner_rule` = `compliance_officer` |
+| `document_expiry` (high) | employee index 4 (EMP-0005) gets an active required `visa` that expired **5 days ago** | one high finding |
+| `training_overdue` (medium) | employee index 5 (EMP-0006) gets a required `certification` that expired **14 days ago** (holding it derives `requires_training`) | one medium finding |
+| `contract_missing_field` (low) | employee index 6 (EMP-0007) has `phone` set to `NULL` | one low finding, `owner_rule` = `hr_admin` |
+
+These fixtures are documented here so the live-gate expectations match the seed
+rows exactly; if the seed ever changes, the fixture block
+(`# ── COMPLIANCE FIXTURE` in `seed_demo.py`) must be reviewed with it.

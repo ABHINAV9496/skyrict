@@ -23,6 +23,7 @@ dependencies = [
     "alembic>=1.14,<2",
     "python-jose[cryptography]>=3.3,<4",
     "httpx>=0.27,<1",
+    "reportlab>=4,<5",
     "skyrict-common",
     "skyrict-events",
     "structlog>=24.0,<25",

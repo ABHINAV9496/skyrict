@@ -1,0 +1,201 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+
+import { PageHeader } from "@/components/dashboard/shared/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { getPayrollAnomalySummary, type HrPayrollAnomalySummary } from "@/lib/api/hr-api";
+import { ApiError } from "@/lib/api/http";
+import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+const SEVERITY_STYLES: Record<string, string> = {
+  critical: "bg-destructive/10 text-destructive ring-1 ring-destructive/30",
+  high: "bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/30 dark:text-orange-400",
+  medium: "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400",
+  low: "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-400",
+};
+
+const SEVERITY_LABEL: Record<string, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+const TYPE_LABEL: Record<string, string> = {
+  net_pay_delta: "Net pay delta",
+  duplicate_account: "Duplicate payout account",
+  ghost_employee: "Ghost employee",
+};
+
+function SeverityBadge({ severity }: { severity: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn("capitalize", SEVERITY_STYLES[severity] ?? "bg-muted text-muted-foreground")}
+    >
+      {SEVERITY_LABEL[severity] ?? severity}
+    </Badge>
+  );
+}
+
+function SummaryCards({ summary }: { summary: HrPayrollAnomalySummary }) {
+  const severities = ["critical", "high", "medium", "low"] as const;
+  return (
+    <section aria-label="Payroll anomaly summary" className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Badge
+          variant="outline"
+          className="border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+        >
+          L1 aggregate
+        </Badge>
+        <p className="text-xs text-muted-foreground">Counts only — no per-person data.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {severities.map((severity) => {
+          const label = SEVERITY_LABEL[severity];
+          return (
+            <div key={severity} className="rounded-xl border border-border bg-card p-4">
+              <p className="text-xs font-medium text-muted-foreground">{label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+                {summary.bySeverity[severity] ?? 0}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs font-medium text-muted-foreground">Open findings</p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+            {summary.openAnomalies}
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              of {summary.totalAnomalies} total
+            </span>
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs font-medium text-muted-foreground">By type</p>
+          <div className="mt-2 space-y-1.5">
+            {Object.entries(summary.byType).length > 0 ? (
+              Object.entries(summary.byType).map(([type, count]) => (
+                <div key={type} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">{TYPE_LABEL[type] ?? type}</span>
+                  <span className="font-medium tabular-nums text-foreground">{count}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No findings in the latest run.</p>
+            )}
+          </div>
+        </div>
+      </div>
+      {summary.narrative || summary.generatedAt ? (
+        <div className="rounded-xl border border-border bg-card p-4">
+          {summary.narrative ? <p className="text-sm text-muted-foreground">{summary.narrative}</p> : null}
+          {summary.generatedAt ? (
+            <p className="mt-2 text-xs text-muted-foreground">As of {formatDateTime(summary.generatedAt)}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function PayrollAnomaliesClient() {
+  const [view, setView] = useState<
+    | { state: "loading" }
+    | { state: "error"; message: string }
+    | { state: "summary"; summary: HrPayrollAnomalySummary }
+  >({ state: "loading" });
+
+  const load = useCallback(async () => {
+    setView({ state: "loading" });
+    try {
+      const summary = await getPayrollAnomalySummary();
+      setView({ state: "summary", summary });
+    } catch (error) {
+      setView({
+        state: "error",
+        message: error instanceof ApiError ? error.message : "Could not load payroll anomalies.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const empty = view.state === "summary" && view.summary.totalAnomalies === 0;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Payroll anomalies"
+        description="Detected anomalies in the latest payroll run — ghost payouts, duplicate payout accounts, and material net-pay swings."
+        icon={AlertTriangle}
+      />
+
+      {view.state === "error" ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-4 py-10 text-center">
+          <p className="text-sm font-medium text-destructive">{view.message}</p>
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void load()}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
+
+      {view.state === "loading" ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
+            ))}
+          </div>
+          <div className="h-40 animate-pulse rounded-xl border border-border bg-card" />
+        </div>
+      ) : null}
+
+      {view.state === "summary" ? (
+        <>
+          <SummaryCards summary={view.summary} />
+          {empty ? (
+            <section
+              aria-label="No payroll anomalies"
+              className="rounded-xl border border-border bg-card p-4"
+            >
+              <div className="flex items-center gap-2">
+                <SeverityBadge severity="low" />
+                <p className="text-xs text-muted-foreground">
+                  The latest payroll run is clean — no anomalies were detected.
+                </p>
+              </div>
+            </section>
+          ) : (
+            <section
+              aria-label="Individual drill-down locked"
+              className="rounded-xl border border-border bg-card p-4"
+            >
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
+                >
+                  L2 individual
+                </Badge>
+                <p className="text-xs text-muted-foreground">
+                  Per-employee findings are served to erp.hr.ai.individual holders against a
+                  specific employee id — the aggregate feed above never exposes them.
+                </p>
+              </div>
+            </section>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}

@@ -64,6 +64,14 @@ ERP_PAYROLL_READ = "erp.payroll.read"
 ERP_PAYROLL_WRITE = "erp.payroll.write"
 ERP_PAYROLL_APPROVE = "erp.payroll.approve"
 
+# Payroll automation (HR-AUT-001, docs/modules/skyrict-ai/hr-payroll-ai-features.md §15).
+# Batch engine keys — same string catalog as core's (migration 0026) so role
+# grants stay portable across the platform.
+ERP_PAYROLL_AI_READ = "erp.payroll.ai.read"
+ERP_PAYROLL_AI_RUN = "erp.payroll.ai.run"
+ERP_PAYROLL_AI_NOTIFY = "erp.payroll.ai.notify"
+ERP_PAYROLL_AI_APPROVE = "erp.payroll.ai.approve"
+
 # AI assistant gate (docs/modules/skyrict-ai/inventory-ai-features.md §6.3).
 # Checked by core BEFORE any /api/v1/ai/* request is forwarded to the
 # ai-agent microservice. Same string as core's catalog so role grants stay
@@ -138,6 +146,10 @@ CATALOG: tuple[str, ...] = (
     ERP_HR_AI_INDIVIDUAL,
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
+    ERP_PAYROLL_AI_READ,
+    ERP_PAYROLL_AI_RUN,
+    ERP_PAYROLL_AI_NOTIFY,
+    ERP_PAYROLL_AI_APPROVE,
     ERP_LEAVE_SELF,
     AGENTS_READ,
     INTELLIGENCE_READ,
@@ -175,6 +187,11 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "erp_hr_ai",
         "ERP HR & Payroll AI",
         (ERP_HR_AI_READ, ERP_HR_AI_INDIVIDUAL, ERP_HR_AI_ACKNOWLEDGE, ERP_HR_AI_COPILOT),
+    ),
+    (
+        "erp_payroll_ai",
+        "ERP Payroll Automation",
+        (ERP_PAYROLL_AI_READ, ERP_PAYROLL_AI_RUN, ERP_PAYROLL_AI_NOTIFY, ERP_PAYROLL_AI_APPROVE),
     ),
     ("erp_leave_self", "Employee self-service", (ERP_LEAVE_SELF,)),
     ("agents", "AI Agents", (AGENTS_READ,)),
@@ -226,6 +243,10 @@ __all__ = [
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
     "ERP_LEAVE_SELF",
+    "ERP_PAYROLL_AI_APPROVE",
+    "ERP_PAYROLL_AI_NOTIFY",
+    "ERP_PAYROLL_AI_READ",
+    "ERP_PAYROLL_AI_RUN",
     "ERP_PAYROLL_APPROVE",
     "ERP_PAYROLL_READ",
     "ERP_PAYROLL_WRITE",

@@ -13,6 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -60,6 +61,15 @@ class PayrollSettingsModel(Base):
         ),
         nullable=False,
         server_default=text("'nearest'"),
+    )
+    # HR-AUT-001 (0026): opt-out for the payroll automation batch engine.
+    ai_automation_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    # HR-AUT-001 (0029): per-tenant flag for the payroll→Finance accrual JE
+    # bridge. Off = marking a run paid is fully manual (no journal entry).
+    je_bridge_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

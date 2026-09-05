@@ -228,6 +228,15 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return toResult<T>(await fetchWithSession(path, options));
 }
 
+/**
+ * Bare authenticated fetch for binary responses (PDFs, files). Same session
+ * hydration/refresh chain as `apiFetch`, but returns the raw `Response` so the
+ * caller can read a blob instead of an envelope body.
+ */
+export async function apiFetchRaw(path: string, options: RequestInit = {}): Promise<Response> {
+  return fetchWithSession(path, options);
+}
+
 export async function apiFetchWithMeta<T>(
   path: string,
   options: RequestInit = {},

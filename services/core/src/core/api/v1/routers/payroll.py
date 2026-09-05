@@ -12,7 +12,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from core.api.deps import (
     get_payroll_service,
@@ -29,6 +29,9 @@ from core.api.v1.schemas import (
     PayrollRunOut,
     PayrollSettingsIn,
     PayrollSettingsOut,
+    PayslipOut,
+    PayslipReviewActionIn,
+    PayslipReviewOut,
     RunComputeOut,
     SkippedEmployeeOut,
 )
@@ -136,6 +139,23 @@ async def get_run(
     if run is None:
         raise NotFoundError(f"payroll run {run_id} not found")
     return ResponseEnvelope(data=PayrollRunOut.from_entity(run))
+
+
+@router.get("/runs/{run_id}/payslips", response_model=ResponseEnvelope[list[PayslipOut]])
+async def get_run_payslips(
+    run_id: uuid.UUID,
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[list[PayslipOut]]:
+    try:
+        payslips = await payroll_svc.list_run_payslips(run_id, tenant_id=tenant_id)
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(
+        data=[PayslipOut.from_entity(p) for p in payslips],
+        message="Run payslips",
+    )
 
 
 @router.post("/runs/{run_id}/compute", response_model=ResponseEnvelope[RunComputeOut])
@@ -295,3 +315,85 @@ async def list_compensation(
 ) -> ResponseEnvelope[list[CompensationOut]]:
     history = await payroll_svc.list_compensation(employee_id, tenant_id=tenant_id)
     return ResponseEnvelope(data=[CompensationOut.from_entity(c) for c in history])
+
+
+# ---------------------------------------------------------------------------
+# Payslip reviews (HR-AUT-001, Commit 2 — versioned approval lifecycle)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/payslips/reviews", response_model=ResponseEnvelope[list[PayslipReviewOut]])
+async def list_payslip_reviews(
+    status: str | None = Query(default=None),
+    run_id: uuid.UUID | None = Query(default=None),
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[list[PayslipReviewOut]]:
+    reviews = await payroll_svc.list_payable_payslips(tenant_id, status=status, run_id=run_id)
+    return ResponseEnvelope(data=[PayslipReviewOut.from_entity(r) for r in reviews])
+
+
+@router.post(
+    "/payslips/reviews/{payslip_id}/approve",
+    response_model=ResponseEnvelope[PayslipReviewOut],
+)
+async def approve_payslip_review(
+    payslip_id: uuid.UUID,
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[PayslipReviewOut]:
+    try:
+        review = await payroll_svc.approve_payslip(
+            payslip_id,
+            tenant_id=tenant_id,
+            approved_by=current_user["user_id"],
+            actor_user_id=current_user["user_id"],
+        )
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(data=PayslipReviewOut.from_entity(review), message="Payslip approved")
+
+
+@router.post(
+    "/payslips/reviews/{payslip_id}/reject",
+    response_model=ResponseEnvelope[PayslipReviewOut],
+)
+async def reject_payslip_review(
+    payslip_id: uuid.UUID,
+    body: PayslipReviewActionIn,
+    current_user: dict[str, Any] = Depends(_require_payroll_approve),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ResponseEnvelope[PayslipReviewOut]:
+    try:
+        review = await payroll_svc.reject_payslip(
+            payslip_id,
+            tenant_id=tenant_id,
+            rejected_by=current_user["user_id"],
+            reason=body.reason,
+            actor_user_id=current_user["user_id"],
+        )
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    return ResponseEnvelope(data=PayslipReviewOut.from_entity(review), message="Payslip rejected")
+
+
+@router.get("/payslips/reviews/{payslip_id}/pdf")
+async def render_payslip_pdf(
+    payslip_id: uuid.UUID,
+    current_user: dict[str, Any] = Depends(_require_payroll_read),
+    payroll_svc: PayrollService = Depends(get_payroll_service),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> Response:
+    try:
+        pdf_bytes = await payroll_svc.render_payslip_pdf(payslip_id, tenant_id=tenant_id)
+    except ValueError as exc:
+        raise_from_service_error(exc)
+    filename = f"payslip-{payslip_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

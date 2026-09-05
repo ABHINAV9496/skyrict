@@ -14,8 +14,12 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from skyrict_common.ai_hr_rules import (
+    ComplianceFinding,
+    DocumentComplianceSignal,
+    EmployeeComplianceContext,
     Holiday,
     RequestSignal,
+    detect_compliance_findings,
     detect_leave_pattern_anomalies,
     ratio_severity,
 )
@@ -252,3 +256,422 @@ def test_pre_holiday_spike_overlap_is_high() -> None:
     (fired,) = _found(findings, "pre_holiday_spike")
     assert fired.evidence["distance_days"] == 0
     assert fired.severity == "high"
+
+
+# ---------------------------------------------------------------------------
+# Payroll anomaly rules (HR-AI-001, Unit B) — the LITERAL engine core deploys.
+# ---------------------------------------------------------------------------
+
+from skyrict_common.ai_hr_rules import (  # noqa: E402
+    PayrollAnomalyFinding,
+    PayrollEmployeeContext,
+    PayrollEntrySignal,
+    detect_payroll_anomalies,
+    mask_account,
+    normalize_account,
+)
+
+
+def _entry(
+    emp_id: uuid.UUID,
+    run_code: str,
+    net: float,
+    *,
+    pay_days: int = 22,
+    period_end: date = TODAY,
+) -> PayrollEntrySignal:
+    return PayrollEntrySignal(
+        employee_id=emp_id,
+        run_code=run_code,
+        period_start=period_end - timedelta(days=pay_days),
+        period_end=period_end,
+        base_salary=0.0,
+        pay_days=pay_days,
+        gross=0.0,
+        deductions=0.0,
+        net=net,
+    )
+
+
+def _ctx(emp_id: uuid.UUID, **overrides) -> PayrollEmployeeContext:
+    base: dict = {
+        "employee_id": emp_id,
+        "status": "active",
+        "bank_account": "GB29 NWBK 6016 1331 9268 19",
+    }
+    base.update(overrides)
+    return PayrollEmployeeContext(**base)
+
+
+def _run_payroll(
+    latest: list, prior: list, *, employees: dict, delta_ratio: float = 1.5
+) -> list[PayrollAnomalyFinding]:
+    return detect_payroll_anomalies(
+        latest_entries=latest,
+        prior_entries=prior,
+        employees=employees,
+        delta_ratio=delta_ratio,
+    )
+
+
+def test_payroll_flat_seed_yields_no_findings() -> None:
+    """The DEMO seed pays every eligible employee flat 0.85x — nothing fires."""
+    employees = {
+        E1: _ctx(E1, status="active", bank_account="ACC-0001"),
+        E2: _ctx(E2, status="active", bank_account="ACC-0002"),
+    }
+    latest = [_entry(E1, "PR-2026-04", 5100.0), _entry(E2, "PR-2026-04", 8500.0)]
+    prior = [_entry(E1, "PR-2026-03", 5100.0), _entry(E2, "PR-2026-03", 8500.0)]
+    assert _run_payroll(latest, prior, employees=employees) == []
+
+
+def test_net_pay_delta_fires_on_spike_via_ratio_severity() -> None:
+    """~2.5x net-per-day swing vs the preceding run -> medium (>= 1.5x)."""
+    employees = {E1: _ctx(E1)}
+    latest = [_entry(E1, "PR-2026-04", 12_750.0)]
+    prior = [_entry(E1, "PR-2026-03", 5100.0)]
+    (fired,) = _run_payroll(latest, prior, employees=employees)
+    assert fired.anomaly_type == "net_pay_delta"
+    assert fired.severity == "medium"
+    assert fired.employee_id == E1
+    assert fired.evidence["ratio"] == round(12_750.0 / 5100.0, 3)
+    assert fired.evidence["direction"] == "increase"
+    assert fired.evidence["current_run"] == "PR-2026-04"
+
+
+def test_net_pay_delta_uses_pay_days_normalization() -> None:
+    """A swing in PAY DAYS, not pay, with a flat daily rate must NOT fire."""
+    employees = {E1: _ctx(E1)}
+    latest = [_entry(E1, "PR-2026-04", 5100.0, pay_days=22)]
+    prior = [_entry(E1, "PR-2026-03", 3400.0, pay_days=14)]
+    assert _run_payroll(latest, prior, employees=employees) == []
+
+
+def test_net_pay_delta_absents_without_prior_entry() -> None:
+    employees = {E1: _ctx(E1)}
+    latest = [_entry(E1, "PR-2026-04", 12_750.0)]
+    assert _run_payroll(latest, prior=[], employees=employees) == []
+
+
+def test_duplicate_account_shares_medium_for_two() -> None:
+    employees = {
+        E1: _ctx(E1, bank_account="GB29 NWBK 6016 1331 9268 19"),
+        E2: _ctx(E2, bank_account="gb29nwbk60161331926819"),  # same, normalized
+    }
+    latest = [_entry(E1, "PR-2026-04", 5100.0), _entry(E2, "PR-2026-04", 8500.0)]
+    (fired,) = _found(_run_payroll(latest, [], employees=employees), "duplicate_account")
+    assert fired.severity == "medium"
+    assert set(fired.evidence["employee_ids"]) == {str(E1), str(E2)}
+    assert fired.employee_id == E2  # highest net is the primary subject
+    assert fired.evidence["account_masked"] == "****6819"
+    assert "gb29nwbk60161331926819" not in str(fired.evidence)
+
+
+def test_duplicate_account_matches_normalized_keys() -> None:
+    employees = {
+        E1: _ctx(E1, bank_account="GB29 NWBK 6016 1331 9268 19"),
+        E3: _ctx(E3, bank_account="GB29-NWBK-6016-1331-9268-19"),
+    }
+    latest = [_entry(E1, "PR-2026-04", 5100.0), _entry(E3, "PR-2026-04", 5100.0)]
+    (fired,) = _found(_run_payroll(latest, [], employees=employees), "duplicate_account")
+    assert fired.severity == "medium"
+    assert fired.evidence["employee_count"] == 2
+
+
+def test_duplicate_account_three_is_high_and_terminated_is_critical() -> None:
+    employees = {
+        E1: _ctx(E1, bank_account="ACC-1234"),
+        E2: _ctx(E2, bank_account="ACC-1234"),
+        E3: _ctx(E3, bank_account="ACC-1234"),
+    }
+    latest = [
+        _entry(E1, "PR-2026-04", 5100.0),
+        _entry(E2, "PR-2026-04", 5100.0),
+        _entry(E3, "PR-2026-04", 5100.0),
+    ]
+    (fired,) = _found(_run_payroll(latest, [], employees=employees), "duplicate_account")
+    assert fired.severity == "high"
+
+    terminated = {
+        E1: _ctx(E1, status="terminated", bank_account="ACC-1234"),
+        E2: _ctx(E2, bank_account="ACC-1234"),
+    }
+    pair = [_entry(E1, "PR-2026-04", 5100.0), _entry(E2, "PR-2026-04", 5100.0)]
+    (critical,) = _found(_run_payroll(pair, [], employees=terminated), "duplicate_account")
+    assert critical.severity == "critical"
+    assert critical.evidence["includes_terminated"] is True
+
+
+def test_ghost_employee_paid_while_terminated_is_critical() -> None:
+    employees = {E1: _ctx(E1, status="terminated", termination_date=date(2026, 7, 15))}
+    latest = [_entry(E1, "PR-2026-04", 5100.0)]
+    (fired,) = _found(_run_payroll(latest, [], employees=employees), "ghost_employee")
+    assert fired.severity == "critical"
+    assert fired.evidence["termination_date"] == "2026-07-15"
+
+
+def test_ghost_employee_no_bank_account_is_medium() -> None:
+    employees = {E1: _ctx(E1, bank_account=None)}
+    latest = [_entry(E1, "PR-2026-04", 5100.0)]
+    (fired,) = _found(_run_payroll(latest, [], employees=employees), "ghost_employee")
+    assert fired.severity == "medium"
+    assert fired.evidence["has_bank_account"] is False
+
+
+def test_ghost_employee_active_with_account_silent() -> None:
+    employees = {E1: _ctx(E1)}
+    latest = [_entry(E1, "PR-2026-04", 5100.0)]
+    assert _run_payroll(latest, [], employees=employees) == []
+
+
+def test_findings_sorted_critical_first_then_type() -> None:
+    employees = {
+        E1: _ctx(E1, status="terminated", termination_date=date(2026, 6, 1)),
+        E2: _ctx(E2, bank_account="A1"),
+        E3: _ctx(E3, bank_account="A2"),
+        E4: _ctx(E4),
+    }
+    latest = [
+        _entry(E1, "PR-2026-04", 5100.0),
+        _entry(E2, "PR-2026-04", 5100.0),
+        _entry(E3, "PR-2026-04", 5100.0),
+    ]
+    findings = _run_payroll(latest, [], employees=employees)
+    assert findings[0].severity == "critical"
+    assert findings[0].anomaly_type == "ghost_employee"
+    assert findings[-1].anomaly_type == "ghost_employee"
+    severities = [f.severity for f in findings]
+    assert severities == sorted(severities, key=lambda s: _SEVERITY_ORDER[s])
+
+
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def test_mask_account_last_four_only() -> None:
+    assert mask_account("GB29 NWBK 6016 1331 9268 19") == "****6819"
+    assert mask_account("1234") == "****"
+    assert mask_account("  1234  ") == "****"
+
+
+def test_normalize_account_is_case_and_punctuation_insensitive() -> None:
+    assert normalize_account("GB29 NWBK 6016 1331 9268 19") == "gb29nwbk60161331926819"
+    assert normalize_account("gb29-nwbk-6016-1331-9268-19") == "gb29nwbk60161331926819"
+
+
+# -- compliance rule pack v1 (HR-AI-001, Unit C) ------------------------------
+
+
+def _compliance_ctx(
+    eid: uuid.UUID,
+    *,
+    status: str = "active",
+    email: str = "e@acme.test",
+    department_id: uuid.UUID | None = TEAM,
+    job_title: str = "Engineer",
+    phone: str = "555-0100",
+    requires_training: bool = False,
+) -> EmployeeComplianceContext:
+    return EmployeeComplianceContext(
+        employee_id=eid,
+        status=status,
+        email=email,
+        department_id=department_id,
+        job_title=job_title,
+        phone=phone,
+        requires_training=requires_training,
+    )
+
+
+def _run_compliance(
+    documents: Sequence[DocumentComplianceSignal],
+    *,
+    employees: dict[uuid.UUID, EmployeeComplianceContext],
+    today: date = TODAY,
+) -> list[ComplianceFinding]:
+    return detect_compliance_findings(
+        documents=documents,
+        employees=employees,
+        today=today,
+    )
+
+
+def _c_found(findings, check_type: str):
+    return [f for f in findings if f.check_type == check_type]
+
+
+def test_compliance_clean_seed_is_quiet() -> None:
+    """Clean active employees with complete fields and valid docs fire nothing."""
+    employees = {E1: _compliance_ctx(E1), E2: _compliance_ctx(E2)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="work_permit",
+            expiry_date=TODAY + timedelta(days=90),
+            is_required=True,
+        )
+    ]
+    assert _run_compliance(docs, employees=employees) == []
+
+
+def test_document_expiry_past_is_high() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=5),
+            is_required=True,
+        )
+    ]
+    (fired,) = _run_compliance(docs, employees=employees)
+    assert fired.check_type == "document_expiry"
+    assert fired.severity == "high"
+    assert fired.owner_rule == "compliance_officer"
+    assert fired.evidence["days_left"] == -5
+    assert fired.evidence["expiry_date"] == (TODAY - timedelta(days=5)).isoformat()
+
+
+def test_document_expiry_soon_is_medium() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="passport",
+            expiry_date=TODAY + timedelta(days=20),
+            is_required=True,
+        )
+    ]
+    (fired,) = _run_compliance(docs, employees=employees)
+    assert fired.severity == "medium"
+    assert fired.evidence["days_left"] == 20
+    assert fired.evidence["doc_type"] == "passport"
+
+
+def test_document_expiry_outside_window_is_silent() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="national_id",
+            expiry_date=TODAY + timedelta(days=90),
+            is_required=True,
+        )
+    ]
+    assert _run_compliance(docs, employees=employees) == []
+
+
+def test_document_expiry_ignores_terminated_employee() -> None:
+    employees = {E1: _compliance_ctx(E1, status="terminated")}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=2),
+            is_required=True,
+        )
+    ]
+    assert _run_compliance(docs, employees=employees) == []
+
+
+def test_document_expiry_ignores_non_identity_document() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="medical",
+            expiry_date=TODAY - timedelta(days=2),
+            is_required=True,
+        )
+    ]
+    assert _run_compliance(docs, employees=employees) == []
+
+
+def test_training_overdue_expired_required_certification() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="certification",
+            expiry_date=TODAY - timedelta(days=14),
+            is_required=True,
+        )
+    ]
+    (fired,) = _run_compliance(docs, employees=employees)
+    assert fired.check_type == "training_overdue"
+    assert fired.severity == "medium"
+    assert fired.evidence["days_late"] == 14
+    assert fired.owner_rule == "compliance_officer"
+
+
+def test_training_overdue_optional_certification_is_silent() -> None:
+    employees = {E1: _compliance_ctx(E1)}
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="certification",
+            expiry_date=TODAY - timedelta(days=14),
+            is_required=False,
+        )
+    ]
+    assert _run_compliance(docs, employees=employees) == []
+
+
+def test_training_overdue_missing_required_training() -> None:
+    employees = {E1: _compliance_ctx(E1, requires_training=True)}
+    (fired,) = _run_compliance([], employees=employees)
+    assert fired.check_type == "training_overdue"
+    assert fired.severity == "medium"
+    assert fired.evidence.get("missing") is True
+
+
+def test_training_overdue_not_absent_without_requirement() -> None:
+    employees = {E1: _compliance_ctx(E1, requires_training=False)}
+    assert _run_compliance([], employees=employees) == []
+
+
+def test_contract_missing_field_fires_low_per_missing_field() -> None:
+    employees = {
+        E1: _compliance_ctx(E1, email=None, phone=None),
+    }
+    fired = _c_found(_run_compliance([], employees=employees), "contract_missing_field")
+    field_names = {f.evidence["missing_fields"][0] for f in fired}
+    assert field_names == {"email", "phone"}
+    assert all(f.severity == "low" for f in fired)
+    assert all(f.owner_rule == "hr_admin" for f in fired)
+    # No employee email/phone VALUE leaks into evidence.
+    raw = str(fired[0].evidence)
+    assert "e@acme.test" not in raw
+    assert "555-0100" not in raw
+
+
+def test_contract_missing_field_ignores_terminated() -> None:
+    employees = {E1: _compliance_ctx(E1, status="terminated", email=None)}
+    assert _run_compliance([], employees=employees) == []
+
+
+def test_compliance_no_pii_in_evidence() -> None:
+    employees = {
+        E1: _compliance_ctx(E1, email="alice@corp.test", phone="555-1234"),
+    }
+    docs = [
+        DocumentComplianceSignal(
+            employee_id=E1,
+            document_id=uuid.uuid4(),
+            doc_type="visa",
+            expiry_date=TODAY - timedelta(days=1),
+            is_required=True,
+        )
+    ]
+    for f in _run_compliance(docs, employees=employees):
+        serialized = str(f.evidence)
+        assert "alice@corp.test" not in serialized
+        assert "555-1234" not in serialized
+        assert "Engineer" not in serialized

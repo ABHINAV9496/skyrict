@@ -381,6 +381,43 @@ class CogsPort(Protocol):
     ) -> None: ...
 
 
+@dataclass(frozen=True)
+class PayrollAccrualOutcome:
+    """Result of a payroll accrual JE-draft attempt (HR-AUT-001, Commit 4).
+
+    ``missing_accounts`` lists the chart codes the tenant has not seeded — the
+    payroll service flips the run to ``je_bridge_status='pending'`` when it is
+    non-empty so the gap is queryable instead of silently losing the booking.
+    ``entry_id`` is set when a DRAFT entry was created (or already existed for
+    the same ``(source='payroll', source_ref=run_id)`` idempotency key).
+    """
+
+    entry_id: uuid.UUID | None = None
+    missing_accounts: tuple[str, ...] = ()
+    already_booked: bool = False
+
+
+class PayrollAccrualPort(Protocol):
+    """Payroll→Finance accrual seam — implemented by ``FinanceService``.
+
+    Called by the payroll service when a run is marked PAID (flag-gated by
+    ``erp_payroll_settings.je_bridge_enabled``). The entry is created as a
+    DRAFT in the Finance inbox so posting/approval stays on the existing
+    finance endpoints today and is consumed later by FIN-AI-001 — the payroll
+    feature never imports finance modules, mirroring the COGS seam above.
+    """
+
+    async def create_payroll_accrual_draft(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        run_id: uuid.UUID,
+        entry_date: date,
+        gross: Decimal,
+        net: Decimal,
+    ) -> PayrollAccrualOutcome: ...
+
+
 # ---------------------------------------------------------------------------
 # Cross-module CRM timeline port (seam for writing finance events to CRM)
 # ---------------------------------------------------------------------------

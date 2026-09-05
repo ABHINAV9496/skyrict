@@ -16,6 +16,7 @@ from core.core.constants import (
     EmploymentStatus,
     LeaveRequestStatus,
     PayImpact,
+    PayrollJeBridgeStatus,
     PayrollRounding,
     PayrollRunStatus,
 )
@@ -237,6 +238,27 @@ class Employee:
     user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     termination_date: date | None = None
+    bank_account: str | None = None
+    bank_name: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class BenefitElection:
+    """A tenant-scoped benefit plan election for one employee.
+
+    ``effective_from`` is the date the election takes effect. The payroll
+    pre-flight ``benefit_elections`` warning reads the enrolled elections for a
+    pay period to surface roster employees holding none before a run commits.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    plan_id: uuid.UUID
+    status: str
+    effective_from: date
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -403,6 +425,57 @@ class PayrollRun:
     # {"employee_id": str, "reason": str}), set at compute time (gap #6).
     skipped_employees: list[dict[str, str]] | None = None
 
+    # Payroll→Finance accrual JE bridge state (Commit 4): none/pending/draft.
+    je_bridge_status: PayrollJeBridgeStatus = PayrollJeBridgeStatus.NONE
+
+
+@dataclass(frozen=True)
+class Payslip:
+    """One employee's payslip view inside a run (HR-AUT-001, Commit 4).
+
+    ``gross``/``deductions``/``net`` mirror the run's frozen entry; the
+    employee attributes denormalize the roster so the payslip endpoint needs no
+    separate employee lookup.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+
+
+@dataclass(frozen=True)
+class PayslipReview:
+    """Versioned payslip review row with approval lifecycle (HR-AUT-001, Commit 2).
+
+    Every computed payslip is materialized as a ``draft`` review row on compute.
+    An admin approves or rejects it; re-approval after correction creates a new
+    version row. The notification delivery-gate fires only on approval.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+    status: str = "draft"  # draft | approved | rejected
+    version: int = 1
+    rejected_reason: str | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    rejected_by: uuid.UUID | None = None
+    rejected_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
 
 @dataclass(frozen=True)
 class PayrollEntry:
@@ -435,6 +508,12 @@ class PayrollSettings:
     pf_rate: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
     rounding: PayrollRounding = PayrollRounding.NEAREST
+    # HR-AUT-001 (0026): whether the tenant allows the payroll automation batch
+    # engine to drive runs; pre-flight blocks a batch when this is off.
+    ai_automation_enabled: bool = True
+    # HR-AUT-001 (0029): whether marking a run paid also books the accrual JE
+    # into the Finance inbox (off = fully manual flow).
+    je_bridge_enabled: bool = True
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

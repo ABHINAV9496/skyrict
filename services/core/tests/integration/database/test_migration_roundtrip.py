@@ -74,6 +74,11 @@ _ERP_PERMISSION_KEYS = (
     "erp.hr.ai.eval",
     # 0025: inventory AI approve permission (SKY-68, renumbered on HR-AI-002).
     "erp.inventory.ai.approve",
+    # 0031: payroll automation permissions (HR-AUT-001).
+    "erp.payroll.ai.read",
+    "erp.payroll.ai.run",
+    "erp.payroll.ai.notify",
+    "erp.payroll.ai.approve",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -92,6 +97,18 @@ _HR_AI_TABLES = (
     # 0024: HR-AI-002 pattern-engine input tables (holidays + blackouts).
     "ai_hr_public_holidays",
     "ai_hr_leave_blackout_periods",
+    # 0031: payroll automation engine tables (HR-AUT-001, Commit 1).
+    "ai_payroll_batch_runs",
+    "ai_payroll_batch_items",
+    # 0032: benefit plans + elections (HR-AUT-001, pre-flight finish-up).
+    "erp_benefit_plans",
+    "erp_benefit_elections",
+    # 0033: payroll notifications + schedules (HR-AUT-001, Commit 3).
+    "ai_payroll_notifications",
+    "ai_payroll_notification_prefs",
+    "ai_payroll_schedules",
+    # 0035: payslip review queue (HR-AUT-001, Commit 2).
+    "erp_payslip_reviews",
 )
 
 
@@ -157,7 +174,7 @@ async def _assert_upgraded_schema(url: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0030", f"head is {version}, expected 0030"
+            assert version == "0035", f"head is {version}, expected 0035"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -363,6 +380,286 @@ async def _assert_upgraded_schema(url: str) -> None:
             )
             assert set(rls_tables) == set(_HR_AI_TABLES), (
                 f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
+            )
+
+            # 0031: payroll automation columns on settings + employees.
+            settings_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_settings' "
+                        "AND column_name = 'ai_automation_enabled'"
+                    )
+                )
+            ).one_or_none()
+            assert settings_col is not None, (
+                "0031 must add erp_payroll_settings.ai_automation_enabled"
+            )
+            assert settings_col[0] == "boolean"
+
+            for col_name in ("bank_account", "bank_name"):
+                bank_col = (
+                    await conn.execute(
+                        text(
+                            "SELECT data_type FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_employees' "
+                            "AND column_name = :name"
+                        ),
+                        {"name": col_name},
+                    )
+                ).one_or_none()
+                assert bank_col is not None, f"0031 must add erp_employees.{col_name}"
+                assert bank_col[0] == "character varying"
+
+            # 0032: benefit catalogue — columns + status/type constraints.
+            plan_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_benefit_plans' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "plan_code",
+                "name",
+                "plan_type",
+                "monthly_cost_cents",
+                "is_active",
+                "effective_from",
+            }.issubset(set(plan_cols)), plan_cols
+
+            election_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'erp_benefit_elections' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "employee_id",
+                "plan_id",
+                "status",
+                "effective_from",
+            }.issubset(set(election_cols)), election_cols
+
+            plan_type_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_benefit_plans'::regclass "
+                        "AND conname = 'ck_erp_benefit_plans_type'"
+                    )
+                )
+            ).scalar_one()
+            assert plan_type_check == 1, "0032 must add the plan_type check constraint"
+
+            election_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_benefit_elections'::regclass "
+                        "AND conname = 'ck_erp_benefit_elections_status'"
+                    )
+                )
+            ).scalar_one()
+            assert election_status_check == 1, "0032 must add the election status check constraint"
+
+            # 0033: notifications + schedules — tables, dedupe constraint, checks.
+            notif_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_notifications' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "recipient_user_id",
+                "event_type",
+                "dedupe_key",
+                "in_app",
+                "email_stub",
+                "subject",
+                "body",
+                "batch_id",
+                "run_id",
+                "employee_id",
+                "created_at",
+            }.issubset(set(notif_cols)), notif_cols
+            notif_dedupe = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.ai_payroll_notifications'::regclass "
+                        "AND conname = 'uq_ai_payroll_notifications_dedupe'"
+                    )
+                )
+            ).scalar_one()
+            assert notif_dedupe == 1, "0033 must add the notification dedupe constraint"
+
+            pref_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_notification_prefs' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "user_id",
+                "in_app_on",
+                "email_on",
+                "updated_at",
+            }.issubset(set(pref_cols)), pref_cols
+
+            schedule_cols = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "AND table_name = 'ai_payroll_schedules' "
+                            "ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert {
+                "tenant_id",
+                "id",
+                "name",
+                "cron_expression",
+                "enabled",
+                "last_fired_at",
+                "next_run_at",
+                "created_at",
+                "updated_at",
+            }.issubset(set(schedule_cols)), schedule_cols
+
+            # 0034: payroll accrual JE bridge (HR-AUT-001, Commit 4).
+            je_status_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type, character_maximum_length "
+                        "FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_runs' "
+                        "AND column_name = 'je_bridge_status'"
+                    )
+                )
+            ).one_or_none()
+            assert je_status_col is not None, "0034 must add erp_payroll_runs.je_bridge_status"
+            assert je_status_col[0] == "character varying", je_status_col
+            assert je_status_col[1] == 16, je_status_col
+
+            je_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_payroll_runs'::regclass "
+                        "AND conname = 'ck_erp_payroll_runs_je_bridge_status'"
+                    )
+                )
+            ).scalar_one()
+            assert je_status_check == 1, "0034 must add the je_bridge_status check constraint"
+
+            je_bridge_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_payroll_settings' "
+                        "AND column_name = 'je_bridge_enabled'"
+                    )
+                )
+            ).one_or_none()
+            assert je_bridge_col is not None, "0034 must add erp_payroll_settings.je_bridge_enabled"
+            assert je_bridge_col[0] == "boolean", je_bridge_col
+
+            # 0035: payslip review queue (HR-AUT-001, Commit 2).
+            review_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_payslip_reviews')"))
+            ).scalar_one()
+            assert review_table is not None, "0035 must create erp_payslip_reviews table"
+
+            review_cols = {
+                row[0]
+                for row in await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'erp_payslip_reviews'"
+                    )
+                )
+            }
+            assert {
+                "tenant_id",
+                "id",
+                "run_id",
+                "employee_id",
+                "employee_number",
+                "employee_name",
+                "gross",
+                "deductions",
+                "net",
+                "status",
+                "version",
+                "rejected_reason",
+                "reviewed_by",
+                "reviewed_at",
+                "rejected_by",
+                "rejected_at",
+                "created_at",
+                "updated_at",
+            }.issubset(set(review_cols)), review_cols
+
+            review_status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_payslip_reviews'::regclass "
+                        "AND conname = 'ck_erp_payslip_reviews_status'"
+                    )
+                )
+            ).scalar_one()
+            assert review_status_check == 1, (
+                "0035 must add the payslip review status check constraint"
             )
     finally:
         await engine.dispose()

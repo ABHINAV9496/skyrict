@@ -11,6 +11,8 @@ from core.core.audit_events import HR_LEAVE_APPROVED
 from core.core.audit_service import AuditService
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from core.domain.entities import AuditLogEntry
 
 
@@ -26,7 +28,16 @@ class FakeAuditRepository:
         return entry
 
     async def list(
-        self, tenant_id: uuid.UUID, *, action: str | None = None, limit: int = 100
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        action: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
     ) -> list[AuditLogEntry]:
         self.listed.append((tenant_id, action, limit))
         return self.added

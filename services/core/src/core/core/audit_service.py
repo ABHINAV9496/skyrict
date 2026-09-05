@@ -15,6 +15,7 @@ from core.domain.entities import AuditLogEntry
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
     from core.db.ports import AuditLogRepositoryPort
 
@@ -58,7 +59,57 @@ class AuditService:
         tenant_id: uuid.UUID,
         *,
         action: str | None = None,
-        limit: int = 100,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
     ) -> list[AuditLogEntry]:
         """Return the tenant's audit trail, newest first, optionally filtered."""
-        return await self._repository.list(tenant_id, action=action, limit=limit)
+        return await self._repository.list(
+            tenant_id,
+            action=action,
+            actor_user_id=actor_user_id,
+            q=q,
+            from_date=from_date,
+            to_date=to_date,
+            offset=offset,
+            limit=limit,
+        )
+
+    async def search(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        action: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[AuditLogEntry], int]:
+        """Search the audit trail with the same filters as ``feed``, plus a total.
+
+        Returns ``(entries, total)`` for paginated search (FIN-AUT-002 B22).
+        """
+        entries = await self._repository.list(
+            tenant_id,
+            action=action,
+            actor_user_id=actor_user_id,
+            q=q,
+            from_date=from_date,
+            to_date=to_date,
+            offset=offset,
+            limit=limit,
+        )
+        total = await self._repository.count(
+            tenant_id,
+            action=action,
+            actor_user_id=actor_user_id,
+            q=q,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return entries, total

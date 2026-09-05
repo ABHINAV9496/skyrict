@@ -11,10 +11,12 @@ import {
   Receipt,
   SlidersHorizontal,
   UserRound,
+  Zap,
 } from "lucide-react";
 
 import { ErpDataTable, ErpDataTableSkeleton, type ErpColumn } from "@/components/dashboard/shared/erp-data-table";
 import { StatusBadge } from "@/components/dashboard/shared/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,19 +28,26 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useModuleAccess } from "@/lib/access/modules";
 import {
   approvePayrollRun,
   computePayrollRun,
   getPayrollRun,
+  getRunPayslips,
   listRunEntries,
   markPayrollRunPaid,
   updateRunEntry,
   voidPayrollRun,
   type PayrollEntry,
   type PayrollRun,
+  type Payslip,
   type SkippedEmployee,
 } from "@/lib/api/payroll-api";
+import {
+  enqueuePayrollBatch,
+  type PayrollBatch,
+} from "@/lib/api/payroll-automation-api";
 import { listEmployees, type Employee } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -62,6 +71,72 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
+function PreflightSummary({ preflight }: { preflight: Record<string, unknown> }) {
+  const checks = (preflight.checks ?? {}) as Record<string, { status?: string; detail?: string }>;
+  const blocks = (preflight.blocks ?? []) as string[];
+  const warnings = (preflight.warnings ?? []) as string[];
+  const rosterCount = typeof preflight.roster_count === "number" ? preflight.roster_count : null;
+
+  const entries = Object.entries(checks).map(([key, check]) => ({
+    key,
+    status: check.status ?? "warn",
+    detail: check.detail ?? "",
+  }));
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>Pre-flight check</span>
+        {rosterCount != null ? <span>· {rosterCount} employee(s)</span> : null}
+        {preflight.checked_at ? (
+          <span>· {formatDateTime(String(preflight.checked_at))}</span>
+        ) : null}
+      </div>
+      {entries.length > 0 ? (
+        <ul className="space-y-1.5">
+          {entries.map((entry) => (
+            <li key={entry.key} className="flex items-start gap-2 text-sm">
+              <StatusPip status={entry.status} />
+              <span className="min-w-0">
+                <span className="font-medium text-foreground">{entry.key}</span>
+                {entry.detail ? (
+                  <span className="ml-1.5 text-muted-foreground">— {entry.detail}</span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {warnings.length > 0 ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          {warnings.length} warning(s) — not blocking.
+        </p>
+      ) : null}
+      {blocks.length > 0 ? (
+        <p className="text-xs font-medium text-destructive">
+          {blocks.length} blocking issue(s): {blocks.join(", ")}.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusPip({ status }: { status: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mt-1.5 size-2 shrink-0 rounded-full",
+        status === "ok"
+          ? "bg-emerald-500"
+          : status === "block"
+            ? "bg-destructive"
+            : "bg-amber-500",
+      )}
+    />
+  );
+}
+
 export function RunDetailClient({ runId }: { runId: string }) {
   const { permissions } = useModuleAccess();
   const canWrite =
@@ -71,6 +146,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
 
   const [status, setStatus] = useState<PageStatus>({ state: "loading" });
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
@@ -79,16 +155,22 @@ export function RunDetailClient({ runId }: { runId: string }) {
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchDryRun, setBatchDryRun] = useState(true);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchResult, setBatchResult] = useState<PayrollBatch | null>(null);
 
   const load = useCallback(async () => {
     setStatus({ state: "loading" });
     try {
-      const [run, entries, employeeList] = await Promise.all([
+      const [run, entries, employeeList, payslipList] = await Promise.all([
         getPayrollRun(runId),
         listRunEntries(runId),
         listEmployees({ pageSize: 100 }),
+        getRunPayslips(runId).catch(() => [] as Payslip[]),
       ]);
       setEmployees(employeeList.items);
+      setPayslips(payslipList);
       setStatus({ state: "ready", run, entries });
     } catch (error) {
       const message =
@@ -141,6 +223,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
     setNotice(null);
     try {
       const result = await computePayrollRun(runId);
+      setPayslips(await getRunPayslips(runId).catch(() => []));
       setStatus({
         state: "ready",
         run: result.run,
@@ -243,6 +326,29 @@ export function RunDetailClient({ runId }: { runId: string }) {
   const canPay = canApprove && run.status === "approved";
   const canVoid = canApprove && (run.status === "computed" || run.status === "approved");
   const canAdjust = canWrite && (run.status === "draft" || run.status === "computed");
+  const canBatch = canWrite && run.status === "computed";
+
+  async function onSubmitBatch() {
+    if (!status.state || batchSubmitting) return;
+    setBatchSubmitting(true);
+    setNotice(null);
+    try {
+      const batch = await enqueuePayrollBatch({ runId, dryRun: batchDryRun });
+      setBatchResult(batch);
+      setNotice({
+        tone: "success",
+        text: `Batch ${batch.batchId ? `#${batch.batchId} ` : ""}${batch.dryRun ? "dry-run " : ""}enqueued.`,
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text:
+          error instanceof ApiError ? error.message : "Could not submit the batch.",
+      });
+    } finally {
+      setBatchSubmitting(false);
+    }
+  }
 
   const columns: ErpColumn<PayrollEntry>[] = [
     {
@@ -389,6 +495,21 @@ export function RunDetailClient({ runId }: { runId: string }) {
               Compute
             </Button>
           ) : null}
+          {canBatch ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setBatchResult(null);
+                setBatchDryRun(true);
+                setBatchOpen(true);
+              }}
+            >
+              <Zap aria-hidden="true" className="size-4" />
+              Run automation batch
+            </Button>
+          ) : null}
           {canApproveRun ? (
             <Button
               type="button"
@@ -462,6 +583,24 @@ export function RunDetailClient({ runId }: { runId: string }) {
           {run.paidAt ? (
             <SummaryRow label="Paid" value={formatDateTime(run.paidAt)} />
           ) : null}
+          {run.paidAt ? (
+            <SummaryRow
+              label="Accrual JE"
+              value={
+                run.jeBridgeStatus === "draft" ? (
+                  <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                    Journal entry draft
+                  </Badge>
+                ) : run.jeBridgeStatus === "pending" ? (
+                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                    Pending accounts setup
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">Not created</span>
+                )
+              }
+            />
+          ) : null}
           {run.voidReason ? (
             <SummaryRow label="Void reason" value={run.voidReason} />
           ) : null}
@@ -490,6 +629,73 @@ export function RunDetailClient({ runId }: { runId: string }) {
           )}
         </div>
       </section>
+
+      {payslips.length > 0 ? (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold tracking-tight text-foreground">
+            <Receipt aria-hidden="true" className="size-4 text-primary" />
+            Payslips
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              Per-employee net pay after deduction
+            </span>
+          </h2>
+          <div className="mt-4">
+            <ErpDataTable
+              columns={[
+                {
+                  key: "employeeId",
+                  label: "Employee",
+                  render: (payslip) => (
+                    <span className="font-medium text-foreground">
+                      {payslip.employeeName}
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {payslip.employeeNumber}
+                      </span>
+                    </span>
+                  ),
+                },
+                {
+                  key: "gross",
+                  label: "Gross",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatMoney(payslip.gross.amount, payslip.gross.currency)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "deductions",
+                  label: "Deductions",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatMoney(payslip.deductions.amount, payslip.deductions.currency)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "net",
+                  label: "Net",
+                  align: "right",
+                  render: (payslip) => (
+                    <span className="tabular-nums font-medium text-foreground">
+                      {formatMoney(payslip.net.amount, payslip.net.currency)}
+                    </span>
+                  ),
+                },
+              ]}
+              rows={payslips.map((payslip) => ({ ...payslip, id: payslip.employeeId }))}
+              meta={{
+                total: payslips.length,
+                page: 1,
+                page_size: payslips.length,
+                total_pages: 1,
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {run.skippedEmployees.length > 0 ? (
         <section className="rounded-xl border border-border bg-card p-5">
@@ -601,6 +807,85 @@ export function RunDetailClient({ runId }: { runId: string }) {
               ) : null}
               Save adjustment
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={batchOpen} onOpenChange={(open) => !batchSubmitting && !open && setBatchOpen(false)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Run automation batch</DialogTitle>
+            <DialogDescription>
+              Submit this run to the payroll automation worker. A pre-flight pass
+              reports blocking issues; the dry-run toggle processes the roster
+              without persisting payslips.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {batchResult ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={batchResult.status} />
+                  {batchResult.dryRun ? (
+                    <Badge variant="secondary">Dry run</Badge>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    {batchResult.batchId ? `Batch #${batchResult.batchId}` : "Batch"}
+                  </span>
+                </div>
+                {Object.keys(batchResult.totals).length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {(["total", "done", "failed", "retried", "skipped"] as const).map((key) =>
+                      batchResult.totals[key] != null ? (
+                        <div key={key} className="rounded-lg border border-border bg-muted/30 p-2">
+                          <p className="text-xs text-muted-foreground">{key}</p>
+                          <p className="text-base font-semibold tabular-nums">
+                            {String(batchResult.totals[key])}
+                          </p>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                ) : null}
+                {batchResult.preflight ? (
+                  <PreflightSummary preflight={batchResult.preflight} />
+                ) : null}
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <Checkbox
+                  checked={batchDryRun}
+                  onCheckedChange={(value) => setBatchDryRun(value === true)}
+                />
+                Dry run (no payslips persisted)
+              </label>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBatchOpen(false)}
+              disabled={batchSubmitting}
+            >
+              {batchResult ? "Done" : "Cancel"}
+            </Button>
+            {!batchResult ? (
+              <Button
+                type="button"
+                onClick={() => void onSubmitBatch()}
+                disabled={batchSubmitting}
+              >
+                {batchSubmitting ? (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Zap aria-hidden="true" className="size-4" />
+                )}
+                {batchSubmitting ? "Submitting…" : batchDryRun ? "Start dry run" : "Submit batch"}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

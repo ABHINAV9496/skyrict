@@ -17,6 +17,7 @@ from core.models.core_audit_log import CoreAuditLogModel
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
 
 def _audit_from_orm(model: CoreAuditLogModel) -> AuditLogEntry:
@@ -61,15 +62,39 @@ class AuditLogRepository(SqlRepository):
         tenant_id: uuid.UUID,
         *,
         action: str | None = None,
-        limit: int = 100,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
     ) -> list[AuditLogEntry]:
-        """Get audit entries for a tenant, newest first, optionally filtered."""
+        """Get audit entries for a tenant, newest first, optionally filtered.
+
+        ``q`` is a case-insensitive substring match against ``action`` or
+        ``target`` (parameterized - never interpolated); ``actor_user_id`` and
+        the date bounds constrain further; results are paginated by ``offset``/
+        ``limit`` (ticket FIN-AUT-002 B22 - audit log search).
+        """
         stmt = select(CoreAuditLogModel).where(CoreAuditLogModel.tenant_id == tenant_id)
         if action is not None:
             stmt = stmt.where(CoreAuditLogModel.action == action)
-        stmt = stmt.order_by(
-            CoreAuditLogModel.created_at.desc(), CoreAuditLogModel.id.desc()
-        ).limit(limit)
+        if actor_user_id is not None:
+            stmt = stmt.where(CoreAuditLogModel.actor_user_id == actor_user_id)
+        if q is not None:
+            like = f"%{q}%"
+            stmt = stmt.where(
+                CoreAuditLogModel.action.ilike(like) | CoreAuditLogModel.target.ilike(like)
+            )
+        if from_date is not None:
+            stmt = stmt.where(CoreAuditLogModel.created_at >= from_date)
+        if to_date is not None:
+            stmt = stmt.where(CoreAuditLogModel.created_at <= to_date)
+        stmt = (
+            stmt.order_by(CoreAuditLogModel.created_at.desc(), CoreAuditLogModel.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self.session.execute(stmt)
         return [_audit_from_orm(model) for model in result.scalars().all()]
 
@@ -80,3 +105,34 @@ class AuditLogRepository(SqlRepository):
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _audit_from_orm(model) if model is not None else None
+
+    async def count(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        action: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> int:
+        """Count matching audit entries under the same filters as ``list``."""
+        from sqlalchemy import func
+
+        stmt = select(func.count(CoreAuditLogModel.id)).where(
+            CoreAuditLogModel.tenant_id == tenant_id
+        )
+        if action is not None:
+            stmt = stmt.where(CoreAuditLogModel.action == action)
+        if actor_user_id is not None:
+            stmt = stmt.where(CoreAuditLogModel.actor_user_id == actor_user_id)
+        if q is not None:
+            like = f"%{q}%"
+            stmt = stmt.where(
+                CoreAuditLogModel.action.ilike(like) | CoreAuditLogModel.target.ilike(like)
+            )
+        if from_date is not None:
+            stmt = stmt.where(CoreAuditLogModel.created_at >= from_date)
+        if to_date is not None:
+            stmt = stmt.where(CoreAuditLogModel.created_at <= to_date)
+        return (await self.session.execute(stmt)).scalar_one()

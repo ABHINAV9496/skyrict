@@ -60,7 +60,6 @@ from core.features.hr.models import (  # noqa: F401
     LeaveTypeModel,
 )
 from core.features.inventory.models.product import ErpProductModel  # noqa: F401
-from core.features.inventory.models.report_snapshot import ErpReportSnapshotModel  # noqa: F401
 from core.features.inventory.models.stock_level import ErpStockLevelModel  # noqa: F401
 from core.features.inventory.models.stock_movement import ErpStockMovementModel  # noqa: F401
 from core.features.inventory.models.warehouse import ErpWarehouseModel  # noqa: F401
@@ -69,6 +68,13 @@ from core.features.payroll.models import (  # noqa: F401
     PayrollEntryModel,
     PayrollRunModel,
     PayrollSettingsModel,
+)
+from core.features.reporting.models import (  # noqa: F401
+    ErpDashboardModel,
+    ErpReportDefinitionModel,
+    ErpReportSnapshotModel,
+    UserDashboardLayoutModel,
+    WidgetEventModel,
 )
 from core.features.sales.models import (  # noqa: F401
     ErpSalesOrderLineModel,

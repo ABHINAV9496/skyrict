@@ -29,7 +29,12 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 
-from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
+from core.core.constants import (
+    EmploymentStatus,
+    PayrollJeBridgeStatus,
+    PayrollRounding,
+    PayrollRunStatus,
+)
 from core.core.exceptions import PayrollEntryImmutableError
 from core.domain import entities as ent
 from core.domain.value_objects import Money
@@ -39,6 +44,7 @@ from core.features.hr.models.employee import (
 from core.features.hr.models.employee import (
     EmploymentStatus as EmployeeEmploymentStatus,
 )
+from core.features.payroll.models.benefits import BenefitElectionModel
 from core.features.payroll.models.compensation import CompensationModel
 from core.features.payroll.models.payroll_entry import PayrollEntryModel
 from core.features.payroll.models.payroll_run import (
@@ -51,6 +57,7 @@ from core.features.payroll.models.payroll_run import (
     PayrollRunStatus as PayrollRunStatusModel,
 )
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
+from core.features.payroll.models.payslip_review import PayslipReviewModel
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,6 +107,7 @@ def _run_to_orm(run: ent.PayrollRun) -> PayrollRunModel:
         "paid_at": run.paid_at,
         "void_reason": run.void_reason,
         "skipped_employees": run.skipped_employees,
+        "je_bridge_status": run.je_bridge_status.value,
     }
     if run.id is not None:
         kwargs["id"] = run.id
@@ -114,6 +122,8 @@ def _settings_from_orm(model: PayrollSettingsModel) -> ent.PayrollSettings:
         pf_rate=model.pf_rate,
         tax_rate=model.tax_rate,
         rounding=PayrollRounding(model.rounding.value),
+        ai_automation_enabled=model.ai_automation_enabled,
+        je_bridge_enabled=model.je_bridge_enabled,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -134,6 +144,44 @@ def _employee_from_orm(model: EmployeeModel) -> ent.Employee:
         employment_status=EmploymentStatus(model.employment_status.value),
         hire_date=model.hire_date,
         termination_date=model.termination_date,
+        bank_account=model.bank_account,
+        bank_name=model.bank_name,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _benefit_election_from_orm(model: BenefitElectionModel) -> ent.BenefitElection:
+    return ent.BenefitElection(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        plan_id=model.plan_id,
+        status=model.status,
+        effective_from=model.effective_from,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _payslip_review_from_orm(model: PayslipReviewModel, currency: str) -> ent.PayslipReview:
+    return ent.PayslipReview(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        run_id=model.run_id,
+        employee_id=model.employee_id,
+        employee_number=model.employee_number,
+        employee_name=model.employee_name,
+        gross=Money(model.gross, currency),
+        deductions=Money(model.deductions, currency),
+        net=Money(model.net, currency),
+        status=model.status,
+        version=model.version,
+        rejected_reason=model.rejected_reason,
+        reviewed_by=model.reviewed_by,
+        reviewed_at=model.reviewed_at,
+        rejected_by=model.rejected_by,
+        rejected_at=model.rejected_at,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -188,6 +236,7 @@ class PayrollRepository:
             created_at=model.created_at,
             updated_at=model.updated_at,
             skipped_employees=model.skipped_employees,
+            je_bridge_status=PayrollJeBridgeStatus(model.je_bridge_status),
         )
 
     # ------------------------------------------------------------------
@@ -209,6 +258,8 @@ class PayrollRepository:
                 pf_rate=settings.pf_rate,
                 tax_rate=settings.tax_rate,
                 rounding=PayrollRoundingModel(settings.rounding.value),
+                ai_automation_enabled=settings.ai_automation_enabled,
+                je_bridge_enabled=settings.je_bridge_enabled,
             )
             .on_conflict_do_update(
                 index_elements=[PayrollSettingsModel.tenant_id],
@@ -217,6 +268,8 @@ class PayrollRepository:
                     "pf_rate": settings.pf_rate,
                     "tax_rate": settings.tax_rate,
                     "rounding": PayrollRoundingModel(settings.rounding.value),
+                    "ai_automation_enabled": settings.ai_automation_enabled,
+                    "je_bridge_enabled": settings.je_bridge_enabled,
                     "updated_at": func.now(),
                 },
             )
@@ -352,6 +405,28 @@ class PayrollRepository:
 
     async def next_run_code(self, tenant_id: uuid.UUID) -> int:
         return await self._next_sequence(tenant_id, "payroll_run")
+
+    async def set_run_je_bridge_status(
+        self,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: PayrollJeBridgeStatus,
+    ) -> ent.PayrollRun | None:
+        """Record the payroll→Finance accrual bridge outcome on the run (Commit 4)."""
+        stmt = (
+            update(PayrollRunModel)
+            .where(
+                PayrollRunModel.tenant_id == tenant_id,
+                PayrollRunModel.id == run_id,
+            )
+            .values(je_bridge_status=status.value, updated_at=func.now())
+            .returning(PayrollRunModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        return self._run_from_orm(model, currency)
 
     # ------------------------------------------------------------------
     # Entries (Rule 8: immutable after approved - the repo only upserts)
@@ -636,3 +711,196 @@ class PayrollRepository:
         stmt = stmt.order_by(EmployeeModel.employee_number.asc())
         result = await self.session.execute(stmt)
         return [_employee_from_orm(model) for model in result.scalars().all()]
+
+    async def get_employee(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> ent.Employee | None:
+        """One roster employee for the payslip view (terminal employees included)."""
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _employee_from_orm(model) if model is not None else None
+
+    # ------------------------------------------------------------------
+    # Benefits (read-only, pre-flight input)
+    # ------------------------------------------------------------------
+
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]:
+        """Enrolled elections effective by ``period_end`` (pre-flight input)."""
+        stmt = (
+            select(BenefitElectionModel)
+            .where(
+                BenefitElectionModel.tenant_id == tenant_id,
+                BenefitElectionModel.status == "enrolled",
+                BenefitElectionModel.effective_from <= period_end,
+            )
+            .order_by(BenefitElectionModel.effective_from.desc())
+        )
+        result = await self.session.execute(stmt)
+        return [_benefit_election_from_orm(model) for model in result.scalars().all()]
+
+    # ------------------------------------------------------------------
+    # Payslip reviews (0030: versioned approval lifecycle)
+    # ------------------------------------------------------------------
+
+    async def materialize_payslip_reviews(
+        self,
+        run_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        payslips: Sequence[ent.Payslip],
+    ) -> int:
+        """Insert one ``draft`` review row per computed payslip, version-aware.
+
+        For each employee: if a ``draft`` row already exists for this run it is
+        updated in place (recompute of an un-reviewed run); otherwise a new row
+        is inserted at ``max(version) + 1`` — so re-approval after a correction
+        (following a rejection/approval) gets its own version instead of
+        overwriting the terminal row. Returns the number of rows written.
+        """
+        if not payslips:
+            return 0
+        stmt = select(PayslipReviewModel).where(
+            PayslipReviewModel.tenant_id == tenant_id,
+            PayslipReviewModel.run_id == run_id,
+        )
+        existing = (await self.session.execute(stmt)).scalars().all()
+        by_employee: dict[uuid.UUID, list[PayslipReviewModel]] = {}
+        for model in existing:
+            by_employee.setdefault(model.employee_id, []).append(model)
+
+        written = 0
+        for payslip in payslips:
+            rows = by_employee.get(payslip.employee_id, [])
+            draft = next((row for row in rows if row.status == "draft"), None)
+            if draft is not None:
+                draft.gross = payslip.gross.amount
+                draft.deductions = payslip.deductions.amount
+                draft.net = payslip.net.amount
+                draft.employee_name = payslip.employee_name
+                written += 1
+                continue
+            max_version = max((row.version for row in rows), default=0)
+            self.session.add(
+                PayslipReviewModel(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    employee_id=payslip.employee_id,
+                    employee_number=payslip.employee_number,
+                    employee_name=payslip.employee_name,
+                    gross=payslip.gross.amount,
+                    deductions=payslip.deductions.amount,
+                    net=payslip.net.amount,
+                    status="draft",
+                    version=max_version + 1,
+                )
+            )
+            written += 1
+        await self.session.flush()
+        return written
+
+    async def list_payslip_reviews(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        run_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> Sequence[ent.PayslipReview]:
+        stmt = select(PayslipReviewModel).where(PayslipReviewModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(PayslipReviewModel.status == status)
+        if run_id is not None:
+            stmt = stmt.where(PayslipReviewModel.run_id == run_id)
+        stmt = stmt.order_by(PayslipReviewModel.employee_number.asc()).limit(limit)
+        currency = await self._currency_for(tenant_id)
+        result = await self.session.execute(stmt)
+        return [_payslip_review_from_orm(model, currency) for model in result.scalars().all()]
+
+    async def get_payslip_review(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None:
+        stmt = select(PayslipReviewModel).where(
+            PayslipReviewModel.tenant_id == tenant_id,
+            PayslipReviewModel.id == payslip_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        return _payslip_review_from_orm(model, currency)
+
+    async def transition_payslip_review(
+        self,
+        payslip_id: uuid.UUID,
+        from_status: str,
+        to_status: str,
+        *,
+        tenant_id: uuid.UUID,
+        reviewed_by: uuid.UUID | None = None,
+        reviewed_at: object | None = None,
+        rejected_reason: str | None = None,
+    ) -> ent.PayslipReview | None:
+        values: dict[str, object] = {"status": to_status}
+        if to_status == "approved":
+            values["reviewed_by"] = reviewed_by
+            values["reviewed_at"] = reviewed_at
+        if to_status == "rejected":
+            values["rejected_by"] = reviewed_by
+            values["rejected_at"] = reviewed_at
+            values["rejected_reason"] = rejected_reason
+        stmt = (
+            update(PayslipReviewModel)
+            .where(
+                PayslipReviewModel.tenant_id == tenant_id,
+                PayslipReviewModel.id == payslip_id,
+                PayslipReviewModel.status == from_status,
+            )
+            .values(**values)
+            .returning(PayslipReviewModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        return _payslip_review_from_orm(model, currency)
+
+    async def bump_payslip_review_version(
+        self,
+        payslip_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> ent.PayslipReview | None:
+        """Create the next-version draft row for a re-approved payslip.
+
+        Copies the (frozen, approved/rejected) row to a new ``draft`` row with
+        ``version + 1`` and a fresh id, leaving the original audit trail intact.
+        """
+        stmt = select(PayslipReviewModel).where(
+            PayslipReviewModel.tenant_id == tenant_id,
+            PayslipReviewModel.id == payslip_id,
+        )
+        source = (await self.session.execute(stmt)).scalar_one_or_none()
+        if source is None:
+            return None
+        currency = await self._currency_for(tenant_id)
+        current = _payslip_review_from_orm(source, currency)
+        new_model = PayslipReviewModel(
+            tenant_id=tenant_id,
+            run_id=source.run_id,
+            employee_id=source.employee_id,
+            employee_number=source.employee_number,
+            employee_name=source.employee_name,
+            gross=current.gross.amount,
+            deductions=current.deductions.amount,
+            net=current.net.amount,
+            status="draft",
+            version=source.version + 1,
+        )
+        self.session.add(new_model)
+        await self.session.flush()
+        return _payslip_review_from_orm(new_model, currency)

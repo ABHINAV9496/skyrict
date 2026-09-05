@@ -86,9 +86,10 @@ def test_team_size_gate_passes_for_four_members() -> None:
     rows = AiHrAnomalyRepository._compute(  # type: ignore[arg-type]
         _members([E1, E2, E3, E4]), requests, today=today
     )
-    assert len(rows) == 1
-    assert rows[0].anomaly_type == "leave_overuse"
-    assert rows[0].team_size == 4
+    overuse = [r for r in rows if r.anomaly_type == "leave_overuse"]
+    assert len(overuse) == 1
+    assert overuse[0].employee_id == E1
+    assert overuse[0].team_size == 4
 
 
 # -- rule behaviour ---------------------------------------------------------

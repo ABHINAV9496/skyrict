@@ -16,6 +16,7 @@ from core.core.constants import (
     EmploymentStatus,
     LeaveRequestStatus,
     PayImpact,
+    PayrollJeBridgeStatus,
     PayrollRounding,
     PayrollRunStatus,
 )
@@ -237,6 +238,27 @@ class Employee:
     user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     termination_date: date | None = None
+    bank_account: str | None = None
+    bank_name: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class BenefitElection:
+    """A tenant-scoped benefit plan election for one employee.
+
+    ``effective_from`` is the date the election takes effect. The payroll
+    pre-flight ``benefit_elections`` warning reads the enrolled elections for a
+    pay period to surface roster employees holding none before a run commits.
+    """
+
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    plan_id: uuid.UUID
+    status: str
+    effective_from: date
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -403,6 +425,57 @@ class PayrollRun:
     # {"employee_id": str, "reason": str}), set at compute time (gap #6).
     skipped_employees: list[dict[str, str]] | None = None
 
+    # Payroll→Finance accrual JE bridge state (Commit 4): none/pending/draft.
+    je_bridge_status: PayrollJeBridgeStatus = PayrollJeBridgeStatus.NONE
+
+
+@dataclass(frozen=True)
+class Payslip:
+    """One employee's payslip view inside a run (HR-AUT-001, Commit 4).
+
+    ``gross``/``deductions``/``net`` mirror the run's frozen entry; the
+    employee attributes denormalize the roster so the payslip endpoint needs no
+    separate employee lookup.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+
+
+@dataclass(frozen=True)
+class PayslipReview:
+    """Versioned payslip review row with approval lifecycle (HR-AUT-001, Commit 2).
+
+    Every computed payslip is materialized as a ``draft`` review row on compute.
+    An admin approves or rejects it; re-approval after correction creates a new
+    version row. The notification delivery-gate fires only on approval.
+    """
+
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_number: str
+    employee_name: str
+    gross: Money
+    deductions: Money
+    net: Money
+    status: str = "draft"  # draft | approved | rejected
+    version: int = 1
+    rejected_reason: str | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    rejected_by: uuid.UUID | None = None
+    rejected_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
 
 @dataclass(frozen=True)
 class PayrollEntry:
@@ -435,6 +508,12 @@ class PayrollSettings:
     pf_rate: Decimal = Decimal("0")
     tax_rate: Decimal = Decimal("0")
     rounding: PayrollRounding = PayrollRounding.NEAREST
+    # HR-AUT-001 (0026): whether the tenant allows the payroll automation batch
+    # engine to drive runs; pre-flight blocks a batch when this is off.
+    ai_automation_enabled: bool = True
+    # HR-AUT-001 (0029): whether marking a run paid also books the accrual JE
+    # into the Finance inbox (off = fully manual flow).
+    je_bridge_enabled: bool = True
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -1208,3 +1287,85 @@ class StockHealthSummary:
     dead_stock_count: int = 0
     slow_mover_count: int = 0
     tied_up_capital: Money = field(default_factory=lambda: Money.zero("USD"))
+
+
+# ---------------------------------------------------------------------------
+# Finance automation wave-2 read-models (SKY-66) - derived, never stored.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RevenueConcentrationEntry:
+    """One customer's share of recognized revenue over a period (B11)."""
+
+    customer_id: uuid.UUID
+    customer_name: str | None
+    amount: Decimal
+    share: Decimal  # 0..1 of total revenue
+    above_threshold: bool  # share >= threshold
+
+
+@dataclass(frozen=True)
+class RevenueConcentration:
+    """Revenue concentration report - how dependent revenue is on top customers."""
+
+    from_date: date
+    to_date: date
+    threshold: Decimal  # e.g. 0.25
+    total_revenue: Decimal
+    entries: tuple[RevenueConcentrationEntry, ...]
+
+
+@dataclass(frozen=True)
+class WorkingCapitalPosition:
+    """Assets minus liabilities for a single month end (B12)."""
+
+    month: str  # "YYYY-MM"
+    assets: Decimal
+    liabilities: Decimal
+    working_capital: Decimal
+
+
+@dataclass(frozen=True)
+class WorkingCapitalSeries:
+    """Monthly assets - liabilities trend (B12)."""
+
+    positions: tuple[WorkingCapitalPosition, ...]
+
+
+@dataclass(frozen=True)
+class PaymentMethodAnalyticsEntry:
+    """Revenue share by payment method over a period (B20)."""
+
+    method: str
+    count: int
+    amount: Decimal
+    share: Decimal  # 0..1 of total
+
+
+@dataclass(frozen=True)
+class PaymentMethodAnalytics:
+    """How payments split by method - used to spot CPP/fee-heavy channels."""
+
+    from_date: date
+    to_date: date
+    total_amount: Decimal
+    entries: tuple[PaymentMethodAnalyticsEntry, ...]
+
+
+@dataclass(frozen=True)
+class AuditReadinessCheck:
+    """A single audit-readiness gate and whether the tenant passes it (B32)."""
+
+    key: str
+    label: str
+    status: str  # "ok" | "warning" | "missing"
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditReadiness:
+    """Overall audit-readiness posture for the tenant (B32)."""
+
+    ready: bool
+    checks: tuple[AuditReadinessCheck, ...]

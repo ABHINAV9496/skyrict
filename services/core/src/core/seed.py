@@ -8,6 +8,9 @@ decisions) live here and are applied at tenant provisioning time:
     (accrual, 8 days/yr), and unpaid (non-accrual ledger-only type);
   - the single ``erp_payroll_settings`` row per tenant (default currency from
     settings, zero PF/tax rates, nearest rounding);
+  - the Phase-1 reporting pack in ``erp_report_definitions`` (the SAME
+    ``core.features.reporting.seeds`` catalog that migration 0036 applies for
+    pre-existing tenants);
   - the five system roles in ``core_roles`` (ERP grants per the HR & Payroll
     design doc section 2.4) - the role catalog ``require_permission`` resolves
     through ``core_user_roles``.
@@ -31,6 +34,7 @@ from sqlalchemy import select, text
 
 from core.core.config import settings
 from core.core.permissions import (
+    ERP_AI_INVOKE,
     ERP_CRM_READ,
     ERP_CRM_WRITE,
     ERP_HR_AI_ACKNOWLEDGE,
@@ -40,6 +44,10 @@ from core.core.permissions import (
     ERP_HR_READ,
     ERP_HR_WRITE,
     ERP_LEAVE_SELF,
+    ERP_PAYROLL_AI_APPROVE,
+    ERP_PAYROLL_AI_NOTIFY,
+    ERP_PAYROLL_AI_READ,
+    ERP_PAYROLL_AI_RUN,
     ERP_PAYROLL_APPROVE,
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
@@ -52,6 +60,9 @@ from core.db.session import async_session_factory
 from core.features.hr.models.leave_type import LeaveTypeModel
 from core.features.payroll.models.payroll_run import PayrollRounding
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
+from core.features.reporting.models.report_definition import ErpReportDefinitionModel
+from core.features.reporting.seeds import PHASE_1_REPORT_SEEDS
+from core.features.reporting.validation import validate_read_only_sql
 from core.models.core_role import CoreRoleModel
 
 if TYPE_CHECKING:
@@ -157,9 +168,14 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_SALES_READ,
             ERP_SALES_WRITE,
             ERP_SALES_APPROVE,
+            ERP_AI_INVOKE,
             ERP_HR_AI_READ,
             ERP_HR_AI_ACKNOWLEDGE,
             ERP_HR_AI_COPILOT,
+            ERP_PAYROLL_AI_READ,
+            ERP_PAYROLL_AI_RUN,
+            ERP_PAYROLL_AI_NOTIFY,
+            ERP_PAYROLL_AI_APPROVE,
         ),
     ),
     (
@@ -186,6 +202,7 @@ CORE_SYSTEM_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
             ERP_CRM_READ,
             ERP_SALES_READ,
             ERP_HR_AI_READ,
+            ERP_PAYROLL_AI_READ,
         ),
     ),
     # Employee self-service: portal-only role (own leave balances/requests).
@@ -232,6 +249,54 @@ async def seed_core_roles_for_tenant(tenant_id: uuid.UUID) -> None:
                 role.permissions = list(dict.fromkeys(role.permissions + list(permissions)))
         if created:
             logger.info("seed.core_roles.created", tenant_id=str(tenant_id), count=created)
+        await session.commit()
+
+
+async def seed_reporting_defaults(tenant_id: uuid.UUID) -> None:
+    """Idempotently seed the Phase-1 report definitions for one tenant.
+
+    Applies the canonical ``PHASE_1_REPORT_SEEDS`` pack - the same definitions
+    migration 0036 inserts for pre-existing tenants - so a newly provisioned
+    tenant is indistinguishable from one that pre-dates the reporting data
+    layer. Each definition is validated read-only before insert; existing
+    slugs are skipped so re-runs are safe.
+    """
+    async with async_session_factory() as session:
+        existing_slugs = {
+            slug
+            for (slug,) in (
+                await session.execute(
+                    select(ErpReportDefinitionModel.slug).where(
+                        ErpReportDefinitionModel.tenant_id == tenant_id
+                    )
+                )
+            ).all()
+        }
+
+        inserted = 0
+        for seed in PHASE_1_REPORT_SEEDS:
+            if seed.slug in existing_slugs:
+                continue
+            validate_read_only_sql(seed.sql, seed.params)
+            session.add(
+                ErpReportDefinitionModel(
+                    tenant_id=tenant_id,
+                    slug=seed.slug,
+                    title=seed.title,
+                    module=seed.module,
+                    description=seed.description,
+                    sql=seed.sql,
+                    params=list(seed.params),
+                    permission_key=seed.permission_key,
+                )
+            )
+            inserted += 1
+        if inserted:
+            logger.info(
+                "seed.reporting_definitions.created",
+                tenant_id=str(tenant_id),
+                count=inserted,
+            )
         await session.commit()
 
 

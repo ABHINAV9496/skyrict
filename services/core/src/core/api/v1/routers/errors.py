@@ -8,10 +8,12 @@ domain error taxonomy so the app's RFC 7807 handlers return the right status:
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 from skyrict_common.exceptions import NotFoundError, ValidationError
 
 
-def raise_from_service_error(exc: ValueError) -> None:
+def raise_from_service_error(exc: ValueError) -> NoReturn:
     """Re-raise a service ``ValueError`` as the correct domain error."""
     if "not found" in str(exc):
         raise NotFoundError(str(exc)) from exc

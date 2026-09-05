@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Protocol
 
 from core.domain.entities import (
     DeadStockItem,
@@ -239,24 +239,6 @@ class InventoryRepositoryPort(Protocol):
     async def health_summary(
         self, tenant_id: uuid.UUID, *, days: int = 90
     ) -> StockHealthSummary: ...
-
-    # --- Report snapshots (M-RPT lightweight persistence) ---
-    async def save_snapshot(
-        self,
-        tenant_id: uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-        payload: dict[str, Any],
-    ) -> None: ...
-
-    async def get_snapshot(
-        self,
-        tenant_id: uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-    ) -> dict[str, Any] | None: ...
 
     async def commit(self) -> None: ...
 

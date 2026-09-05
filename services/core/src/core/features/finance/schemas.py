@@ -460,3 +460,99 @@ class ReminderDraftLineResponse(BaseModel):
 
 class ReminderDraftResponse(BaseModel):
     reminders: list[ReminderDraftLineResponse]
+
+
+# ---------------------------------------------------------------------------
+# Finance automation wave-2 response models (SKY-66 / FIN-AUT-002)
+# ---------------------------------------------------------------------------
+
+
+class RevenueConcentrationEntryResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    customer_id: uuid.UUID
+    customer_name: str | None = None
+    amount: Decimal
+    share: Decimal
+    above_threshold: bool
+
+
+class RevenueConcentrationResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    from_date: date
+    to_date: date
+    threshold: Decimal
+    total_revenue: Decimal
+    entries: list[RevenueConcentrationEntryResponse]
+
+
+class WorkingCapitalPositionResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    month: str
+    assets: Decimal
+    liabilities: Decimal
+    working_capital: Decimal
+
+
+class WorkingCapitalSeriesResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    positions: list[WorkingCapitalPositionResponse]
+
+
+class PaymentMethodAnalyticsEntryResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    method: str
+    count: int
+    amount: Decimal
+    share: Decimal
+
+
+class PaymentMethodAnalyticsResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    from_date: date
+    to_date: date
+    total_amount: Decimal
+    entries: list[PaymentMethodAnalyticsEntryResponse]
+
+
+class AuditReadinessCheckResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    key: str
+    label: str
+    status: str
+    detail: str | None = None
+
+
+class AuditReadinessResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    ready: bool
+    checks: list[AuditReadinessCheckResponse]
+
+
+class AuditLogEntryResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    id: uuid.UUID | None = None
+    action: str
+    target: str
+    actor_user_id: uuid.UUID | None = None
+    details: dict[str, object] | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    hash: str | None = None
+    prev_hash: str | None = None
+    created_at: datetime | None = None
+
+
+class AuditLogSearchResponse(BaseModel):
+    entries: list[AuditLogEntryResponse]
+    total: int
+    offset: int
+    limit: int

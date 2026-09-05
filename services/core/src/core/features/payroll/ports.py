@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
+from core.core.constants import PayrollJeBridgeStatus
 from core.domain import entities as ent
 from core.domain.value_objects import Money
 
@@ -116,6 +117,15 @@ class PayrollRepositoryPort(Protocol):
 
     async def next_run_code(self, tenant_id: uuid.UUID) -> int: ...
 
+    async def set_run_je_bridge_status(
+        self,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: PayrollJeBridgeStatus,
+    ) -> ent.PayrollRun | None:
+        """Record the payroll→Finance accrual bridge outcome (Commit 4)."""
+        ...
+
     # --- Entries ---
     async def upsert_entries(
         self, entries: Sequence[ent.PayrollEntry], *, tenant_id: uuid.UUID
@@ -159,5 +169,88 @@ class PayrollRepositoryPort(Protocol):
         period_end: date,
     ) -> Sequence[ent.Employee]: ...
 
+    async def get_employee(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> ent.Employee | None:
+        """One roster employee for the payslip view (terminal employees included)."""
+        ...
 
-__all__ = ["LeaveLedgerPort", "PayrollRepositoryPort"]
+    # --- Benefits (read-only, pre-flight input) ---
+    async def enrolled_benefit_elections(
+        self, tenant_id: uuid.UUID, *, period_end: date
+    ) -> Sequence[ent.BenefitElection]: ...
+
+    # --- Payslip reviews (0030: versioned approval lifecycle) ---
+    async def materialize_payslip_reviews(
+        self,
+        run_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        payslips: Sequence[ent.Payslip],
+    ) -> int:
+        """Insert one ``draft`` review row per computed payslip, version-aware.
+
+        For each employee: a ``draft`` row for this run is updated in place
+        (recompute); otherwise a new row is inserted at ``max(version) + 1`` so
+        a correction after approval/rejection gets its own version. Returns the
+        number of rows written.
+        """
+        ...
+
+    async def list_payslip_reviews(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        run_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> Sequence[ent.PayslipReview]: ...
+
+    async def get_payslip_review(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None: ...
+
+    async def transition_payslip_review(
+        self,
+        payslip_id: uuid.UUID,
+        from_status: str,
+        to_status: str,
+        *,
+        tenant_id: uuid.UUID,
+        reviewed_by: uuid.UUID | None = None,
+        reviewed_at: object | None = None,
+        rejected_reason: str | None = None,
+    ) -> ent.PayslipReview | None:
+        """Move one review's status (atomic conditional UPDATE)."""
+        ...
+
+    async def bump_payslip_review_version(
+        self,
+        payslip_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> ent.PayslipReview | None:
+        """Create the next-version draft row for a re-approved payslip (new row)."""
+        ...
+
+
+class PayslipApprovedNotifierPort(Protocol):
+    """Cross-feature delivery-gate: fire ``payslip_ready`` on payslip approval.
+
+    Implemented by ``features/payroll_automation`` (the notification
+    orchestrator) and injected at the composition root. The payroll feature
+    never imports the automation feature — approval-gated delivery is the
+    spec's "approval gates employee delivery".
+    """
+
+    async def notify_payslip_approved(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        run_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        version: int,
+    ) -> None: ...
+
+
+__all__ = ["LeaveLedgerPort", "PayrollRepositoryPort", "PayslipApprovedNotifierPort"]

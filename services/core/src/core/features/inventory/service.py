@@ -34,7 +34,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.audit_events import (
     PRODUCT_CREATED,
@@ -1147,26 +1147,3 @@ class InventoryService:
         self, tenant_id: str | uuid.UUID, *, days: int = 90
     ) -> StockHealthSummary:
         return await self.inventory_repo.health_summary(_as_uuid(tenant_id), days=days)
-
-    async def save_snapshot(
-        self,
-        tenant_id: str | uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-        payload: dict[str, Any],
-    ) -> None:
-        await self.inventory_repo.save_snapshot(
-            _as_uuid(tenant_id), definition_slug=definition_slug, period=period, payload=payload
-        )
-
-    async def get_snapshot(
-        self,
-        tenant_id: str | uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-    ) -> dict[str, Any] | None:
-        return await self.inventory_repo.get_snapshot(
-            _as_uuid(tenant_id), definition_slug=definition_slug, period=period
-        )

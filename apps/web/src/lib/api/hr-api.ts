@@ -7,10 +7,12 @@
  */
 
 import {
+  ApiError,
   apiFetch,
   apiList,
   apiPost,
   buildQueryString,
+  fetchWithSession,
   type Paginated,
 } from "@/lib/api/http";
 
@@ -688,6 +690,212 @@ export async function listEmployeeSuggestions(
 }
 
 // ---------------------------------------------------------------------------
+// HR AI — utilization alerts (8.1.4) + leave-pattern anomalies (8.2.1)
+// ---------------------------------------------------------------------------
+
+export interface HrUtilizationOrg {
+  totalAlerts: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+export interface HrUtilizationAlert {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  alertType: string;
+  severity: string;
+  balanceDays: number;
+  projectedForfeitureDays: number | null;
+  daysRemainingInYear: number | null;
+  leaveType: string | null;
+  status: string | null;
+  evidence: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface HrUtilizationOrgPayload {
+  total_alerts?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+interface HrUtilizationAlertPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  alert_type?: unknown;
+  severity?: unknown;
+  balance_days?: unknown;
+  projected_forfeiture_days?: unknown;
+  days_remaining_in_year?: unknown;
+  leave_type?: unknown;
+  status?: unknown;
+  evidence?: unknown;
+  created_at?: unknown;
+}
+
+function mapUtilizationAlert(payload: HrUtilizationAlertPayload): HrUtilizationAlert {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    alertType: String(payload.alert_type ?? ""),
+    severity: String(payload.severity ?? ""),
+    balanceDays: Number(payload.balance_days ?? 0),
+    projectedForfeitureDays:
+      payload.projected_forfeiture_days != null
+        ? Number(payload.projected_forfeiture_days)
+        : null,
+    daysRemainingInYear:
+      payload.days_remaining_in_year != null ? Number(payload.days_remaining_in_year) : null,
+    leaveType: payload.leave_type != null ? String(payload.leave_type) : null,
+    status: payload.status != null ? String(payload.status) : null,
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+/** L1 usage-balance alert aggregate (never carries per-person values). */
+export async function getUtilizationSummary(): Promise<HrUtilizationOrg | null> {
+  const raw = await apiFetch<HrUtilizationOrgPayload | null>("/api/v1/ai/hr/alerts/utilization");
+  if (!raw) return null;
+  return {
+    totalAlerts: Number(raw.total_alerts ?? 0),
+    byType: Object.fromEntries(
+      Object.entries((raw.by_type ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    bySeverity: Object.fromEntries(
+      Object.entries((raw.by_severity ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    generatedAt: String(raw.generated_at ?? ""),
+    narrative: String(raw.narrative ?? ""),
+  };
+}
+
+/** L2 per-employee utilization alerts. Requires `erp.hr.ai.individual`. */
+export async function getEmployeeUtilization(employeeId: string): Promise<HrUtilizationAlert[]> {
+  const raw = await apiFetch<HrUtilizationAlertPayload[] | null>(
+    `/api/v1/ai/hr/alerts/utilization/${employeeId}`,
+  );
+  return Array.isArray(raw) ? raw.map(mapUtilizationAlert) : [];
+}
+
+export interface HrAnomalyOrg {
+  totalAnomalies: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+export interface HrLeaveAnomaly {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  anomalyType: string;
+  severity: string;
+  title: string;
+  description: string;
+  teamSize: number;
+  evidence: Record<string, unknown>;
+  status: string | null;
+  createdAt: string;
+}
+
+interface HrAnomalyOrgPayload {
+  total_anomalies?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+interface HrLeaveAnomalyPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  anomaly_type?: unknown;
+  severity?: unknown;
+  title?: unknown;
+  description?: unknown;
+  team_size?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  created_at?: unknown;
+}
+
+function mapLeaveAnomaly(payload: HrLeaveAnomalyPayload): HrLeaveAnomaly {
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    anomalyType: String(payload.anomaly_type ?? ""),
+    severity: String(payload.severity ?? ""),
+    title: String(payload.title ?? ""),
+    description: String(payload.description ?? ""),
+    teamSize: Number(payload.team_size ?? 0),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status: payload.status != null ? String(payload.status) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+/** L1 leave-pattern anomaly aggregate (never carries per-person values). */
+export async function getAnomalySummary(): Promise<HrAnomalyOrg | null> {
+  const raw = await apiFetch<HrAnomalyOrgPayload | null>("/api/v1/ai/hr/alerts/anomalies");
+  if (!raw) return null;
+  return {
+    totalAnomalies: Number(raw.total_anomalies ?? 0),
+    byType: Object.fromEntries(
+      Object.entries((raw.by_type ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    bySeverity: Object.fromEntries(
+      Object.entries((raw.by_severity ?? {}) as Record<string, unknown>).map(([key, value]) => [
+        key,
+        Number(value ?? 0),
+      ]),
+    ),
+    generatedAt: String(raw.generated_at ?? ""),
+    narrative: String(raw.narrative ?? ""),
+  };
+}
+
+/** L2 per-employee leave-pattern anomalies. Requires `erp.hr.ai.individual`. */
+export async function getEmployeeAnomalies(employeeId: string): Promise<HrLeaveAnomaly[]> {
+  const raw = await apiFetch<HrLeaveAnomalyPayload[] | null>(
+    `/api/v1/ai/hr/alerts/anomalies/${employeeId}`,
+  );
+  return Array.isArray(raw) ? raw.map(mapLeaveAnomaly) : [];
+}
+
+// ---------------------------------------------------------------------------
+// HR AI — data quality (8.1.3): L1 org KPI + L2 per-employee drill-down
 // HR AI - data quality (8.1.3): L1 org KPI + L2 per-employee drill-down
 // ---------------------------------------------------------------------------
 
@@ -822,3 +1030,490 @@ export async function listQualityScores(input: {
   });
   return { items: result.items.map(mapQualityScore), meta: result.meta };
 }
+
+// ---------------------------------------------------------------------------
+// HR AI — attrition risk (8.1.x): L1 aggregates / L2 per-employee slices
+// ---------------------------------------------------------------------------
+
+export interface HrDepartmentRisk {
+  departmentName: string;
+  highRiskCount: number;
+  totalScores: number;
+  averageRisk: number;
+}
+
+export interface HrAttritionSummary {
+  generatedAt: string;
+  modelVersion: string;
+  highRiskCount: number;
+  mediumRiskCount: number;
+  lowRiskCount: number;
+  topRiskDepartments: HrDepartmentRisk[];
+  narrative: string;
+}
+
+export interface HrAttritionFactor {
+  feature: string;
+  contribution: number;
+  direction: string;
+}
+
+export interface HrEmployeeRisk {
+  employeeId: string;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  riskBand: "high" | "medium" | "low";
+  score: number;
+  confidence: number;
+  factors: HrAttritionFactor[];
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+}
+
+/** The `/attrition` endpoint varies on the caller's `erp.hr.ai.individual`. */
+export type HrAttritionView =
+  | { mode: "summary"; summary: HrAttritionSummary }
+  | { mode: "detail"; modelVersion: string; generatedAt: string; employees: HrEmployeeRisk[] };
+
+interface HrDepartmentRiskPayload {
+  department_name?: unknown;
+  high_risk_count?: unknown;
+  total_scores?: unknown;
+  average_risk?: unknown;
+}
+
+interface HrAttritionSummaryPayload {
+  generated_at?: unknown;
+  model_version?: unknown;
+  high_risk_count?: unknown;
+  medium_risk_count?: unknown;
+  low_risk_count?: unknown;
+  top_risk_departments?: unknown;
+  narrative?: unknown;
+}
+
+interface HrAttritionFactorPayload {
+  feature?: unknown;
+  contribution?: unknown;
+  direction?: unknown;
+}
+
+interface HrEmployeeRiskPayload {
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  risk_band?: unknown;
+  score?: unknown;
+  confidence?: unknown;
+  factors?: unknown;
+  acknowledged?: unknown;
+  acknowledged_at?: unknown;
+}
+
+interface HrAttritionDetailPayload {
+  generated_at?: unknown;
+  model_version?: unknown;
+  employees?: unknown;
+}
+
+function mapDepartmentRisk(payload: HrDepartmentRiskPayload): HrDepartmentRisk {
+  return {
+    departmentName: String(payload.department_name ?? ""),
+    highRiskCount: Number(payload.high_risk_count ?? 0),
+    totalScores: Number(payload.total_scores ?? 0),
+    averageRisk: Number(payload.average_risk ?? 0),
+  };
+}
+
+function mapAttritionSummary(payload: HrAttritionSummaryPayload): HrAttritionSummary {
+  return {
+    generatedAt: String(payload.generated_at ?? ""),
+    modelVersion: String(payload.model_version ?? ""),
+    highRiskCount: Number(payload.high_risk_count ?? 0),
+    mediumRiskCount: Number(payload.medium_risk_count ?? 0),
+    lowRiskCount: Number(payload.low_risk_count ?? 0),
+    topRiskDepartments: Array.isArray(payload.top_risk_departments)
+      ? (payload.top_risk_departments as HrDepartmentRiskPayload[]).map(mapDepartmentRisk)
+      : [],
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+function mapEmployeeRisk(payload: HrEmployeeRiskPayload): HrEmployeeRisk {
+  const band = String(payload.risk_band ?? "low");
+  return {
+    employeeId: String(payload.employee_id ?? ""),
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    riskBand: band === "high" || band === "medium" ? band : "low",
+    score: Number(payload.score ?? 0),
+    confidence: Number(payload.confidence ?? 0),
+    factors: Array.isArray(payload.factors)
+      ? (payload.factors as HrAttritionFactorPayload[]).map((factor) => ({
+          feature: String(factor.feature ?? ""),
+          contribution: Number(factor.contribution ?? 0),
+          direction: String(factor.direction ?? ""),
+        }))
+      : [],
+    acknowledged: Boolean(payload.acknowledged ?? false),
+    acknowledgedAt: payload.acknowledged_at != null ? String(payload.acknowledged_at) : null,
+  };
+}
+
+/**
+ * Attrition risk: L2 per-employee detail for `erp.hr.ai.individual` holders,
+ * otherwise the backend answers 403 with the L1 aggregates in the body — which
+ * is a usable summary, not a lock. This client keeps both modes so the page can
+ * render the aggregate always and the drill-down only when permitted.
+ */
+export async function getAttrition(): Promise<HrAttritionView> {
+  const response = await fetchWithSession("/api/v1/ai/hr/attrition", {});
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrAttritionDetailPayload | HrAttritionSummaryPayload | null;
+  };
+  const data = payload.data;
+  if (data && typeof data === "object") {
+    if ("employees" in data && Array.isArray((data as HrAttritionDetailPayload).employees)) {
+      const detail = data as HrAttritionDetailPayload;
+      return {
+        mode: "detail",
+        modelVersion: String(detail.model_version ?? ""),
+        generatedAt: String(detail.generated_at ?? ""),
+        employees: Array.isArray(detail.employees)
+          ? (detail.employees as HrEmployeeRiskPayload[]).map(mapEmployeeRisk)
+          : [],
+      };
+    }
+    if ("high_risk_count" in data) {
+      return { mode: "summary", summary: mapAttritionSummary(data as HrAttritionSummaryPayload) };
+    }
+  }
+  throw new ApiError(
+    response.status,
+    response.status === 403
+      ? "erp.hr.ai.individual required for the individual view."
+      : "Attrition risk could not be loaded.",
+  );
+}
+
+/** Record a manager's acknowledgement of one employee's attrition risk. */
+export async function acknowledgeAttrition(employeeId: string): Promise<void> {
+  await apiPost<void>(`/api/v1/ai/hr/attrition/${employeeId}/acknowledge`, {});
+}
+
+// ---------------------------------------------------------------------------
+// HR AI — payroll anomalies (HR-AI-001, Unit B): L1 feed / L2 drill-down /
+// dispositions
+// ---------------------------------------------------------------------------
+
+export type HrPayrollAnomalyType = "net_pay_delta" | "duplicate_account" | "ghost_employee";
+
+export interface HrPayrollAnomaly {
+  anomalyId: string;
+  runId: string;
+  runCode: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  employeeId: string | null;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  anomalyType: HrPayrollAnomalyType;
+  severity: "low" | "medium" | "high" | "critical";
+  title: string;
+  description: string;
+  evidence: Record<string, unknown>;
+  status: "open" | "acknowledged" | "dismissed" | "resolved";
+  acknowledgedAt: string | null;
+  createdAt: string;
+}
+
+export interface HrPayrollAnomalySummary {
+  totalAnomalies: number;
+  openAnomalies: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+interface HrPayrollAnomalyPayload {
+  anomaly_id?: unknown;
+  run_id?: unknown;
+  run_code?: unknown;
+  period_start?: unknown;
+  period_end?: unknown;
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  anomaly_type?: unknown;
+  severity?: unknown;
+  title?: unknown;
+  description?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  acknowledged_at?: unknown;
+  created_at?: unknown;
+}
+
+interface HrPayrollAnomalySummaryPayload {
+  total_anomalies?: unknown;
+  open_anomalies?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+function mapPayrollAnomaly(payload: HrPayrollAnomalyPayload): HrPayrollAnomaly {
+  const type = String(payload.anomaly_type ?? "net_pay_delta") as HrPayrollAnomalyType;
+  const status = String(payload.status ?? "open") as HrPayrollAnomaly["status"];
+  return {
+    anomalyId: String(payload.anomaly_id ?? ""),
+    runId: String(payload.run_id ?? ""),
+    runCode: payload.run_code != null ? String(payload.run_code) : null,
+    periodStart: payload.period_start != null ? String(payload.period_start) : null,
+    periodEnd: payload.period_end != null ? String(payload.period_end) : null,
+    employeeId: payload.employee_id != null ? String(payload.employee_id) : null,
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    anomalyType: type,
+    severity: String(payload.severity ?? "medium") as HrPayrollAnomaly["severity"],
+    title: String(payload.title ?? "Payroll anomaly"),
+    description: String(payload.description ?? ""),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status,
+    acknowledgedAt: payload.acknowledged_at != null ? String(payload.acknowledged_at) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+function mapPayrollAnomalySummary(
+  payload: HrPayrollAnomalySummaryPayload,
+): HrPayrollAnomalySummary {
+  return {
+    totalAnomalies: Number(payload.total_anomalies ?? 0),
+    openAnomalies: Number(payload.open_anomalies ?? 0),
+    byType:
+      payload.by_type != null && typeof payload.by_type === "object"
+        ? (payload.by_type as Record<string, number>)
+        : {},
+    bySeverity:
+      payload.by_severity != null && typeof payload.by_severity === "object"
+        ? (payload.by_severity as Record<string, number>)
+        : {},
+    generatedAt: String(payload.generated_at ?? ""),
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+/** L1 payroll-anomaly feed — aggregate counts only, never per-person data. */
+export async function getPayrollAnomalySummary(): Promise<HrPayrollAnomalySummary> {
+  const response = await fetchWithSession("/api/v1/ai/hr/alerts/payroll", {});
+  if (!response.ok) {
+    throw new ApiError(response.status, "Payroll anomaly feed could not be loaded.");
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrPayrollAnomalySummaryPayload | null;
+  };
+  if (payload.data && typeof payload.data === "object") {
+    return mapPayrollAnomalySummary(payload.data as HrPayrollAnomalySummaryPayload);
+  }
+  throw new ApiError(response.status, "Payroll anomaly feed could not be loaded.");
+}
+
+/** L2 per-employee payroll findings (needs `erp.hr.ai.individual`). */
+export async function getEmployeePayrollAnomalies(
+  employeeId: string,
+): Promise<HrPayrollAnomaly[]> {
+  const response = await fetchWithSession(`/api/v1/ai/hr/alerts/payroll/${employeeId}`, {});
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.status === 403
+        ? "erp.hr.ai.individual required for the individual view."
+        : "Payroll anomalies could not be loaded.",
+    );
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrPayrollAnomalyPayload[] | null;
+  };
+  return Array.isArray(payload.data)
+    ? (payload.data as HrPayrollAnomalyPayload[]).map(mapPayrollAnomaly)
+    : [];
+}
+
+/** Move one finding along `acknowledged | dismissed | resolved` (audited). */
+export async function disposePayrollAnomaly(
+  anomalyId: string,
+  status: "acknowledged" | "dismissed" | "resolved",
+): Promise<HrPayrollAnomaly> {
+  const response = await apiPost<HrPayrollAnomalyPayload>(
+    `/api/v1/ai/hr/alerts/payroll/${anomalyId}/disposition`,
+    { status },
+  );
+  return mapPayrollAnomaly(response);
+}
+
+// ---------------------------------------------------------------------------
+// HR AI — compliance engine v1 (HR-AI-001, Unit C): L1 feed / L2 drill-down /
+// status updates
+// ---------------------------------------------------------------------------
+
+export type HrComplianceCheckType =
+  | "document_expiry"
+  | "training_overdue"
+  | "contract_missing_field";
+
+export interface HrComplianceFinding {
+  checkId: string;
+  employeeId: string | null;
+  employeeNumber: string | null;
+  name: string | null;
+  departmentName: string | null;
+  checkType: HrComplianceCheckType;
+  severity: "low" | "medium" | "high" | "critical";
+  ownerRule: string;
+  title: string;
+  description: string;
+  evidence: Record<string, unknown>;
+  status: "open" | "acknowledged" | "resolved";
+  ownerUserId: string | null;
+  createdAt: string;
+}
+
+export interface HrComplianceSummary {
+  totalFindings: number;
+  openFindings: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  generatedAt: string;
+  narrative: string;
+}
+
+interface HrComplianceFindingPayload {
+  check_id?: unknown;
+  employee_id?: unknown;
+  employee_number?: unknown;
+  name?: unknown;
+  department_name?: unknown;
+  check_type?: unknown;
+  severity?: unknown;
+  owner_rule?: unknown;
+  title?: unknown;
+  description?: unknown;
+  evidence?: unknown;
+  status?: unknown;
+  owner_user_id?: unknown;
+  created_at?: unknown;
+}
+
+interface HrComplianceSummaryPayload {
+  total_findings?: unknown;
+  open_findings?: unknown;
+  by_type?: unknown;
+  by_severity?: unknown;
+  generated_at?: unknown;
+  narrative?: unknown;
+}
+
+function mapComplianceFinding(payload: HrComplianceFindingPayload): HrComplianceFinding {
+  const type = String(payload.check_type ?? "document_expiry") as HrComplianceCheckType;
+  const status = String(payload.status ?? "open") as HrComplianceFinding["status"];
+  return {
+    checkId: String(payload.check_id ?? ""),
+    employeeId: payload.employee_id != null ? String(payload.employee_id) : null,
+    employeeNumber: payload.employee_number != null ? String(payload.employee_number) : null,
+    name: payload.name != null ? String(payload.name) : null,
+    departmentName: payload.department_name != null ? String(payload.department_name) : null,
+    checkType: type,
+    severity: String(payload.severity ?? "medium") as HrComplianceFinding["severity"],
+    ownerRule: String(payload.owner_rule ?? ""),
+    title: String(payload.title ?? "Compliance finding"),
+    description: String(payload.description ?? ""),
+    evidence:
+      payload.evidence != null && typeof payload.evidence === "object"
+        ? (payload.evidence as Record<string, unknown>)
+        : {},
+    status,
+    ownerUserId: payload.owner_user_id != null ? String(payload.owner_user_id) : null,
+    createdAt: String(payload.created_at ?? ""),
+  };
+}
+
+function mapComplianceSummary(payload: HrComplianceSummaryPayload): HrComplianceSummary {
+  return {
+    totalFindings: Number(payload.total_findings ?? 0),
+    openFindings: Number(payload.open_findings ?? 0),
+    byType:
+      payload.by_type != null && typeof payload.by_type === "object"
+        ? (payload.by_type as Record<string, number>)
+        : {},
+    bySeverity:
+      payload.by_severity != null && typeof payload.by_severity === "object"
+        ? (payload.by_severity as Record<string, number>)
+        : {},
+    generatedAt: String(payload.generated_at ?? ""),
+    narrative: String(payload.narrative ?? ""),
+  };
+}
+
+/** L1 compliance feed — aggregate counts only, never per-person data. */
+export async function getComplianceSummary(): Promise<HrComplianceSummary> {
+  const response = await fetchWithSession("/api/v1/ai/hr/alerts/compliance", {});
+  if (!response.ok) {
+    throw new ApiError(response.status, "Compliance feed could not be loaded.");
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrComplianceSummaryPayload | null;
+  };
+  if (payload.data && typeof payload.data === "object") {
+    return mapComplianceSummary(payload.data as HrComplianceSummaryPayload);
+  }
+  throw new ApiError(response.status, "Compliance feed could not be loaded.");
+}
+
+/** L2 per-employee compliance findings (needs `erp.hr.ai.individual`). */
+export async function getEmployeeComplianceFindings(
+  employeeId: string,
+): Promise<HrComplianceFinding[]> {
+  const response = await fetchWithSession(
+    `/api/v1/ai/hr/alerts/compliance/${employeeId}`,
+    {},
+  );
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.status === 403
+        ? "erp.hr.ai.individual required for the individual view."
+        : "Compliance findings could not be loaded.",
+    );
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: HrComplianceFindingPayload[] | null;
+  };
+  return Array.isArray(payload.data)
+    ? (payload.data as HrComplianceFindingPayload[]).map(mapComplianceFinding)
+    : [];
+}
+
+/** Move one finding along `acknowledged | resolved` (audited). */
+export async function setComplianceStatus(
+  checkId: string,
+  status: "acknowledged" | "resolved",
+): Promise<HrComplianceFinding> {
+  const response = await apiPost<HrComplianceFindingPayload>(
+    `/api/v1/ai/hr/alerts/compliance/${checkId}/status`,
+    { status },
+  );
+  return mapComplianceFinding(response);
+}
+

@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.integration
 
-_BALANCE_ON_HIRE = 20
+CASUAL_BALANCE_ON_HIRE = 20
 _OLYMPUS = "olympus"
 
 
@@ -157,7 +157,7 @@ async def _audit_count(tenant_id: str, action: str, target: str) -> int:
 async def _materialized_balance(tenant_id: str, employee_id: str) -> int:
     return await _scalar(
         "SELECT balance FROM erp_leave_balances "
-        "WHERE tenant_id = :t AND employee_id = :e AND leave_type = 'annual'",
+        "WHERE tenant_id = :t AND employee_id = :e AND leave_type = 'casual'",
         t=uuid.UUID(tenant_id),
         e=uuid.UUID(employee_id),
     )
@@ -166,7 +166,7 @@ async def _materialized_balance(tenant_id: str, employee_id: str) -> int:
 async def _ledger_sum(tenant_id: str, employee_id: str) -> int:
     return await _scalar(
         "SELECT COALESCE(SUM(qty), 0) FROM erp_leave_movements "
-        "WHERE tenant_id = :t AND employee_id = :e AND leave_type = 'annual'",
+        "WHERE tenant_id = :t AND employee_id = :e AND leave_type = 'casual'",
         t=uuid.UUID(tenant_id),
         e=uuid.UUID(employee_id),
     )
@@ -212,6 +212,25 @@ async def _hire(
     return response.json()["data"]
 
 
+async def _set_leave_policy(client: AsyncClient, headers: dict[str, str]) -> None:
+    """Seed the tenant's LeavePolicy (casual=20) so hire-time accrual kicks in.
+
+    Post-rework (ff822f8) accrual is policy-driven casual+sick: without a
+    policy row the hire accrual produces nothing. The test tenants are created
+    after the migration-time policy seed, so tests set their own.
+    """
+    response = await client.put(
+        "/api/v1/hr/leave/policy",
+        json={
+            "casual_days_per_year": 20,
+            "sick_days_per_year": 8,
+            "effective_from": "2026-01-01",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+
 async def _create_leave_request(
     client: AsyncClient, headers: dict[str, str], employee_id: str, days: int
 ) -> str:
@@ -223,7 +242,7 @@ async def _create_leave_request(
         "/api/v1/hr/leave/requests",
         json={
             "employee_id": employee_id,
-            "leave_type": "annual",
+            "leave_type": "casual",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         },
@@ -245,6 +264,7 @@ class TestConcurrentApprove:
         """Two racing approves of the SAME request: one guard wins."""
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
+        await _set_leave_policy(client, headers)
         employee = await _hire(client, headers)
         request_id = await _create_leave_request(client, headers, employee["id"], 3)
 
@@ -270,8 +290,8 @@ class TestConcurrentApprove:
 
         # Events flush asynchronously after commit (db/session.py after_commit).
         assert await _settle(_event_flushed), "leave.approved event not flushed after commit"
-        assert await _materialized_balance(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
-        assert await _ledger_sum(tenant_id, employee["id"]) == _BALANCE_ON_HIRE - 3
+        assert await _materialized_balance(tenant_id, employee["id"]) == CASUAL_BALANCE_ON_HIRE - 3
+        assert await _ledger_sum(tenant_id, employee["id"]) == CASUAL_BALANCE_ON_HIRE - 3
 
     async def test_concurrent_approve_cross_requests_invariant(
         self,
@@ -293,6 +313,7 @@ class TestConcurrentApprove:
         """
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
+        await _set_leave_policy(client, headers)
         employee = await _hire(client, headers)
         request_a = await _create_leave_request(client, headers, employee["id"], 15)
         request_b = await _create_leave_request(client, headers, employee["id"], 15)
@@ -346,6 +367,7 @@ class TestConcurrentApprove:
         error raised"), and movements == events == approvals."""
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
+        await _set_leave_policy(client, headers)
         employee = await _hire(client, headers)
         request_ids = [
             await _create_leave_request(client, headers, employee["id"], 5) for _ in range(10)
@@ -449,8 +471,10 @@ class TestConcurrentCompute:
         """
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
-        # Hires accrue 2026 annual on hire; the 2027 grants below are FRESH, so
-        # compute_run takes a balance-row lock for every employee it accrues.
+        await _set_leave_policy(client, headers)
+        # Hires accrue 2026 casual+sick on hire; the 2027 grants below are
+        # FRESH, so compute_run takes a balance-row lock for every employee it
+        # accrues.
         employees = [await _hire(client, headers) for _ in range(3)]
         approve_target = employees[1]
 
@@ -478,13 +502,15 @@ class TestConcurrentCompute:
         assert status == "computed"
 
         async def _grants_settled() -> bool:
+            # Post-rework (ff822f8) the 2027 grants are policy-driven: each
+            # employee accrues a movement per accrual type (casual+sick).
             return (
                 await _scalar(
                     "SELECT count(*) FROM erp_leave_movements "
-                    "WHERE tenant_id = :t AND ref_type = 'annual_accrual' AND ref_id = '2027'",
+                    "WHERE tenant_id = :t AND ref_type = 'accrual' AND ref_id = '2027'",
                     t=uuid.UUID(tenant_id),
                 )
-                == 3
+                == len(employees) * 2
             )
 
         assert await _settle(_grants_settled), "2027 grants did not settle"
@@ -520,17 +546,18 @@ class TestConcurrentAccrual:
         is skipped (two grants would be written and balance would diverge)."""
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
+        await _set_leave_policy(client, headers)
         employee = await _hire(client, headers)
 
         results = await asyncio.gather(
             client.post(
                 "/api/v1/hr/leave/accrue",
-                json={"employee_id": employee["id"], "leave_type": "annual", "leave_year": 2027},
+                json={"employee_id": employee["id"], "leave_type": "casual", "leave_year": 2027},
                 headers=headers,
             ),
             client.post(
                 "/api/v1/hr/leave/accrue",
-                json={"employee_id": employee["id"], "leave_type": "annual", "leave_year": 2027},
+                json={"employee_id": employee["id"], "leave_type": "casual", "leave_year": 2027},
                 headers=headers,
             ),
         )
@@ -541,7 +568,7 @@ class TestConcurrentAccrual:
                 await _scalar(
                     "SELECT count(*) FROM erp_leave_movements "
                     "WHERE tenant_id = :t AND employee_id = :e "
-                    "AND ref_type = 'annual_accrual' AND ref_id = '2027'",
+                    "AND ref_type = 'accrual' AND ref_id = '2027'",
                     t=uuid.UUID(tenant_id),
                     e=uuid.UUID(employee["id"]),
                 )
@@ -566,6 +593,7 @@ class TestNoEventOnFailedTransaction:
         """Rule 2 service breach: rejected before any write - pending, no movement, no event."""
         tenant_id = integration_db["acme_id"]
         headers = tenant_headers(_OLYMPUS)
+        await _set_leave_policy(client, headers)
         employee = await _hire(client, headers)
         request_id = await _create_leave_request(client, headers, employee["id"], 30)
 
@@ -578,7 +606,7 @@ class TestNoEventOnFailedTransaction:
         assert await _leave_request_status(tenant_id, request_id) == "pending"
         assert await _approval_movement_count(tenant_id, request_id) == 0
         assert _count_by_type(recorded_events, HR_LEAVE_APPROVED) == 0
-        assert await _materialized_balance(tenant_id, employee["id"]) == _BALANCE_ON_HIRE
+        assert await _materialized_balance(tenant_id, employee["id"]) == CASUAL_BALANCE_ON_HIRE
 
     async def test_duplicate_department_no_event(
         self,
@@ -683,7 +711,7 @@ class TestPostEmitPreCommitFailure:
                         text(
                             "INSERT INTO public.erp_leave_movements "
                             "(tenant_id, id, employee_id, leave_type, qty, ref_type, ref_id) "
-                            "VALUES (:tenant_id, :id, :employee_id, 'annual', 1, "
+                            "VALUES (:tenant_id, :id, :employee_id, 'casual', 1, "
                             "'manual_adjustment', NULL)"
                         ),
                         {

@@ -31,10 +31,12 @@ from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
     from core.features.ai_hr.anomaly_service import AnomalyService
+    from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )
+    from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
     from core.features.ai_hr.quality_service import QualityService
     from core.features.ai_hr.service import AiHrService
     from core.features.ai_hr.suggestion_service import SuggestionService
@@ -43,7 +45,7 @@ if TYPE_CHECKING:
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
     from core.features.finance.automation import FinanceAutomationService
-    from core.features.finance.ports import AuditSink
+    from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
     from core.features.hr.service import (
@@ -53,7 +55,9 @@ if TYPE_CHECKING:
         LeaveService,
     )
     from core.features.inventory.service import InventoryService
+    from core.features.payroll.ports import PayslipApprovedNotifierPort
     from core.features.payroll.service import PayrollService
+    from core.features.payroll_automation.service import PayrollAutomationService
     from core.features.reporting.service import DashboardService
     from core.features.sales.service import SalesService
 
@@ -296,11 +300,21 @@ def get_hr_repo(db: AsyncSession = Depends(get_db)) -> HrRepository:
     return HrRepository(db, next_sequence=SequenceRepository(db).next_value)
 
 
-def get_core_audit_service(db: AsyncSession = Depends(get_db)) -> CoreAuditService:
+def make_core_audit_service(db: AsyncSession) -> CoreAuditService:
+    """Plain factory — build :class:`AuditService` without FastAPI resolution.
+
+    Shared by the FastAPI dependency below and the background payroll
+    automation worker, which constructs its own services on a per-tick session
+    and cannot go through ``Depends``.
+    """
     from core.core.audit_service import AuditService
     from core.db.audit_repository import AuditLogRepository
 
     return AuditService(AuditLogRepository(db))
+
+
+def get_core_audit_service(db: AsyncSession = Depends(get_db)) -> CoreAuditService:
+    return make_core_audit_service(db)
 
 
 def get_department_service(
@@ -371,17 +385,20 @@ def get_attendance_service(
     return AttendanceService(repository=repo, audit=audit)
 
 
-def get_payroll_service(
-    db: AsyncSession = Depends(get_db),
-    audit: CoreAuditService = Depends(get_core_audit_service),
+def make_payroll_service(
+    db: AsyncSession,
+    audit: CoreAuditService | None = None,
+    finance: PayrollAccrualPort | None = None,
+    payslip_notifier: PayslipApprovedNotifierPort | None = None,
 ) -> PayrollService:
-    """Payroll service with ``LeaveService`` injected as the leave ledger.
+    """Plain factory — build :class:`PayrollService` without FastAPI resolution.
 
-    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
-    leave days, accrual-type catalogue, idempotent annual accrual - Rule 4), so
-    the payroll feature never imports the HR feature directly. The HR repository
-    is shared (same ``db`` session), keeping payroll-driven accrual in the same
-    transaction as the compute.
+    Used by the FastAPI dependency below and by the payroll automation worker
+    (which constructs services on its own per-tick session). When ``audit`` is
+    omitted a core audit service on the same session is built. ``finance``
+    (the cross-feature accrual bridge used by ``mark_paid``) and
+    ``payslip_notifier`` (the 0035 approval delivery-gate) are injected only
+    where they are resolvable.
     """
     from core.db.sequence_repository import SequenceRepository
     from core.features.hr.repository import HrRepository
@@ -393,8 +410,83 @@ def get_payroll_service(
         repository=PayrollRepository(db, next_sequence=SequenceRepository(db).next_value),
         leave_ledger=LeaveService(
             repository=HrRepository(db, next_sequence=SequenceRepository(db).next_value),
+            audit=audit or make_core_audit_service(db),
+        ),
+        audit=audit or make_core_audit_service(db),
+        finance=finance,
+        payslip_notifier=payslip_notifier,
+    )
+
+
+def get_payroll_automation_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> PayrollAutomationService:
+    """Composition root for the payroll automation engine (HR-AUT-001).
+
+    The engine shares ONE request-scoped session with its payroll compute seam
+    so item claims, per-employee entries, totals and backend state commit
+    atomically per item. Config drives the retry budget and tick size.
+    """
+    from core.core.config import settings
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
+    from core.features.payroll_automation.repository import PostgresPayrollAutomationRepository
+    from core.features.payroll_automation.service import PayrollAutomationService
+
+    return PayrollAutomationService(
+        repository=PostgresPayrollAutomationRepository(db),
+        payroll=make_payroll_service(db, audit),
+        audit=audit,
+        # Post-commit fan-out: payslip-ready + admin digest (Commit 3). Runs in
+        # the SAME request-scoped session as the finalize commit.
+        notifier=PayrollNotificationOrchestrator(
+            repository=PostgresPayrollNotificationRepository(db),
             audit=audit,
         ),
+        # Stable id so sequential /tick calls act as ONE worker: the claim owners
+        # a batch across ticks and only the same worker may resume it (the batch
+        # stays processing until every item is terminal). A fresh id per request
+        # would dead-lock a half-finished batch for hours.
+        worker_id="manual-tick",
+        max_retries=settings.PAYROLL_AUTO_MAX_RETRIES,
+        items_per_tick=settings.PAYROLL_AUTO_ITEMS_PER_TICK,
+    )
+
+
+def get_payroll_notification_orchestrator(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> object:
+    """Composition root for the notification orchestrator + inbox/pref reads."""
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
+
+    return PayrollNotificationOrchestrator(
+        repository=PostgresPayrollNotificationRepository(db),
+        audit=audit,
+    )
+
+
+def get_payroll_scheduler_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> object:
+    """Composition root for payroll schedules (HR-AUT-001 §5.8)."""
+    from core.features.payroll_automation.schedules import PayrollSchedulerService
+    from core.features.payroll_automation.schedules_repository import (
+        PostgresPayrollScheduleRepository,
+    )
+
+    batches = get_payroll_automation_service(db, audit)
+    return PayrollSchedulerService(
+        repository=PostgresPayrollScheduleRepository(db),
+        payroll=make_payroll_service(db, audit),
+        batches=batches,
         audit=audit,
     )
 
@@ -460,6 +552,38 @@ def get_anomaly_service(
     return AnomalyService(
         repository=AiHrAnomalyRepository(db),
         refresh_days=settings.AI_HR_ANOMALY_SCAN_INTERVAL_DAYS,
+    )
+
+
+def get_payroll_anomaly_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> PayrollAnomalyService:
+    """Composition root for the payroll anomaly scanner (HR-AI-001, Unit B)."""
+    from core.core.config import settings
+    from core.features.ai_hr.payroll_anomaly_repository import AiHrPayrollAnomalyRepository
+    from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
+
+    return PayrollAnomalyService(
+        repository=AiHrPayrollAnomalyRepository(db),
+        refresh_days=settings.AI_HR_PAYROLL_ANOMALY_SCAN_INTERVAL_DAYS,
+        audit=audit,
+    )
+
+
+def get_compliance_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+) -> ComplianceService:
+    """Composition root for the compliance engine v1 (HR-AI-001, Unit C)."""
+    from core.core.config import settings
+    from core.features.ai_hr.compliance_repository import AiHrComplianceRepository
+    from core.features.ai_hr.compliance_service import ComplianceService
+
+    return ComplianceService(
+        repository=AiHrComplianceRepository(db),
+        refresh_days=settings.AI_HR_COMPLIANCE_SCAN_INTERVAL_DAYS,
+        audit=audit,
     )
 
 
@@ -544,12 +668,42 @@ def get_finance_service(
     )
 
 
+def get_payroll_service(
+    db: AsyncSession = Depends(get_db),
+    audit: CoreAuditService = Depends(get_core_audit_service),
+    finance: FinanceService = Depends(get_finance_service),
+) -> PayrollService:
+    """Payroll service with ``LeaveService`` injected as the leave ledger.
+
+    ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
+    leave days, accrual-type catalogue, idempotent annual accrual — Rule 4), so
+    the payroll feature never imports the HR feature directly. The HR repository
+    is shared (same ``db`` session), keeping payroll-driven accrual in the same
+    transaction as the compute. The request-scoped ``FinanceService`` is passed
+    as the accrual bridge so ``mark_paid`` can draft the payroll JE in the same
+    transaction. The notification orchestrator is injected as the 0035
+    delivery-gate so ``approve_payslip`` fires the employee's ``payslip_ready``
+    in the same request-scoped session (approval gates employee delivery).
+    """
+    from core.features.payroll_automation.notifications import PayrollNotificationOrchestrator
+    from core.features.payroll_automation.notifications_repository import (
+        PostgresPayrollNotificationRepository,
+    )
+
+    notifier = PayrollNotificationOrchestrator(
+        repository=PostgresPayrollNotificationRepository(db),
+        audit=audit,
+    )
+    return make_payroll_service(db, audit, finance, payslip_notifier=notifier)
+
+
 def get_finance_automation_service(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> FinanceAutomationService:
     """Composition root for the finance automation feature (SKY-56/SKY-64)."""
     from core.features.audit.repository import AuditRepository
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.repository import FinanceRepository
 
@@ -558,6 +712,7 @@ def get_finance_automation_service(
     return FinanceAutomationService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
+        customers=CrmRepository(db),
     )
 
 
@@ -572,6 +727,7 @@ def get_finance_automation_service_with_ai(
     from core.domain.entities import AccountCodeSuggestion, ChartOfAccount, DraftEntry
     from core.features.ai.router import get_ai_client
     from core.features.audit.repository import AuditRepository
+    from core.features.crm.repository import CrmRepository
     from core.features.finance.ai_suggester import (
         draft_journal_entry_with_ai,
         suggest_account_code_with_ai,
@@ -606,6 +762,7 @@ def get_finance_automation_service_with_ai(
     return FinanceAutomationService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
+        customers=CrmRepository(db),
         ai_suggest=ai_suggest,
         ai_draft=ai_draft,
     )

@@ -30,9 +30,9 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -44,6 +44,8 @@ from core.domain.entities import (
     AiFinanceSuggestion,
     ArAging,
     ArAgingBucket,
+    AuditReadiness,
+    AuditReadinessCheck,
     BalanceSheet,
     BalanceSheetLine,
     CashflowPosition,
@@ -63,12 +65,18 @@ from core.domain.entities import (
     JournalEntry,
     JournalLine,
     Payment,
+    PaymentMethodAnalytics,
+    PaymentMethodAnalyticsEntry,
     PnlLine,
     ProfitAndLoss,
+    RevenueConcentration,
+    RevenueConcentrationEntry,
     TenantSetting,
     TrialBalance,
     TrialBalanceRow,
     WorkingCapitalAlert,
+    WorkingCapitalPosition,
+    WorkingCapitalSeries,
 )
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
@@ -291,6 +299,18 @@ def _end_of_month(month_start: date) -> date:
     if month_start.month == 12:
         return date(month_start.year + 1, 1, 1) - timedelta(days=1)
     return date(month_start.year, month_start.month + 1, 1) - timedelta(days=1)
+
+
+class _AuditReadinessFacts(TypedDict):
+    trial_balanced: bool
+    posted_count: int
+    unposted_count: int
+    open_anomaly_count: int
+    duplicate_group_count: int
+    over90_amount: Decimal
+    total_ar: Decimal
+    open_period_count: int
+    draft_invoice_count: int
 
 
 class FinanceRepository:
@@ -1419,6 +1439,246 @@ class FinanceRepository:
             rows=tuple(rows),
         )
 
+    async def revenue_concentration(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> RevenueConcentration:
+        threshold = Decimal("0.25")
+        stmt = (
+            select(
+                ErpInvoiceModel.customer_id.label("customer_id"),
+                func.coalesce(func.sum(ErpInvoiceModel.total), 0).label("amount"),
+            )
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status == InvoiceStatus.APPROVED,
+                ErpInvoiceModel.invoice_date >= from_date,
+                ErpInvoiceModel.invoice_date <= to_date,
+            )
+            .group_by(ErpInvoiceModel.customer_id)
+            .order_by(func.coalesce(func.sum(ErpInvoiceModel.total), 0).desc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        total_revenue = sum((Decimal(row.amount) for row in rows), Decimal("0"))
+        entries: list[RevenueConcentrationEntry] = []
+        for row in rows:
+            amount = Decimal(row.amount)
+            share = amount / total_revenue if total_revenue else Decimal("0")
+            share = share.quantize(Decimal("0.0001"))
+            entries.append(
+                RevenueConcentrationEntry(
+                    customer_id=row.customer_id,
+                    customer_name=None,  # resolved by the service via CustomerPort
+                    amount=amount,
+                    share=share,
+                    above_threshold=share >= threshold,
+                )
+            )
+        return RevenueConcentration(
+            from_date=from_date,
+            to_date=to_date,
+            threshold=threshold,
+            total_revenue=total_revenue,
+            entries=tuple(entries),
+        )
+
+    async def working_capital_series(
+        self, tenant_id: uuid.UUID, as_of: date, months: int = 6
+    ) -> WorkingCapitalSeries:
+        positions: list[WorkingCapitalPosition] = []
+        for i in range(months):
+            month_start = date(
+                as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1
+            )
+            month_end = _end_of_month(month_start)
+            balance = await self.balance_sheet(tenant_id, month_end)
+            assets = balance.total_assets
+            liabilities = balance.total_liabilities
+            positions.append(
+                WorkingCapitalPosition(
+                    month=month_start.strftime("%Y-%m"),
+                    assets=assets,
+                    liabilities=liabilities,
+                    working_capital=assets - liabilities,
+                )
+            )
+        positions.reverse()
+        return WorkingCapitalSeries(positions=tuple(positions))
+
+    async def payment_method_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> PaymentMethodAnalytics:
+        # Normalize the stored method so inconsistent values like
+        # "bank transfer" and "bank_transfer" collapse to one channel.
+        method_expr = func.lower(func.replace(ErpPaymentModel.method, " ", "_"))
+        stmt = (
+            select(
+                method_expr.label("method"),
+                func.count(ErpPaymentModel.id).label("cnt"),
+                func.coalesce(func.sum(ErpPaymentModel.amount), 0).label("amount"),
+            )
+            .where(
+                ErpPaymentModel.tenant_id == tenant_id,
+                ErpPaymentModel.status == PaymentStatus.APPLIED,
+                func.date(ErpPaymentModel.paid_at) >= from_date,
+                func.date(ErpPaymentModel.paid_at) <= to_date,
+            )
+            .group_by(method_expr)
+            .order_by(func.coalesce(func.sum(ErpPaymentModel.amount), 0).desc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        total_amount = sum((Decimal(row.amount) for row in rows), Decimal("0"))
+        entries: list[PaymentMethodAnalyticsEntry] = []
+        for row in rows:
+            amount = Decimal(row.amount)
+            share = amount / total_amount if total_amount else Decimal("0")
+            share = share.quantize(Decimal("0.0001"))
+            entries.append(
+                PaymentMethodAnalyticsEntry(
+                    method=row.method,
+                    count=row.cnt,
+                    amount=amount,
+                    share=share,
+                )
+            )
+        return PaymentMethodAnalytics(
+            from_date=from_date,
+            to_date=to_date,
+            total_amount=total_amount,
+            entries=tuple(entries),
+        )
+
+    # Config array of audit-readiness checks (B32). Each entry is
+    # ``(key, label, checker_method_name)``; tenants extend by adding entries
+    # here. The checker method receives the gathered ``facts`` dict.
+    _AUDIT_READINESS_CHECKS: tuple[tuple[str, str, str], ...] = (
+        ("trial_balance_balanced", "Trial balance balanced", "_readiness_trial_balanced"),
+        ("journal_entries_posted", "Journal entries posted", "_readiness_entries_posted"),
+        ("no_open_anomalies", "No open anomalies", "_readiness_no_open_anomalies"),
+        ("no_duplicate_entries", "No duplicate entries", "_readiness_no_duplicates"),
+        ("ar_overdue_monitored", "Overdue receivables monitored", "_readiness_ar_overdue"),
+        ("current_period_open", "Current fiscal period open", "_readiness_period_open"),
+        ("invoices_resolved", "No stale draft invoices", "_readiness_invoices_resolved"),
+        ("ledger_has_activity", "Ledger has activity", "_readiness_ledger_activity"),
+    )
+
+    async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness:
+        from datetime import date as _date
+
+        today = _date.today()
+        trial = await self.trial_balance(tenant_id, today)
+        entries = await self.list_journal_entries(tenant_id, limit=1000)
+        posted_count = sum(1 for e in entries if e.status == EntryStatus.POSTED)
+        unposted_count = len(entries) - posted_count
+        open_anomalies = await self.list_open_ai_anomalies(tenant_id)
+        dup_groups = await self.duplicates(tenant_id)
+        aging = await self.ar_aging(tenant_id, today)
+        over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
+        periods = await self.list_fiscal_periods(tenant_id)
+        draft_invoices = await self._count_invoice_status(tenant_id, InvoiceStatus.DRAFT)
+
+        facts: _AuditReadinessFacts = {
+            "trial_balanced": trial.total_debit == trial.total_credit,
+            "posted_count": posted_count,
+            "unposted_count": unposted_count,
+            "open_anomaly_count": len(open_anomalies),
+            "duplicate_group_count": sum(1 for g in dup_groups if len(g.entries) > 1),
+            "over90_amount": over_90.amount if over_90 else Decimal("0"),
+            "total_ar": aging.total_ar,
+            "open_period_count": sum(1 for p in periods if not p.is_closed and p.end_date >= today),
+            "draft_invoice_count": draft_invoices,
+        }
+
+        checks: list[AuditReadinessCheck] = []
+        for key, label, method in self._AUDIT_READINESS_CHECKS:
+            status, detail = getattr(self, method)(facts)
+            checks.append(AuditReadinessCheck(key=key, label=label, status=status, detail=detail))
+        ready = all(c.status == "ok" for c in checks)
+        return AuditReadiness(ready=ready, checks=tuple(checks))
+
+    async def _count_invoice_status(self, tenant_id: uuid.UUID, status: InvoiceStatus) -> int:
+        stmt = select(func.count(ErpInvoiceModel.id)).where(
+            ErpInvoiceModel.tenant_id == tenant_id,
+            ErpInvoiceModel.status == status,
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    @staticmethod
+    def _readiness_trial_balanced(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["trial_balanced"]
+        return ("ok" if ok else "missing"), (None if ok else "Debits and credits do not match")
+
+    @staticmethod
+    def _readiness_entries_posted(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["posted_count"] > 0 and facts["unposted_count"] == 0
+        return (
+            "ok" if ok else "missing",
+            None if ok else "Unposted journal entries remain or the ledger is empty",
+        )
+
+    @staticmethod
+    def _readiness_no_open_anomalies(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["open_anomaly_count"]
+        return (
+            "ok" if count == 0 else "warning",
+            None if count == 0 else f"{count} open anomaly(s) to review",
+        )
+
+    @staticmethod
+    def _readiness_no_duplicates(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["duplicate_group_count"]
+        return (
+            "ok" if count == 0 else "missing",
+            None if count == 0 else f"{count} duplicate entry group(s) to resolve",
+        )
+
+    @staticmethod
+    def _readiness_ar_overdue(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        ok = facts["total_ar"] == 0 or facts["over90_amount"] <= facts["total_ar"] * Decimal("0.2")
+        return (
+            "ok" if ok else "warning",
+            None if ok else "Receivables more than 90 days overdue exceed 20% of AR",
+        )
+
+    @staticmethod
+    def _readiness_period_open(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["open_period_count"]
+        return (
+            "ok" if count > 0 else "missing",
+            None if count > 0 else "No current fiscal period is open",
+        )
+
+    @staticmethod
+    def _readiness_invoices_resolved(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["draft_invoice_count"]
+        return (
+            "ok" if count == 0 else "warning",
+            None if count == 0 else f"{count} draft invoice(s) awaiting completion",
+        )
+
+    @staticmethod
+    def _readiness_ledger_activity(
+        facts: _AuditReadinessFacts,
+    ) -> tuple[str, str | None]:
+        count = facts["posted_count"]
+        return (
+            "ok" if count > 0 else "missing",
+            None if count > 0 else "No posted journal entries found",
+        )
+
     async def reverse_journal_entry(
         self,
         entry_id: uuid.UUID,
@@ -1533,6 +1793,32 @@ class FinanceRepository:
         )
         models = (await self.session.execute(stmt)).scalars().all()
         return [_ai_anomaly_from_orm(m) for m in models]
+
+    async def close_stale_anomalies(
+        self,
+        tenant_id: uuid.UUID,
+        anomaly_type: str,
+        keep_entity_ids: set[uuid.UUID],
+    ) -> int:
+        """Close open anomalies whose source entity is no longer affected.
+
+        Called by the anomaly scan so a duplicate that has since been resolved
+        (e.g. one copy was reversed) stops surfacing as an open anomaly.
+        Returns the number of anomalies closed.
+        """
+        stmt = select(AiFinanceAnomalyModel).where(
+            AiFinanceAnomalyModel.tenant_id == tenant_id,
+            AiFinanceAnomalyModel.anomaly_type == anomaly_type,
+            AiFinanceAnomalyModel.status == "open",
+        )
+        if keep_entity_ids:
+            stmt = stmt.where(AiFinanceAnomalyModel.entity_id.notin_(tuple(keep_entity_ids)))
+        models = (await self.session.execute(stmt)).scalars().all()
+        now = datetime.now(UTC)
+        for model in models:
+            model.status = "closed"
+            model.reviewed_at = now
+        return len(models)
 
     async def get_ai_anomaly(
         self, tenant_id: uuid.UUID, anomaly_id: uuid.UUID

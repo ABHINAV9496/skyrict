@@ -54,16 +54,17 @@ def seed(
     tenant_id: str = typer.Option(
         None,
         "--tenant-id",
-        help="UUID of a tenant to seed HR/Payroll defaults + core RBAC roles",
+        help="UUID of a tenant to seed HR/Payroll defaults + reporting pack + core RBAC roles",
     ),
 ) -> None:
-    """Seed reference + per-tenant HR/Payroll defaults and core RBAC roles.
+    """Seed reference + per-tenant defaults and core RBAC roles.
 
     Reference data (erp_currencies, core_permissions) is seeded by migration
     0001 itself, so this command always verifies those rows are present. With
     ``--tenant-id`` it additionally seeds that tenant's leave-type catalogue
-    defaults, the single payroll-settings row, and the five system roles in
-    ``core_roles`` (core.seed) - idempotent.
+    defaults, the single payroll-settings row, the Phase-1 reporting pack in
+    ``erp_report_definitions``, and the five system roles in ``core_roles``
+    (core.seed) - idempotent.
     """
     import asyncio
 
@@ -85,11 +86,18 @@ def seed(
             typer.echo(f"core_permissions: {permission_count} rows")
 
     async def _seed_tenant() -> None:
-        from core.seed import seed_core_roles_for_tenant, seed_tenant_hr_defaults
+        from core.seed import (
+            seed_core_roles_for_tenant,
+            seed_reporting_defaults,
+            seed_tenant_hr_defaults,
+        )
 
         await seed_tenant_hr_defaults(uuid.UUID(tenant_id))
+        await seed_reporting_defaults(uuid.UUID(tenant_id))
         await seed_core_roles_for_tenant(uuid.UUID(tenant_id))
-        typer.echo(f"seeded HR/Payroll defaults + core RBAC roles for tenant {tenant_id}")
+        typer.echo(
+            f"seeded HR/Payroll defaults + reporting pack + core RBAC roles for tenant {tenant_id}"
+        )
 
     async def _run() -> None:
         await _verify()
@@ -166,6 +174,12 @@ def seed_demo(
         "--force",
         help="Clear existing demo data for the tenant, then reseed",
     ),
+    employees: int = typer.Option(
+        15,
+        "--employees",
+        min=1,
+        help="Number of employees to seed (15 default; 50 for the payroll automation acceptance scrub)",
+    ),
 ) -> None:
     """Seed 10+ demo records per ERP module (Finance, HR, Payroll, Sales).
 
@@ -200,7 +214,7 @@ def seed_demo(
 
         from core.seed_demo import seed_demo_data
 
-        counts = await seed_demo_data(target, force=force)
+        counts = await seed_demo_data(target, force=force, employees=employees)
         typer.echo(f"seeded demo data for tenant {target}:")
         for key, value in counts.items():
             typer.echo(f"  {key}: {value}")

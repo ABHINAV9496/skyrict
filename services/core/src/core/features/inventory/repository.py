@@ -22,7 +22,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import Select, and_, case, func, or_, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 
 from core.domain.entities import (
@@ -37,7 +36,6 @@ from core.domain.entities import (
 )
 from core.domain.value_objects import Money, StockMovementType
 from core.features.inventory.models.product import ErpProductModel
-from core.features.inventory.models.report_snapshot import ErpReportSnapshotModel
 from core.features.inventory.models.stock_level import ErpStockLevelModel
 from core.features.inventory.models.stock_movement import ErpStockMovementModel
 from core.features.inventory.models.warehouse import ErpWarehouseModel
@@ -758,7 +756,7 @@ class InventoryRepository:
     # ------------------------------------------------------------------
     # Stock-health analytics (INV-ANL-001) — read-only, tenant-scoped.
     #
-    # All queries are indexed for the analytics access path by migration 0031
+    # All queries are indexed for the analytics access path by migration 0037
     # (ix_erp_stock_movements_tenant_wh_type_created) and filter on tenant_id
     # first so RLS + index agree. Valuations are computed at cost_price on the
     # SERVER only; the router gates the money fields behind erp.inventory.cost.
@@ -1072,57 +1070,6 @@ class InventoryRepository:
             slow_mover_count=slow_count,
             tied_up_capital=Money(tied_up, currency),
         )
-
-    async def save_snapshot(
-        self,
-        tenant_id: uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-        payload: dict[str, Any],
-    ) -> None:
-        """Persist one computed report payload under (tenant, definition, period).
-
-        The composite unique constraint makes refreshes idempotent: re-saving the
-        same definition+period in a closed period replaces the prior snapshot.
-        """
-        await self.session.execute(
-            pg_insert(ErpReportSnapshotModel)
-            .values(
-                tenant_id=tenant_id,
-                id=uuid.uuid4(),
-                definition_slug=definition_slug,
-                period=period,
-                payload=payload,
-                generated_at=datetime.now(UTC),
-            )
-            .on_conflict_do_update(
-                constraint="uq_erp_report_snapshots_def_period",
-                set_={
-                    "payload": payload,
-                    "generated_at": datetime.now(UTC),
-                },
-            )
-        )
-
-    async def get_snapshot(
-        self,
-        tenant_id: uuid.UUID,
-        *,
-        definition_slug: str,
-        period: str,
-    ) -> dict[str, Any] | None:
-        stmt = (
-            select(ErpReportSnapshotModel.payload)
-            .where(
-                ErpReportSnapshotModel.tenant_id == tenant_id,
-                ErpReportSnapshotModel.definition_slug == definition_slug,
-                ErpReportSnapshotModel.period == period,
-            )
-            .order_by(ErpReportSnapshotModel.generated_at.desc())
-            .limit(1)
-        )
-        return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def commit(self) -> None:
         """Commit the current transaction - services own the transaction lifecycle."""

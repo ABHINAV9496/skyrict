@@ -242,7 +242,7 @@ class AiHrAttritionRepository:
         )
         await self.session.execute(stmt)
 
-    async def _latest_run_subq(self, tenant_id: uuid.UUID) -> Any:
+    def _latest_run_subq(self, tenant_id: uuid.UUID) -> Any:
         return (
             select(func.max(AttritionScoreModel.generated_at).label("max_at"))
             .where(AttritionScoreModel.tenant_id == tenant_id)

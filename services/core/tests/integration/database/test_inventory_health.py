@@ -344,20 +344,3 @@ class TestHealthSummary:
             assert summary.tied_up_capital.currency == "USD"
             # D-1 cost 2 * 10 + D-3 cost 4 * 5 = 40
             assert summary.tied_up_capital.amount == Decimal("40")
-
-
-class TestReportSnapshots:
-    async def test_save_and_get_idempotent(self, health_world: dict[str, str]) -> None:
-        tenant = _u(health_world["tenant_slow"])
-        payload = {"dead_stock_count": 0, "slow_mover_count": 2}
-        async with async_session_factory() as session:
-            repo = InventoryRepository(session)
-            await repo.save_snapshot(
-                tenant, definition_slug="stock_health", period="2026-Q3", payload=payload
-            )
-            await session.commit()
-            stored = await repo.get_snapshot(
-                tenant, definition_slug="stock_health", period="2026-Q3"
-            )
-            await session.commit()
-            assert stored == payload

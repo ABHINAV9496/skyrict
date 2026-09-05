@@ -198,7 +198,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
-exclude = ['services/_template/', '(^|/)tests/']
+exclude = ['services/_template/', '(^|/)tests/', 'alembic/env\.py']
 
 [[tool.mypy.overrides]]
 # Third-party packages without type stubs - treat as Any.
@@ -229,6 +229,12 @@ module = ["shap", "sklearn", "sklearn.*", "numba", "numba.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# reportlab ships no type stubs (payslip PDF renderer) — treat as Any.
+module = ["reportlab", "reportlab.lib.*", "reportlab.platypus.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# factory_boy ships py.typed but is only partially typed — treat as Any.
 # factory_boy ships py.typed but is only partially typed - treat as Any.
 module = ["factory"]
 follow_imports = "skip"

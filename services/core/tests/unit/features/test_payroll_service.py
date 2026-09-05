@@ -6,6 +6,7 @@ the btree_gist exclusion constraint and RLS stay in the integration suite.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
@@ -18,7 +19,12 @@ from core.core.audit_events import (
     PAYROLL_RUN_CREATED,
 )
 from core.core.audit_service import AuditService
-from core.core.constants import EmploymentStatus, PayrollRounding, PayrollRunStatus
+from core.core.constants import (
+    EmploymentStatus,
+    PayrollJeBridgeStatus,
+    PayrollRounding,
+    PayrollRunStatus,
+)
 from core.core.exceptions import (
     IllegalStateTransitionError,
     PayrollEntryImmutableError,
@@ -26,6 +32,7 @@ from core.core.exceptions import (
 )
 from core.domain import entities as ent
 from core.domain.value_objects import Money
+from core.features.finance.ports import PayrollAccrualOutcome
 from core.features.payroll.service import PayrollService
 
 if TYPE_CHECKING:
@@ -35,6 +42,7 @@ pytestmark = pytest.mark.unit
 
 TENANT = uuid.uuid4()
 EMPLOYEE = uuid.uuid4()
+EMPLOYEE2 = uuid.uuid4()
 ACTOR = uuid.uuid4()
 
 
@@ -112,6 +120,35 @@ class FakeLeaveLedger:
         self.accrued.append((employee_id, leave_type, year))
 
 
+class FakeFinanceAccrual:
+    """In-memory ``PayrollAccrualPort`` double."""
+
+    def __init__(self, *, missing_accounts: bool = False, disabled: bool = False) -> None:
+        self.missing_accounts = missing_accounts
+        self.disabled = disabled
+        self.calls: list[tuple[uuid.UUID, uuid.UUID, Decimal, Decimal]] = []
+
+    async def create_payroll_accrual_draft(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        run_id: uuid.UUID,
+        entry_date: date,
+        gross: Decimal,
+        net: Decimal,
+    ) -> PayrollAccrualOutcome:
+        if self.disabled:
+            raise AssertionError("accrual bridge must not be called")
+        self.calls.append((tenant_id, run_id, gross, net))
+        if self.missing_accounts:
+            return PayrollAccrualOutcome(
+                entry_id=None, missing_accounts=["5010", "2010", "2020"], already_booked=False
+            )
+        return PayrollAccrualOutcome(
+            entry_id=uuid.uuid4(), missing_accounts=[], already_booked=False
+        )
+
+
 class FakePayrollRepository:
     """In-memory ``PayrollRepositoryPort`` double."""
 
@@ -122,6 +159,7 @@ class FakePayrollRepository:
         self.settings: dict[uuid.UUID, ent.PayrollSettings] = {}
         self.run_numbers = 0
         self.employees: list[ent.Employee] = []
+        self.reviews: list[ent.PayslipReview] = []
 
     async def create_compensation(self, compensation: ent.Compensation) -> ent.Compensation:
         self.compensation.append(compensation)
@@ -263,15 +301,157 @@ class FakePayrollRepository:
     ):
         return self.employees
 
+    async def set_run_je_bridge_status(
+        self,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: PayrollJeBridgeStatus,
+    ) -> ent.PayrollRun | None:
+        current = self.runs.get(run_id)
+        if current is None:
+            return None
+        updated = dataclasses.replace(current, je_bridge_status=status)
+        self.runs[run_id] = updated
+        return updated
+
+    async def get_employee(
+        self, tenant_id: uuid.UUID, employee_id: uuid.UUID
+    ) -> ent.Employee | None:
+        for employee in self.employees:
+            if employee.id == employee_id:
+                return employee
+        return None
+
+    async def materialize_payslip_reviews(
+        self,
+        run_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        payslips: Sequence[ent.Payslip],
+    ) -> int:
+        written = 0
+        for payslip in payslips:
+            existing = next(
+                (
+                    p
+                    for p in self.reviews
+                    if p.run_id == run_id
+                    and p.employee_id == payslip.employee_id
+                    and p.status == "draft"
+                ),
+                None,
+            )
+            if existing is not None:
+                self.reviews.remove(existing)
+            max_version = max(
+                (
+                    p.version
+                    for p in self.reviews
+                    if p.run_id == run_id and p.employee_id == payslip.employee_id
+                ),
+                default=0,
+            )
+            self.reviews.append(
+                ent.PayslipReview(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    employee_id=payslip.employee_id,
+                    employee_number=payslip.employee_number,
+                    employee_name=payslip.employee_name,
+                    gross=payslip.gross,
+                    deductions=payslip.deductions,
+                    net=payslip.net,
+                    status="draft",
+                    version=max_version + 1,
+                    id=uuid.uuid4(),
+                )
+            )
+            written += 1
+        return written
+
+    async def list_payslip_reviews(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        run_id: uuid.UUID | None = None,
+        limit: int = 200,
+    ) -> Sequence[ent.PayslipReview]:
+        rows = [r for r in self.reviews if r.tenant_id == tenant_id]
+        if status is not None:
+            rows = [r for r in rows if r.status == status]
+        if run_id is not None:
+            rows = [r for r in rows if r.run_id == run_id]
+        return rows[:limit]
+
+    async def get_payslip_review(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None:
+        return next(
+            (r for r in self.reviews if r.id == payslip_id and r.tenant_id == tenant_id), None
+        )
+
+    async def transition_payslip_review(
+        self,
+        payslip_id: uuid.UUID,
+        from_status: str,
+        to_status: str,
+        *,
+        tenant_id: uuid.UUID,
+        reviewed_by: uuid.UUID | None = None,
+        reviewed_at: object | None = None,
+        rejected_reason: str | None = None,
+    ) -> ent.PayslipReview | None:
+        for index, r in enumerate(self.reviews):
+            if r.id == payslip_id and r.tenant_id == tenant_id and r.status == from_status:
+                values: dict[str, object] = {"status": to_status}
+                if to_status == "approved":
+                    values["reviewed_by"] = reviewed_by
+                    values["reviewed_at"] = reviewed_at
+                elif to_status == "rejected":
+                    values["rejected_by"] = reviewed_by
+                    values["rejected_at"] = reviewed_at
+                    values["rejected_reason"] = rejected_reason
+                updated = dataclasses.replace(r, **values)
+                self.reviews[index] = updated
+                return updated
+        return None
+
+    async def bump_payslip_review_version(
+        self, payslip_id: uuid.UUID, *, tenant_id: uuid.UUID
+    ) -> ent.PayslipReview | None:
+        source = next(
+            (r for r in self.reviews if r.id == payslip_id and r.tenant_id == tenant_id), None
+        )
+        if source is None:
+            return None
+        bumped = dataclasses.replace(
+            source,
+            id=uuid.uuid4(),
+            status="draft",
+            version=source.version + 1,
+            reviewed_by=None,
+            reviewed_at=None,
+            rejected_by=None,
+            rejected_at=None,
+            rejected_reason=None,
+        )
+        self.reviews.append(bumped)
+        return bumped
+
 
 def _service(
     repo: FakePayrollRepository | None = None,
     ledger: FakeLeaveLedger | None = None,
+    finance: FakeFinanceAccrual | None = None,
 ) -> tuple[PayrollService, FakePayrollRepository, FakeAuditRepository]:
     fake = repo or FakePayrollRepository()
     audit = FakeAuditRepository()
     service = PayrollService(
-        repository=fake, leave_ledger=ledger or FakeLeaveLedger(), audit=AuditService(audit)
+        repository=fake,
+        leave_ledger=ledger or FakeLeaveLedger(),
+        audit=AuditService(audit),
+        finance=finance,
     )
     return service, fake, audit
 
@@ -862,3 +1042,160 @@ class TestSettings:
         fetched = await service.get_settings(TENANT)
         assert fetched is not None and fetched.tax_rate == Decimal("0")
         assert repo.settings[TENANT].tenant_id == TENANT
+
+
+def _employee2() -> ent.Employee:
+    return ent.Employee(
+        tenant_id=TENANT,
+        employee_number="EMP-2",
+        first_name="C",
+        last_name="D",
+        job_title="Analyst",
+        hire_date=date(2021, 5, 1),
+        employment_status=EmploymentStatus.ACTIVE,
+        id=EMPLOYEE2,
+    )
+
+
+async def _approved_run(service: PayrollService, repo: FakePayrollRepository) -> ent.PayrollRun:
+    repo.settings[TENANT] = _settings()
+    repo.employees = [_employee()]
+    await repo.create_compensation(
+        ent.Compensation(
+            tenant_id=TENANT,
+            employee_id=EMPLOYEE,
+            monthly_salary=_money("3000"),
+            effective_from=date(2024, 1, 1),
+            is_active=True,
+            id=uuid.uuid4(),
+        )
+    )
+    run = await _create_run(service)
+    await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+    await service.approve_run(run_id=run.id, tenant_id=TENANT, approved_by=ACTOR)
+    return await service.get_run(run.id, tenant_id=TENANT)
+
+
+class TestJeBridge:
+    async def test_mark_paid_drafts_accrual_when_chart_present(self) -> None:
+        finance = FakeFinanceAccrual()
+        service, repo, _ = _service(finance=finance)
+        run = await _approved_run(service, repo)
+        gross = run.total_gross.amount
+        net = run.total_net.amount
+
+        paid = await service.mark_paid(run_id=run.id, tenant_id=TENANT, paid_by=ACTOR)
+
+        assert paid.status == PayrollRunStatus.PAID
+        assert paid.je_bridge_status == PayrollJeBridgeStatus.DRAFT
+        assert len(finance.calls) == 1
+        _, run_uuid, call_gross, call_net = finance.calls[0]
+        assert run_uuid == run.id
+        assert call_gross == gross
+        assert call_net == net
+
+    async def test_mark_paid_pending_when_chart_missing(self) -> None:
+        finance = FakeFinanceAccrual(missing_accounts=True)
+        service, repo, _ = _service(finance=finance)
+        run = await _approved_run(service, repo)
+
+        paid = await service.mark_paid(run_id=run.id, tenant_id=TENANT, paid_by=ACTOR)
+
+        assert paid.status == PayrollRunStatus.PAID
+        assert paid.je_bridge_status == PayrollJeBridgeStatus.PENDING
+
+    async def test_mark_paid_no_bridge_when_flag_disabled(self) -> None:
+        finance = FakeFinanceAccrual(disabled=True)
+        service, repo, _ = _service(finance=finance)
+        run = await _approved_run(service, repo)
+        disabled = _settings()
+        assert disabled.je_bridge_enabled is True
+        repo.settings[TENANT] = dataclasses.replace(disabled, je_bridge_enabled=False)
+
+        paid = await service.mark_paid(run_id=run.id, tenant_id=TENANT, paid_by=ACTOR)
+
+        assert paid.je_bridge_status == PayrollJeBridgeStatus.NONE
+
+    async def test_mark_paid_no_bridge_without_finance_port(self) -> None:
+        service, repo, _ = _service()
+        run = await _approved_run(service, repo)
+        paid = await service.mark_paid(run_id=run.id, tenant_id=TENANT, paid_by=ACTOR)
+        assert paid.je_bridge_status == PayrollJeBridgeStatus.NONE
+
+
+class TestPayslips:
+    async def test_list_run_payslips_returns_frozen_entries(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee(), _employee2()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE2,
+                monthly_salary=_money("1500"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        result = await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+        assert len(result.entries) == 2
+
+        payslips = await service.list_run_payslips(run.id, tenant_id=TENANT)
+
+        assert [p.employee_number for p in payslips] == ["EMP-1", "EMP-2"]
+        assert payslips[0].gross.amount == Decimal("3000")
+        assert payslips[1].net.amount == Decimal("1500")
+
+    async def test_list_run_payslips_empty_on_draft_run(self) -> None:
+        service, _, _ = _service()
+        run = await _create_run(service)
+        assert await service.list_run_payslips(run.id, tenant_id=TENANT) == []
+
+    async def test_list_run_payslips_unknown_run_raises(self) -> None:
+        service, _, _ = _service()
+        with pytest.raises(ValueError):
+            await service.list_run_payslips(uuid.uuid4(), tenant_id=TENANT)
+
+    async def test_render_payslip_pdf_returns_valid_pdf(self) -> None:
+        service, repo, _ = _service()
+        repo.settings[TENANT] = _settings()
+        repo.employees = [_employee()]
+        await repo.create_compensation(
+            ent.Compensation(
+                tenant_id=TENANT,
+                employee_id=EMPLOYEE,
+                monthly_salary=_money("3000"),
+                effective_from=date(2024, 1, 1),
+                is_active=True,
+                id=uuid.uuid4(),
+            )
+        )
+        run = await _create_run(service)
+        await service.compute_run(run_id=run.id, tenant_id=TENANT, actor_user_id=ACTOR)
+
+        reviews = await service.list_payable_payslips(TENANT)
+        assert len(reviews) == 1
+        review = reviews[0]
+        assert review.id is not None
+
+        pdf_bytes = await service.render_payslip_pdf(review.id, tenant_id=TENANT)
+
+        assert pdf_bytes.startswith(b"%PDF")
+        assert b"%%EOF" in pdf_bytes
+
+    async def test_render_payslip_pdf_unknown_review_raises(self) -> None:
+        service, _, _ = _service()
+        with pytest.raises(ValueError):
+            await service.render_payslip_pdf(uuid.uuid4(), tenant_id=TENANT)

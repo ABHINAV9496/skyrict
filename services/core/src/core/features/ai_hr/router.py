@@ -27,10 +27,12 @@ from fastapi.responses import JSONResponse, Response
 from core.api.deps import (
     get_ai_hr_service,
     get_anomaly_service,
+    get_compliance_service,
     get_current_user,
     get_eval_repository,
     get_hr_ai_individual,
     get_pattern_data_repository,
+    get_payroll_anomaly_service,
     get_quality_service,
     get_suggestion_service,
     get_utilization_service,
@@ -51,13 +53,18 @@ from core.features.ai.router import get_ai_client
 from core.features.ai_hr.anomaly_service import AnomalyService
 from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
+from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
+from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
 from core.features.ai_hr.schemas import (
     AnomalyOrgOut,
     AttritionDetailOut,
     AttritionSummaryOut,
+    ComplianceFindingOut,
+    ComplianceOrgOut,
+    ComplianceStatusWrite,
     EmployeeQualityOut,
     HrEvalRunWrite,
     HrEvalWriteOut,
@@ -66,6 +73,9 @@ from core.features.ai_hr.schemas import (
     LeaveBlackoutWrite,
     LeaveSuggestionOut,
     OverviewOut,
+    PayrollAnomalyDispositionWrite,
+    PayrollAnomalyOrgOut,
+    PayrollAnomalyOut,
     PublicHolidayOut,
     PublicHolidayWrite,
     QualityOrgOut,
@@ -78,9 +88,13 @@ from core.features.ai_hr.schemas import (
     anomaly_to_out,
     attrition_l1_to_out,
     attrition_l2_to_out,
+    compliance_finding_to_out,
+    compliance_org_to_out,
     employee_quality_to_out,
     leave_blackout_to_out,
     overview_to_out,
+    payroll_anomaly_org_to_out,
+    payroll_anomaly_to_out,
     public_holiday_to_out,
     quality_org_to_out,
     suggestion_org_to_out,
@@ -118,6 +132,8 @@ _QualityServiceDep = Annotated[QualityService, Depends(get_quality_service)]
 _UtilizationServiceDep = Annotated[UtilizationService, Depends(get_utilization_service)]
 _AnomalyServiceDep = Annotated[AnomalyService, Depends(get_anomaly_service)]
 _SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_service)]
+_PayrollAnomalyServiceDep = Annotated[PayrollAnomalyService, Depends(get_payroll_anomaly_service)]
+_ComplianceServiceDep = Annotated[ComplianceService, Depends(get_compliance_service)]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
 _PatternDataRepositoryDep = Annotated[
     AiHrPatternDataRepository, Depends(get_pattern_data_repository)
@@ -340,6 +356,71 @@ async def anomaly_employee(
     )
 
 
+@router.get("/alerts/payroll", response_model=ResponseEnvelope[PayrollAnomalyOrgOut])
+async def payroll_anomaly_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+) -> ResponseEnvelope[PayrollAnomalyOrgOut]:
+    """L1 payroll anomaly feed (HR-AI-001, Unit B). No per-person values."""
+    summary = await payroll_anomaly_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=payroll_anomaly_org_to_out(summary),
+        message="HR AI payroll anomaly feed retrieved",
+    )
+
+
+@router.get(
+    "/alerts/payroll/{employee_id}",
+    response_model=ResponseEnvelope[list[PayrollAnomalyOut]],
+)
+async def payroll_anomaly_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[PayrollAnomalyOut]] | JSONResponse:
+    """L2 per-employee payroll findings for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    findings = await payroll_anomaly_service.employee_anomalies(
+        _tenant_id(current_user), employee_id
+    )
+    return ResponseEnvelope(
+        data=[payroll_anomaly_to_out(a) for a in findings],
+        message="HR AI employee payroll anomaly findings retrieved",
+    )
+
+
+@router.post(
+    "/alerts/payroll/{anomaly_id}/disposition",
+    response_model=ResponseEnvelope[PayrollAnomalyOut],
+)
+async def payroll_anomaly_disposition(
+    anomaly_id: uuid.UUID,
+    body: PayrollAnomalyDispositionWrite,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiAckDep,
+    payroll_anomaly_service: _PayrollAnomalyServiceDep,
+) -> ResponseEnvelope[PayrollAnomalyOut]:
+    """Move one payroll finding along (acknowledged|dismissed|resolved)."""
+    updated = await payroll_anomaly_service.set_disposition(
+        _tenant_id(current_user),
+        anomaly_id,
+        status=body.status,
+        actor_user_id=current_user["user_id"],
+    )
+    return ResponseEnvelope(
+        data=payroll_anomaly_to_out(updated),
+        message="Payroll anomaly disposition applied",
+    )
+
+
 @router.get("/suggestions", response_model=ResponseEnvelope[SuggestionOrgOut])
 async def suggestion_org(
     _invoke: _AiInvokeDep,
@@ -547,7 +628,7 @@ async def copilot_chat(
     upstream = await forward_to_ai_agent(
         client,
         method=request.method,
-        upstream_path="/ai/hr/copilot/chat",
+        upstream_path="/api/v1/ai/hr/copilot/chat",
         authorization=request.headers.get("authorization"),
         tenant_slug=derive_tenant_slug(request),
         body=body,
@@ -576,4 +657,67 @@ async def record_eval_runs(
     return ResponseEnvelope(
         data=HrEvalWriteOut(recorded=recorded),
         message="HR AI eval metrics recorded",
+    )
+
+
+@router.get("/alerts/compliance", response_model=ResponseEnvelope[ComplianceOrgOut])
+async def compliance_org(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    compliance_service: _ComplianceServiceDep,
+) -> ResponseEnvelope[ComplianceOrgOut]:
+    """L1 compliance feed (HR-AI-001, Unit C). No per-person values."""
+    summary = await compliance_service.org_feed(_tenant_id(current_user))
+    return ResponseEnvelope(
+        data=compliance_org_to_out(summary),
+        message="HR AI compliance feed retrieved",
+    )
+
+
+@router.get(
+    "/alerts/compliance/{employee_id}",
+    response_model=ResponseEnvelope[list[ComplianceFindingOut]],
+)
+async def compliance_employee(
+    employee_id: uuid.UUID,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiReadDep,
+    compliance_service: _ComplianceServiceDep,
+    show_individual: _IndividualDep,
+) -> ResponseEnvelope[list[ComplianceFindingOut]] | JSONResponse:
+    """L2 per-employee compliance findings for ``individual`` callers; 403 else."""
+    if not show_individual:
+        limited: ResponseEnvelope[dict[str, Any]] = ResponseEnvelope(
+            data={"detail": "erp.hr.ai.individual required for the individual view"},
+            message="erp.hr.ai.individual required",
+        )
+        return JSONResponse(status_code=403, content=limited.model_dump(mode="json"))
+    findings = await compliance_service.employee_findings(_tenant_id(current_user), employee_id)
+    return ResponseEnvelope(
+        data=[compliance_finding_to_out(f) for f in findings],
+        message="HR AI employee compliance findings retrieved",
+    )
+
+
+@router.post(
+    "/alerts/compliance/{check_id}/status",
+    response_model=ResponseEnvelope[ComplianceFindingOut],
+)
+async def compliance_set_status(
+    check_id: uuid.UUID,
+    body: ComplianceStatusWrite,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiAckDep,
+    compliance_service: _ComplianceServiceDep,
+) -> ResponseEnvelope[ComplianceFindingOut]:
+    """Move one compliance finding along (acknowledged|resolved)."""
+    updated = await compliance_service.set_status(
+        _tenant_id(current_user),
+        check_id,
+        status=body.status,
+        actor_user_id=current_user["user_id"],
+    )
+    return ResponseEnvelope(
+        data=compliance_finding_to_out(updated),
+        message="Compliance finding status applied",
     )

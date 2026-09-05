@@ -35,16 +35,20 @@ from typing import TYPE_CHECKING
 
 from core.core import audit_events
 from core.core.constants import (
+    ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE,
     AR_ACCOUNT_CODE,
     COGS_ACCOUNT_CODE,
+    DEDUCTIONS_PAYABLE_ACCOUNT_CODE,
     INVENTORY_ASSET_ACCOUNT_CODE,
     INVOICE_SOURCE_MANUAL,
     INVOICE_SOURCE_SALES_ORDER,
     JOURNAL_SOURCE_COGS,
     JOURNAL_SOURCE_INVOICE,
     JOURNAL_SOURCE_MANUAL,
+    JOURNAL_SOURCE_PAYROLL,
     PAYMENT_SOURCE_MANUAL,
     REVENUE_ACCOUNT_CODE,
+    SALARY_EXPENSE_ACCOUNT_CODE,
 )
 from core.domain.entities import (
     ArAging,
@@ -83,6 +87,8 @@ if TYPE_CHECKING:
         OrderLookupPort,
         SalesOrderForInvoicing,
     )
+
+from core.features.finance.ports import PayrollAccrualOutcome
 
 # Maximum scale for line amounts, kept in sync with the Numeric(18, 4) columns.
 _MONEY_QUANTUM = Decimal("0.0001")
@@ -854,6 +860,81 @@ class FinanceService:
         )
 
     # ------------------------------------------------------------------
+    # Payroll accrual bridge (payroll→finance draft JE — HR-AUT-001, Commit 4)
+    # ------------------------------------------------------------------
+
+    async def create_payroll_accrual_draft(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        run_id: uuid.UUID,
+        entry_date: date,
+        gross: Decimal,
+        net: Decimal,
+    ) -> PayrollAccrualOutcome:
+        """Create the DRAFT accrual JE a paid payroll run books in the Finance inbox.
+
+        Mirrors ``create_manual_entry``/``post_cogs_for_order``: account codes
+        are resolved per-tenant and the ``UNIQUE (tenant_id, source,
+        source_ref)`` lock (source='payroll', source_ref=run_id) makes a
+        replayed handoff idempotent. Unlike COGS this does NOT raise when the
+        chart is missing — the missing codes are returned so the payroll
+        service records a queryable ``je_bridge_status='pending'`` instead of
+        hard-failing mark-paid on an unrelated module's provisioning gap.
+        """
+        codes = (
+            SALARY_EXPENSE_ACCOUNT_CODE,
+            ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE,
+            DEDUCTIONS_PAYABLE_ACCOUNT_CODE,
+        )
+        account_ids: dict[str, uuid.UUID] = {}
+        missing: list[str] = []
+        for code in codes:
+            account = await self._repo.get_account_by_code(code, tenant_id)
+            if account is None or not account.is_active:
+                missing.append(code)
+                continue
+            assert account.id is not None
+            account_ids[code] = account.id
+        if missing:
+            return PayrollAccrualOutcome(missing_accounts=tuple(missing))
+
+        deductions = (gross - net).quantize(_MONEY_QUANTUM)
+        lines = [
+            JournalLine(account_id=account_ids[SALARY_EXPENSE_ACCOUNT_CODE], debit=gross),
+            JournalLine(account_id=account_ids[ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE], credit=net),
+        ]
+        # A zero-deduction payroll run must not create a 0.00 journal line
+        # (the ledger rejects zero amounts); the 2020 leg only exists when
+        # gross > net.
+        if deductions > 0:
+            lines.append(
+                JournalLine(
+                    account_id=account_ids[DEDUCTIONS_PAYABLE_ACCOUNT_CODE],
+                    credit=deductions,
+                )
+            )
+        entry = JournalEntry(
+            tenant_id=tenant_id,
+            entry_date=entry_date,
+            memo=f"Payroll accrual for run {run_id}",
+            status=EntryStatus.DRAFT,
+            source=JOURNAL_SOURCE_PAYROLL,
+            source_ref=str(run_id),
+            lines=tuple(lines),
+            posted_at=None,
+        )
+        try:
+            created = await self._repo.create_journal_entry(entry)
+        except ConflictError:
+            # A replayed mark-paid already booked this run — the idempotency
+            # lock did its job; the run is reported as booked.
+            return PayrollAccrualOutcome(already_booked=True)
+        assert created.id is not None
+        return PayrollAccrualOutcome(entry_id=created.id)
+
+    # ------------------------------------------------------------------
+    # Reports (derived from posted lines — never stored)
     # Reports (derived from posted lines - never stored)
     # ------------------------------------------------------------------
 

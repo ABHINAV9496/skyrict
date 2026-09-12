@@ -21,7 +21,6 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     DateTime,
     Float,
-    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -38,12 +37,6 @@ from ai_agent.models.base import Base
 class AiDocumentEmbeddingModel(Base):
     __tablename__ = "ai_document_embeddings"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["tenant_id", "document_id"],
-            ["erp_documents.tenant_id", "erp_documents.id"],
-            ondelete="CASCADE",
-            name="fk_ai_doc_emb_document_tenant",
-        ),
         Index("idx_ai_doc_emb_tenant_status", "tenant_id", "processing_status"),
         Index("idx_ai_doc_emb_tenant_module", "tenant_id", "module_ref"),
     )

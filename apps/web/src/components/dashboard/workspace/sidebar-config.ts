@@ -33,6 +33,7 @@ import {
     Sparkles,
     TrendingDown,
     TrendingUp,
+    Truck,
     UserPlus,
     UserRound,
     Users,
@@ -209,6 +210,12 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/dashboard/erp/inventory/warehouses",
                         label: "Warehouses",
                         icon: Warehouse,
+                        permission: "erp.inventory.read",
+                    },
+                    {
+                        href: "/dashboard/erp/inventory/suppliers",
+                        label: "Suppliers",
+                        icon: Truck,
                         permission: "erp.inventory.read",
                     },
                     {

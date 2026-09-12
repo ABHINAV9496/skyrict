@@ -32,7 +32,7 @@ async function proxy(request: NextRequest) {
   const authorization = request.headers.get("authorization");
 
   const path = `/${request.nextUrl.pathname.replace(/^\/api\/v1\//, "")}${request.nextUrl.search}`;
-  const segment = path.split("/")[1];
+  const segment = path.split("?")[0].split("/")[1];
 
   // Binary file downloads are streamed straight through (the envelope JSON
   // wrappers below would mangle the byte stream).

@@ -151,7 +151,11 @@ services:
     ports:
       - "8002:8000"
     env_file:
+      # Non-secret config (services/ai-agent/.env) + gitignored secrets
+      # (services/ai-agent/.env.local). .env.local is loaded LAST so its
+      # AI_API_KEY / AI_FALLBACK_API_KEY / AI_EMBEDDING_API_KEY win.
       - ../../services/ai-agent/.env
+      - ../../services/ai-agent/.env.local
     environment:
       AI_ENVIRONMENT: dev
       AI_DEBUG: "true"
@@ -163,21 +167,12 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
-      # --- Dev LLM chain (in-container contract) ---
-      # Provider/keys come from services/ai-agent/.env (env_file). Two
-      # container-only corrections keep that env reachable from inside the
-      # compose network:
-      # 1. PRIMARY: host-run .env points omniroute at http://localhost:20128/v1,
-      #    but localhost inside the container is the container itself. Override
-      #    to the Docker Desktop host alias so the host gateway is reached.
-      # 2. FALLBACK: keep groq (from env_file) with its real base URL and a
-      #    current groq model - llama-3.1-8b-instant no longer exists (404) and
-      #    the previous openrouter model was being sent to groq's endpoint (400).
-      AI_BASE_URL: http://host.docker.internal:20128/v1
-      AI_FALLBACK_PROVIDER: groq
-      AI_FALLBACK_MODEL: qwen/qwen3.8-27b
-      AI_FALLBACK_BASE_URL: https://api.groq.com/openai/v1
-      AI_FALLBACK_LOCAL_ONLY: "false"
+      # --- Dev LLM chain: driven entirely by env_file (.env + .env.local) ---
+      # Key contract: AI_API_KEY = valid Groq key, AI_FALLBACK_API_KEY = valid
+      # OpenRouter key (both in .env.local). The previous overrides are gone:
+      # the host omniroute gateway primary (http://host.docker.internal:20128/v1)
+      # was never actually running, and hardcoding the groq fallback + base URL
+      # masked the registry defaults and caused 401s (blank fallback key).
       # Core data plane for the inventory AI engines - the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001

@@ -19,6 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.logging import get_logger
+from core.core.permissions import ERP_DOCUMENTS_READ
 from core.core.security import cross_check_jwt_tenant, verify_jwt
 from core.core.tenant_context import TenantContext
 from core.db.rbac import RbacRepository, grants_permission
@@ -981,7 +982,7 @@ async def require_entity_linked_read(
 
 
 async def get_entity_link_guard(
-    current_user: dict[str, Any] = Depends(get_current_user),
+    identity: dict[str, Any] = Depends(require_ingest_m2m_or_permission(ERP_DOCUMENTS_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> Callable[[str | None], Awaitable[None]]:
     """Dependency factory - returns a per-request guard closure for SKY-87.
@@ -990,11 +991,15 @@ async def get_entity_link_guard(
     document so the owning-module read key check never touches ``core.db`` from
     a feature module (import-linter: "Only repositories touch the database
     layer"). The guard resolves here in the api layer with the request-scoped
-    session and the same DB grant path as ``require_permission``.
+    session and the same DB grant path as ``require_permission``. Machine
+    callers (ai-agent m2m download) hold the shared ingest secret and skip the
+    entity-link grant check.
     """
 
     async def guard(module_ref: str | None) -> None:
-        await require_entity_linked_read(module_ref, current_user, db)
+        if identity.get("machine"):
+            return
+        await require_entity_linked_read(module_ref, identity, db)
 
     return guard
 

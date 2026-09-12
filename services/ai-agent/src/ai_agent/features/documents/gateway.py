@@ -83,7 +83,7 @@ class HttpDocumentGateway:
         timeout: float | None = None,
     ) -> None:
         self._core_url = (core_url or settings.CORE_DOCUMENT_URL).rstrip("/")
-        self._sync_token = sync_token or settings.INVENTORY_SYNC_TOKEN
+        self._sync_token = sync_token or settings.INGEST_TOKEN
         self._timeout = timeout or settings.CORE_DOCUMENT_TIMEOUT_SECONDS
 
     def _headers(self, tenant_slug: str) -> dict[str, str]:
@@ -120,7 +120,7 @@ class HttpDocumentGateway:
         try:
             async with httpx.AsyncClient(base_url=self._core_url, timeout=self._timeout) as client:
                 resp = await client.get(
-                    f"/documents/{doc_id}/download", headers=self._headers(tenant_slug)
+                    f"/api/v1/documents/{doc_id}/download", headers=self._headers(tenant_slug)
                 )
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -170,7 +170,7 @@ class HttpDocumentGateway:
         try:
             async with httpx.AsyncClient(base_url=self._core_url, timeout=self._timeout) as client:
                 resp = await client.post(
-                    f"/documents/{doc_id}/ocr/result", headers=headers, json=payload
+                    f"/api/v1/documents/{doc_id}/ocr/result", headers=headers, json=payload
                 )
             if resp.status_code >= 400:
                 logger.warning(
@@ -197,7 +197,7 @@ class HttpDocumentGateway:
         try:
             async with httpx.AsyncClient(base_url=self._core_url, timeout=self._timeout) as client:
                 resp = await client.get(
-                    "/documents",
+                    "/api/v1/documents",
                     params={"ocr_status": ocr_status, "page": 1, "page_size": limit},
                     headers=self._headers(tenant_slug),
                 )

@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-_require_documents_read = require_permission(ERP_DOCUMENTS_READ)
+_require_documents_read = require_ingest_m2m_or_permission(ERP_DOCUMENTS_READ)
 _require_documents_write = require_permission(ERP_DOCUMENTS_WRITE)
 _require_documents_delete = require_permission(ERP_DOCUMENTS_DELETE)
 # OCR callback: ai-agent pulls with the ingest secret OR a user holds write.

@@ -172,6 +172,7 @@ class FakeApprovalWorkflowInstanceRepository:
             status=kwargs["status"],  # type: ignore[arg-type]
         )
         self.decided_step.decided_by = kwargs.get("decided_by")
+        self.decided_step.delegated_from = kwargs.get("delegated_from")
         return self.decided_step
 
     async def update_instance_status(self, **kwargs: object) -> object:
@@ -204,8 +205,45 @@ class FakeApprovalWorkflowInstanceRepository:
         return []
 
 
-def _engine(repo: FakeApprovalWorkflowInstanceRepository, *, port: FakeResourcePort | None = None):
-    return ApprovalEngine(repo, now=lambda: FIXED_NOW, resource_port=port)  # type: ignore[arg-type]
+class FakeApprovalDelegationRepository:
+    """Returns preset active grants; scope filtering is the engine's job."""
+
+    def __init__(self, grants: list[object] | None = None) -> None:
+        self.grants = grants or []
+        self.calls: list[tuple[str, dict]] = []
+
+    async def list_grants_from_delegators(self, **kwargs: object) -> list[object]:
+        self.calls.append(("list_grants_from_delegators", kwargs))
+        return list(self.grants)
+
+
+def _grant(
+    *,
+    delegator: uuid.UUID,
+    delegate: uuid.UUID,
+    permission: str | None = None,
+    resource_type: str | None = None,
+):
+    return SimpleNamespace(
+        delegator=delegator,
+        delegate=delegate,
+        permission=permission,
+        resource_type=resource_type,
+    )
+
+
+def _engine(
+    repo: FakeApprovalWorkflowInstanceRepository,
+    *,
+    port: FakeResourcePort | None = None,
+    delegation_repo: FakeApprovalDelegationRepository | None = None,
+):
+    return ApprovalEngine(  # type: ignore[arg-type]
+        repo,
+        now=lambda: FIXED_NOW,
+        resource_port=port,
+        delegation_repository=delegation_repo,
+    )
 
 
 # ------------------------------------------------------------------ submit
@@ -764,3 +802,222 @@ async def test_decide_without_port_keeps_module_unaware() -> None:
 
     assert result.instance_completed is True
     assert result.instance.status == "approved"
+
+
+# ---------------------------------------------------------------- delegation
+
+
+async def test_decide_delegate_of_assignee_may_decide() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[_grant(delegator=USER_APPROVER, delegate=USER_STRANGER)]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    # the delegate is not the direct assignee...
+    transition = repo.transitions[-1]
+    assert transition["actor_type"] == "delegated"
+    assert transition["actor_id"] == USER_STRANGER
+    assert transition["delegated_actor"] == USER_APPROVER
+    assert transition["original_assignee"] == USER_APPROVER
+    # ... and the step's effective-assignee triple records the delegator
+    assert repo.decided_step.delegated_from == USER_APPROVER
+
+
+async def test_decide_delegation_with_matching_resource_scope_decides() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                resource_type="journal_entry",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    assert repo.transitions[-1]["actor_type"] == "delegated"
+
+
+async def test_decide_delegation_with_mismatched_resource_scope_fails_closed() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                resource_type="payroll_run",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    with pytest.raises(PermissionDeniedError):
+        await engine.decide(
+            tenant_id=TENANT,
+            instance_id=INSTANCE_ID,
+            actor_id=USER_STRANGER,
+            decision="approved",
+        )
+
+    assert repo.transitions == []
+    assert repo.decided_step is None
+
+
+async def test_decide_delegation_with_matching_permission_scope_decides() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    repo.instance = _instance()
+    repo.steps = [
+        _step_row(
+            index=0,
+            key="approve",
+            kind="permission",
+            value="erp.finance.approve",
+        )
+    ]
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                permission="erp.finance.approve",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    assert repo.transitions[-1]["actor_type"] == "delegated"
+
+
+async def test_decide_permission_scoped_grant_ignored_for_user_step() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)  # users-keyed step
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                permission="erp.finance.approve",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    with pytest.raises(PermissionDeniedError):
+        await engine.decide(
+            tenant_id=TENANT,
+            instance_id=INSTANCE_ID,
+            actor_id=USER_STRANGER,
+            decision="approved",
+        )
+
+    assert repo.transitions == []
+
+
+async def test_decide_delegate_without_matching_grant_fails_closed() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    # grant exists but points at a different delegate
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[_grant(delegator=USER_APPROVER, delegate=USER_SECOND)]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    with pytest.raises(PermissionDeniedError):
+        await engine.decide(
+            tenant_id=TENANT,
+            instance_id=INSTANCE_ID,
+            actor_id=USER_STRANGER,
+            decision="approved",
+        )
+
+    assert repo.transitions == []
+
+
+async def test_decide_without_delegation_repository_denies_delegate() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    engine = _engine(repo)  # no delegation repository wired
+
+    with pytest.raises(PermissionDeniedError):
+        await engine.decide(
+            tenant_id=TENANT,
+            instance_id=INSTANCE_ID,
+            actor_id=USER_STRANGER,
+            decision="approved",
+        )
+
+    assert repo.transitions == []
+
+
+async def test_decide_direct_assignee_stays_human_even_when_delegate() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    # USER_APPROVER is both the direct assignee and a delegate of USER_SECOND
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[_grant(delegator=USER_SECOND, delegate=USER_APPROVER)]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    transition = repo.transitions[-1]
+    assert transition["actor_type"] == ACTOR_HUMAN
+    assert transition["delegated_actor"] is None
+    assert transition["original_assignee"] == USER_APPROVER
+    assert repo.decided_step.delegated_from is None
+
+
+async def test_decide_delegated_completion_notifies_port_with_delegated_actor() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    port = FakeResourcePort()
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[_grant(delegator=USER_APPROVER, delegate=USER_STRANGER)]
+    )
+    engine = _engine(repo, port=port, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance_completed is True
+    approved_call = next(call for call in port.calls if call[0] == "on_approved")
+    assert approved_call[1]["decider_actor_type"] == "delegated"

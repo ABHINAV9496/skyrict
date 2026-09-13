@@ -15,16 +15,18 @@ Behavior:
   is resolved at decision time against the DB, never from submission-time
   snapshots. Auto-approval rules are then evaluated in definition order:
   each step whose ``auto_approval.when`` matches the routing amount is
-  approved by the system actor; when every step auto-approves the instance
-  completes as ``auto_approved`` and
-  the module port's ``on_approved`` (system actor) is called; the first
-  non-matching step becomes the pending queue.
+  approved by the system actor; when every step auto-approves, the instance
+  completes as ``auto_approved`` and the module port's ``on_approved``
+  (system actor) is called; the first non-matching step becomes the pending
+  queue.
 - ``decide`` - approve / reject / request-changes the current step. The actor
-  must be a member of the step's resolved assignee set (delegation arrives in
-  the delegation/inbox commit). Every decision is an append-only transition;
-  the instance advances to the next pending step and completes
-  (``approved``/``rejected``/``request_changes``) after the final step, with
-  the module port notified.
+  must be a member of the step's resolved assignee set, or an active delegate
+  of such a member (runtime approver-level delegation, resolved at decision
+  time via ``ApprovalDelegationRepository``; a delegated decision is audited
+  with actor type ``delegated`` plus the delegator). Every decision is an
+  append-only transition; the instance advances to the next pending step and
+  completes (``approved``/``rejected``/``request_changes``) after the final
+  step, with the module port notified.
 
 All decisions are made against the DB-resolved RBAC state at decision time
 (never from JWT claims), matching ``require_permission``.
@@ -42,6 +44,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from core.features.approval_workflow.delegation_repository import ApprovalDelegationRepository
 from core.features.approval_workflow.dsl import (
     AmountAtLeastCondition,
     AmountBelowCondition,
@@ -133,10 +136,12 @@ class ApprovalEngine:
         *,
         now: Callable[[], datetime],
         resource_port: ApprovalResourcePort | None = None,
+        delegation_repository: ApprovalDelegationRepository | None = None,
     ) -> None:
         self._repo = repository
         self._now = now
         self._resource_port = resource_port
+        self._delegation_repo = delegation_repository
 
     async def submit(
         self,
@@ -285,12 +290,15 @@ class ApprovalEngine:
         - instance exists and is ``pending``;
         - the target step exists, belongs to the instance, and is pending;
         - ``actor_id`` is a member of the step's resolved assignee set
-          (role members / permission members / explicit user list).
+          (role members / permission members / explicit user list) or an
+          active delegate of such a member (the grant's permission and
+          resource_type scopes must match the step and instance; a delegated
+          decision records ``actor_type='delegated'`` and the delegator).
 
         Every decision appends an audit transition with actor type ``human``
-        and advances the instance to the next pending step; after the final
-        step the instance completes as ``approved`` / ``rejected`` /
-        ``request_changes``.
+        (or ``delegated``) and advances the instance to the next pending step;
+        after the final step the instance completes as ``approved`` /
+        ``rejected`` / ``request_changes``.
         """
         now = self._now()
         instance = await self._repo.get_instance(tenant_id, instance_id)
@@ -311,7 +319,33 @@ class ApprovalEngine:
             raise ConflictError(f"Step '{target.step_key}' is {target.status}, not pending")
 
         assignee_ids = await self._step_assignee_ids(tenant_id, target)
-        if actor_id not in assignee_ids:
+        delegated_actor: uuid.UUID | None = None
+        actor_type = ACTOR_HUMAN
+
+        if actor_id not in assignee_ids and self._delegation_repo is not None:
+            # Delegate of an assignee may decide when their grant is active
+            # and its scopes match this step and instance (fail closed).
+            grants = await self._delegation_repo.list_grants_from_delegators(
+                tenant_id=tenant_id,
+                delegators=assignee_ids,
+                now=now,
+            )
+            for grant in grants:
+                if (
+                    grant.resource_type is not None
+                    and grant.resource_type != instance.resource_type
+                ):
+                    continue
+                if grant.permission is not None and target.assignee_kind != "permission":
+                    continue
+                if grant.permission is not None and grant.permission != target.assignee_value:
+                    continue
+                if grant.delegate == actor_id:
+                    delegated_actor = grant.delegator
+                    actor_type = "delegated"
+                    break
+
+        if actor_id not in assignee_ids and delegated_actor is None:
             raise PermissionDeniedError(
                 f"User {actor_id} is not an assignee of step '{target.step_key}'"
             )
@@ -329,7 +363,8 @@ class ApprovalEngine:
             status=step_status,
             decided_by=actor_id,
             decided_at=now,
-            actor_type=ACTOR_HUMAN,
+            actor_type=actor_type,
+            delegated_from=delegated_actor,
         )
         if step is None:
             raise NotFoundError(f"Step {target.id} not found")
@@ -341,9 +376,10 @@ class ApprovalEngine:
             previous_state=STEP_PENDING,
             new_state=decision,
             actor_id=actor_id,
-            actor_type=ACTOR_HUMAN,
+            actor_type=actor_type,
             reason=reason,
-            original_assignee=actor_id,
+            original_assignee=delegated_actor or actor_id,
+            delegated_actor=delegated_actor,
             occurred_at=now,
         )
 
@@ -388,7 +424,7 @@ class ApprovalEngine:
                     tenant_id=tenant_id,
                     resource_type=updated.resource_type,
                     resource_id=updated.resource_id,
-                    decider_actor_type=ACTOR_HUMAN,
+                    decider_actor_type=actor_type,
                     reason=reason,
                 )
             elif decision == "rejected":

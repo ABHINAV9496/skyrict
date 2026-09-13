@@ -126,11 +126,15 @@ class ApprovalWorkflowInstanceRepository:
         decided_by: uuid.UUID | None,
         decided_at: datetime,
         actor_type: str = "human",
+        delegated_from: uuid.UUID | None = None,
     ) -> ErpApprovalWorkflowStepModel | None:
         """Approve/reject a step and record who decided.
 
         ``decided_by`` is None for system actors (auto approval, escalation) -
         the audit transition carries ``actor_type='system'`` instead.
+        ``delegated_from`` preserves the delegator when a delegate decides
+        (the ``assigned_to``/``delegated_from`` triple is the step's effective
+        assignee history contract).
         """
         result = await self._db.execute(
             select(ErpApprovalWorkflowStepModel).where(
@@ -144,6 +148,9 @@ class ApprovalWorkflowInstanceRepository:
         step.status = status
         step.decided_by = decided_by
         step.decided_at = decided_at
+        if delegated_from is not None:
+            step.assigned_to = decided_by
+            step.delegated_from = delegated_from
         await self._db.flush()
         await self._db.refresh(step)
         return step

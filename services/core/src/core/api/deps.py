@@ -674,7 +674,17 @@ def get_finance_service(
     from core.db.sequence_repository import SequenceRepository
     from core.events.producers import get_event_producer
     from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.approval_workflow.definition_repository import (
+        ApprovalWorkflowDefinitionRepository,
+    )
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
     from core.features.crm.repository import CrmRepository
+    from core.features.finance.approval import JournalEntryApprovalCoordinator
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
     from core.features.payroll.repository import PayrollRepository
@@ -683,7 +693,7 @@ def get_finance_service(
     correlation_id = getattr(request.state, "request_id", None)
     crm_repo = CrmRepository(db)
     sales_repo = SalesRepository(db, next_sequence=SequenceRepository(db).next_value)
-    return FinanceService(
+    service = FinanceService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
@@ -695,6 +705,29 @@ def get_finance_service(
             PayrollRepository(db, next_sequence=SequenceRepository(db).next_value)
         ),
     )
+
+    # SKY-92: attach the journal-entry approval coordinator as the optional
+    # posting seam. The coordinator owns the engine + definition repos and
+    # the ai-agent client; it calls back into the ONE request-scoped service
+    # instance above (complete_posting) so audit, events and the repo write
+    # stay atomic on this session.
+    from datetime import UTC, datetime
+
+    from core.core.tenant_resolver import derive_tenant_slug
+
+    coordinator = JournalEntryApprovalCoordinator(
+        db=db,
+        definitions=ApprovalWorkflowDefinitionRepository(db),
+        instances=ApprovalWorkflowInstanceRepository(db),
+        delegations=ApprovalDelegationRepository(db),
+        now=lambda: datetime.now(UTC),
+        ai_client=getattr(request.app.state, "ai_client", None),
+        ai_authorization=request.headers.get("authorization"),
+        ai_tenant_slug=derive_tenant_slug(request),
+        post_verified=service.complete_posting,
+    )
+    service.attach_approval(coordinator)
+    return service
 
 
 def get_revenue_forecast_service(

@@ -37,6 +37,7 @@ from skyrict_common.exceptions import (
 )
 
 __all__ = [
+    "ApprovalDefinitionMissingError",
     "AuthenticationError",
     "AuthorizationError",
     "ConflictError",
@@ -198,6 +199,22 @@ class AiServiceUnavailableError(SkyrictError):
     code = "AI_UNAVAILABLE"
 
 
+class ApprovalDefinitionMissingError(SkyrictError):
+    """A tenant enabled the approval engine but has no active definition (500).
+
+    A controlled configuration error, NOT an authorization bypass: when the
+    per-tenant approval flag is ON the engine is mandatory, so a missing
+    active workflow definition must fail the submission (the journal entry
+    stays pre-posting) instead of silently posting without approval. This is
+    a server-side provisioning problem (the tenant flag was turned on before
+    an operator seeded the definition); expose the typed problem so ops can
+    react, while the payload never reveals internals.
+    """
+
+    message = "No active approval definition is configured for this resource"
+    code = "APPROVAL_DEFINITION_MISSING"
+
+
 _PROBLEM_BASE = "https://api.skyrict.io/problems"
 
 # Mapping from exception type to HTTP status code and problem type URI.
@@ -228,6 +245,9 @@ _STATUS_MAP: dict[type, tuple[int, str]] = {
     CreditLimitExceededError: (422, f"{_PROBLEM_BASE}/credit-limit-exceeded"),
     # AI proxy transport failures (docs/modules/skyrict-ai/... §6).
     AiServiceUnavailableError: (503, f"{_PROBLEM_BASE}/ai-unavailable"),
+    # Approval engine configuration failures (SKY-92): flag ON but no seeded
+    # definition - a controlled server-config error, never a silent bypass.
+    ApprovalDefinitionMissingError: (500, f"{_PROBLEM_BASE}/approval-definition-missing"),
 }
 
 _DEFAULT_STATUS = (500, f"{_PROBLEM_BASE}/internal-error")

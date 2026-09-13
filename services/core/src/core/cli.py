@@ -54,7 +54,7 @@ def seed(
     tenant_id: str = typer.Option(
         None,
         "--tenant-id",
-        help="UUID of a tenant to seed HR/Payroll defaults + reporting pack + core RBAC roles",
+        help="UUID of a tenant to seed HR/Payroll defaults + reporting pack + core RBAC roles + approval definitions",
     ),
 ) -> None:
     """Seed reference + per-tenant defaults and core RBAC roles.
@@ -87,6 +87,7 @@ def seed(
 
     async def _seed_tenant() -> None:
         from core.seed import (
+            seed_approval_workflow_defaults,
             seed_core_roles_for_tenant,
             seed_reporting_defaults,
             seed_tenant_hr_defaults,
@@ -95,8 +96,10 @@ def seed(
         await seed_tenant_hr_defaults(uuid.UUID(tenant_id))
         await seed_reporting_defaults(uuid.UUID(tenant_id))
         await seed_core_roles_for_tenant(uuid.UUID(tenant_id))
+        await seed_approval_workflow_defaults(uuid.UUID(tenant_id))
         typer.echo(
-            f"seeded HR/Payroll defaults + reporting pack + core RBAC roles for tenant {tenant_id}"
+            f"seeded HR/Payroll defaults + reporting pack + core RBAC roles + "
+            f"approval definitions for tenant {tenant_id}"
         )
 
     async def _run() -> None:

@@ -25,6 +25,7 @@ Failure posture (fail-safe, "never break submission"):
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from collections.abc import Callable
@@ -56,12 +57,17 @@ class ApprovalRoutingSuggestion:
     ``recommendation`` is ``None`` when the model abstains; ``confidence`` is
     ``None`` when missing or out of ``[0, 1]`` (fail closed). ``reasoning`` /
     ``model_used`` default to empty strings so the inbox renders cleanly.
+    ``suggested_approver_id`` is an OPTIONAL person the model thinks fits the
+    step; Core validates it against the step's eligible set before it is ever
+    recorded (``None`` when the upstream did not suggest anyone, or when the
+    suggested person is not eligible).
     """
 
     recommendation: str | None
     confidence: Decimal | None
     reasoning: str = ""
     model_used: str = ""
+    suggested_approver_id: uuid.UUID | None = None
 
 
 async def request_approval_routing_suggestion(
@@ -125,6 +131,17 @@ async def request_approval_routing_suggestion(
 
     reasoning = str(data.get("reasoning") or "").strip()
     model_used = str(data.get("model_used") or "").strip()
+
+    # The suggested approver is optional and advisory; an unparsable id is an
+    # abstention on that field only (never a transport failure).
+    suggested_approver_id: uuid.UUID | None = None
+    raw_suggested = data.get("suggested_approver_id")
+    if isinstance(raw_suggested, str) and raw_suggested.strip():
+        try:
+            suggested_approver_id = uuid.UUID(raw_suggested.strip())
+        except ValueError:
+            suggested_approver_id = None
+
     if recommendation is None and not reasoning and not model_used:
         return None
     return ApprovalRoutingSuggestion(
@@ -132,6 +149,7 @@ async def request_approval_routing_suggestion(
         confidence=confidence,
         reasoning=reasoning,
         model_used=model_used,
+        suggested_approver_id=suggested_approver_id,
     )
 
 
@@ -142,6 +160,11 @@ def _suggestion_context(suggestion: ApprovalRoutingSuggestion) -> dict[str, Any]
         "confidence": (str(suggestion.confidence) if suggestion.confidence is not None else None),
         "reasoning": suggestion.reasoning,
         "model_used": suggestion.model_used,
+        "suggested_approver_id": (
+            str(suggestion.suggested_approver_id)
+            if suggestion.suggested_approver_id is not None
+            else None
+        ),
     }
 
 
@@ -174,6 +197,7 @@ class ApprovalSuggestionService:
         step: ErpApprovalWorkflowStepModel,
         amount: Decimal | None,
         description: str,
+        allowed_approver_ids: set[uuid.UUID] | None = None,
     ) -> ApprovalRoutingSuggestion | None:
         """Request a suggestion and append its audit transition.
 
@@ -181,6 +205,13 @@ class ApprovalSuggestionService:
         off), which short-circuits to ``None`` without an audit row. Transport
         failures are swallowed (fail-safe); an upstream abstention returns
         ``None`` without an audit row.
+
+        ``allowed_approver_ids`` is the step's eligible approver set
+        (resolved by Core from the assignee spec AT THE TIME OF SUBMISSION).
+        When the upstream suggests an approver outside that set the suggestion
+        is stripped of the person (never recorded, never surfaced) while the
+        rest of the recommendation survives - the AI never gets to select an
+        unauthorized user.
         """
         if client is None:
             return None
@@ -198,6 +229,12 @@ class ApprovalSuggestionService:
             return None
         if suggestion is None:
             return None
+        if (
+            suggestion.suggested_approver_id is not None
+            and allowed_approver_ids is not None
+            and suggestion.suggested_approver_id not in allowed_approver_ids
+        ):
+            suggestion = dataclasses.replace(suggestion, suggested_approver_id=None)
         await self._repo.record_transition(
             tenant_id=tenant_id,
             workflow_instance_id=instance.id,

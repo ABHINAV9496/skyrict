@@ -48,8 +48,14 @@ class ApprovalResourcePort(Protocol):
         resource_id: uuid.UUID,
         decider_actor_type: str,
         reason: str | None = None,
+        decided_by: uuid.UUID | None = None,
     ) -> None:
-        """Apply the approved state to the module's resource (authoritative)."""
+        """Apply the approved state to the module's resource (authoritative).
+
+        ``decided_by`` is the approving user when a human decided (``None``
+        for system auto-approval); modules use it for attribution on the
+        resource state change (e.g. ``posted_by_user_id``).
+        """
         ...
 
     async def on_rejected(

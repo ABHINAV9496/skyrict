@@ -87,6 +87,61 @@ async def test_success_parses_suggestion() -> None:
     )
 
 
+async def test_success_parses_suggested_approver() -> None:
+    approver_id = uuid.UUID("aaaa0000-0000-4000-8000-000000000001")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "recommendation": "approve",
+                "confidence": 0.9,
+                "reasoning": "Fits the finance approval desk.",
+                "model_used": "gpt-4.1",
+                "suggested_approver_id": str(approver_id),
+            },
+        )
+
+    async with _client(handler) as client:
+        result = await request_approval_routing_suggestion(
+            client,
+            authorization=None,
+            tenant_slug=None,
+            resource_type="journal_entry",
+            resource_id=RESOURCE_ID,
+            amount=Decimal("12500.00"),
+            description="Credit memo",
+        )
+    assert result is not None
+    assert result.suggested_approver_id == approver_id
+
+
+async def test_invalid_suggested_approver_id_is_field_abstention() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "recommendation": "approve",
+                "reasoning": "Still useful.",
+                "suggested_approver_id": "not-a-uuid",
+            },
+        )
+
+    async with _client(handler) as client:
+        result = await request_approval_routing_suggestion(
+            client,
+            authorization=None,
+            tenant_slug=None,
+            resource_type="journal_entry",
+            resource_id=RESOURCE_ID,
+            amount=Decimal("12500.00"),
+            description="Credit memo",
+        )
+    assert result is not None
+    assert result.recommendation == "approve"
+    assert result.suggested_approver_id is None
+
+
 async def test_abstains_when_payload_empty() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={})
@@ -318,6 +373,85 @@ async def test_service_records_suggestion_audit_transition() -> None:
     assert transition.context["reasoning"] == "Duplicate vendor invoice detected."
     assert transition.context["model_used"] == "gpt-4.1"
     assert transition.occurred_at == FIXED_NOW
+
+
+async def test_service_keeps_eligible_suggested_approver() -> None:
+    approver_id = uuid.UUID("aaaa0000-0000-4000-8000-000000000001")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "recommendation": "approve",
+                "confidence": 0.9,
+                "suggested_approver_id": str(approver_id),
+            },
+        )
+
+    session = _FakeSession()
+    service = ApprovalSuggestionService(
+        repository=ApprovalWorkflowInstanceRepository(session),  # type: ignore[arg-type]
+        now=lambda: FIXED_NOW,
+    )
+    async with _client(handler) as client:
+        result = await service.suggest_and_record(
+            client=client,
+            authorization=None,
+            tenant_slug=None,
+            tenant_id=TENANT,
+            instance=_instance(),  # type: ignore[arg-type]
+            step=_step(),  # type: ignore[arg-type]
+            amount=Decimal("12500.00"),
+            description="Credit memo",
+            allowed_approver_ids={approver_id},
+        )
+
+    assert result is not None
+    assert result.suggested_approver_id == approver_id
+    assert len(session.added) == 1
+    assert session.added[0].context["suggested_approver_id"] == str(approver_id)
+
+
+async def test_service_strips_ineligible_suggested_approver() -> None:
+    """Core validates the AI's person against the step's eligible set."""
+    approver_id = uuid.UUID("aaaa0000-0000-4000-8000-000000000001")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "recommendation": "approve",
+                "confidence": 0.9,
+                "reasoning": "Fits the finance approval desk.",
+                "suggested_approver_id": str(approver_id),
+            },
+        )
+
+    session = _FakeSession()
+    service = ApprovalSuggestionService(
+        repository=ApprovalWorkflowInstanceRepository(session),  # type: ignore[arg-type]
+        now=lambda: FIXED_NOW,
+    )
+    async with _client(handler) as client:
+        result = await service.suggest_and_record(
+            client=client,
+            authorization=None,
+            tenant_slug=None,
+            tenant_id=TENANT,
+            instance=_instance(),  # type: ignore[arg-type]
+            step=_step(),  # type: ignore[arg-type]
+            amount=Decimal("12500.00"),
+            description="Credit memo",
+            allowed_approver_ids={uuid.UUID("bbbb0000-0000-4000-8000-000000000002")},
+        )
+
+    # The person is stripped (never surfaced, never recorded) while the rest
+    # of the recommendation survives and is audited as-is.
+    assert result is not None
+    assert result.recommendation == "approve"
+    assert result.suggested_approver_id is None
+    assert len(session.added) == 1
+    assert session.added[0].context["suggested_approver_id"] is None
 
 
 async def test_service_degrades_on_transport_failure(monkeypatch: pytest.MonkeyPatch) -> None:

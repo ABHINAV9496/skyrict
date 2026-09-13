@@ -39,6 +39,7 @@ from core.core.permissions import (
     ERP_AI_INVOKE,
     ERP_CRM_READ,
     ERP_CRM_WRITE,
+    ERP_FINANCE_APPROVE,
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
     ERP_HR_AI_READ,
@@ -59,6 +60,19 @@ from core.core.permissions import (
     WILDCARD,
 )
 from core.db.session import async_session_factory
+from core.features.approval_workflow.definition_repository import (
+    ApprovalWorkflowDefinitionRepository,
+)
+from core.features.approval_workflow.dsl import (
+    AmountBelowCondition,
+    AutoApprovalRule,
+    EscalationPolicy,
+    PermissionAssignee,
+    RoutingStrategy,
+    SlaPolicy,
+    WorkflowDefinition,
+    WorkflowStep,
+)
 from core.features.hr.models.leave_type import LeaveTypeModel
 from core.features.payroll.models.payroll_run import PayrollRounding
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
@@ -322,6 +336,82 @@ async def seed_reporting_defaults(tenant_id: uuid.UUID) -> None:
                 updated=updated,
             )
         await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Approval workflow definition defaults (SKY-92)
+# ---------------------------------------------------------------------------
+
+#: Resource type keyed by the finance coordinator (finance/approval.py).
+JE_APPROVAL_RESOURCE_TYPE = "journal_entry"
+
+
+async def seed_approval_workflow_defaults(tenant_id: uuid.UUID) -> None:
+    """Idempotently seed the built-in journal-entry approval definition.
+
+    The definition every newly provisioned tenant starts with (SKY-92
+    decision 6). The engine stays OFF until the tenant opts in via the
+    ``erp_tenant_settings`` flags, but the definition is provisioned with the
+    normal tenant bootstrap so ``cli seed --tenant-id`` is all an operator
+    needs before flipping the flag.
+
+    Definition contract:
+
+    - routing amount is the entry's total debit, supplied by finance as an
+      exact ``Decimal`` (never floats);
+    - amounts below ``10,000`` auto-approve (system actor audit + immediate
+      finance posting);
+    - amounts at-or-above ``10,000`` route to holders of the
+      ``erp.finance.approve`` permission, with a 24h SLA, the same group as
+      the escalation target, delegation allowed, and AI-assisted routing
+      (advisory only - the AI never decides or selects an unauthorized
+      approver).
+
+    Skipped when the tenant already has an ACTIVE ``journal_entry``
+    definition: operators can hand-tune the definition later and re-seeding
+    must never overwrite their workflow.
+    """
+    async with async_session_factory() as session:
+        definitions = ApprovalWorkflowDefinitionRepository(session)
+        active = await definitions.get_active(tenant_id, JE_APPROVAL_RESOURCE_TYPE)
+        if active is not None:
+            return
+
+        definition = WorkflowDefinition(
+            name="Journal entry approval",
+            resource_type=JE_APPROVAL_RESOURCE_TYPE,
+            version=1,
+            steps=[
+                WorkflowStep(
+                    key="finance_approval",
+                    assignee=PermissionAssignee(permission=ERP_FINANCE_APPROVE),
+                    routing=RoutingStrategy.AI_ASSISTED,
+                    auto_approval=AutoApprovalRule(
+                        when=AmountBelowCondition(amount=Decimal("10000.00"))
+                    ),
+                    sla=SlaPolicy(
+                        hours=24,
+                        reminder_before_hours=4,
+                        escalation=EscalationPolicy(
+                            assignee=PermissionAssignee(permission=ERP_FINANCE_APPROVE)
+                        ),
+                    ),
+                )
+            ],
+        )
+        draft = await definitions.create_draft(
+            tenant_id=tenant_id,
+            name="Journal entry approval",
+            resource_type=JE_APPROVAL_RESOURCE_TYPE,
+            definition=definition.model_dump(mode="json"),
+        )
+        await definitions.activate(tenant_id, draft.id)
+        await session.commit()
+        logger.info(
+            "seed.approval_workflow.je_definition.seeded",
+            tenant_id=str(tenant_id),
+            version=draft.version,
+        )
 
 
 async def sync_rbac_from_identity() -> None:

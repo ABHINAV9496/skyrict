@@ -435,6 +435,7 @@ class ApprovalEngine:
                     resource_id=updated.resource_id,
                     decider_actor_type=actor_type,
                     reason=reason,
+                    decided_by=actor_id,
                 )
             elif decision == "rejected":
                 await self._resource_port.on_rejected(

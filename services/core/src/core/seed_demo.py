@@ -2929,11 +2929,16 @@ async def seed_demo_data(
             counts["notification_prefs"] = 1
 
         # ── APPROVAL ENGINE FLAGS (SKY-92) ─────────────────────────────
-        # Demo tenants opt the approval engine IN so the demo exercises the
-        # journal-entry workflow (below-threshold auto-approval, finance
-        # approval queue for larger entries). Idempotent: an operator who set
-        # a flag explicitly later never gets it overwritten by re-seeding.
-        _approval_flag_keys = ("approval_engine_enabled", "je_approval_engine")
+        # Demo tenants opt the approval engine IN so the demo exercises
+        # journal-entry + payroll-run workflows (below-threshold
+        # auto-approval, human approval queues for larger amounts).
+        # Idempotent: an operator who set a flag explicitly later never gets
+        # it overwritten by re-seeding.
+        _approval_flag_keys = (
+            "approval_engine_enabled",
+            "je_approval_engine",
+            "payroll_approval_engine",
+        )
         for _flag_key in _approval_flag_keys:
             await session.execute(
                 text(

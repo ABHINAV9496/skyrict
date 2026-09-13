@@ -741,6 +741,7 @@ def get_revenue_forecast_service(
 
 
 def get_payroll_service(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     audit: CoreAuditService = Depends(get_core_audit_service),
     finance: FinanceService = Depends(get_finance_service),
@@ -766,7 +767,40 @@ def get_payroll_service(
         repository=PostgresPayrollNotificationRepository(db),
         audit=audit,
     )
-    return make_payroll_service(db, audit, finance, payslip_notifier=notifier)
+    service = make_payroll_service(db, audit, finance, payslip_notifier=notifier)
+
+    # SKY-92: attach the payroll-run approval coordinator as the optional
+    # approve seam. The coordinator owns the engine + definition repos and
+    # the ai-agent client; it calls back into the ONE request-scoped service
+    # instance above (complete_approval) so audit, events and the repo write
+    # stay atomic on this session.
+    from datetime import UTC, datetime
+
+    from core.core.tenant_resolver import derive_tenant_slug
+    from core.features.approval_workflow.definition_repository import (
+        ApprovalWorkflowDefinitionRepository,
+    )
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
+    from core.features.payroll.approval import PayrollRunApprovalCoordinator
+
+    coordinator = PayrollRunApprovalCoordinator(
+        db=db,
+        definitions=ApprovalWorkflowDefinitionRepository(db),
+        instances=ApprovalWorkflowInstanceRepository(db),
+        delegations=ApprovalDelegationRepository(db),
+        now=lambda: datetime.now(UTC),
+        ai_client=getattr(request.app.state, "ai_client", None),
+        ai_authorization=request.headers.get("authorization"),
+        ai_tenant_slug=derive_tenant_slug(request),
+        complete_verified=service.complete_approval,
+    )
+    service.attach_approval(coordinator)
+    return service
 
 
 def get_finance_automation_service(

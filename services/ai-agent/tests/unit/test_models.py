@@ -81,6 +81,8 @@ class TestRegistry:
             "ai_transcript_analyses",
             # SKY-91 CRM anomaly detection
             "ai_crm_anomalies",
+            # SKY-93 L4 what-if scenario snapshots
+            "ai_l4_scenario_versions",
             # SKY-61 memory persistence
             "ai_semantic_memory",
             # Conversation persistence (SKY-60)
@@ -108,6 +110,8 @@ class TestRegistry:
             "ai_transcript_analyses",
             # SKY-91 CRM anomaly detection share the composite PK
             "ai_crm_anomalies",
+            # SKY-93 L4 scenario snapshots share the composite PK
+            "ai_l4_scenario_versions",
             # SKY-61 memory persistence
             "ai_semantic_memory",
             # Agent wave 2 (SKY-90)

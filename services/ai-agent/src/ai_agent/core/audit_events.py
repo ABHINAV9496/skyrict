@@ -89,6 +89,9 @@ AI_REPORT_GENERATED = "ai.report.generated"
 AI_REPORT_SAVED = "ai.report.saved"
 """The NL report builder persisted a generated report as a saved definition (SKY-80)."""
 
+AI_L4_SCENARIO_CREATED = "ai.l4.scenario.created"
+"""The L4 what-if planner saved a named scenario with a frozen projection (SKY-93)."""
+
 AI_COACHING_SUGGESTION_CREATED = "ai.coaching.suggestion.created"
 """The Sales Coach agent produced a coaching suggestion (SKY-90)."""
 
@@ -133,6 +136,7 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_TRANSCRIPT_ANALYZED,
         AI_CRM_ANOMALY_DETECTED,
         AI_CRM_ANOMALY_RESOLVED,
+        AI_L4_SCENARIO_CREATED,
         AI_CRM_ANOMALY_DISMISSED,
         AI_COACHING_SUGGESTION_CREATED,
         AI_COACHING_SUGGESTION_VIEWED,

@@ -12,6 +12,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -161,3 +162,94 @@ def test_empty_base_defaults_currency_and_zero_totals() -> None:
     assert out.monthly_salary_total == "0.00"
     assert out.monthly_benefit_cost_total == "0.00"
     assert out.employees == []
+
+
+# --- L4 scenario proxy -> ai-agent (Commit 2, SKY-93) ------------------------
+
+_SCENARIO_ID = uuid.UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+
+
+def _build_proxy_app(seen: list[httpx.Request]) -> TestClient:
+    """App with an ai-client over MockTransport; records every relayed request."""
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {
+        "tenant_id": str(TENANT_ID)
+    }
+    app.dependency_overrides[ai_hr_router._require_hr_ai_planning] = lambda: {
+        "tenant_id": str(TENANT_ID),
+        "user_id": str(uuid.uuid4()),
+    }
+
+    def capture_handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={"success": True, "data": {"id": str(_SCENARIO_ID)}, "message": "ok"},
+        )
+
+    async def client_factory() -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.MockTransport(capture_handler),
+            base_url="http://ai-agent.test",
+        )
+
+    app.dependency_overrides[ai_hr_router.get_ai_client] = client_factory
+    return TestClient(app)
+
+
+def test_proxy_relays_scenario_create_to_ai_agent() -> None:
+    seen: list[httpx.Request] = []
+    client = _build_proxy_app(seen)
+
+    resp = client.post(
+        "/api/v1/ai/hr/l4/scenarios",
+        headers={"authorization": "Bearer tok"},
+        json={"name": "five-percent", "base_as_of": "2026-01-01"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"]["id"] == str(_SCENARIO_ID)
+    assert len(seen) == 1
+    assert seen[0].url.path == "/api/v1/ai/l4/scenarios"
+    assert seen[0].headers.get("authorization") == "Bearer tok"
+
+
+def test_proxy_relays_scenario_get_with_id_path() -> None:
+    seen: list[httpx.Request] = []
+    client = _build_proxy_app(seen)
+
+    resp = client.get(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert seen[0].url.path == f"/api/v1/ai/l4/scenarios/{_SCENARIO_ID}"
+
+
+def test_proxy_relays_scenario_compare_query_params() -> None:
+    seen: list[httpx.Request] = []
+    client = _build_proxy_app(seen)
+    other = uuid.uuid4()
+
+    resp = client.get(
+        f"/api/v1/ai/hr/l4/scenarios/compare?ids={_SCENARIO_ID}&ids={other}",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert seen[0].url.path == "/api/v1/ai/l4/scenarios/compare"
+    query = seen[0].url.query.decode()
+    assert f"ids={_SCENARIO_ID}" in query
+    assert f"ids={other}" in query
+
+
+def test_proxy_requires_planning_permission() -> None:
+    seen: list[httpx.Request] = []
+    client = _build_proxy_app(seen)
+    client.app.dependency_overrides[ai_hr_router._require_hr_ai_planning] = lambda: _deny()
+
+    resp = client.get("/api/v1/ai/hr/l4/scenarios")
+    assert resp.status_code == 403
+    assert seen == []  # never reached ai-agent

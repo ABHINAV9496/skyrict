@@ -750,3 +750,84 @@ async def l4_payroll_base(
         data=payroll_base_to_out(snapshot),
         message="HR AI payroll base retrieved",
     )
+
+
+# --- L4 what-if scenario proxy -> ai-agent (SKY-93, Commit 2) -----------------
+# Scenario persistence lives in ai-agent; core enforces the permission gate
+# here (erp.ai.invoke + erp.hr.ai.planning) and relays the caller's JWT and
+# tenant slug so ai-agent makes its core payroll-base reads under exactly
+# that identity (the SKY-57 "AI is a proxy, not a bypass" rule).
+
+
+async def _proxy_l4(
+    request: Request,
+    client: httpx.AsyncClient,
+    upstream_path: str,
+) -> Response:
+    """Forward one L4 scenario request after auth+authz deps have passed."""
+    authorization = request.headers.get("authorization")
+    body = await request.body() if request.method in ("POST", "PUT", "PATCH") else None
+    upstream = await forward_to_ai_agent(
+        client,
+        method=request.method,
+        upstream_path=upstream_path,
+        authorization=authorization,
+        tenant_slug=derive_tenant_slug(request),
+        body=body,
+        # Raw query string round-trips verbatim (order + duplicates preserved).
+        params=httpx.QueryParams(request.url.query),
+    )
+    return relay_response(upstream)
+
+
+@router.post("/l4/scenarios")
+async def l4_scenario_create(
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    client: _ClientDep,
+) -> Response:
+    """Create a named what-if scenario; projection computed and frozen in ai-agent."""
+    del current_user
+    return await _proxy_l4(request, client, "/api/v1/ai/l4/scenarios")
+
+
+@router.get("/l4/scenarios")
+async def l4_scenario_list(
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    client: _ClientDep,
+) -> Response:
+    """List this tenant's named scenarios (frozen projections)."""
+    del current_user
+    return await _proxy_l4(request, client, "/api/v1/ai/l4/scenarios")
+
+
+@router.get("/l4/scenarios/compare")
+async def l4_scenario_compare(
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    client: _ClientDep,
+) -> Response:
+    """Compare up to 3 scenarios side-by-side (stored snapshots, no recompute)."""
+    del current_user
+    return await _proxy_l4(request, client, "/api/v1/ai/l4/scenarios/compare")
+
+
+@router.get("/l4/scenarios/{scenario_id}")
+async def l4_scenario_get(
+    scenario_id: uuid.UUID,
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    client: _ClientDep,
+) -> Response:
+    """Fetch one named scenario by UUID."""
+    del current_user
+    return await _proxy_l4(
+        request,
+        client,
+        f"/api/v1/ai/l4/scenarios/{scenario_id}",
+    )

@@ -5,9 +5,15 @@ machine and audit behavior are tested without a database:
 
 - submit resolves steps in order, computes SLA due times from the injectable
   clock, records the submission transition and returns the pending instance;
+- auto-approval routing evaluates each step's ``auto_approval.when`` against
+  the routing amount in definition order: matching steps are approved by the
+  system actor; the first non-matching step becomes the pending human queue;
+  when every step auto-approves the instance completes ``auto_approved`` and
+  the module resource port's ``on_approved`` (system actor) is called;
 - decide enforces instance/step pending state, resolves role / permission /
   user-list membership AT DECISION TIME (a revoked user fails closed) and
-  appends an audit transition per decision;
+  appends an audit transition per decision; a completed instance notifies the
+  module resource port (approved / rejected / request_changes);
 - the instance advances to the next pending step and completes only after the
   final step.
 """
@@ -22,6 +28,9 @@ from types import SimpleNamespace
 import pytest
 
 from core.features.approval_workflow.dsl import (
+    AmountAtLeastCondition,
+    AmountBelowCondition,
+    AutoApprovalRule,
     PermissionAssignee,
     RoleAssignee,
     UserListAssignee,
@@ -67,6 +76,7 @@ def _step_row(*, index: int, key: str, kind: str, value: str, status: str = "pen
         assignee_kind=kind,
         assignee_value=value,
         status=status,
+        decided_by=USER_APPROVER,
     )
 
 
@@ -76,7 +86,31 @@ def _instance(*, status: str = "pending", current_step_index: int = 0):
         tenant_id=TENANT,
         status=status,
         current_step_index=current_step_index,
+        resource_type="journal_entry",
+        resource_id=uuid.UUID("77777777-7777-7777-7777-777777777777"),
     )
+
+
+class FakeResourcePort:
+    """Records module-side callbacks the engine drives through the port."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    async def submit_for_approval(self, **kwargs: object) -> None:
+        self.calls.append(("submit_for_approval", kwargs))
+
+    async def on_approved(self, **kwargs: object) -> None:
+        self.calls.append(("on_approved", kwargs))
+
+    async def on_rejected(self, **kwargs: object) -> None:
+        self.calls.append(("on_rejected", kwargs))
+
+    async def on_request_changes(self, **kwargs: object) -> None:
+        self.calls.append(("on_request_changes", kwargs))
+
+    async def on_cancelled(self, **kwargs: object) -> None:
+        self.calls.append(("on_cancelled", kwargs))
 
 
 class FakeApprovalWorkflowInstanceRepository:
@@ -137,6 +171,7 @@ class FakeApprovalWorkflowInstanceRepository:
             value=str(USER_APPROVER),
             status=kwargs["status"],  # type: ignore[arg-type]
         )
+        self.decided_step.decided_by = kwargs.get("decided_by")
         return self.decided_step
 
     async def update_instance_status(self, **kwargs: object) -> object:
@@ -169,8 +204,8 @@ class FakeApprovalWorkflowInstanceRepository:
         return []
 
 
-def _engine(repo: FakeApprovalWorkflowInstanceRepository) -> ApprovalEngine:
-    return ApprovalEngine(repo, now=lambda: FIXED_NOW)  # type: ignore[arg-type]
+def _engine(repo: FakeApprovalWorkflowInstanceRepository, *, port: FakeResourcePort | None = None):
+    return ApprovalEngine(repo, now=lambda: FIXED_NOW, resource_port=port)  # type: ignore[arg-type]
 
 
 # ------------------------------------------------------------------ submit
@@ -482,3 +517,250 @@ async def test_decide_unsupported_decision_raises_conflict() -> None:
             actor_id=USER_APPROVER,
             decision="maybe",
         )
+
+
+# ----------------------------------------------------- auto-approval routing
+
+
+def _auto_step(key: str, condition: object) -> WorkflowStep:
+    step = _step(UserListAssignee(user_ids=[USER_APPROVER]), key=key)
+    step.auto_approval = AutoApprovalRule(when=condition)  # type: ignore[attr-defined]
+    return step
+
+
+async def test_submit_auto_approves_step_below_threshold_and_completes_instance() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+    definition = _definition(
+        [_auto_step("auto", AmountBelowCondition(amount=Decimal("10000.0000")))]
+    )
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=Decimal("5000.0000"),
+        submitted_by=USER_APPROVER,
+    )
+
+    assert result.auto_approved is True
+    assert result.instance.status == "auto_approved"
+    assert repo.decided_step.status == "approved"
+    assert repo.decided_step.decided_by is None
+    auto_transition = repo.transitions[-1]
+    assert auto_transition["new_state"] == "auto_approved"
+    assert auto_transition["actor_type"] == ACTOR_SYSTEM
+    assert auto_transition["actor_id"] is None
+    assert auto_transition["context"] == {"condition": "amount_below"}
+    # module port notified that the resource is approved by the system actor
+    port_calls = [call[0] for call in port.calls]
+    assert "on_approved" in port_calls
+    approved_call = next(call for call in port.calls if call[0] == "on_approved")
+    assert approved_call[1]["decider_actor_type"] == ACTOR_SYSTEM
+
+
+async def test_submit_at_threshold_routes_to_human_queue() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+    definition = _definition(
+        [_auto_step("auto", AmountBelowCondition(amount=Decimal("10000.0000")))]
+    )
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=Decimal("10000.0000"),
+        submitted_by=USER_APPROVER,
+    )
+
+    assert result.auto_approved is False
+    assert result.instance.status == "pending"
+    assert port.calls == []
+    # nothing auto-decided; step stays pending for the human queue
+    assert repo.decided_step is None
+    assert repo.instance_updates[-1]["current_step_index"] == 0
+
+
+async def test_submit_missing_amount_never_auto_approves() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    engine = _engine(repo)
+    definition = _definition(
+        [_auto_step("auto", AmountBelowCondition(amount=Decimal("10000.0000")))]
+    )
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=None,
+        submitted_by=USER_APPROVER,
+    )
+
+    assert result.auto_approved is False
+    assert result.instance.status == "pending"
+    assert repo.decided_step is None
+
+
+async def test_submit_without_auto_approval_stays_pending() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    engine = _engine(repo)
+    definition = _definition([_step(UserListAssignee(user_ids=[USER_APPROVER]))])
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=Decimal("5000.0000"),
+        submitted_by=USER_APPROVER,
+    )
+
+    assert result.auto_approved is False
+    assert result.instance.status == "pending"
+    assert repo.decided_step is None
+
+
+async def test_submit_mixed_chain_auto_approves_prefix_and_waits_on_next() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    engine = _engine(repo)
+    definition = _definition(
+        [
+            _auto_step("auto", AmountBelowCondition(amount=Decimal("10000.0000"))),
+            _step(RoleAssignee(role="finance_manager"), key="cf0"),
+        ]
+    )
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=Decimal("5000.0000"),
+        submitted_by=USER_APPROVER,
+    )
+
+    # first step auto-approved, second step is now the pending queue
+    assert result.auto_approved is False
+    assert result.instance.status == "pending"
+    assert result.instance.current_step_index == 1
+    assert repo.decided_step.status == "approved"
+    assert repo.decided_step.decided_by is None
+
+
+async def test_submit_auto_approves_all_steps_in_chain() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+    definition = _definition(
+        [
+            _auto_step("one", AmountBelowCondition(amount=Decimal("10000.0000"))),
+            _auto_step("two", AmountAtLeastCondition(amount=Decimal("1.0000"))),
+        ]
+    )
+
+    result = await engine.submit(
+        tenant_id=TENANT,
+        definition=definition,
+        definition_id=uuid.uuid4(),
+        resource_type="journal_entry",
+        resource_id=uuid.uuid4(),
+        amount=Decimal("5000.0000"),
+        submitted_by=USER_APPROVER,
+    )
+
+    assert result.auto_approved is True
+    assert result.instance.status == "auto_approved"
+    assert result.instance.current_step_index == 1
+    assert any(call[0] == "on_approved" for call in port.calls)
+
+
+# ------------------------------------------------------ module resource port
+
+
+async def test_decide_completed_approval_notifies_module_port() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="approved",
+        reason="verified",
+    )
+
+    assert result.instance_completed is True
+    approved_call = next(call for call in port.calls if call[0] == "on_approved")
+    assert approved_call[1]["decider_actor_type"] == ACTOR_HUMAN
+    assert approved_call[1]["reason"] == "verified"
+    assert approved_call[1]["resource_type"] == "journal_entry"
+
+
+async def test_decide_completed_rejection_notifies_module_port() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="rejected",
+        reason="amount exceeded",
+    )
+
+    assert result.instance.status == "rejected"
+    rejected_call = next(call for call in port.calls if call[0] == "on_rejected")
+    assert rejected_call[1]["reason"] == "amount exceeded"
+
+
+async def test_decide_request_changes_on_final_step_completes_and_notifies() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    port = FakeResourcePort()
+    engine = _engine(repo, port=port)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="request_changes",
+        reason="fix the line items",
+    )
+
+    assert result.instance_completed is True
+    assert result.instance.status == "request_changes"
+    # regression: the OLD engine KeyError'd on a final-step request_changes
+    changes_call = next(call for call in port.calls if call[0] == "on_request_changes")
+    assert changes_call[1]["reason"] == "fix the line items"
+    assert changes_call[1]["resource_id"] == _instance().resource_id
+
+
+async def test_decide_without_port_keeps_module_unaware() -> None:
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    engine = _engine(repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="approved",
+    )
+
+    assert result.instance_completed is True
+    assert result.instance.status == "approved"

@@ -123,11 +123,15 @@ class ApprovalWorkflowInstanceRepository:
         tenant_id: uuid.UUID,
         step_id: uuid.UUID,
         status: str,
-        decided_by: uuid.UUID,
+        decided_by: uuid.UUID | None,
         decided_at: datetime,
         actor_type: str = "human",
     ) -> ErpApprovalWorkflowStepModel | None:
-        """Approve/reject a step and record who decided."""
+        """Approve/reject a step and record who decided.
+
+        ``decided_by`` is None for system actors (auto approval, escalation) -
+        the audit transition carries ``actor_type='system'`` instead.
+        """
         result = await self._db.execute(
             select(ErpApprovalWorkflowStepModel).where(
                 ErpApprovalWorkflowStepModel.tenant_id == tenant_id,

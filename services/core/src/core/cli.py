@@ -348,5 +348,40 @@ def retention(
     asyncio.run(_run())
 
 
+@app.command()
+def approval_escalation(
+    steps: int = typer.Option(
+        None,
+        "--steps",
+        min=1,
+        help="Overdue steps per tenant (default: APPROVAL_ESCALATION_STEPS_PER_PASS, 200)",
+    ),
+) -> None:
+    """Run one approval SLA escalation pass (manual/CI equivalent of the worker).
+
+    Walks every tenant with a pending approval instance and escalates the
+    current steps whose SLA is due (a supervisory nudge - the step stays
+    decidable by its assignees; the instance is never auto-rejected).
+    """
+    import asyncio
+
+    from core.core.config import settings
+    from core.db.session import async_session_factory
+    from core.features.approval_workflow.escalation_worker import ApprovalEscalationWorker
+
+    async def _run() -> None:
+        steps_per_pass = steps if steps is not None else settings.APPROVAL_ESCALATION_STEPS_PER_PASS
+        outcome = await ApprovalEscalationWorker(
+            async_session_factory,
+            steps_per_pass=steps_per_pass,
+        ).process_all()
+        typer.echo(
+            f"approval escalation pass complete: {outcome.tenants_processed} tenants, "
+            f"{outcome.steps_escalated} steps escalated"
+        )
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()

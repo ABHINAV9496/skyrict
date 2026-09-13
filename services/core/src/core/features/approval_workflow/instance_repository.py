@@ -117,6 +117,86 @@ class ApprovalWorkflowInstanceRepository:
 
     # ------------------------------------------------------------- decisions
 
+    async def list_overdue_steps(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        now: datetime,
+        limit: int,
+    ) -> Sequence[ErpApprovalWorkflowStepModel]:
+        """Pending current steps whose ``sla_due_at`` has passed (SLA breach).
+
+        Targeted at the step the instance is actually waiting on
+        (``step_index == instance.current_step_index``): future steps are not
+        yet anyone's responsibility, so only the current pending step can
+        escalate. Ordered most-overdue first, capped by ``limit``.
+        """
+        result = await self._db.execute(
+            select(ErpApprovalWorkflowStepModel)
+            .join(
+                ErpApprovalWorkflowInstanceModel,
+                and_(
+                    ErpApprovalWorkflowInstanceModel.tenant_id
+                    == ErpApprovalWorkflowStepModel.tenant_id,
+                    ErpApprovalWorkflowInstanceModel.id == ErpApprovalWorkflowStepModel.instance_id,
+                ),
+            )
+            .where(
+                ErpApprovalWorkflowStepModel.tenant_id == tenant_id,
+                ErpApprovalWorkflowInstanceModel.status == "pending",
+                ErpApprovalWorkflowStepModel.status == "pending",
+                ErpApprovalWorkflowStepModel.step_index
+                == ErpApprovalWorkflowInstanceModel.current_step_index,
+                ErpApprovalWorkflowStepModel.sla_due_at.is_not(None),
+                ErpApprovalWorkflowStepModel.sla_due_at <= now,
+            )
+            .order_by(ErpApprovalWorkflowStepModel.sla_due_at)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    async def mark_step_escalated(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        step_id: uuid.UUID,
+    ) -> ErpApprovalWorkflowStepModel | None:
+        """Mark a pending step ``escalated`` (SLA breach).
+
+        Idempotent: only a ``pending`` step escalates; the same step can never
+        be escalated twice. ``decided_by``/``decided_at`` stay unset - escalation
+        is a supervisory signal, not a decision by an actor.
+        """
+        result = await self._db.execute(
+            select(ErpApprovalWorkflowStepModel).where(
+                ErpApprovalWorkflowStepModel.tenant_id == tenant_id,
+                ErpApprovalWorkflowStepModel.id == step_id,
+                ErpApprovalWorkflowStepModel.status == "pending",
+            )
+        )
+        step = result.scalar_one_or_none()
+        if step is None:
+            return None
+        step.status = "escalated"
+        await self._db.flush()
+        await self._db.refresh(step)
+        return step
+
+    async def list_pending_tenant_ids(self) -> list[uuid.UUID]:
+        """Distinct tenant ids that have at least one ``pending`` instance.
+
+        Cross-tenant probe for the background escalation worker (mirrors
+        reporting's ``list_all_definition_pairs``): never tenant-scoped itself
+        - the owner role bypasses RLS and this method must enumerate rows
+        across all tenants so the worker can set each tenant's context.
+        """
+        result = await self._db.execute(
+            select(ErpApprovalWorkflowInstanceModel.tenant_id)
+            .where(ErpApprovalWorkflowInstanceModel.status == "pending")
+            .distinct()
+        )
+        return [uuid.UUID(str(row)) for row in result.scalars().all()]
+
     async def update_step_decision(
         self,
         *,

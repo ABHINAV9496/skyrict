@@ -71,6 +71,7 @@ INSTANCE_REJECTED = "rejected"
 INSTANCE_REQUEST_CHANGES = "request_changes"
 
 STEP_PENDING = "pending"
+STEP_ESCALATED = "escalated"
 STEP_APPROVED = "approved"
 STEP_REJECTED = "rejected"
 
@@ -288,7 +289,9 @@ class ApprovalEngine:
         Validations (all fail closed):
 
         - instance exists and is ``pending``;
-        - the target step exists, belongs to the instance, and is pending;
+        - the target step exists, belongs to the instance, and is ``pending``
+          or ``escalated`` (escalation is a supervisory nudge, never a
+          decision - an escalated step is still acted on by its assignees);
         - ``actor_id`` is a member of the step's resolved assignee set
           (role members / permission members / explicit user list) or an
           active delegate of such a member (the grant's permission and
@@ -315,8 +318,10 @@ class ApprovalEngine:
         target = next((s for s in steps if s.step_index == step_index), None)
         if target is None:
             raise NotFoundError(f"Step index {step_index} not found on instance {instance_id}")
-        if target.status != STEP_PENDING:
-            raise ConflictError(f"Step '{target.step_key}' is {target.status}, not pending")
+        if target.status not in (STEP_PENDING, STEP_ESCALATED):
+            raise ConflictError(
+                f"Step '{target.step_key}' is {target.status}, not pending or escalated"
+            )
 
         assignee_ids = await self._step_assignee_ids(tenant_id, target)
         delegated_actor: uuid.UUID | None = None
@@ -357,6 +362,10 @@ class ApprovalEngine:
         if decision == "request_changes":
             step_status = "rejected"
 
+        # Audit the REAL previous state: ``update_step_decision`` mutates the
+        # identity-mapped step row, so read it before the decision write.
+        previous_state = target.status
+
         step = await self._repo.update_step_decision(
             tenant_id=tenant_id,
             step_id=target.id,
@@ -373,7 +382,7 @@ class ApprovalEngine:
             tenant_id=tenant_id,
             workflow_instance_id=instance_id,
             step_id=step.id,
-            previous_state=STEP_PENDING,
+            previous_state=previous_state,
             new_state=decision,
             actor_id=actor_id,
             actor_type=actor_type,

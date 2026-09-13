@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 50 revisions, 0001..0050) -> core ``downgrade base`` (all the way back to
+(all 51 revisions, 0001..0051) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -207,7 +207,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0050", f"head is {version}, expected 0050"
+            assert version == "0051", f"head is {version}, expected 0051"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1044,7 +1044,29 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 ).scalar_one_or_none()
                 assert perm_row is not None, f"0048 must register {perm_key}"
 
-            # 0050: CRM transcript ingestion (SKY-91) - erp_crm_activities gets
+            # 0050: document & tax AI suite (FIN-AI-004, SKY-83) - the two
+            # versioned, DRAFT-gated artifact tables behind the finance AI
+            # document features.
+            for table in ("erp_ai_documents", "erp_tax_summaries"):
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0050 must create {table}"
+
+            ai_doc_cols = {
+                row[0]
+                for row in await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'erp_ai_documents'"
+                    )
+                )
+            }
+            assert "watermarked" in ai_doc_cols, (
+                "0050 erp_ai_documents must keep the draft watermark column"
+            )
+
+            # 0051: CRM transcript ingestion (SKY-91) - erp_crm_activities gets
             # a nullable TEXT transcript column (nullable so existing rows and
             # non-AI updates are unaffected; AI never writes analysis onto
             # CRM rows, it lives in ai-agent's ai_transcript_analyses).
@@ -1058,7 +1080,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).one_or_none()
-            assert transcript_col is not None, "0050 must add transcript_text"
+            assert transcript_col is not None, "0051 must add transcript_text"
             assert transcript_col[0] == "text", transcript_col
             transcript_nullable = (
                 await conn.execute(
@@ -1070,7 +1092,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert transcript_nullable == "YES", "0050 transcript_text must be nullable"
+            assert transcript_nullable == "YES", "0051 transcript_text must be nullable"
     finally:
         await engine.dispose()
 
@@ -1098,6 +1120,8 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_revenue_forecast",
                 "public.erp_documents",
                 "public.erp_document_versions",
+                "public.erp_ai_documents",
+                "public.erp_tax_summaries",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"

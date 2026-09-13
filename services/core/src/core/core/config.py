@@ -317,6 +317,27 @@ class Settings(BaseSettings):
         description="interval between retention passes while idle",
     )
 
+    # --- Approval workflow SLA escalation worker (SKY-92, escalation commit) ---
+    APPROVAL_ESCALATION_WORKER_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "run the in-process approval SLA escalation worker (a background "
+            "asyncio loop that marks overdue pending approval steps escalated). "
+            "Disabled under the test environment so integration tests drive "
+            "the escalation pass directly."
+        ),
+    )
+    APPROVAL_ESCALATION_POLL_SECONDS: float = Field(
+        default=3600.0,
+        gt=0,
+        description="interval between escalation passes while idle",
+    )
+    APPROVAL_ESCALATION_STEPS_PER_PASS: int = Field(
+        default=200,
+        ge=1,
+        description="max overdue steps one escalation pass marks escalated per tenant",
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
 

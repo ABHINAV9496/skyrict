@@ -54,7 +54,7 @@ def seed(
     tenant_id: str = typer.Option(
         None,
         "--tenant-id",
-        help="UUID of a tenant to seed HR/Payroll defaults + reporting pack + core RBAC roles",
+        help="UUID of a tenant to seed HR/Payroll defaults + reporting pack + core RBAC roles + approval definitions",
     ),
 ) -> None:
     """Seed reference + per-tenant defaults and core RBAC roles.
@@ -87,6 +87,7 @@ def seed(
 
     async def _seed_tenant() -> None:
         from core.seed import (
+            seed_approval_workflow_defaults,
             seed_core_roles_for_tenant,
             seed_reporting_defaults,
             seed_tenant_hr_defaults,
@@ -95,8 +96,10 @@ def seed(
         await seed_tenant_hr_defaults(uuid.UUID(tenant_id))
         await seed_reporting_defaults(uuid.UUID(tenant_id))
         await seed_core_roles_for_tenant(uuid.UUID(tenant_id))
+        await seed_approval_workflow_defaults(uuid.UUID(tenant_id))
         typer.echo(
-            f"seeded HR/Payroll defaults + reporting pack + core RBAC roles for tenant {tenant_id}"
+            f"seeded HR/Payroll defaults + reporting pack + core RBAC roles + "
+            f"approval definitions for tenant {tenant_id}"
         )
 
     async def _run() -> None:
@@ -343,6 +346,41 @@ def retention(
         typer.echo(
             f"retention pass complete: {outcome.tenants_processed} tenants, "
             f"{outcome.snapshots_pruned} snapshots pruned (keep={keep_n})"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command()
+def approval_escalation(
+    steps: int = typer.Option(
+        None,
+        "--steps",
+        min=1,
+        help="Overdue steps per tenant (default: APPROVAL_ESCALATION_STEPS_PER_PASS, 200)",
+    ),
+) -> None:
+    """Run one approval SLA escalation pass (manual/CI equivalent of the worker).
+
+    Walks every tenant with a pending approval instance and escalates the
+    current steps whose SLA is due (a supervisory nudge - the step stays
+    decidable by its assignees; the instance is never auto-rejected).
+    """
+    import asyncio
+
+    from core.core.config import settings
+    from core.db.session import async_session_factory
+    from core.features.approval_workflow.escalation_worker import ApprovalEscalationWorker
+
+    async def _run() -> None:
+        steps_per_pass = steps if steps is not None else settings.APPROVAL_ESCALATION_STEPS_PER_PASS
+        outcome = await ApprovalEscalationWorker(
+            async_session_factory,
+            steps_per_pass=steps_per_pass,
+        ).process_all()
+        typer.echo(
+            f"approval escalation pass complete: {outcome.tenants_processed} tenants, "
+            f"{outcome.steps_escalated} steps escalated"
         )
 
     asyncio.run(_run())

@@ -87,6 +87,7 @@ if TYPE_CHECKING:
         FinanceEventSink,
         FinanceRepositoryPort,
         FinanceTimelinePort,
+        JournalEntryApprovalPort,
         OrderLookupPort,
         SalesOrderForInvoicing,
         TenantDefaultCurrencyPort,
@@ -131,6 +132,7 @@ class FinanceService:
         timeline: FinanceTimelinePort | None = None,
         order_lookup: OrderLookupPort | None = None,
         default_currency: TenantDefaultCurrencyPort | None = None,
+        approval: JournalEntryApprovalPort | None = None,
     ) -> None:
         self._repo = repo
         self._audit = audit
@@ -140,6 +142,17 @@ class FinanceService:
         self._timeline = timeline
         self._order_lookup = order_lookup
         self._default_currency = default_currency
+        self._approval = approval
+
+    def attach_approval(self, approval: JournalEntryApprovalPort) -> None:
+        """Composition-root seam that attaches the optional approval engine.
+
+        The approval coordinator needs a callback bound to THIS service
+        (``complete_posting``), so it cannot be constructed before the
+        service. The API composition root creates the coordinator and calls
+        this right before returning the service.
+        """
+        self._approval = approval
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -275,6 +288,14 @@ class FinanceService:
         Gates: entry is draft, the entry date's fiscal period is open, and the
         entry balances. On success the entry is audited and the
         ``journal_entry.posted`` money moment is announced (after commit).
+
+        When the optional approval seam is attached (SKY-92), the gates still
+        run here (draft/period/balance) and the approved *amount* - the total
+        debit, as ``Decimal`` - is then routed through the coordinator:
+        per-tenant flag OFF posts immediately (unchanged behaviour); flag ON
+        auto-approves below-threshold entries and queues at-or-above-threshold
+        entries for a human approval step, in which case the entry is
+        returned still DRAFT and posting happens only on the human decision.
         """
         entry = await self.get_journal_entry(tenant_id, entry_id)
         if entry.status != EntryStatus.DRAFT:
@@ -286,7 +307,8 @@ class FinanceService:
             )
 
         debit_total = sum(
-            (line.debit or Decimal("0")) for line in entry.lines if line.debit is not None
+            ((line.debit or Decimal("0")) for line in entry.lines if line.debit is not None),
+            start=Decimal("0"),
         )
         credit_total = sum(
             (line.credit or Decimal("0")) for line in entry.lines if line.credit is not None
@@ -296,11 +318,41 @@ class FinanceService:
                 f"Journal entry is not balanced (debit {debit_total} != credit {credit_total})"
             )
 
+        if self._approval is not None:
+            return await self._approval.submit_for_posting(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                entry=entry,
+                debit_total=debit_total,
+            )
+        return await self.complete_posting(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            entry_id=entry_id,
+            posted_at=datetime.now(UTC),
+        )
+
+    async def complete_posting(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        entry_id: uuid.UUID,
+        posted_at: datetime,
+    ) -> JournalEntry:
+        """Authoritative finance post step: repo write + audit + money moment.
+
+        Shared by the direct post path and the approval coordinator (the
+        resource port's ``on_approved`` callback drives this after a human or
+        the system approves). ``user_id`` is ``None`` for system
+        auto-approval - the column supports it and the audit transition
+        already records the system actor.
+        """
         posted = await self._repo.post_journal_entry(
             entry_id,
             tenant_id,
             posted_by_user_id=user_id,
-            posted_at=datetime.now(UTC),
+            posted_at=posted_at,
         )
         assert posted is not None
 
@@ -309,7 +361,7 @@ class FinanceService:
             user_id=user_id,
             action=audit_events.FINANCE_JOURNAL_ENTRY_POSTED,
             target=f"journal_entry:{entry_id}",
-            details={"entry_date": entry.entry_date.isoformat(), "memo": entry.memo},
+            details={"entry_date": posted.entry_date.isoformat(), "memo": posted.memo},
         )
         self._events.journal_entry_posted(
             entry_id=entry_id,

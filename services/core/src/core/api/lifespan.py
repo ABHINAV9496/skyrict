@@ -98,6 +98,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         app.state.reporting_retention_worker = None
 
+    # Approval SLA escalation worker (SKY-92): a background asyncio loop that
+    # escalates overdue pending steps (nudge, never a decision). Disabled under
+    # the test environment so integration tests drive process_all() directly
+    # (and via `core approval-escalation run`).
+    if settings.APPROVAL_ESCALATION_WORKER_ENABLED and settings.ENVIRONMENT != Environment.TEST:
+        from core.db.session import async_session_factory
+        from core.features.approval_workflow.escalation_worker import (
+            ApprovalEscalationWorker,
+        )
+
+        app.state.approval_escalation_worker = ApprovalEscalationWorker(
+            async_session_factory,
+            poll_seconds=settings.APPROVAL_ESCALATION_POLL_SECONDS,
+            steps_per_pass=settings.APPROVAL_ESCALATION_STEPS_PER_PASS,
+        )
+        app.state.approval_escalation_worker.start()
+    else:
+        app.state.approval_escalation_worker = None
+
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate, the AI
     # client and the DB engine so in-flight work can drain cleanly.
@@ -114,5 +133,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     retention_worker = getattr(app.state, "reporting_retention_worker", None)
     if retention_worker is not None:
         await retention_worker.stop()
+    escalation_worker = getattr(app.state, "approval_escalation_worker", None)
+    if escalation_worker is not None:
+        await escalation_worker.stop()
     await app.state.ai_client.aclose()
     await engine.dispose()

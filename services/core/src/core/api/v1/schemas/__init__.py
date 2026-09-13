@@ -1,5 +1,14 @@
 """API v1 request/response schemas - HR & payroll (HR-BE-002)."""
 
+from core.api.v1.schemas.approval_workflow import (
+    ApprovalDecisionIn,
+    ApprovalDecisionOut,
+    ApprovalInboxItemOut,
+    ApprovalInstanceOut,
+    ApprovalStepOut,
+    ApprovalSuggestionOut,
+    ApprovalTransitionOut,
+)
 from core.api.v1.schemas.hr import (
     AttendanceRecordOut,
     AttendanceUpsertRequest,
@@ -56,6 +65,13 @@ from core.api.v1.schemas.payroll_automation import (
 )
 
 __all__ = [
+    "ApprovalDecisionIn",
+    "ApprovalDecisionOut",
+    "ApprovalInboxItemOut",
+    "ApprovalInstanceOut",
+    "ApprovalStepOut",
+    "ApprovalSuggestionOut",
+    "ApprovalTransitionOut",
     "AttendanceRecordOut",
     "AttendanceUpsertRequest",
     "CompensationCreate",

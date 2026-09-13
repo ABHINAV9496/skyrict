@@ -202,6 +202,31 @@ describe("reports BFF proxy segment", () => {
     });
   });
 
+  it("routes the notifications segment to Core (not Identity)", async () => {
+    callBackend.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { items: [], total: 0, unread_count: 0, pinned_unread_count: 0 },
+      payload: {
+        data: { items: [], total: 0, unread_count: 0, pinned_unread_count: 0 },
+        message: "ok",
+      },
+    });
+
+    const response = await GET(
+      nextRequest("http://tenant.localhost/api/v1/notifications/counts", {
+        method: "GET",
+        headers: { authorization: "Bearer abc123" },
+      }),
+    );
+
+    expect(callBackend).toHaveBeenCalledWith(
+      "/notifications/counts",
+      expect.objectContaining({ target: "core", token: "abc123" }),
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("exports every HTTP method bound to the proxy", () => {
     expect(typeof GET).toBe("function");
     expect(typeof POST).toBe("function");

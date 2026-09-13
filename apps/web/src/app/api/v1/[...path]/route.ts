@@ -66,7 +66,7 @@ async function proxy(request: NextRequest) {
     });
   }
 
-  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents"].includes(
+  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents", "notifications"].includes(
     segment,
   )
     ? "core"

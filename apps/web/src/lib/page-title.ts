@@ -6,6 +6,7 @@ export const knownTitles: Record<string, string> = {
     "/dashboard/erp": "Business Operations",
     "/dashboard/intelligence": "Market Intelligence",
     "/dashboard/settings": "Settings",
+    "/dashboard/settings/notifications": "Notification preferences",
     "/dashboard/integrations": "Integrations",
 };
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, Request
@@ -26,7 +27,11 @@ from core.db.session import get_db
 from core.domain.value_objects import DataScope
 from core.features.audit.repository import AuditRepository
 from core.features.inventory.repository import InventoryRepository
-from skyrict_common.exceptions import AuthenticationError, PermissionDeniedError
+from skyrict_common.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    PermissionDeniedError,
+)
 
 if TYPE_CHECKING:
     from core.core.audit_service import AuditService as CoreAuditService
@@ -42,6 +47,8 @@ if TYPE_CHECKING:
     from core.features.ai_hr.service import AiHrService
     from core.features.ai_hr.suggestion_service import SuggestionService
     from core.features.ai_hr.utilization_service import UtilizationService
+    from core.features.approval_workflow.engine import ApprovalEngine
+    from core.features.approval_workflow.query import ApprovalWorkflowQueryService
     from core.features.audit.service import AuditService
     from core.features.crm.service import CrmService
     from core.features.crm.workspace_service import CrmWorkspaceService
@@ -674,7 +681,17 @@ def get_finance_service(
     from core.db.sequence_repository import SequenceRepository
     from core.events.producers import get_event_producer
     from core.events.producers.finance_events import FinanceEventPublisher
+    from core.features.approval_workflow.definition_repository import (
+        ApprovalWorkflowDefinitionRepository,
+    )
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
     from core.features.crm.repository import CrmRepository
+    from core.features.finance.approval import JournalEntryApprovalCoordinator
     from core.features.finance.repository import FinanceRepository
     from core.features.finance.service import FinanceService
     from core.features.payroll.repository import PayrollRepository
@@ -683,7 +700,7 @@ def get_finance_service(
     correlation_id = getattr(request.state, "request_id", None)
     crm_repo = CrmRepository(db)
     sales_repo = SalesRepository(db, next_sequence=SequenceRepository(db).next_value)
-    return FinanceService(
+    service = FinanceService(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         events=FinanceEventPublisher(session=db, producer=get_event_producer()),
@@ -695,6 +712,29 @@ def get_finance_service(
             PayrollRepository(db, next_sequence=SequenceRepository(db).next_value)
         ),
     )
+
+    # SKY-92: attach the journal-entry approval coordinator as the optional
+    # posting seam. The coordinator owns the engine + definition repos and
+    # the ai-agent client; it calls back into the ONE request-scoped service
+    # instance above (complete_posting) so audit, events and the repo write
+    # stay atomic on this session.
+    from datetime import UTC, datetime
+
+    from core.core.tenant_resolver import derive_tenant_slug
+
+    coordinator = JournalEntryApprovalCoordinator(
+        db=db,
+        definitions=ApprovalWorkflowDefinitionRepository(db),
+        instances=ApprovalWorkflowInstanceRepository(db),
+        delegations=ApprovalDelegationRepository(db),
+        now=lambda: datetime.now(UTC),
+        ai_client=getattr(request.app.state, "ai_client", None),
+        ai_authorization=request.headers.get("authorization"),
+        ai_tenant_slug=derive_tenant_slug(request),
+        post_verified=service.complete_posting,
+    )
+    service.attach_approval(coordinator)
+    return service
 
 
 def get_revenue_forecast_service(
@@ -708,6 +748,7 @@ def get_revenue_forecast_service(
 
 
 def get_payroll_service(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     audit: CoreAuditService = Depends(get_core_audit_service),
     finance: FinanceService = Depends(get_finance_service),
@@ -733,7 +774,208 @@ def get_payroll_service(
         repository=PostgresPayrollNotificationRepository(db),
         audit=audit,
     )
-    return make_payroll_service(db, audit, finance, payslip_notifier=notifier)
+    service = make_payroll_service(db, audit, finance, payslip_notifier=notifier)
+
+    # SKY-92: attach the payroll-run approval coordinator as the optional
+    # approve seam. The coordinator owns the engine + definition repos and
+    # the ai-agent client; it calls back into the ONE request-scoped service
+    # instance above (complete_approval) so audit, events and the repo write
+    # stay atomic on this session.
+    from datetime import UTC, datetime
+
+    from core.core.tenant_resolver import derive_tenant_slug
+    from core.features.approval_workflow.definition_repository import (
+        ApprovalWorkflowDefinitionRepository,
+    )
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
+    from core.features.payroll.approval import PayrollRunApprovalCoordinator
+
+    coordinator = PayrollRunApprovalCoordinator(
+        db=db,
+        definitions=ApprovalWorkflowDefinitionRepository(db),
+        instances=ApprovalWorkflowInstanceRepository(db),
+        delegations=ApprovalDelegationRepository(db),
+        now=lambda: datetime.now(UTC),
+        ai_client=getattr(request.app.state, "ai_client", None),
+        ai_authorization=request.headers.get("authorization"),
+        ai_tenant_slug=derive_tenant_slug(request),
+        complete_verified=service.complete_approval,
+    )
+    service.attach_approval(coordinator)
+    return service
+
+
+class _ApprovalResourceDispatchPort:
+    """Routes engine outcome callbacks to the owning module's authoritative state.
+
+    The engine is resource-agnostic (SKY-92): when an instance completes it
+    calls this port and the owning feature drives its authoritative transition
+    on the same request-scoped session. Approving a journal entry posts it
+    (``FinanceService.complete_posting``); approving a payroll run approves it
+    (``PayrollService.complete_approval``). The system actor passes
+    ``decided_by=None`` (auto approval), so both callbacks accept a nullable
+    user id for attribution.
+
+    Rejection / request-changes leave the resource in its pre-approval state
+    (draft / computed) - there is no module mutation, exactly like the
+    coordinator seams at submission time. An unknown resource type fails
+    closed: the workflow must not complete with no owner for the downstream
+    side effect, so the decision rolls back with the request.
+    """
+
+    def __init__(
+        self,
+        *,
+        finance: FinanceService,
+        payroll: PayrollService,
+        now: Callable[[], datetime],
+    ) -> None:
+        self._finance = finance
+        self._payroll = payroll
+        self._now = now
+
+    async def submit_for_approval(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        resource_type: str,
+        resource_id: uuid.UUID,
+        submitted_by: uuid.UUID,
+    ) -> None:
+        # The module coordinators already recorded their own pending marker at
+        # submission time; the API only serves decide/read flows.
+        return None
+
+    async def on_approved(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        resource_type: str,
+        resource_id: uuid.UUID,
+        decider_actor_type: str,
+        reason: str | None = None,
+        decided_by: uuid.UUID | None = None,
+    ) -> None:
+        now = self._now()
+        if resource_type == "journal_entry":
+            await self._finance.complete_posting(
+                tenant_id=tenant_id,
+                user_id=decided_by,
+                entry_id=resource_id,
+                posted_at=now,
+            )
+            return
+        if resource_type == "payroll_run":
+            await self._payroll.complete_approval(
+                run_id=resource_id,
+                tenant_id=tenant_id,
+                approved_by=decided_by,
+                actor_user_id=decided_by,
+                approved_at=now,
+            )
+            return
+        raise ConflictError(f"Unsupported approval resource type: {resource_type}")
+
+    async def on_rejected(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        resource_type: str,
+        resource_id: uuid.UUID,
+        reason: str | None = None,
+    ) -> None:
+        # The resource stays in its pre-approval state (draft / computed).
+        return None
+
+    async def on_request_changes(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        resource_type: str,
+        resource_id: uuid.UUID,
+        reason: str | None = None,
+    ) -> None:
+        # The resource stays in its pre-approval state (draft / computed).
+        return None
+
+    async def on_cancelled(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        resource_type: str,
+        resource_id: uuid.UUID,
+        reason: str | None = None,
+    ) -> None:
+        return None
+
+
+def get_approval_query_service(
+    db: AsyncSession = Depends(get_db),
+) -> ApprovalWorkflowQueryService:
+    """Composition root for the approval-workflow inbox read model (SKY-92).
+
+    Wires the inbox (with delegated eligibility) and the instance repository
+    onto the ONE request-scoped session: an inbox decision appears
+    immediately after the deciding request commits, and a revoked role or
+    delegation disappears from the next poll.
+    """
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.inbox_repository import (
+        ApprovalWorkflowInboxRepository,
+    )
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
+    from core.features.approval_workflow.query import ApprovalWorkflowQueryService
+
+    return ApprovalWorkflowQueryService(
+        inbox=ApprovalWorkflowInboxRepository(
+            db,
+            delegation_repository=ApprovalDelegationRepository(db),
+        ),
+        instances=ApprovalWorkflowInstanceRepository(db),
+    )
+
+
+def get_approval_decision_engine(
+    db: AsyncSession = Depends(get_db),
+    finance: FinanceService = Depends(get_finance_service),
+    payroll: PayrollService = Depends(get_payroll_service),
+) -> ApprovalEngine:
+    """Composition root for human decisions on approval instances (SKY-92).
+
+    The engine validates the actor against the step's resolved assignee set
+    (or an active delegation) at decision time and appends the audit
+    transition on the request-scoped session; the resource port dispatches a
+    completed instance to the owning module's authoritative transition
+    (finance post / payroll approve) on the same session, so the decision and
+    the downstream mutation commit atomically.
+    """
+    from core.features.approval_workflow.delegation_repository import (
+        ApprovalDelegationRepository,
+    )
+    from core.features.approval_workflow.engine import ApprovalEngine
+    from core.features.approval_workflow.instance_repository import (
+        ApprovalWorkflowInstanceRepository,
+    )
+
+    return ApprovalEngine(
+        repository=ApprovalWorkflowInstanceRepository(db),
+        now=lambda: datetime.now(UTC),
+        resource_port=_ApprovalResourceDispatchPort(
+            finance=finance,
+            payroll=payroll,
+            now=lambda: datetime.now(UTC),
+        ),
+        delegation_repository=ApprovalDelegationRepository(db),
+    )
 
 
 def get_finance_automation_service(

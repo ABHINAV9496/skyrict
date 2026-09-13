@@ -2928,6 +2928,31 @@ async def seed_demo_data(
             )
             counts["notification_prefs"] = 1
 
+        # ── APPROVAL ENGINE FLAGS (SKY-92) ─────────────────────────────
+        # Demo tenants opt the approval engine IN so the demo exercises
+        # journal-entry + payroll-run workflows (below-threshold
+        # auto-approval, human approval queues for larger amounts).
+        # Idempotent: an operator who set a flag explicitly later never gets
+        # it overwritten by re-seeding.
+        _approval_flag_keys = (
+            "approval_engine_enabled",
+            "je_approval_engine",
+            "payroll_approval_engine",
+        )
+        for _flag_key in _approval_flag_keys:
+            await session.execute(
+                text(
+                    "INSERT INTO erp_tenant_settings (tenant_id, id, key, value) "
+                    "SELECT :tid, gen_random_uuid(), :flag_key, 'true' "
+                    "WHERE NOT EXISTS ("
+                    "  SELECT 1 FROM erp_tenant_settings"
+                    "  WHERE tenant_id = :tid AND key = :flag_key"
+                    ")"
+                ),
+                {"tid": tenant_id, "flag_key": _flag_key},
+            )
+        counts["approval_engine_flags"] = len(_approval_flag_keys)
+
         await session.commit()
         logger.info("seed.demo.complete", tenant_id=str(tenant_id), **counts)
         return counts

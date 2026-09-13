@@ -251,6 +251,31 @@ Each module is a feature package under `src/core/features/<module>/` (`router.py
 
 **Acceptance criteria.** Leave balance never over-drawn; payroll run is idempotent and posts exactly one journal entry; terminated employees cannot be included in a new run; PII fields never appear in list payloads by default.
 
+### M-APR - Approval Workflows
+
+**Purpose.** One engine that routes and records approvals for any resource type that needs a review gate before its mutation - Phase 1 wires journal-entry posting and payroll-run approval; the engine, transitions, inbox, and decide API are resource-agnostic.
+
+**Entities.** `approval_workflow_definitions` (name, version, ordered steps jsonb, active flag - seeded defaults per resource type), `approval_workflow_instances` (definition_id/version, resource_type, resource_id, status, current_step_index, submitted_by/at, completed_at), `approval_workflow_steps` (instance_id, step_index, step_key, assignee_kind/value, status, decided_by/at, sla_due_at), `approval_workflow_transitions` (append-only: instance_id, new_state, previous_state, actor_type/id, reason, step_key, occurred_at).
+
+**Rules.**
+
+- The engine is the single eligibility authority: at decision time the current step's assignee set is resolved from live DB RBAC (user/role memberships) plus active delegations, and the actor must be a member. AI suggestions name a member of that set and are validated against it - they never narrow eligibility (ADR-006).
+- AI routing output is recorded as an `ai_suggestion` transition (recommendation, confidence, reasoning, model, suggested approver) and surfaced as advisory only; it is never re-computed and never a decision.
+- Completion side effects are dispatched once by the resource port on final approval: `journal_entry` → `FinanceService.complete_posting`, `payroll_run` → `PayrollService.complete_approval` (each keeps its own audit + domain events). Unknown resource types fail closed; the session commit makes workflow state + resource mutation atomic.
+- Delegations are recorded with `delegated_from` and surfaced to the reviewer; the engine still enforces the delegated actor's eligibility per step.
+
+**Endpoints (implemented - PLT-APPR-001, approval-workflow feature).**
+
+- `GET /api/v1/approval/inbox` (pending items for the caller: current step, SLA, eligibility/delegation source, latest AI suggestion)
+- `GET /api/v1/approval/inbox/{instance_id}` (full detail: steps, audit transitions, suggestion)
+- `POST /api/v1/approval/inbox/{instance_id}/decide` (approve / request_changes / reject + optional note ≤ 1000; delegates all validation + writes to the engine)
+
+**Access.** Router gate `erp.finance.approve` or `erp.payroll.approve`; the engine re-checks step membership for every decision.
+
+**Events.** Approval decisions are recorded on the instance's append-only transitions; resource mutations emit the owning feature's events (e.g. `journal_entry_posted`).
+
+**Acceptance criteria.** A suggestion cannot shrink the approver set (unit matrix); every decision is attributable on the transition trail; posting/approval happens exactly once per completed workflow; decisions and resource mutation commit atomically.
+
 ### M-RPT - Reporting & Analytics
 
 **Purpose.** The cross-module synthesis the workspace is built around: dashboards, exports, and scheduled snapshots consumed by the agent layer and the workspace UI.

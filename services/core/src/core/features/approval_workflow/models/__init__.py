@@ -6,7 +6,13 @@ contract, so the migration runner imports these models directly.
 """
 
 from core.features.approval_workflow.models.definition import ErpApprovalWorkflowDefinitionModel
+from core.features.approval_workflow.models.instance import ErpApprovalWorkflowInstanceModel
+from core.features.approval_workflow.models.step import ErpApprovalWorkflowStepModel
+from core.features.approval_workflow.models.transition import ErpApprovalTransitionModel
 
 __all__ = [
+    "ErpApprovalTransitionModel",
     "ErpApprovalWorkflowDefinitionModel",
+    "ErpApprovalWorkflowInstanceModel",
+    "ErpApprovalWorkflowStepModel",
 ]

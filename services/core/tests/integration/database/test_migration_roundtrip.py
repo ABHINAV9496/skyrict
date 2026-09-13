@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 51 revisions, 0001..0051) -> core ``downgrade base`` (all the way back to
+(all 52 revisions, 0001..0052) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -207,7 +207,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0051", f"head is {version}, expected 0051"
+            assert version == "0052", f"head is {version}, expected 0052"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1093,6 +1093,17 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 )
             ).scalar_one()
             assert transcript_nullable == "YES", "0051 transcript_text must be nullable"
+
+            # 0052: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
+            # gains erp.hr.ai.planning, the owner-gated key for L4 what-if
+            # scenario planning and its payroll-base source endpoint.
+            planning_perm = (
+                await conn.execute(
+                    text("SELECT description FROM core_permissions WHERE key = :key"),
+                    {"key": "erp.hr.ai.planning"},
+                )
+            ).scalar_one_or_none()
+            assert planning_perm is not None, "0052 must register erp.hr.ai.planning"
     finally:
         await engine.dispose()
 

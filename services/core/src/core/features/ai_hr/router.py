@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
 import httpx
@@ -31,6 +31,7 @@ from core.api.deps import (
     get_current_user,
     get_eval_repository,
     get_hr_ai_individual,
+    get_l4_payroll_repository,
     get_pattern_data_repository,
     get_payroll_anomaly_service,
     get_quality_service,
@@ -43,6 +44,7 @@ from core.core.permissions import (
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
     ERP_HR_AI_EVAL,
+    ERP_HR_AI_PLANNING,
     ERP_HR_AI_READ,
     ERP_HR_READ,
     ERP_HR_WRITE,
@@ -55,6 +57,8 @@ from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
 from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
+from core.features.ai_hr.l4_repository import PayrollBaseRepository
+from core.features.ai_hr.l4_schemas import PayrollBaseOut, payroll_base_to_out
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
@@ -116,6 +120,7 @@ _require_hr_ai_read = require_permission(ERP_HR_AI_READ)
 _require_hr_ai_acknowledge = require_permission(ERP_HR_AI_ACKNOWLEDGE)
 _require_hr_ai_copilot = require_permission(ERP_HR_AI_COPILOT)
 _require_hr_ai_eval = require_permission(ERP_HR_AI_EVAL)
+_require_hr_ai_planning = require_permission(ERP_HR_AI_PLANNING)
 _require_hr_read = require_permission(ERP_HR_READ)
 _require_hr_write = require_permission(ERP_HR_WRITE)
 
@@ -124,6 +129,7 @@ _HrAiReadDep = Annotated[dict[str, Any], Depends(_require_hr_ai_read)]
 _HrAiAckDep = Annotated[dict[str, Any], Depends(_require_hr_ai_acknowledge)]
 _HrAiCopilotDep = Annotated[dict[str, Any], Depends(_require_hr_ai_copilot)]
 _HrAiEvalDep = Annotated[dict[str, Any], Depends(_require_hr_ai_eval)]
+_HrAiPlanningDep = Annotated[dict[str, Any], Depends(_require_hr_ai_planning)]
 _HrReadDep = Annotated[dict[str, Any], Depends(_require_hr_read)]
 _HrWriteDep = Annotated[dict[str, Any], Depends(_require_hr_write)]
 _CurrentUserDep = Annotated[dict[str, Any], Depends(get_current_user)]
@@ -135,6 +141,7 @@ _SuggestionServiceDep = Annotated[SuggestionService, Depends(get_suggestion_serv
 _PayrollAnomalyServiceDep = Annotated[PayrollAnomalyService, Depends(get_payroll_anomaly_service)]
 _ComplianceServiceDep = Annotated[ComplianceService, Depends(get_compliance_service)]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
+_L4PayrollBaseRepoDep = Annotated[PayrollBaseRepository, Depends(get_l4_payroll_repository)]
 _PatternDataRepositoryDep = Annotated[
     AiHrPatternDataRepository, Depends(get_pattern_data_repository)
 ]
@@ -720,4 +727,26 @@ async def compliance_set_status(
     return ResponseEnvelope(
         data=compliance_finding_to_out(updated),
         message="Compliance finding status applied",
+    )
+
+
+@router.get("/l4/payroll-base", response_model=ResponseEnvelope[PayrollBaseOut])
+async def l4_payroll_base(
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    repository: _L4PayrollBaseRepoDep,
+    as_of: date | None = Query(default=None),
+) -> ResponseEnvelope[PayrollBaseOut]:
+    """Planning base snapshot for the L4 what-if engine (SKY-93, Commit 1).
+
+    Active roster employees with their current salary (latest effective
+    ``erp_compensation`` row as of ``as_of``) and enrolled benefit cost.
+    Money is serialized as strings; no scenario logic lives here - the
+    ai-agent engine projects this base over a 12-month horizon.
+    """
+    tenant_id = _tenant_id(current_user)
+    snapshot = await repository.get_payroll_base(tenant_id, as_of=as_of or datetime.now(UTC).date())
+    return ResponseEnvelope(
+        data=payroll_base_to_out(snapshot),
+        message="HR AI payroll base retrieved",
     )

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from core.features.ai_hr.anomaly_service import AnomalyService
     from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
+    from core.features.ai_hr.l4_repository import PayrollBaseRepository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )
@@ -617,6 +618,13 @@ def get_pattern_data_repository(db: AsyncSession = Depends(get_db)) -> PatternDa
     from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 
     return AiHrPatternDataRepository(db)
+
+
+def get_l4_payroll_repository(db: AsyncSession = Depends(get_db)) -> PayrollBaseRepository:
+    """Composition root for the HR-AI-004 payroll-base snapshot (SKY-93)."""
+    from core.features.ai_hr.l4_repository import PayrollBaseRepository
+
+    return PayrollBaseRepository(db)
 
 
 async def get_hr_ai_individual(

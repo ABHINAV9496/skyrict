@@ -6,6 +6,7 @@ import {
   BarChart3,
   Contact,
   FileText,
+  Inbox,
   Package,
   Receipt,
   ShoppingCart,
@@ -27,6 +28,7 @@ const quickLinks: {
   { href: "/dashboard/erp/hr", title: "HR", description: "People and the team.", icon: Users },
   { href: "/dashboard/erp/documents", title: "Documents", description: "Central document store with AI extraction.", icon: FileText },
   { href: "/dashboard/erp/payroll", title: "Payroll", description: "Runs, compensation, and pay rules.", icon: Receipt },
+  { href: "/dashboard/erp/approvals", title: "Approvals", description: "AI-routed approvals inbox.", icon: Inbox },
   { href: "/dashboard/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
 ];
 

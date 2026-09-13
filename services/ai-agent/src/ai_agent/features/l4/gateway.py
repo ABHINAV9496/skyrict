@@ -2,7 +2,8 @@
 
 Unlike the HR Copilot gateway which gracefully degrades on 403 (aggregate
 vs per-employee data tiers), the L4 gateway is *strict*: the caller has
-already passed the ``erp.hr.ai.planning`` gate at the core proxy edge, so a
+already passed the ``erp.hr.ai.planning`` gate both at this service's router
+(database-resolved, direct API hits get 403) and at the core proxy edge, so a
 403 or transport failure here is a hard error (misconfiguration or outage).
 
 The protocol (:class:`L4CoreGatewayPort`) is what the service depends on;

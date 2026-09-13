@@ -1,15 +1,18 @@
 """/ai/l4 endpoints - the L4 what-if workforce-cost planning engine (SKY-93).
 
-Authentication happens here (JWT re-verification); authorization happened
-upstream at the core monolith's proxy (``erp.ai.invoke`` + ``erp.hr.ai.planning``
-checked before forwarding).  Scenarios are frozen on create: the projection
-snapshot is stored as JSONB so reads are deterministic.
+Authentication happens here (JWT re-verification); authorization happens BOTH
+here and at the core monolith's proxy (``erp.ai.invoke`` + ``erp.hr.ai.planning``).
+This router independently enforces ``erp.hr.ai.planning`` from the database
+(every tool/route in ai-agent resolves permissions from the DB, never from
+JWT claims), so a direct hit on the API returns 403 without the key. Scenarios
+are frozen on create: the projection snapshot is stored as JSONB so reads are
+deterministic.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -26,12 +29,32 @@ from ai_agent.core.audit_service import AuditService
 from ai_agent.core.tenant_context import TenantContext
 from ai_agent.db.audit_repository import AiAuditLogRepository
 from ai_agent.db.l4_scenario_repository import L4ScenarioRepository
+from ai_agent.db.permission_repository import PermissionRepository
 from ai_agent.features.l4.gateway import HttpL4CoreGateway
 from ai_agent.features.l4.service import L4ScenarioService
 
 router = APIRouter(prefix="/ai/l4", tags=["ai-l4-planning"])
 
 _MAX_COMPARE = 3
+
+_HR_PLANNING_PERMISSION = "erp.hr.ai.planning"
+
+
+async def _require_hr_ai_planning(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """403 unless the caller holds ``erp.hr.ai.planning`` (owner wildcard ok)."""
+    granted = await PermissionRepository(session).has_permission(
+        user_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+        required=_HR_PLANNING_PERMISSION,
+    )
+    if not granted:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Requires {_HR_PLANNING_PERMISSION} permission",
+        )
 
 
 def get_l4_service(
@@ -56,6 +79,7 @@ async def create_scenario(
     body: ScenarioCreateIn,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     service: Annotated[L4ScenarioService, Depends(get_l4_service)],
+    _planning_granted: Annotated[None, Depends(_require_hr_ai_planning)] = None,
 ) -> ScenarioOut:
     """Create a named what-if scenario with a frozen projection snapshot."""
     result = await service.create(
@@ -74,6 +98,7 @@ async def create_scenario(
 async def list_scenarios_route(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     service: Annotated[L4ScenarioService, Depends(get_l4_service)],
+    _planning_granted: Annotated[None, Depends(_require_hr_ai_planning)] = None,
 ) -> list[ScenarioListItemOut]:
     """List named scenarios for this tenant, newest first."""
     rows = await service.list_scenarios(tenant_id=current_user["tenant_id"])
@@ -85,6 +110,7 @@ async def compare_scenarios_route(
     ids: Annotated[list[uuid.UUID], Query(...)],
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     service: Annotated[L4ScenarioService, Depends(get_l4_service)],
+    _planning_granted: Annotated[None, Depends(_require_hr_ai_planning)] = None,
 ) -> list[ScenarioCompareItemOut]:
     """Compare up to 3 scenarios side-by-side (stored snapshots, no recompute)."""
     if len(ids) < 2:
@@ -103,6 +129,7 @@ async def get_scenario_route(
     scenario_id: uuid.UUID,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     service: Annotated[L4ScenarioService, Depends(get_l4_service)],
+    _planning_granted: Annotated[None, Depends(_require_hr_ai_planning)] = None,
 ) -> ScenarioOut:
     """Get one named scenario by ID."""
     result = await service.get(
@@ -113,10 +140,20 @@ async def get_scenario_route(
 
 
 def _out_dates(d: dict[str, Any]) -> dict[str, Any]:
-    """Ensure date fields are isoformat strings for Pydantic."""
+    """Ensure date fields are isoformat strings for Pydantic.
+
+    ``created_at`` is a timestamp with a time-of-day component; the API
+    contract declares a calendar ``date``, so datetimes are truncated - an
+    ISO string with a non-midnight time makes Pydantic raise
+    ``date_from_datetime_inexact``.
+    """
     out = dict(d)
     for key in ("base_as_of", "created_at"):
         v = out.get(key)
-        if isinstance(v, date):
+        if isinstance(v, datetime):
+            out[key] = v.date().isoformat()
+        elif isinstance(v, date):
             out[key] = v.isoformat()
+        elif isinstance(v, str) and len(v) >= 10:
+            out[key] = v[:10]
     return out

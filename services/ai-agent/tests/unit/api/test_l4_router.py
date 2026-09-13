@@ -2,8 +2,9 @@
 
 TestClient without lifespan (no DB/Redis pools); ``get_l4_service`` is
 overridden with a scripted fake so these tests cover the HTTP contract:
-request validation, response mapping, the 422 boundary on compare, and the
-scenario JSONB output shape.
+request validation, response mapping, the 422 boundary on compare, the
+scenario JSONB output shape, and the router-level ``erp.hr.ai.planning``
+enforcement (direct API hits return 403 without the key).
 """
 
 from __future__ import annotations
@@ -55,7 +56,7 @@ _FAKE_SCENARIO = {
         "grand_total": "660000.00",
     },
     "created_by": str(_CALLER["user_id"]),
-    "created_at": "2026-09-12T00:00:00",
+    "created_at": "2026-09-12T14:30:00",
 }
 
 
@@ -80,6 +81,9 @@ class _FakeL4Service:
 def _app(
     fake_service: _FakeL4Service | None = None,
     monkeypatch: pytest.MonkeyPatch | None = None,
+    *,
+    permission_override: bool = True,
+    perm_rows: list[list[str]] | None = None,
 ) -> TestClient:
     if monkeypatch is not None:
         # Tenant middleware resolves the slug against Postgres; bypass it (its
@@ -90,9 +94,41 @@ def _app(
         )
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: _CALLER
-    app.dependency_overrides[get_db] = lambda: None
+    app.dependency_overrides[get_db] = lambda: (
+        _FakePermSession(perm_rows)
+        if perm_rows is not None
+        else None
+    )
+    if permission_override:
+        app.dependency_overrides[l4_router._require_hr_ai_planning] = lambda: None
     app.dependency_overrides[l4_router.get_l4_service] = lambda: fake_service or _FakeL4Service()
     return TestClient(app, raise_server_exceptions=True)
+
+
+class _FakePermSession:
+    """Scripted AsyncSession stand-in that answers the RBAC join result."""
+
+    def __init__(self, rows: list[list[str]]) -> None:
+        self._rows = rows
+
+    async def execute(self, _stmt: Any) -> _FakePermResult:
+        return _FakePermResult(self._rows)
+
+
+class _FakePermResult:
+    def __init__(self, rows: list[list[str]]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _FakeScalars:
+        return _FakeScalars(self._rows)
+
+
+class _FakeScalars:
+    def __init__(self, rows: list[list[str]]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[list[str]]:
+        return self._rows
 
 
 class TestCreateScenario:
@@ -196,3 +232,64 @@ class TestCompareScenarios:
 
         assert response.status_code == 422
         assert "at most 3" in response.json()["detail"]
+
+
+class _PermDeniedApp:
+    """The L4 router must 403 on a direct API hit without erp.hr.ai.planning."""
+
+    def test_endpoints_denied_without_permission(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _app(
+            monkeypatch=monkeypatch,
+            permission_override=False,
+            perm_rows=[],
+        )
+        headers = {"authorization": "Bearer t"}
+        body = {
+            "name": "x",
+            "base_as_of": "2026-01-01",
+            "horizon": 12,
+            "actions": [{"type": "salary_merit", "percent": "0.05", "effective_month": 4}],
+        }
+
+        for method, url in (
+            ("POST", "/api/v1/ai/l4/scenarios"),
+            ("GET", "/api/v1/ai/l4/scenarios"),
+            ("GET", f"/api/v1/ai/l4/scenarios/compare?ids={_SCENARIO_ID}&ids={uuid.uuid4()}"),
+            ("GET", f"/api/v1/ai/l4/scenarios/{_SCENARIO_ID}"),
+        ):
+            response = client.request(method, url, headers=headers, json=body if method == "POST" else None)
+            assert response.status_code == 403, f"{method} {url}"
+
+    def test_granted_by_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _app(
+            monkeypatch=monkeypatch,
+            permission_override=False,
+            perm_rows=[["erp.hr.ai.planning"]],
+        )
+
+        response = client.get(
+            "/api/v1/ai/l4/scenarios",
+            headers={"authorization": "Bearer t"},
+        )
+
+        assert response.status_code == 200
+
+    def test_granted_by_owner_wildcard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _app(
+            monkeypatch=monkeypatch,
+            permission_override=False,
+            perm_rows=[["*"]],
+        )
+
+        response = client.post(
+            "/api/v1/ai/l4/scenarios",
+            json={
+                "name": "owner scenario",
+                "base_as_of": "2026-01-01",
+                "horizon": 12,
+                "actions": [{"type": "salary_merit", "percent": "0.05", "effective_month": 4}],
+            },
+            headers={"authorization": "Bearer t"},
+        )
+
+        assert response.status_code == 200

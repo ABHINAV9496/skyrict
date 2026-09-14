@@ -4,8 +4,10 @@ The forecast is a computed product - one point per forecast month, each with
 an optional ±1.5 sigma confidence band. ``backtest_mape`` / ``sigma`` are
 run-level aggregates; both are None when history is too short to validate.
 ``pipeline_value`` is the run-level total of weighted expected pipeline
-(open CRM opportunities, ``probability/100 x amount`` bucketed by expected
-close month) blended into the horizon; None when the forecast abstained.
+(open CRM opportunities ``conversion_weight x amount`` - explicit
+``probability/100`` when set, else the stage's historical conversion rate
+from the CRM timeline, else zero - bucketed by expected close month) blended
+into the horizon; None when the forecast abstained.
 """
 
 from __future__ import annotations
@@ -22,12 +24,15 @@ from skyrict_common.schemas import ResponseEnvelope
 class ForecastDealResponse(BaseModel):
     """One open CRM deal blended into a forecast month (SKY-82 deal health).
 
-    ``weighted`` is the raw conversion value (``probability/100 x amount``);
-    ``adjusted`` applies the deal's latest ai-agent health rating - green
-    keeps full weight, yellow/red discount it (``factor``), blended toward
-    neutral by ``confidence``. ``health`` / ``confidence`` are None for deals
-    the health engine has never assessed (``factor`` 1.0). The month's
-    ``pipeline`` is the sum of its deals' ``adjusted`` values.
+    ``weighted`` is the raw conversion value (``conversion_weight x amount``;
+    the weight is ``probability/100`` when an explicit probability is set,
+    otherwise the stage's historical conversion rate from the CRM timeline,
+    otherwise zero - SKY-91); ``adjusted`` applies the deal's latest ai-agent
+    health rating - green keeps full weight, yellow/red discount it
+    (``factor``), blended toward neutral by ``confidence``. ``health`` /
+    ``confidence`` are None for deals the health engine has never assessed
+    (``factor`` 1.0). The month's ``pipeline`` is the sum of its deals'
+    ``adjusted`` values.
     """
 
     id: uuid.UUID

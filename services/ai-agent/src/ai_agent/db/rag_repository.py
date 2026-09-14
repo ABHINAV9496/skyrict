@@ -111,6 +111,7 @@ class RagRepository:
                     metadata_={},
                 )
             )
+            await self.session.flush()
             for child, vector in zip(parent.children, child_vectors, strict=True):
                 if len(vector) != dims:
                     raise ValueError(

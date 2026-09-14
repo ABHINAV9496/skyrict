@@ -20,13 +20,18 @@ reach the upstream request target).
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from core.api.deps import require_all_permissions, require_permission
+from core.api.deps import (
+    get_crm_workspace_service,
+    get_current_scope,
+    require_all_permissions,
+    require_permission,
+)
 from core.core.permissions import (
     ERP_AI_COACHING_READ,
     ERP_AI_COACHING_REVIEW,
@@ -47,7 +52,10 @@ from core.core.permissions import (
     ERP_SALES_READ,
 )
 from core.core.tenant_resolver import derive_tenant_slug
+from core.domain.value_objects import DataScope
 from core.features.ai.proxy import forward_to_ai_agent, relay_response
+from core.features.ai.schemas import TranscriptForwardRequest
+from core.features.crm.workspace_service import CrmWorkspaceService
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -487,6 +495,112 @@ async def proxy_crm_deal_health_sweep(
 ) -> Response:
     """Recheck deal health for all open opportunities -> ai-agent /api/v1/ai/crm/opportunities/sweep."""
     return await _proxy(request, client, "/api/v1/ai/crm/opportunities/sweep")
+
+
+# --- CRM transcript store + analysis (SKY-91) --------------------------------
+
+# GET is a plain relay (latest persisted analysis). POST is NOT a plain relay:
+# core first persists the raw transcript into ``erp_crm_activities`` scoped by
+# the caller's DataScope - the exact ``update_activity`` boundary the workspace
+# API enforces - and only then forwards the analysis request. The transcript is
+# therefore NEVER lost when ai-agent is down: the store happens first, and the
+# analysis can be re-triggered any time. Permission matrix: erp.ai.invoke +
+# erp.crm.write for POST (write-like), erp.ai.invoke + erp.crm.read for GET.
+
+
+@router.get("/crm/activities/{activity_id}/transcript")
+async def proxy_get_transcript_analysis(
+    request: Request,
+    activity_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_read: _CrmReadDep,
+    client: _ClientDep,
+) -> Response:
+    """Latest CRM transcript analysis -> ai-agent /api/v1/ai/crm/activities/{id}/transcript."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/activities/{activity_id}/transcript")
+
+
+@router.post("/crm/activities/{activity_id}/transcript")
+async def proxy_transcript_analysis(
+    request: Request,
+    activity_id: uuid.UUID,
+    body: TranscriptForwardRequest,
+    _invoke: _InvokeDep,
+    current_user: _CrmWriteDep,
+    client: _ClientDep,
+    svc: Annotated[CrmWorkspaceService, Depends(get_crm_workspace_service)],
+    scope_team: Annotated[tuple[DataScope, uuid.UUID | None], Depends(get_current_scope)],
+) -> Response:
+    """Store a CRM transcript in core, then analyze it in ai-agent.
+
+    The write is scoped exactly like every other CRM mutation: the request
+    -resolved ``DataScope`` + caller ids are passed straight through, so the
+    owner/team/all grant is the SAME boundary ``PUT /crm/activities/{id}``
+    enforces (the AI layer can never widen it). After the transcript commits,
+    the analysis request is forwarded with the validated body - no re-read of
+    the consumed request stream.
+    """
+    scope, team_id = scope_team
+    await svc.update_activity(
+        activity_id,
+        tenant_id=uuid.UUID(current_user["tenant_id"]),
+        scope=scope,
+        user_id=cast("uuid.UUID", current_user["user_id"]),
+        team_id=team_id,
+        changes={"transcript_text": body.transcript},
+    )
+    authorization = request.headers.get("authorization")
+    upstream = await forward_to_ai_agent(
+        client,
+        method="POST",
+        upstream_path=f"/api/v1/ai/crm/activities/{activity_id}/transcript",
+        authorization=authorization,
+        tenant_slug=derive_tenant_slug(request),
+        body=body.model_dump_json().encode(),
+    )
+    return relay_response(upstream)
+
+
+# --- CRM anomaly management (SKY-91) ---------------------------------------
+# The anomaly inbox reads the tenant-scoped feed; resolve/dismiss are the
+# human dispositions (write-like). Matrix: erp.ai.invoke + erp.crm.read for
+# the list, erp.ai.invoke + erp.crm.write for the terminal transitions -
+# same shape as the follow-up apply/dismiss proxies above.
+
+
+@router.get("/crm/anomalies")
+async def proxy_list_crm_anomalies(
+    request: Request,
+    _invoke: _InvokeDep,
+    _crm_read: _CrmReadDep,
+    client: _ClientDep,
+) -> Response:
+    """Open CRM pipeline anomaly feed -> ai-agent /api/v1/ai/crm/anomalies."""
+    return await _proxy(request, client, "/api/v1/ai/crm/anomalies")
+
+
+@router.post("/crm/anomalies/{anomaly_id}/resolve")
+async def proxy_resolve_crm_anomaly(
+    request: Request,
+    anomaly_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_write: _CrmWriteDep,
+    client: _ClientDep,
+) -> Response:
+    """Resolve an open CRM anomaly -> ai-agent /api/v1/ai/crm/anomalies/{id}/resolve."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/anomalies/{anomaly_id}/resolve")
+
+
+@router.post("/crm/anomalies/{anomaly_id}/dismiss")
+async def proxy_dismiss_crm_anomaly(
+    request: Request,
+    anomaly_id: uuid.UUID,
+    _invoke: _InvokeDep,
+    _crm_write: _CrmWriteDep,
+    client: _ClientDep,
+) -> Response:
+    """Dismiss a CRM anomaly as false positive -> ai-agent /api/v1/ai/crm/anomalies/{id}/dismiss."""
+    return await _proxy(request, client, f"/api/v1/ai/crm/anomalies/{anomaly_id}/dismiss")
 
 
 # --- NL report builder (SKY-80) ---------------------------------------------

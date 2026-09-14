@@ -1,11 +1,12 @@
 name: Finance - Nightly Prompt Eval
 
-# Finance AI prompt quality (FIN-AI-002, SKY-67). Runs nightly against the
-# REAL production prompt functions (a1_suggest / a2_draft / a7_narrate /
-# a8_remind) over the curated cases in tests/eval/finance_prompts.yaml and
-# records one row per feature in ai_finance_eval_runs. warn-not-fail by
-# contract: `eval-finance` never exits nonzero, so prompt regressions surface
-# as WARNINGS + persisted rows instead of blocking development.
+# Finance AI prompt quality (FIN-AI-002, SKY-67, FIN-AI-004, SKY-83). Runs
+# nightly against the REAL production prompt functions (a1_suggest / a2_draft /
+# a7_narrate / a8_remind / a5_tax_summary / a10_audit / a12_doc_qa) over the
+# curated cases in tests/eval/finance_prompts.yaml and records one row per
+# feature in ai_finance_eval_runs. warn-not-fail by contract: `eval-finance`
+# never exits nonzero, so prompt regressions surface as WARNINGS + persisted
+# rows instead of blocking development.
 #
 # Secrets required:
 #   OPENAI_API_KEY         - LLM provider for the prompt functions

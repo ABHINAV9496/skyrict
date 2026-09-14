@@ -22,10 +22,17 @@ observed more than once.
 Pipeline weighting (SKY-82): each forecast month may also carry an additive
 CRM pipeline uplift. ``compute_forecast`` accepts a ``pipeline`` map of
 forecast-month -> expected revenue from open deals (weighted conversion value
-= per-deal ``probability/100 x amount``, bucketed by ``expected_close_date``).
+= per-deal conversion weight x amount, bucketed by ``expected_close_date``).
 The uplift only touches the projected months - the backtest, MAPE, and sigma
 band are computed over historical months only, so pipeline data can never
-inflate the model's reported accuracy. The per-deal conversion weight may be
+inflate the model's reported accuracy.
+
+The per-deal conversion weight is deterministic CRM math (SKY-91, FIN-AI-003
+- no LLM output feeds it): an explicit non-zero ``probability`` wins
+(``probability/100``); otherwise the deal's stage contributes its historical
+conversion rate from the CRM timeline (won / (won + lost) outcomes per stage,
+:func:`stage_conversion_rates`, blended by :func:`conversion_weight`); a stage
+without any completed outcome contributes nothing. The weight may then be
 modulated by the ai-agent's deal-health engine (:func:`deal_health_factor`):
 a green deal keeps its full weight, a yellow or red deal is discounted to its
 band factor, and the discount is blended toward neutral by low confidence (a
@@ -91,6 +98,43 @@ class Forecast:
 
 def _quantize(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+
+def stage_conversion_rates(
+    won_from_stage: Mapping[str, int], lost_from_stage: Mapping[str, int]
+) -> dict[str, Decimal]:
+    """Historical conversion rate per pipeline stage (SKY-91).
+
+    A stage's rate is its completed outcomes - won / (won + lost) - recorded
+    on the CRM timeline (``opportunity.won`` / ``opportunity.lost`` events
+    carrying ``from_stage``). Stages with no completed outcome get no entry:
+    callers distinguish "no history" (no rate) from an observed zero rate,
+    which matters because :func:`conversion_weight` only falls back to a rate
+    that actually exists.
+    """
+    rates: dict[str, Decimal] = {}
+    for stage in won_from_stage.keys() | lost_from_stage.keys():
+        total = won_from_stage.get(stage, 0) + lost_from_stage.get(stage, 0)
+        if total <= 0:
+            continue
+        rates[stage] = _quantize(Decimal(won_from_stage.get(stage, 0)) / Decimal(total))
+    return rates
+
+
+def conversion_weight(probability: int, stage_rate: Decimal | None) -> Decimal:
+    """Deterministic per-deal conversion weight for the pipeline blend (SKY-91).
+
+    An explicit non-zero ``probability`` wins (``probability/100``); otherwise
+    the deal's stage contributes its historical conversion rate when that stage
+    has completed outcomes (see :func:`stage_conversion_rates`); otherwise the
+    weight is zero. This number is pure CRM math - the ai-agent's LLM output
+    never feeds it (FIN-AI-003).
+    """
+    if probability > 0:
+        return _quantize(Decimal(probability) / Decimal("100"))
+    if stage_rate is not None:
+        return _quantize(stage_rate)
+    return Decimal("0")
 
 
 def deal_health_factor(health: str | None, confidence: float | None) -> Decimal:

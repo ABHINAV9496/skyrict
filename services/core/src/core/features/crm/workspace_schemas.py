@@ -87,6 +87,9 @@ class ActivityUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     due_at: datetime | None = None
     notes: str | None = Field(default=None, max_length=4000)
+    transcript_text: str | None = Field(
+        default=None, max_length=1_000_000, description="Raw call/meeting transcript"
+    )
     owner_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
 
@@ -105,6 +108,7 @@ class ActivityResponse(BaseModel):
     completed_at: datetime | None
     completed_by: uuid.UUID | None
     notes: str | None
+    transcript_text: str | None
     owner_id: uuid.UUID | None
     team_id: uuid.UUID | None
     created_at: datetime | None

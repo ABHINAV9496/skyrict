@@ -368,6 +368,12 @@ export const erpNavGroups: NavGroup[] = [
                         permission: "erp.finance.read",
                     },
                     {
+                        href: "/dashboard/erp/finance/ai-docs",
+                        label: "AI Docs",
+                        icon: Sparkles,
+                        permission: "erp.finance.ai.read",
+                    },
+                    {
                         href: "/dashboard/erp/finance/settings",
                         label: "Settings",
                         icon: SlidersHorizontal,

@@ -10,7 +10,7 @@ export default function CrmAiPage() {
             <div className="space-y-6">
                 <PageHeader
                     title="AI Insights"
-                    description="Lead scores, deal health, and AI-generated follow-up suggestions."
+                    description="Pipeline anomaly detection, lead scores, deal health, and AI-generated follow-up suggestions."
                     icon={Sparkles}
                 />
                 <CrmAiPanel />

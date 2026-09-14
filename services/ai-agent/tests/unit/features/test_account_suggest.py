@@ -126,6 +126,13 @@ class TestParse:
     def test_invalid_returns_none(self) -> None:
         assert _parse_json("garbage") is None
 
+    def test_last_complete_object_wins_over_draft(self) -> None:
+        transcript = '{"a": 1} became {"a": 2, "b": 3}'
+        assert _parse_json(transcript) == {"a": 2, "b": 3}
+
+    def test_skips_incomplete_prefix_and_returns_valid_object(self) -> None:
+        assert _parse_json('{"a": became {"a": 1}}') == {"a": 1}
+
 
 # ---------------------------------------------------------------------------
 # draft_entry tests

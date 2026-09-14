@@ -24,6 +24,11 @@ from ai_agent.api.v1.routers.finance_ai import (
     draft_entry_router,
     reminders_router,
 )
+from ai_agent.api.v1.routers.finance_docs import (
+    audit_narration_router,
+    doc_qa_router,
+    tax_summary_router,
+)
 from ai_agent.api.v1.routers.finance_lines import router as finance_lines_router
 from ai_agent.api.v1.routers.forecast import router as forecast_router
 from ai_agent.api.v1.routers.guardian import router as guardian_router
@@ -66,4 +71,7 @@ api_router.include_router(anomaly_narrate_router)
 api_router.include_router(reminders_router)
 api_router.include_router(finance_lines_router)
 api_router.include_router(supplier_risk_router)
+api_router.include_router(tax_summary_router)
+api_router.include_router(audit_narration_router)
+api_router.include_router(doc_qa_router)
 api_router.include_router(documents_router)

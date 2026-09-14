@@ -1224,6 +1224,7 @@ class Activity:
     completed_at: datetime | None = None
     completed_by: uuid.UUID | None = None
     notes: str | None = None
+    transcript_text: str | None = None
     owner_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     id: uuid.UUID | None = None

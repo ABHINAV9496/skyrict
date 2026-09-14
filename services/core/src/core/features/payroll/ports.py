@@ -281,4 +281,29 @@ class PayslipApprovedNotifierPort(Protocol):
     ) -> None: ...
 
 
-__all__ = ["LeaveLedgerPort", "PayrollRepositoryPort", "PayslipApprovedNotifierPort"]
+class PayrollRunApprovalPort(Protocol):
+    """Optional SKY-92 seam: route ``approve_run`` through the approval engine.
+
+    Implemented by ``features.payroll.approval.PayrollRunApprovalCoordinator``
+    (one instance per request, attached at the composition root) and injected
+    into ``PayrollService`` as ``approval``. When absent, ``approve_run``
+    keeps its direct APPROVED transition exactly as before.
+    """
+
+    async def submit_for_approval(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        run: ent.PayrollRun,
+        total_net: Decimal,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ent.PayrollRun: ...
+
+
+__all__ = [
+    "LeaveLedgerPort",
+    "PayrollRepositoryPort",
+    "PayrollRunApprovalPort",
+    "PayslipApprovedNotifierPort",
+]

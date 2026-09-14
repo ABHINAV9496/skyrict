@@ -1,10 +1,11 @@
 """Database access for the CRM AI tables (SKY-61 Part 11 storage).
 
-Owns the three tenant-scoped CRUD concerns for ``ai_lead_scores``,
-``ai_deal_health``, and ``ai_follow_up_suggestions``. All writes are scoped by
-``tenant_id`` so RLS never sees a cross-tenant leak. The follow-up repository
-also implements the status lifecycle (pending -> sent|dismissed|expired) and
-the expiry sweep the hourly check consumes.
+Owns the tenant-scoped CRUD concerns for ``ai_lead_scores``,
+``ai_deal_health``, ``ai_follow_up_suggestions``, and (SKY-91)
+``ai_transcript_analyses``. All writes are scoped by ``tenant_id`` so RLS
+never sees a cross-tenant leak. The follow-up repository also implements the
+status lifecycle (pending -> sent|dismissed|expired) and the expiry sweep the
+hourly check consumes.
 """
 
 from __future__ import annotations
@@ -14,9 +15,11 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, update
 
+from ai_agent.models.ai_crm_anomaly import AiCrmAnomalyModel
 from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
 from ai_agent.models.ai_lead_score import AiLeadScoreModel
+from ai_agent.models.ai_transcript_analysis import AiTranscriptAnalysisModel
 
 if TYPE_CHECKING:
     import uuid
@@ -90,6 +93,25 @@ class CrmAiRepository:
                 recommended_actions=recommended_actions,
             )
         )
+
+    # --- transcript analyses -------------------------------------------------
+    async def latest_transcript_analysis(
+        self, *, tenant_id: uuid.UUID, activity_id: uuid.UUID
+    ) -> AiTranscriptAnalysisModel | None:
+        stmt = (
+            select(AiTranscriptAnalysisModel)
+            .where(
+                AiTranscriptAnalysisModel.tenant_id == tenant_id,
+                AiTranscriptAnalysisModel.activity_id == activity_id,
+            )
+            .order_by(AiTranscriptAnalysisModel.analyzed_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def save_transcript_analysis(self, row: AiTranscriptAnalysisModel) -> None:
+        self._session.add(row)
 
     # --- follow-up suggestions -----------------------------------------------
     async def list_pending_for_user(
@@ -216,3 +238,98 @@ class CrmAiRepository:
         self._session.add(row)
         await self._session.flush()
         return row
+
+    # --- CRM anomaly detection (SKY-91) -------------------------------------
+    async def create_crm_anomaly(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        rule_id: str,
+        severity: str,
+        title: str,
+        description: str,
+        context: dict[str, object],
+    ) -> AiCrmAnomalyModel:
+        """Persist one detected CRM pipeline anomaly."""
+        row = AiCrmAnomalyModel(
+            tenant_id=tenant_id,
+            opportunity_id=opportunity_id,
+            rule_id=rule_id,
+            severity=severity,
+            title=title,
+            description=description,
+            context=context,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def open_crm_anomaly_count_for_opportunity_and_rule(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        rule_id: str,
+    ) -> int:
+        """Count open anomalies for one opportunity+rule (dedup guard)."""
+        stmt = (
+            select(func.count())
+            .select_from(AiCrmAnomalyModel)
+            .where(
+                AiCrmAnomalyModel.tenant_id == tenant_id,
+                AiCrmAnomalyModel.opportunity_id == opportunity_id,
+                AiCrmAnomalyModel.rule_id == rule_id,
+                AiCrmAnomalyModel.status == "open",
+            )
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_open_crm_anomalies(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> list[AiCrmAnomalyModel]:
+        """List all open CRM anomalies for a tenant, newest first."""
+        stmt = (
+            select(AiCrmAnomalyModel)
+            .where(
+                AiCrmAnomalyModel.tenant_id == tenant_id,
+                AiCrmAnomalyModel.status == "open",
+            )
+            .order_by(AiCrmAnomalyModel.detected_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_crm_anomaly_by_id(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        anomaly_id: uuid.UUID,
+    ) -> AiCrmAnomalyModel | None:
+        stmt = select(AiCrmAnomalyModel).where(
+            AiCrmAnomalyModel.tenant_id == tenant_id,
+            AiCrmAnomalyModel.id == anomaly_id,
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def mark_crm_anomaly_resolved(
+        self,
+        *,
+        row: AiCrmAnomalyModel,
+    ) -> None:
+        row.status = "resolved"
+        row.resolved_at = datetime.now(UTC)
+        await self._session.flush()
+
+    async def mark_crm_anomaly_dismissed(
+        self,
+        *,
+        row: AiCrmAnomalyModel,
+    ) -> None:
+        row.status = "dismissed"
+        row.dismissed_at = datetime.now(UTC)
+        await self._session.flush()

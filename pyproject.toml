@@ -241,7 +241,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # reportlab ships no type stubs (payslip PDF renderer) — treat as Any.
-module = ["reportlab", "reportlab.lib.*", "reportlab.platypus.*"]
+module = ["reportlab", "reportlab.lib.*", "reportlab.pdfgen.*", "reportlab.platypus.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -1,5 +1,6 @@
 import {
     apiFetch,
+    apiFetchRaw,
     apiFetchWithMeta,
     apiPost,
     type PaginationMeta,
@@ -1018,4 +1019,137 @@ export function refreshRevenueForecast(): Promise<RevenueForecast> {
         `${FINANCE}/forecast/revenue/refresh`,
         {},
     ).then(mapRevenueForecast);
+}
+
+// ---------------------------------------------------------------------------
+// FIN-AI-004 (SKY-81 / SKY-83): AI document & tax suite
+// ---------------------------------------------------------------------------
+
+export interface TaxCategoryLine {
+    category: string;
+    detail: string;
+    input_tax: string;
+    output_tax: string;
+    net: string;
+}
+
+export interface TaxSummary {
+    id: string;
+    period_id: string;
+    period_name: string;
+    start_date: string;
+    end_date: string;
+    snapshot_id: string | null;
+    categories: TaxCategoryLine[];
+    total_input: string;
+    total_output: string;
+    status: "draft" | "approved" | "rejected";
+    model_used: string;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    created_at: string;
+}
+
+export interface AiDocAction {
+    id: string;
+    status: "draft" | "approved" | "rejected";
+    watermarked: boolean;
+}
+
+export type AiDocApproveAction = Omit<AiDocAction, "status"> & {
+    status: "draft" | "approved";
+};
+
+export interface AiDoc {
+    id: string;
+    doc_type: "pnl" | "balance_sheet";
+    snapshot_id: string;
+    version: number;
+    status: "draft" | "approved";
+    watermarked: boolean;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    created_at: string;
+}
+
+export interface AuditNarration {
+    from_date: string;
+    to_date: string;
+    narration: string;
+    risk_areas: {
+        entry_id: string | null;
+        risk_type: string;
+        description: string;
+        severity: "low" | "medium" | "high";
+    }[];
+    model_used: string;
+}
+
+export interface DocCitation {
+    source_ref: string;
+    chunk_text: string;
+    score: number;
+}
+
+export interface DocQaAnswer {
+    answer: string;
+    citations: DocCitation[];
+    model_used: string;
+}
+
+const AI_DOCS = "/api/v1/finance/ai";
+
+export function generateTaxSummary(periodId: string): Promise<TaxSummary> {
+    return apiPost<TaxSummary>(`${AI_DOCS}/tax-summary/generate`, {
+        period_id: periodId,
+    });
+}
+
+export function listTaxSummaries(): Promise<TaxSummary[]> {
+    return apiFetch<TaxSummary[]>(`${AI_DOCS}/tax-summaries`);
+}
+
+export function approveTaxSummary(summaryId: string): Promise<AiDocAction> {
+    return apiPost<AiDocAction>(
+        `${AI_DOCS}/tax-summaries/${summaryId}/approve`,
+        {},
+    );
+}
+
+export function rejectTaxSummary(summaryId: string): Promise<AiDocAction> {
+    return apiPost<AiDocAction>(
+        `${AI_DOCS}/tax-summaries/${summaryId}/reject`,
+        {},
+    );
+}
+
+export function generateFinanceDoc(input: {
+    doc_type: "pnl" | "balance_sheet";
+    snapshot_id: string;
+    snapshot_data: Record<string, unknown>;
+}): Promise<AiDoc> {
+    return apiPost<AiDoc>(`${AI_DOCS}/docs/generate`, input);
+}
+
+export function listFinanceDocs(): Promise<AiDoc[]> {
+    return apiFetch<AiDoc[]>(`${AI_DOCS}/docs`);
+}
+
+export function downloadFinanceDoc(docId: string): Promise<Response> {
+    return apiFetchRaw(`${AI_DOCS}/docs/${docId}/download`);
+}
+
+export function approveFinanceDoc(docId: string): Promise<AiDocApproveAction> {
+    return apiPost<AiDocApproveAction>(`${AI_DOCS}/docs/${docId}/approve`, {});
+}
+
+export function narrateFinanceAudit(input: {
+    from_date: string;
+    to_date: string;
+}): Promise<AuditNarration> {
+    return apiPost<AuditNarration>(`${AI_DOCS}/audit-narration`, input);
+}
+
+export function askFinanceDocs(question: string): Promise<DocQaAnswer> {
+    return apiPost<DocQaAnswer>(`${AI_DOCS}/doc-qa`, { question });
 }

@@ -24,6 +24,7 @@ from ai_agent.models.ai_audit_log import AiAuditLogModel
 from ai_agent.models.ai_coaching_suggestion import AiCoachingSuggestionModel
 from ai_agent.models.ai_conversation import AiConversation
 from ai_agent.models.ai_conversation_message import AiConversationMessage
+from ai_agent.models.ai_crm_anomaly import AiCrmAnomalyModel
 from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_digest import AiDigestModel
 from ai_agent.models.ai_document_embeddings import AiDocumentEmbeddingModel
@@ -45,6 +46,7 @@ from ai_agent.models.ai_restock_settings import AiRestockSettingsModel
 from ai_agent.models.ai_semantic_memory import AiSemanticMemoryModel
 from ai_agent.models.ai_suggestion import AiSuggestionModel
 from ai_agent.models.ai_supplier_risk import AiSupplierRiskModel
+from ai_agent.models.ai_transcript_analysis import AiTranscriptAnalysisModel
 from ai_agent.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from ai_agent.models.core_rbac import CoreRoleModel, CoreUserRoleModel
 from ai_agent.models.graph_checkpoint import (
@@ -62,6 +64,7 @@ __all__ = [
     "AiCoachingSuggestionModel",
     "AiConversation",
     "AiConversationMessage",
+    "AiCrmAnomalyModel",
     "AiDealHealthModel",
     "AiDigestModel",
     "AiDocumentEmbeddingModel",
@@ -83,6 +86,7 @@ __all__ = [
     "AiSemanticMemoryModel",
     "AiSuggestionModel",
     "AiSupplierRiskModel",
+    "AiTranscriptAnalysisModel",
     "Base",
     "CoreRoleModel",
     "CoreUserRoleModel",

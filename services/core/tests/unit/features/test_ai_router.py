@@ -19,7 +19,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.api import deps as api_deps
-from core.api.deps import get_current_user, get_db
+from core.api.deps import (
+    get_crm_workspace_service,
+    get_current_scope,
+    get_current_user,
+    get_db,
+)
 from core.core.exceptions import SkyrictError, skyrict_error_handler
 from core.core.permissions import (
     ERP_AI_COACHING_READ,
@@ -30,6 +35,7 @@ from core.core.permissions import (
     ERP_AI_L3_REFRESH,
     ERP_AI_NARRATOR_REFRESH,
     ERP_CRM_READ,
+    ERP_CRM_WRITE,
     ERP_FINANCE_READ,
     ERP_HR_AI_MANAGEMENT,
     ERP_INVENTORY_READ,
@@ -37,36 +43,73 @@ from core.core.permissions import (
     ERP_REPORTS_READ,
     ERP_SALES_READ,
 )
+from core.domain.value_objects import DataScope
 from core.features.ai import router as ai_router
 
 
-def _app_with_recorder(seen: list[httpx.Request]) -> TestClient:
-    """App with auth deps stubbed and an upstream that records every call."""
+def _app_with_recorder(
+    seen: list[httpx.Request],
+    fake_workspace: object | None = None,
+) -> TestClient:
+    """App with auth deps stubbed and an upstream that records every call.
+
+    ``fake_workspace`` replaces the CRM workspace service used by the SKY-91
+    transcript POST (which stores the transcript BEFORE forwarding). Existing
+    routes never resolve it, so the default stub is inert for them. The
+    stubbed user carries string ids because the transcript handler converts
+    tenant/user to UUIDs exactly like the workspace API.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return httpx.Response(200, json={"ok": True})
 
+    fake_user = {
+        "sub": "user-1",
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "tenant_id": "22222222-2222-4222-8222-222222222222",
+    }
     app = FastAPI()
     app.include_router(ai_router.router, prefix="/api/v1")
-    app.dependency_overrides[ai_router._require_ai_invoke] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_inventory_read] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_inventory_write] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_inventory_ai_approve] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_narrator_reads] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_narrator_refresh] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_reports_read] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_reports_create] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_crm_read] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_coaching_read] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_coaching_review] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_guardian_read] = lambda: {"sub": "u1"}
-    app.dependency_overrides[ai_router._require_guardian_review] = lambda: {"sub": "u1"}
+    app.dependency_overrides[ai_router._require_ai_invoke] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_inventory_read] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_inventory_write] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_inventory_ai_approve] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_narrator_reads] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_narrator_refresh] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_reports_read] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_reports_create] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_crm_read] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_crm_write] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_coaching_read] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_coaching_review] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_guardian_read] = lambda: fake_user
+    app.dependency_overrides[ai_router._require_guardian_review] = lambda: fake_user
+    app.dependency_overrides[get_current_scope] = lambda: (DataScope.ALL, None)
+    app.dependency_overrides[get_crm_workspace_service] = lambda: fake_workspace or _NoOpWorkspace()
     client_factory = lambda: httpx.AsyncClient(  # noqa: E731
         transport=httpx.MockTransport(handler), base_url="http://ai.test"
     )
     app.dependency_overrides[ai_router.get_ai_client] = client_factory
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+class _NoOpWorkspace:
+    """Inert CRM workspace stand-in for routes that never call it."""
+
+    async def update_activity(self, *args: object, **kwargs: object) -> object:
+        raise AssertionError("workspace service must not be called for plain relays")
+
+
+class _RecordingWorkspace:
+    """CRM workspace fake recorded into a shared event list."""
+
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    async def update_activity(self, *args: object, **kwargs: object) -> object:
+        self._events.append("write")
+        return {"id": "activity"}
 
 
 class TestProxyPathIdsAreUuids:
@@ -657,3 +700,276 @@ class TestGuardianPermissionGate:
     def test_missing_invoke_denied(self) -> None:
         self._grant(ERP_AI_GUARDIAN_READ)
         assert self._app().get("/api/v1/ai/guardian/reports").status_code == 403
+
+
+class TestCrmTranscriptForwarding:
+    """SKY-91: GET relays; POST stores the transcript FIRST, then forwards."""
+
+    def test_get_forwards_canonical_path(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+        activity_id = uuid.uuid4()
+
+        response = client.get(
+            f"/api/v1/ai/crm/activities/{activity_id}/transcript",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == f"/api/v1/ai/crm/activities/{activity_id}/transcript"
+
+    def test_post_writes_transcript_before_forwarding(self) -> None:
+        seen: list[httpx.Request] = []
+        events: list[str] = []
+        client = _app_with_recorder(seen, fake_workspace=_RecordingWorkspace(events))
+        activity_id = uuid.uuid4()
+
+        response = client.post(
+            f"/api/v1/ai/crm/activities/{activity_id}/transcript",
+            json={"transcript": "customer asked about pricing"},
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert events == ["write"], "the CRM write must happen before the forward"
+        assert len(seen) == 1
+        assert seen[0].url.path == f"/api/v1/ai/crm/activities/{activity_id}/transcript"
+        # The validated body is forwarded verbatim (compact JSON, no re-read).
+        assert seen[0].read() == b'{"transcript":"customer asked about pricing"}'
+
+    def test_write_failure_never_forwards(self) -> None:
+        class _FailingWorkspace:
+            async def update_activity(self, *args: object, **kwargs: object) -> object:
+                raise RuntimeError("simulated write failure")
+
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen, fake_workspace=_FailingWorkspace())
+        activity_id = uuid.uuid4()
+
+        response = client.post(
+            f"/api/v1/ai/crm/activities/{activity_id}/transcript",
+            json={"transcript": "customer asked about pricing"},
+        )
+
+        assert response.status_code == 500
+        assert seen == [], "no analysis request may reach ai-agent if the write failed"
+
+    def test_invalid_body_rejected_before_write_or_forward(self) -> None:
+        seen: list[httpx.Request] = []
+        events: list[str] = []
+        client = _app_with_recorder(seen, fake_workspace=_RecordingWorkspace(events))
+        activity_id = uuid.uuid4()
+
+        response = client.post(
+            f"/api/v1/ai/crm/activities/{activity_id}/transcript",
+            json={"transcript": ""},
+        )
+
+        assert response.status_code == 422
+        assert events == []
+        assert seen == []
+
+    def test_malformed_id_rejected_before_write_or_forward(self) -> None:
+        seen: list[httpx.Request] = []
+        events: list[str] = []
+        client = _app_with_recorder(seen, fake_workspace=_RecordingWorkspace(events))
+
+        response = client.post(
+            "/api/v1/ai/crm/activities/not-a-uuid/transcript",
+            json={"transcript": "customer asked about pricing"},
+        )
+
+        assert response.status_code == 422
+        assert events == []
+        assert seen == []
+
+
+class TestCrmTranscriptPermissionGate:
+    """The POST is write-like: it needs erp.ai.invoke AND erp.crm.write."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rbac(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        grants: list[str] = []
+        self._grants_box = grants
+
+        class _FakeRbac:
+            def __init__(self, session: object) -> None:
+                self.session = session
+
+            async def resolve_user_permissions(
+                self, *, user_id: object, tenant_id: object
+            ) -> list[str]:
+                return grants
+
+        monkeypatch.setattr(api_deps, "RbacRepository", _FakeRbac)
+
+    def _app(self) -> TestClient:
+        app = FastAPI()
+        app.add_exception_handler(SkyrictError, skyrict_error_handler)
+        app.include_router(ai_router.router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: {
+            "user_id": str(uuid.uuid4()),
+            "tenant_id": str(uuid.uuid4()),
+        }
+        app.dependency_overrides[get_db] = lambda: object()
+        app.dependency_overrides[get_current_scope] = lambda: (DataScope.ALL, None)
+        app.dependency_overrides[get_crm_workspace_service] = lambda: _RecordingWorkspace([])
+        app.dependency_overrides[ai_router.get_ai_client] = lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})),
+            base_url="http://ai.test",
+        )
+        return TestClient(app)
+
+    def _grant(self, *keys: str) -> None:
+        self._grants_box[:] = list(keys)
+
+    def _post(self) -> httpx.Response:
+        return self._app().post(
+            f"/api/v1/ai/crm/activities/{uuid.uuid4()}/transcript",
+            json={"transcript": "customer asked about pricing"},
+        )
+
+    def test_post_with_invoke_and_crm_write(self) -> None:
+        self._grant(ERP_AI_INVOKE, ERP_CRM_WRITE)
+        assert self._post().status_code == 200
+
+    def test_post_without_crm_write_denied(self) -> None:
+        self._grant(ERP_AI_INVOKE)
+        assert self._post().status_code == 403
+
+    def test_post_without_invoke_denied(self) -> None:
+        self._grant(ERP_CRM_WRITE)
+        assert self._post().status_code == 403
+
+
+class TestCrmAnomalyForwarding:
+    def test_list_forwards(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+
+        response = client.get(
+            "/api/v1/ai/crm/anomalies",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == "/api/v1/ai/crm/anomalies"
+
+    def test_resolve_post_forwards_uuid(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+        anomaly_id = uuid.uuid4()
+
+        response = client.post(
+            f"/api/v1/ai/crm/anomalies/{anomaly_id}/resolve",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == f"/api/v1/ai/crm/anomalies/{anomaly_id}/resolve"
+
+    def test_dismiss_post_forwards_uuid(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+        anomaly_id = uuid.uuid4()
+
+        response = client.post(
+            f"/api/v1/ai/crm/anomalies/{anomaly_id}/dismiss",
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert seen[0].url.path == f"/api/v1/ai/crm/anomalies/{anomaly_id}/dismiss"
+
+    @pytest.mark.parametrize(
+        ("suffix", "bad_id"),
+        [
+            pytest.param("/resolve", "not-a-uuid", id="garbage"),
+            pytest.param("/dismiss", "x@evil.test", id="authority-like"),
+        ],
+    )
+    def test_malformed_id_rejected_before_any_forward(self, suffix: str, bad_id: str) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+
+        response = client.post(f"/api/v1/ai/crm/anomalies/{bad_id}{suffix}")
+
+        assert response.status_code == 422
+        assert seen == [], "malformed id must never reach ai-agent"
+
+
+class TestCrmAnomalyPermissionGate:
+    """List is read-like (invoke + crm read); resolve/dismiss are write-like
+    (invoke + crm write)."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rbac(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        grants: list[str] = []
+        self._grants_box = grants
+
+        class _FakeRbac:
+            def __init__(self, session: object) -> None:
+                self.session = session
+
+            async def resolve_user_permissions(
+                self, *, user_id: object, tenant_id: object
+            ) -> list[str]:
+                return grants
+
+        monkeypatch.setattr(api_deps, "RbacRepository", _FakeRbac)
+
+    def _app(self) -> TestClient:
+        app = FastAPI()
+        app.add_exception_handler(SkyrictError, skyrict_error_handler)
+        app.include_router(ai_router.router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: {
+            "user_id": str(uuid.uuid4()),
+            "tenant_id": str(uuid.uuid4()),
+        }
+        app.dependency_overrides[get_db] = lambda: object()
+        app.dependency_overrides[get_current_scope] = lambda: (DataScope.ALL, None)
+        app.dependency_overrides[ai_router.get_ai_client] = lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})),
+            base_url="http://ai.test",
+        )
+        return TestClient(app)
+
+    def _grant(self, *keys: str) -> None:
+        self._grants_box[:] = list(keys)
+
+    def _list(self) -> httpx.Response:
+        return self._app().get("/api/v1/ai/crm/anomalies")
+
+    def _resolve(self) -> httpx.Response:
+        return self._app().post(f"/api/v1/ai/crm/anomalies/{uuid.uuid4()}/resolve")
+
+    def _dismiss(self) -> httpx.Response:
+        return self._app().post(f"/api/v1/ai/crm/anomalies/{uuid.uuid4()}/dismiss")
+
+    def test_list_requires_invoke_and_crm_read(self) -> None:
+        self._grant(ERP_AI_INVOKE, ERP_CRM_READ)
+        assert self._list().status_code == 200
+
+    def test_list_without_crm_read_denied(self) -> None:
+        self._grant(ERP_AI_INVOKE)
+        assert self._list().status_code == 403
+
+    def test_list_without_invoke_denied(self) -> None:
+        self._grant(ERP_CRM_READ)
+        assert self._list().status_code == 403
+
+    def test_resolve_requires_invoke_and_crm_write(self) -> None:
+        self._grant(ERP_AI_INVOKE, ERP_CRM_WRITE)
+        assert self._resolve().status_code == 200
+
+    def test_resolve_without_crm_write_denied(self) -> None:
+        self._grant(ERP_AI_INVOKE)
+        assert self._resolve().status_code == 403
+
+    def test_resolve_without_invoke_denied(self) -> None:
+        self._grant(ERP_CRM_WRITE)
+        assert self._resolve().status_code == 403
+
+    def test_dismiss_requires_invoke_and_crm_write(self) -> None:
+        self._grant(ERP_AI_INVOKE, ERP_CRM_WRITE)
+        assert self._dismiss().status_code == 200

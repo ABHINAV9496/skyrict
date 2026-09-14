@@ -146,7 +146,7 @@ class FinanceRepositoryPort(Protocol):
         entry_id: uuid.UUID,
         tenant_id: uuid.UUID,
         *,
-        posted_by_user_id: uuid.UUID,
+        posted_by_user_id: uuid.UUID | None,
         posted_at: datetime,
     ) -> JournalEntry | None: ...
 
@@ -394,6 +394,47 @@ class InvoicePort(Protocol):
     """
 
     async def create_from_order(self, order: SalesOrderForInvoicing) -> Invoice: ...
+
+
+# ---------------------------------------------------------------------------
+# Journal-entry approval port (seam for the approval engine, SKY-92)
+# ---------------------------------------------------------------------------
+
+
+class JournalEntryApprovalPort(Protocol):
+    """Optional approval-engine seam on ``FinanceService.post_journal_entry``.
+
+    Implemented by ``JournalEntryApprovalCoordinator`` (finance writes this
+    adapter; the engine itself lives in ``core.features.approval_workflow``).
+
+    When the seam is attached, posting a DRAFT entry delegates to the
+    coordinator instead of posting immediately. The coordinator:
+
+    - preserves the current direct-post path while the per-tenant
+      ``je_approval_engine`` flag is OFF;
+    - resolves the tenant's ACTIVE journal-entry definition and FAILS SAFE
+      (``ApprovalDefinitionMissingError``) when the flag is ON but no
+      definition exists - never a silent direct post;
+    - auto-approves below-threshold amounts (system audit + immediate post);
+    - routes at-or-above-threshold amounts onto the human approval queue and
+      returns the entry still DRAFT (posting happens only on a human
+      decision);
+    - may ask ai-agent for an advisory routing suggestion on the human branch
+      (fail-safe: an unavailable AI never blocks the queue).
+
+    ``submit_for_posting`` returns the authoritative ``JournalEntry``: the
+    POSTED entry on the direct/auto-approval paths, or the unchanged DRAFT
+    entry while the submission waits on approval.
+    """
+
+    async def submit_for_posting(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        entry: JournalEntry,
+        debit_total: Decimal,
+    ) -> JournalEntry: ...
 
 
 # ---------------------------------------------------------------------------

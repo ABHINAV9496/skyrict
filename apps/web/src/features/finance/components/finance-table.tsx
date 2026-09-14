@@ -19,6 +19,7 @@ interface FinanceTableProps<T> {
     footer?: ReactNode;
     emptyMessage?: string;
     subtitle?: ReactNode;
+    className?: string;
 }
 
 /** Typed table with the same visual language as the shared ERP DataTable. */
@@ -29,10 +30,16 @@ export function FinanceTable<T>({
     footer,
     emptyMessage,
     subtitle,
+    className,
 }: FinanceTableProps<T>) {
     if (rows.length === 0) {
         return (
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                className={cn(
+                    "overflow-hidden rounded-xl border border-border bg-card",
+                    className,
+                )}
+            >
                 {subtitle ? (
                     <div className="border-b border-border/60 px-4 py-3 text-sm">
                         {subtitle}
@@ -48,7 +55,12 @@ export function FinanceTable<T>({
     }
 
     return (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            className={cn(
+                "overflow-hidden rounded-xl border border-border bg-card",
+                className,
+            )}
+        >
             {subtitle ? (
                 <div className="border-b border-border/60 px-4 py-3 text-sm">
                     {subtitle}

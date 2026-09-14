@@ -45,6 +45,7 @@ from core.features.payroll.pdf import render_payslip_pdf
 from core.features.payroll.ports import (
     LeaveLedgerPort,
     PayrollRepositoryPort,
+    PayrollRunApprovalPort,
     PayslipApprovedNotifierPort,
 )
 from core.features.payroll.skip_reasons import (
@@ -253,16 +254,22 @@ class PayrollService:
         audit: AuditService,
         finance: PayrollAccrualPort | None = None,
         payslip_notifier: PayslipApprovedNotifierPort | None = None,
+        approval: PayrollRunApprovalPort | None = None,
     ) -> None:
         self._repo = repository
         self._leave_ledger = leave_ledger
         self._audit = audit
         self._finance = finance
         self._payslip_notifier = payslip_notifier
+        self._approval = approval
 
     @property
     def repository(self) -> PayrollRepositoryPort:
         return self._repo
+
+    def attach_approval(self, approval: PayrollRunApprovalPort) -> None:
+        """SKY-92: attach the request-scoped approval coordinator (post-construction)."""
+        self._approval = approval
 
     # ------------------------------------------------------------------
     # Settings (Rule 9 inputs: pf/tax rates, rounding, default currency)
@@ -989,13 +996,57 @@ class PayrollService:
             _RUN_MACHINE.transition(run.status.value, PayrollRunStatus.APPROVED.value)
         except InvalidTransitionError:
             raise IllegalStateTransitionError("only computed runs can be approved") from None
+
+        # SKY-92: when an approval port is attached the engine owns the
+        # decision. Total NET (exact Decimal) is the routing amount; the run
+        # stays COMPUTED until a human (or the system auto-approval) decides.
+        if self._approval is not None and run.id is not None:
+            total_net = run.total_net.amount if run.total_net is not None else Decimal("0")
+            return await self._approval.submit_for_approval(
+                tenant_id=tenant_id,
+                user_id=approved_by,
+                actor_user_id=actor_user_id,
+                run=run,
+                total_net=total_net,
+            )
+
+        return await self.complete_approval(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            approved_by=approved_by,
+            actor_user_id=actor_user_id,
+            approved_at=datetime.now(UTC),
+        )
+
+    async def complete_approval(
+        self,
+        *,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        approved_by: uuid.UUID | None,
+        actor_user_id: uuid.UUID | None = None,
+        approved_at: datetime,
+    ) -> ent.PayrollRun:
+        """Authoritative APPROVED transition, audit + event (SKY-92 seam).
+
+        ``approved_by`` is the approving human, or ``None`` when the engine
+        auto-approved (system actor); both the repository's ``approved_by``
+        column and the audit actor follow the decision origin.
+        """
+        run = await self._repo.get_run(run_id, tenant_id)
+        if run is None:
+            raise ValueError(f"payroll run {run_id} not found")
+        try:
+            _RUN_MACHINE.transition(run.status.value, PayrollRunStatus.APPROVED.value)
+        except InvalidTransitionError:
+            raise IllegalStateTransitionError("only computed runs can be approved") from None
         transitioned = await self._repo.transition_run_status(
             run_id,
             PayrollRunStatus.COMPUTED.value,
             PayrollRunStatus.APPROVED.value,
             tenant_id=tenant_id,
             approved_by=approved_by,
-            approved_at=datetime.now(UTC),
+            approved_at=approved_at,
         )
         if transitioned is None:
             raise IllegalStateTransitionError("run is not in computed state") from None

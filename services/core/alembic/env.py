@@ -26,6 +26,10 @@ from core.core.config import settings
 # Feature ORM models - imported for autogenerate/``target_metadata`` so the full
 # schema is reflected. Models share the same ``core.models.base`` Base; import
 # order matters only for FK resolution (models use string table refs, so none).
+from core.features.ai_docs.models import (  # noqa: F401
+    ErpAiDocModel,
+    ErpTaxSummaryModel,
+)
 from core.features.ai_hr.models import (  # noqa: F401
     AttritionScoreModel,
     ComplianceCheckModel,

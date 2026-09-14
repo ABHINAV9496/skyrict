@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 8 revisions, 0001..0048) -> core ``downgrade base`` (all the way back to
+(all 52 revisions, 0001..0052) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -20,7 +20,8 @@ Sentinel assertions probe one representative artefact of each migration:
 ``erp_leave_movements.ref_id`` varchar(64) (the 0007 drift regression guard),
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
-and ``current_tenant_id()`` (0001, shared with identity).
+``current_tenant_id()`` (0001, shared with identity), and the five
+approval-workflow tables with their RLS policies (0052, SKY-92).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -110,6 +111,17 @@ _HR_AI_TABLES = (
     "ai_payroll_schedules",
     # 0035: payslip review queue (HR-AUT-001, Commit 2).
     "erp_payslip_reviews",
+)
+
+# 0052: approval workflow engine (SKY-92, Commit 2) - one tenant-scoped table
+# per engine aggregate: versioned definitions, runtime instances, resolved
+# steps, append-only transitions, and delegations (the history contract).
+_APPROVAL_WF_TABLES = (
+    "erp_approval_workflow_definitions",
+    "erp_approval_workflow_instances",
+    "erp_approval_workflow_steps",
+    "erp_approval_transitions",
+    "erp_approval_delegations",
 )
 
 
@@ -208,6 +220,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
             assert version == "0051", f"head is {version}, expected 0051"
+            assert version == "0052", f"head is {version}, expected 0052"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1043,6 +1056,77 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 ).scalar_one_or_none()
                 assert perm_row is not None, f"0048 must register {perm_key}"
+
+            # 0051: CRM transcript ingestion (SKY-91, renumbered from the 0050
+            # collision with 0050_ai_docs) - erp_crm_activities gets
+            # a nullable TEXT transcript column (nullable so existing rows and
+            # non-AI updates are unaffected; AI never writes analysis onto
+            # CRM rows, it lives in ai-agent's ai_transcript_analyses).
+            transcript_col = (
+                await conn.execute(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_crm_activities' "
+                        "AND column_name = 'transcript_text'"
+                    )
+                )
+            ).one_or_none()
+            assert transcript_col is not None, "0051 must add transcript_text"
+            assert transcript_col[0] == "text", transcript_col
+            transcript_nullable = (
+                await conn.execute(
+                    text(
+                        "SELECT is_nullable FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'erp_crm_activities' "
+                        "AND column_name = 'transcript_text'"
+                    )
+                )
+            ).scalar_one()
+            assert transcript_nullable == "YES", "0051 transcript_text must be nullable"
+
+            # 0052: approval workflow engine (SKY-92) - all five tables exist,
+            # are tenant-scoped with the tenant_isolation_* RLS policies, and
+            # the definitions table carries the version-immutability guarantee
+            # (UNIQUE (tenant_id, resource_type, version)).
+            for table in _APPROVAL_WF_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0052 must create {table}"
+
+            approval_rls_tables = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = ANY(:names)"
+                        ),
+                        {"names": list(_APPROVAL_WF_TABLES)},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(approval_rls_tables) == set(_APPROVAL_WF_TABLES), (
+                f"approval-workflow tables missing RLS: "
+                f"{set(_APPROVAL_WF_TABLES) - set(approval_rls_tables)}"
+            )
+
+            definition_uniq = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = "
+                        "'uq_erp_approval_workflow_definitions_tenant_resource_version'"
+                    )
+                )
+            ).scalar_one()
+            assert definition_uniq == 1, (
+                "0052 must add the definitions (tenant, resource_type, version) uniqueness"
+            )
     finally:
         await engine.dispose()
 
@@ -1075,6 +1159,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             for table in _HR_AI_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is None, f"{table} still exists after downgrade base"
+
+            for table in _APPROVAL_WF_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()

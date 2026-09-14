@@ -17,7 +17,9 @@ from core.features.revenue_forecast.calculator import (
     Backtest,
     MonthlyRevenue,
     compute_forecast,
+    conversion_weight,
     deal_health_factor,
+    stage_conversion_rates,
 )
 
 
@@ -243,3 +245,54 @@ def test_deal_health_factor_yellow_and_red_blend_on_confidence() -> None:
 def test_deal_health_factor_clamps_confidence_out_of_range() -> None:
     assert deal_health_factor("red", 2.0) == Decimal("0.3500")
     assert deal_health_factor("red", -1.0) == Decimal("1.0000")
+
+
+def test_stage_conversion_rates_win_rate_per_stage() -> None:
+    rates = stage_conversion_rates(
+        {"proposal": 2, "qualified": 3, "negotiation": 1},
+        {"proposal": 2, "negotiation": 3},
+    )
+    assert rates == {
+        "proposal": Decimal("0.5000"),
+        "qualified": Decimal("1.0000"),
+        "negotiation": Decimal("0.2500"),
+    }
+
+
+def test_stage_conversion_rates_omit_stages_without_completed_outcomes() -> None:
+    # Won outcomes are completed outcomes: a stage with won-only history rates
+    # 1.0 and lost-only history rates 0.0. Only a stage that never appears (no
+    # won or lost event at all) is omitted entirely - the caller must be able
+    # to tell "no history" apart from an observed rate.
+    assert stage_conversion_rates({"qualified": 2}, {}) == {"qualified": Decimal("1.0000")}
+    assert stage_conversion_rates({}, {"qualified": 3}) == {"qualified": Decimal("0.0000")}
+    assert stage_conversion_rates({"proposal": 2, "qualified": 1}, {"proposal": 2}) == {
+        "proposal": Decimal("0.5000"),
+        "qualified": Decimal("1.0000"),
+    }
+
+
+def test_stage_conversion_rates_quantizes_to_four_places() -> None:
+    # 1 / 3 does not terminate - the rate must round half-up to 4 decimals.
+    rates = stage_conversion_rates({"proposal": 1}, {"proposal": 2})
+    assert rates["proposal"] == Decimal("0.3333")
+
+
+def test_conversion_weight_parity_explicit_probability_wins() -> None:
+    """Parity with the pre-SKY-91 formula: a set probability keeps
+    ``probability/100`` exactly, regardless of the stage's history."""
+    assert conversion_weight(50, Decimal("0.2500")) == Decimal("0.5000")
+    assert conversion_weight(50, None) == Decimal("0.5000")
+    assert conversion_weight(100, Decimal("0.2500")) == Decimal("1.0000")
+    assert conversion_weight(1, Decimal("0.9999")) == Decimal("0.0100")
+
+
+def test_conversion_weight_falls_back_to_stage_history_without_override() -> None:
+    assert conversion_weight(0, Decimal("0.5000")) == Decimal("0.5000")
+    assert conversion_weight(0, Decimal("0.2500")) == Decimal("0.2500")
+
+
+def test_conversion_weight_zero_without_override_or_history() -> None:
+    # No explicit probability and no completed outcomes for the stage: the
+    # weight is zero - the deal contributes no expected value.
+    assert conversion_weight(0, None) == Decimal("0.0000")

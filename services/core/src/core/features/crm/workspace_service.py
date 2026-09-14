@@ -67,6 +67,7 @@ _ACTIVITY_KIND_MUTABLE = {
     "description",
     "due_at",
     "notes",
+    "transcript_text",
     "owner_id",
     "team_id",
 }

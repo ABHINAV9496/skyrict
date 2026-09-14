@@ -2,19 +2,27 @@
 
 Loads a YAML registry of finance prompt cases (``tests/eval/finance_prompts.yaml``)
 and runs each case through the REAL production prompt functions in
-:mod:`ai_agent.features.account_suggest.suggest` using the configured LLM
-router. Each feature is scored with a deterministic correctness rule:
+:mod:`ai_agent.features.account_suggest.suggest` (and
+:mod:`ai_agent.features.finance_docs.generate` for the FIN-AI-004 suite) using
+the configured LLM router. Each feature is scored with a deterministic
+correctness rule:
 
-=================  =========================================================
+================  =========================================================
 feature            rule
-=================  =========================================================
+================  =========================================================
 a1_suggest         suggested_code matches the expected chart code
 a2_draft           drafts a balanced entry with >= expected_min_lines lines,
                    and abstains (None) exactly when the case expects it
 a7_narrate         narration is non-empty and (if expected) cites a figure
 a8_remind          subject + body non-empty and body includes the exact
                    invoice number and the amount due
-=================  =========================================================
+a5_tax_summary     a category line exists for the expected tax category
+                   (or abstains exactly when the case has no entries)
+a10_audit           narration is non-empty and (if expected) cites a figure
+a12_doc_qa          answer is non-empty; every citation source_ref is within
+                   the provided evidence, and citations are present exactly
+                   when the case expects them (or abstains on no evidence)
+================  =========================================================
 
 Output mirrors the HR eval harness: one ``FinanceEvalMetric`` per feature
 (precision over considered cases, abstention count, threshold verdict).
@@ -38,6 +46,11 @@ from ai_agent.features.account_suggest.suggest import (
     draft_reminder,
     narrate_anomaly,
     suggest,
+)
+from ai_agent.features.finance_docs.generate import (
+    answer_question,
+    generate_tax_summary,
+    narrate_audit,
 )
 
 if TYPE_CHECKING:
@@ -138,12 +151,60 @@ async def _run_remind(llm_router: LlmRouter, case: dict[str, Any]) -> tuple[bool
     return (invoice_ok and amount_ok, result["model_used"])
 
 
+async def _run_tax_summary(llm_router: LlmRouter, case: dict[str, Any]) -> tuple[bool | None, str]:
+    result = await generate_tax_summary(
+        llm_router, period=case.get("period"), entries=case["entries"]
+    )
+    if case.get("expect_abstain"):
+        return result is None, ""
+    if result is None:
+        return None, ""
+    expected = str(case.get("expected_category") or "").strip()
+    if expected:
+        matched = any(expected.lower() in c.category.lower() for c in result.categories)
+        return matched, result.model_used
+    return bool(result.categories), result.model_used
+
+
+async def _run_audit_narration(
+    llm_router: LlmRouter, case: dict[str, Any]
+) -> tuple[bool | None, str]:
+    result = await narrate_audit(
+        llm_router,
+        from_date=case["from_date"],
+        to_date=case["to_date"],
+        entries=case["entries"],
+    )
+    if result is None or not result.narration:
+        return None, ""
+    cites_figure = any(ch.isdigit() for ch in result.narration)
+    expected_cites = bool(case.get("expected_cites_figure", True))
+    return (cites_figure if expected_cites else True, result.model_used)
+
+
+async def _run_doc_qa(llm_router: LlmRouter, case: dict[str, Any]) -> tuple[bool | None, str]:
+    evidence = case["evidence"]
+    result = await answer_question(llm_router, question=case["question"], evidence=evidence)
+    if case.get("expect_abstain"):
+        return result is None, ""
+    if result is None or not result.answer:
+        return None, ""
+    allowed = {str(e.get("source_ref")) for e in evidence}
+    refs_ok = all(c.source_ref in allowed for c in result.citations)
+    expected_cites = bool(case.get("expected_citations", True))
+    cites = bool(result.citations)
+    return (cites if expected_cites else True) and refs_ok, result.model_used
+
+
 # Feature id -> runner for dispatch (see module docstring for the rules).
 _FEATURE_RUNNERS: dict[str, Any] = {
     "a1_suggest": _run_suggest,
     "a2_draft": _run_draft,
     "a7_narrate": _run_narrate,
     "a8_remind": _run_remind,
+    "a5_tax_summary": _run_tax_summary,
+    "a10_audit": _run_audit_narration,
+    "a12_doc_qa": _run_doc_qa,
 }
 
 

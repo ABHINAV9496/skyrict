@@ -10,7 +10,6 @@ failure) maps to ``None`` (an abstention), never a hard error.
 from __future__ import annotations
 
 import json
-import re
 from typing import TYPE_CHECKING
 
 import structlog
@@ -26,8 +25,6 @@ if TYPE_CHECKING:
     )
 
 logger = structlog.get_logger("ai_agent.account_suggest")
-
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = (
     "You are a bookkeeping assistant. Given a transaction description and a "
@@ -312,12 +309,29 @@ async def draft_reminder(
 
 
 def _parse_json(text: str) -> dict[str, object] | None:
-    """Strip markdown fences/cruft and parse the first JSON object."""
-    match = _JSON_OBJECT_RE.search(text)
-    if match is None:
+    """Parse the model's JSON, tolerating fences and self-correction.
+
+    A single top-level object (outer object, even with nested line/risk
+    arrays) wins outright. When a model drafts then re-emits ("...became..."),
+    returns the **last** top-level object: the corrected final answer.
+    """
+    decoder = json.JSONDecoder()
+    candidates: list[tuple[int, int, dict[str, object]]] = []
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            obj, end = decoder.raw_decode(text[index:])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(obj, dict):
+            candidates.append((index, index + end, obj))
+
+    top_level = [
+        (start, end, obj)
+        for (start, end, obj) in candidates
+        if not any(s < start and e > end for (s, e, _) in candidates)
+    ]
+    if not top_level:
         return None
-    try:
-        parsed = json.loads(match.group(0))
-    except (ValueError, TypeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    return top_level[-1][2]

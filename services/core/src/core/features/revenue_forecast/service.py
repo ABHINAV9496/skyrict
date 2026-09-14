@@ -5,10 +5,11 @@ seasonal echo, plus an additive CRM pipeline uplift) from the last 24 months
 of recognized revenue (abstaining - persisting nothing - when there is under
 3 months of history); ``read`` returns whatever is currently stored (weekly
 recompute and manual refresh keep it fresh). The pipeline uplift weights the
-tenant's open CRM opportunities at their conversion probability
-(``probability/100 x amount`` per closing month, modulated by each deal's
-latest ai-agent deal-health rating) and only shifts projected months - the
-backtest/MAPE/band stay invoice-based.
+tenant's open CRM opportunities at their deterministic conversion weight
+(SKY-91: ``probability/100`` when set, else the deal's stage's historical
+conversion rate from the CRM timeline, else zero) per closing month,
+modulated by each deal's latest ai-agent deal-health rating - and only shifts
+projected months - the backtest/MAPE/band stay invoice-based.
 """
 
 from __future__ import annotations

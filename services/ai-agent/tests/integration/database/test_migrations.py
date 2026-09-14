@@ -78,6 +78,10 @@ _AI_TABLES = (
     "ai_follow_up_suggestions",
     # HR-AI-003 L3 narrative snapshots (migration 0020)
     "ai_l3_narrative_snapshots",
+    # SKY-91 transcript analyses (migration 0022)
+    "ai_transcript_analyses",
+    # SKY-91 CRM anomaly detection (migration 0023)
+    "ai_crm_anomalies",
 )
 _TENANT_SCOPED_TABLES = (
     "ai_query_log",
@@ -95,6 +99,10 @@ _TENANT_SCOPED_TABLES = (
     "ai_lead_scores",
     "ai_deal_health",
     "ai_follow_up_suggestions",
+    # SKY-91 transcript analyses carry RLS on current_tenant_id()
+    "ai_transcript_analyses",
+    # SKY-91 CRM anomaly detection carries RLS on current_tenant_id()
+    "ai_crm_anomalies",
 )
 # Demand stats carries composite FKs into core-owned erp_products/erp_warehouses
 # and NO direct FK to tenants (cross-service idiom); only the tables below are
@@ -123,6 +131,10 @@ _TENANT_FK_TABLES = (
     "ai_follow_up_suggestions",
     # HR-AI-003 L3 narrative snapshots are direct children of ``tenants``
     "ai_l3_narrative_snapshots",
+    # SKY-91 transcript analyses are direct children of ``tenants``
+    "ai_transcript_analyses",
+    # SKY-91 CRM anomaly detection is a direct child of ``tenants``
+    "ai_crm_anomalies",
 )
 
 _EXPECTED_CHECKS = {
@@ -146,6 +158,13 @@ _EXPECTED_CHECKS = {
     "ck_ai_follow_up_type",
     "ck_ai_follow_up_status",
     "ck_ai_follow_up_confidence_range",
+    # SKY-91 transcript analysis constraints
+    "ck_ai_transcript_analyses_objection_score_range",
+    "ck_ai_transcript_analyses_sentiment",
+    "ck_ai_transcript_analyses_confidence_range",
+    # SKY-91 anomaly-detection constraints
+    "ck_ai_crm_anomalies_severity",
+    "ck_ai_crm_anomalies_status",
 }
 
 

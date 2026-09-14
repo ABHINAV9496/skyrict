@@ -501,7 +501,7 @@ class FinanceRepository:
         entry_id: uuid.UUID,
         tenant_id: uuid.UUID,
         *,
-        posted_by_user_id: uuid.UUID,
+        posted_by_user_id: uuid.UUID | None,
         posted_at: datetime,
     ) -> JournalEntry | None:
         model = await self._journal_entry_model(entry_id, tenant_id)

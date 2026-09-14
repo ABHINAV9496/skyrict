@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.dialects import postgresql
 
 from ai_agent.features.crm.repositories import CrmAiRepository
+from ai_agent.models.ai_crm_anomaly import AiCrmAnomalyModel
 from ai_agent.models.ai_deal_health import AiDealHealthModel
 from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
 from ai_agent.models.ai_lead_score import AiLeadScoreModel
@@ -27,6 +28,11 @@ class _Result:
 
     def __init__(self, rows: list[object] | None = None) -> None:
         self._rows = rows or []
+
+    def scalar_one(self) -> object:
+        if not self._rows:
+            raise AssertionError("scalar_one() called with empty result")
+        return self._rows[0]
 
     def scalar_one_or_none(self) -> object | None:
         return self._rows[0] if self._rows else None
@@ -189,4 +195,107 @@ def _follow_up(*, status: str = "pending") -> AiFollowUpSuggestionModel:
         status=status,
         created_at=datetime.now(UTC),
         expires_at=datetime.now(UTC) + timedelta(days=7),
+    )
+
+
+class TestCrmAnomaly:
+    async def test_create_crm_anomaly_adds_row_with_options(self) -> None:
+        session = _FakeSession()
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+        opportunity_id = uuid.uuid4()
+
+        row = await repo.create_crm_anomaly(
+            tenant_id=TENANT_ID,
+            opportunity_id=opportunity_id,
+            rule_id="stage_stall",
+            severity="critical",
+            title="Deal stuck",
+            description="No movement for 45 days.",
+            context={"days_in_stage": 45},
+        )
+
+        assert session.added == [row]
+        assert row.tenant_id == TENANT_ID
+        assert row.opportunity_id == opportunity_id
+        assert row.rule_id == "stage_stall"
+        assert row.severity == "critical"
+        assert row.context == {"days_in_stage": 45}
+
+    async def test_open_count_filters_opportunity_rule_and_open_status(self) -> None:
+        session = _FakeSession(result=_Result([3]))
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+
+        count = await repo.open_crm_anomaly_count_for_opportunity_and_rule(
+            tenant_id=TENANT_ID,
+            opportunity_id=uuid.uuid4(),
+            rule_id="activity_bulk",
+        )
+
+        assert count == 3
+        sql = _compile(session.executed[0])
+        assert "ai_crm_anomalies" in sql
+        assert "tenant_id" in sql
+        assert "opportunity_id" in sql
+        assert "rule_id" in sql
+        assert "status = %(status" in sql
+
+    async def test_list_open_is_tenant_scoped_and_newest_first(self) -> None:
+        session = _FakeSession()
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+
+        rows = await repo.list_open_crm_anomalies(tenant_id=TENANT_ID)
+
+        assert rows == []
+        sql = _compile(session.executed[0])
+        assert "ai_crm_anomalies" in sql
+        assert "tenant_id" in sql
+        assert "status = %(status" in sql
+        assert "ORDER BY ai_crm_anomalies.detected_at DESC" in sql
+
+    async def test_get_by_id_is_tenant_scoped(self) -> None:
+        session = _FakeSession()
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+        await repo.get_crm_anomaly_by_id(tenant_id=TENANT_ID, anomaly_id=uuid.uuid4())
+
+        sql = _compile(session.executed[0])
+        assert "ai_crm_anomalies" in sql
+        assert "tenant_id" in sql
+        assert "id" in sql
+
+    async def test_mark_resolved_sets_status_and_timestamp(self) -> None:
+        session = _FakeSession()
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+        row = _anomaly()
+
+        await repo.mark_crm_anomaly_resolved(row=row)
+
+        assert row.status == "resolved"
+        assert row.resolved_at is not None
+        assert row.dismissed_at is None
+        assert session.executed == []  # mutation only, no extra SQL
+
+    async def test_mark_dismissed_sets_status_and_timestamp(self) -> None:
+        session = _FakeSession()
+        repo = CrmAiRepository(session)  # type: ignore[arg-type]
+        row = _anomaly()
+
+        await repo.mark_crm_anomaly_dismissed(row=row)
+
+        assert row.status == "dismissed"
+        assert row.dismissed_at is not None
+        assert row.resolved_at is None
+        assert session.executed == []  # mutation only, no extra SQL
+
+
+def _anomaly(*, status: str = "open") -> AiCrmAnomalyModel:
+    return AiCrmAnomalyModel(
+        tenant_id=TENANT_ID,
+        opportunity_id=uuid.uuid4(),
+        rule_id="stage_stall",
+        severity="warning",
+        title="Deal stuck",
+        description="No movement for 35 days.",
+        context={},
+        status=status,
+        detected_at=datetime.now(UTC),
     )

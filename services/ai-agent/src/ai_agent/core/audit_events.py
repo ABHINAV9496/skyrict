@@ -85,6 +85,17 @@ AI_L3_ACCESSED = "ai.l3.accessed"
 
 AI_L3_ABSTAINED = "ai.l3.abstained"
 """The L3 narrator abstained (no material activity, LLM disabled, or unusable output)."""
+AI_TRANSCRIPT_ANALYZED = "ai.crm.transcript.analyzed"
+"""The CRM AI service analyzed a call/meeting transcript (SKY-91)."""
+
+AI_CRM_ANOMALY_DETECTED = "ai.crm.anomaly.detected"
+"""The CRM pipeline anomaly scan detected an anomaly on an open deal (SKY-91)."""
+
+AI_CRM_ANOMALY_RESOLVED = "ai.crm.anomaly.resolved"
+"""A human resolved a CRM anomaly (real issue, acted on)."""
+
+AI_CRM_ANOMALY_DISMISSED = "ai.crm.anomaly.dismissed"
+"""A human dismissed a CRM anomaly as a false positive."""
 
 AI_REPORT_GENERATED = "ai.report.generated"
 """The NL report builder generated (and ran) a report from free text (SKY-80)."""
@@ -138,6 +149,10 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_L3_ABSTAINED,
         AI_REPORT_GENERATED,
         AI_REPORT_SAVED,
+        AI_TRANSCRIPT_ANALYZED,
+        AI_CRM_ANOMALY_DETECTED,
+        AI_CRM_ANOMALY_RESOLVED,
+        AI_CRM_ANOMALY_DISMISSED,
         AI_COACHING_SUGGESTION_CREATED,
         AI_COACHING_SUGGESTION_VIEWED,
         AI_COACHING_SUGGESTION_ACCEPTED,

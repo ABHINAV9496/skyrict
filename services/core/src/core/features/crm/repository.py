@@ -83,7 +83,16 @@ _CONTACT_EDITABLE_FIELDS: frozenset[str] = frozenset(
     {"first_name", "last_name", "email", "phone", "job_title", "is_primary"}
 )
 _ACTIVITY_EDITABLE_FIELDS: frozenset[str] = frozenset(
-    {"kind", "subject", "description", "due_at", "notes", "owner_id", "team_id"}
+    {
+        "kind",
+        "subject",
+        "description",
+        "due_at",
+        "notes",
+        "transcript_text",
+        "owner_id",
+        "team_id",
+    }
 )
 _NOTE_EDITABLE_FIELDS: frozenset[str] = frozenset({"body"})
 
@@ -1722,6 +1731,7 @@ def _activity_to_orm(activity: Activity) -> ErpCrmActivityModel:
         "notes": activity.notes,
         "owner_id": activity.owner_id,
         "team_id": activity.team_id,
+        "transcript_text": activity.transcript_text,
     }
     if activity.id is not None:
         kwargs["id"] = activity.id
@@ -1743,6 +1753,7 @@ def _activity_from_orm(model: ErpCrmActivityModel) -> Activity:
         notes=model.notes,
         owner_id=model.owner_id,
         team_id=model.team_id,
+        transcript_text=model.transcript_text,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )

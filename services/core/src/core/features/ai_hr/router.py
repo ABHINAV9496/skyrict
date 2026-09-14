@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from core.api.deps import (
@@ -115,7 +115,7 @@ from core.features.ai_hr.schemas import (
 from core.features.ai_hr.service import AiHrService
 from core.features.ai_hr.suggestion_service import SuggestionService
 from core.features.ai_hr.utilization_service import UtilizationService
-from skyrict_common.exceptions import NotFoundError
+from skyrict_common.exceptions import NotFoundError, ValidationError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/ai/hr", tags=["ai-hr"])
@@ -511,7 +511,7 @@ async def create_public_holiday(
             department_id=body.department_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from exc
     return ResponseEnvelope(data=public_holiday_to_out(holiday), message="Public holiday created")
 
 
@@ -558,7 +558,7 @@ async def create_leave_blackout(
             department_id=body.department_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from exc
     return ResponseEnvelope(data=leave_blackout_to_out(blackout), message="Leave blackout created")
 
 

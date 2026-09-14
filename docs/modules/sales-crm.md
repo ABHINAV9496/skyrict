@@ -723,12 +723,11 @@ Base path `/api/v1`. Every endpoint: requires valid identity access JWT + tenant
 | ---------------------------------------------- | ------ | ----------------------------------------- |
 | Missing/invalid JWT                            | 401    | `authentication-error`                    |
 | Valid JWT, missing permission                  | 403    | `authorization-error`                     |
-| Unknown/other-tenant resource                  | 404    | `crm-not-found` / `sales-order-not-found` |
-| Illegal transition (confirm a fulfilled order) | 409    | `illegal-state-transition`                |
-| Credit limit exceeded on confirm               | 422    | `credit-limit-exceeded`                   |
-| Insufficient stock on confirm                  | 409    | `insufficient-stock`                      |
-| Replayed confirm (order already `confirmed`)   | 200    | stored result - no double reservation     |
-| Rate limit                                     | 429    | `rate-limit-exceeded`                     |
+| Unknown/other-tenant resource                  | 404    | `not-found`                              |
+| Illegal transition (confirm a fulfilled order) | 409    | `illegal-state-transition`               |
+| Credit limit exceeded on confirm               | 422    | `credit-limit-exceeded`                  |
+| Insufficient stock on confirm                  | 409    | `conflict`                               |
+| Replayed confirm (order already `confirmed`)   | 200    | stored result - no double reservation    |
 
 ---
 

@@ -11,6 +11,7 @@ module-level identity.main app is never mutated. Verifies:
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -21,9 +22,19 @@ import pytest
 from fastapi import APIRouter, FastAPI
 
 import identity.api.middleware as middleware_module
-from identity.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from identity.core import exceptions as identity_exceptions
+from identity.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    _status_and_type,
+)
 from identity.main import create_app
-from skyrict_common.exceptions import MFAVerificationError, SessionNotFoundError
+from skyrict_common.exceptions import (
+    MFAVerificationError,
+    SessionNotFoundError,
+    SkyrictError,
+)
 
 
 class TeamNotFoundError(NotFoundError):
@@ -234,3 +245,67 @@ async def test_instance_equals_request_id(http_client: httpx.AsyncClient) -> Non
     request_id = response.headers.get("X-Request-ID")
     assert request_id
     assert response.json()["instance"] == request_id
+
+
+# ---------------------------------------------------------------------------
+# SKY-97: RFC 7807 error-contract sweep
+#
+# Same parametrized invariants as core/identity - pins the MRO walk so a newly
+# added exception can never silently fall through to the generic 500.
+# ---------------------------------------------------------------------------
+
+ALL_SKYRICT_SUBCLASSES = sorted(
+    (
+        obj
+        for _, obj in inspect.getmembers(identity_exceptions, inspect.isclass)
+        if obj is not SkyrictError and issubclass(obj, SkyrictError)
+    ),
+    key=lambda cls: cls.__name__,
+)
+
+
+@pytest.mark.parametrize(
+    "exc_cls",
+    list(identity_exceptions._STATUS_MAP),
+    ids=lambda cls: cls.__name__,
+)
+def test_every_mapped_exception_resolves_to_its_declared_tuple(exc_cls) -> None:
+    """Each _STATUS_MAP entry must round-trip through the MRO resolver."""
+    status, problem_type = _status_and_type(exc_cls())
+    assert (status, problem_type) == identity_exceptions._STATUS_MAP[exc_cls]
+
+
+@pytest.mark.parametrize(
+    "exc_cls",
+    ALL_SKYRICT_SUBCLASSES,
+    ids=lambda cls: cls.__name__,
+)
+def test_no_skyrict_subclass_falls_through_to_generic_internal_error(exc_cls) -> None:
+    """Every documented exception resolves via its MRO to a defined problem type.
+
+    Resolution to the (500, /internal-error) default means the exception was
+    added without a _STATUS_MAP entry OR without inheriting from a mapped base
+    class - the exact silent-500 failure mode SKY-97 is eradicating.
+    """
+    _, problem_type = _status_and_type(exc_cls())
+    assert problem_type != f"{identity_exceptions._PROBLEM_BASE}/internal-error", (
+        f"{exc_cls.__name__} unmapped - resolves to generic internal-error"
+    )
+    assert problem_type.startswith("https://api.skyrict.io/problems/")
+
+
+@pytest.mark.parametrize(
+    "exc_cls",
+    [
+        ConflictError,
+        PermissionDeniedError,
+        NotFoundError,
+        MFAVerificationError,
+        SessionNotFoundError,
+    ],
+    ids=lambda cls: cls.__name__,
+)
+def test_client_errors_resolve_to_4xx(exc_cls) -> None:
+    """Business-rule violations must never surface as 5xx."""
+    status, _ = _status_and_type(exc_cls())
+    assert 400 <= status < 500, f"{exc_cls.__name__} mapped to {status} (should be 4xx)"

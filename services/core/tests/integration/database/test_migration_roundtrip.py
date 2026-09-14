@@ -1180,7 +1180,14 @@ async def _assert_downgraded_to_base(url: str) -> None:
 
 
 def test_core_migration_chain_round_trips_up_down_up() -> None:
-    """upgrade head -> downgrade base -> upgrade head must reproduce the schema."""
+    """The full chain must unwind to base and re-apply without schema drift.
+
+    Regression guard for the 0007 incident (schema silently diverged from the
+    migration files): ``upgrade head -> downgrade base -> upgrade head`` must
+    reproduce the schema exactly. If a newer link can't unwind, the fix is a
+    corrective migration or a documented accepted risk - never an edit to an
+    already-applied migration file.
+    """
     base_url = os.environ["CORE_DATABASE_URL"]
     dbname = f"skyrict_core_rt_{uuid.uuid4().hex[:12]}"
     maint_dsn, scratch_url = _db_urls(base_url, dbname)

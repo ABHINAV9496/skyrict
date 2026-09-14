@@ -121,6 +121,14 @@ kubectl create secret generic identity-secrets-staging \
 > deployment manifest - only the secret-required values above belong in the
 > secret. The identity service **refuses to start** if any required value is
 > missing (fail-fast config).
+>
+> DB connection pool sizing (`IDENTITY_DB_POOL_SIZE`, `IDENTITY_DB_MAX_OVERFLOW`,
+> `IDENTITY_DB_POOL_RECYCLE`, SKY-99/ADR-007) is also set in the deployment
+> manifest, not the secret. When you change the Postgres tier, update **all
+> three** together: keep `(pool_size + max_overflow) * replicas` (plus tooling
+> and admin connections) well under the tier's `max_connections`, and keep
+> `pool_recycle` below the provider's idle-drop timeout (Azure drops idle
+> connections after ~4-8 minutes; 1800s is the safe default).
 
 ## 6. Run the pipeline
 

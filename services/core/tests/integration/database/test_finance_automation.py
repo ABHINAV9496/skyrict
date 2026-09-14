@@ -475,6 +475,35 @@ async def test_payment_method_analytics_groups_by_method(wave2_world: dict[str, 
     assert by_method["bank"].share == Decimal("0.2")
 
 
+async def test_customer_payment_analytics_avg_days_and_consistency(
+    wave2_world: dict[str, str],
+) -> None:
+    """B14 - slow-payer picture: days-to-pay mean and consistency per customer."""
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    cust_a = uuid.UUID(wave2_world["cust_a"])
+    cust_b = uuid.UUID(wave2_world["cust_b"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        analytics = await repo.customer_payment_analytics(
+            tenant_id, date(2026, 1, 1), date(2026, 12, 31)
+        )
+        await session.rollback()
+
+    assert len(analytics.entries) == 2
+    # cust_a first: higher total paid.
+    top, bottom = analytics.entries
+    assert top.customer_id == cust_a
+    assert top.payment_count == 2
+    assert top.total_paid == Decimal("400")
+    assert top.avg_days_to_pay == Decimal("11.5")
+    assert top.consistency_score == Decimal("0.3478")  # 1 - pstdev/mean
+    assert bottom.customer_id == cust_b
+    assert bottom.payment_count == 1
+    assert bottom.total_paid == Decimal("100")
+    assert bottom.avg_days_to_pay == Decimal("9")
+    assert bottom.consistency_score is None  # single payment: no variance
+
+
 async def test_health_score_weights_snapshot(wave2_world: dict[str, str]) -> None:
     """Pin SKY-64 health-score component weights to guard against drift."""
     tenant_id = uuid.UUID(wave2_world["tenant_id"])

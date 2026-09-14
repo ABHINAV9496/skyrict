@@ -45,6 +45,8 @@ from core.domain.entities import (
     AiFinanceSuggestion,
     AnomalyNarration,
     ChartOfAccount,
+    CustomerPaymentAnalytics,
+    CustomerPaymentAnalyticsEntry,
     DraftEntry,
     DraftEntryLine,
     InvoiceLineSuggestion,
@@ -65,6 +67,7 @@ from core.features.finance.schemas import (
     CashflowProjectionResponse,
     CloseChecklistResponse,
     ComparativePnlResponse,
+    CustomerPaymentAnalyticsResponse,
     DraftEntryLineResponse,
     DraftEntryResponse,
     DuplicateGroupResponse,
@@ -362,6 +365,31 @@ class FinanceAutomationService:
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> Any:
         return await self.repo.payment_method_analytics(tenant_id, from_date, to_date)
+
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> Any:
+        report = await self.repo.customer_payment_analytics(tenant_id, from_date, to_date)
+        if self.customers is not None and report.entries:
+            names = await self.customers.get_customer_names(
+                [e.customer_id for e in report.entries], tenant_id=tenant_id
+            )
+            report = CustomerPaymentAnalytics(
+                from_date=report.from_date,
+                to_date=report.to_date,
+                entries=tuple(
+                    CustomerPaymentAnalyticsEntry(
+                        customer_id=e.customer_id,
+                        customer_name=names.get(e.customer_id),
+                        payment_count=e.payment_count,
+                        total_paid=e.total_paid,
+                        avg_days_to_pay=e.avg_days_to_pay,
+                        consistency_score=e.consistency_score,
+                    )
+                    for e in report.entries
+                ),
+            )
+        return report
 
     async def audit_readiness(self, tenant_id: uuid.UUID) -> Any:
         return await self.repo.audit_readiness(tenant_id)
@@ -764,6 +792,20 @@ async def get_payment_method_analytics(
 ) -> ResponseEnvelope[PaymentMethodAnalyticsResponse]:
     analytics = await svc.payment_method_analytics(_tenant_id(current_user), from_date, to_date)
     return ResponseEnvelope(data=PaymentMethodAnalyticsResponse.model_validate(analytics))
+
+
+@router.get(
+    "/customer-analytics",
+    response_model=ResponseEnvelope[CustomerPaymentAnalyticsResponse],
+)
+async def get_customer_payment_analytics(
+    from_date: date,
+    to_date: date,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[CustomerPaymentAnalyticsResponse]:
+    analytics = await svc.customer_payment_analytics(_tenant_id(current_user), from_date, to_date)
+    return ResponseEnvelope(data=CustomerPaymentAnalyticsResponse.model_validate(analytics))
 
 
 @router.get("/audit-readiness", response_model=ResponseEnvelope[AuditReadinessResponse])

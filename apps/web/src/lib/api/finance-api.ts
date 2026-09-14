@@ -904,6 +904,51 @@ export function getPaymentMethodAnalytics(
     );
 }
 
+// ---------------------------------------------------------------------------
+// SKY-84 (FIN-AUT-003): customer payment analytics (B14)
+// ---------------------------------------------------------------------------
+
+export interface CustomerPaymentAnalyticsEntry {
+    customer_id: string;
+    customer_name: string | null;
+    payment_count: number;
+    total_paid: number;
+    avg_days_to_pay: number | null;
+    consistency_score: number | null;
+}
+
+export interface CustomerPaymentAnalytics {
+    from_date: string;
+    to_date: string;
+    entries: CustomerPaymentAnalyticsEntry[];
+}
+
+function mapCustomerPaymentAnalytics(
+    payload: CustomerPaymentAnalytics,
+): CustomerPaymentAnalytics {
+    return {
+        ...payload,
+        entries: (payload.entries ?? []).map((entry) => ({
+            ...entry,
+            total_paid: asNumber(entry.total_paid) ?? 0,
+            avg_days_to_pay: asNumber(entry.avg_days_to_pay),
+            consistency_score: asNumber(entry.consistency_score),
+        })),
+    };
+}
+
+export function getCustomerAnalytics(
+    fromDate: string,
+    toDate: string,
+): Promise<CustomerPaymentAnalytics> {
+    return apiFetch<CustomerPaymentAnalytics>(
+        `${AUTOMATION}/customer-analytics${queryString({
+            from_date: fromDate,
+            to_date: toDate,
+        })}`,
+    ).then(mapCustomerPaymentAnalytics);
+}
+
 export function getAuditReadiness(): Promise<AuditReadiness> {
     return apiFetch<AuditReadiness>(`${AUTOMATION}/audit-readiness`);
 }

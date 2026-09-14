@@ -1589,6 +1589,27 @@ class PaymentMethodAnalytics:
 
 
 @dataclass(frozen=True)
+class CustomerPaymentAnalyticsEntry:
+    """Per-customer payment timing and consistency (B14)."""
+
+    customer_id: uuid.UUID
+    customer_name: str | None
+    payment_count: int
+    total_paid: Decimal
+    avg_days_to_pay: Decimal | None
+    consistency_score: Decimal | None  # 0..1, None if < 2 payments
+
+
+@dataclass(frozen=True)
+class CustomerPaymentAnalytics:
+    """How promptly customers pay — avg days to pay and consistency (B14)."""
+
+    from_date: date
+    to_date: date
+    entries: tuple[CustomerPaymentAnalyticsEntry, ...]
+
+
+@dataclass(frozen=True)
 class AuditReadinessCheck:
     """A single audit-readiness gate and whether the tenant passes it (B32)."""
 

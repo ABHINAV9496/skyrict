@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         ChartOfAccount,
         CloseChecklist,
         ComparativePnl,
+        CustomerPaymentAnalytics,
         DuplicateGroup,
         ExchangeRate,
         FiscalPeriod,
@@ -282,6 +283,10 @@ class FinanceRepositoryPort(Protocol):
     async def payment_method_analytics(
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> PaymentMethodAnalytics: ...
+
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> CustomerPaymentAnalytics: ...
 
     async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness: ...
 

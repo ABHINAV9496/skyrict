@@ -56,6 +56,8 @@ from core.domain.entities import (
     CloseChecklistItem,
     ComparativePnl,
     ComparativePnlRow,
+    CustomerPaymentAnalytics,
+    CustomerPaymentAnalyticsEntry,
     DuplicateCandidate,
     DuplicateGroup,
     ExchangeRate,
@@ -1943,6 +1945,72 @@ class FinanceRepository:
             from_date=from_date,
             to_date=to_date,
             total_amount=total_amount,
+            entries=tuple(entries),
+        )
+
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> CustomerPaymentAnalytics:
+        rows = (
+            await self.session.execute(
+                select(
+                    ErpInvoiceModel.customer_id.label("customer_id"),
+                    ErpInvoiceModel.invoice_date.label("invoice_date"),
+                    func.date(ErpPaymentModel.paid_at).label("paid_date"),
+                    ErpPaymentModel.amount.label("amount"),
+                )
+                .join(
+                    ErpPaymentModel,
+                    ErpPaymentModel.invoice_id == ErpInvoiceModel.id,
+                )
+                .where(
+                    ErpInvoiceModel.tenant_id == tenant_id,
+                    ErpPaymentModel.tenant_id == tenant_id,
+                    ErpPaymentModel.status == PaymentStatus.APPLIED,
+                    func.date(ErpPaymentModel.paid_at) >= from_date,
+                    func.date(ErpPaymentModel.paid_at) <= to_date,
+                )
+                .order_by(ErpInvoiceModel.customer_id)
+            )
+        ).all()
+
+        by_customer: dict[uuid.UUID, list[tuple[int, Decimal]]] = {}
+        for row in rows:
+            days = (row.paid_date - row.invoice_date).days
+            by_customer.setdefault(row.customer_id, []).append((days, Decimal(row.amount)))
+
+        entries: list[CustomerPaymentAnalyticsEntry] = []
+        for customer_id, payments in by_customer.items():
+            total_paid = sum((amount for _, amount in payments), Decimal("0"))
+            days = tuple(d for d, _ in payments)
+            avg_days = (
+                Decimal(str(sum(days) / len(days))).quantize(Decimal("0.01")) if days else None
+            )
+            consistency: Decimal | None = None
+            if len(days) >= 2:
+                mean = sum(days) / len(days)
+                if mean > 0:
+                    variance = sum((d - mean) ** 2 for d in days) / len(days)
+                    score = Decimal("1") - (Decimal(str(variance)).sqrt() / Decimal(str(mean)))
+                    consistency = max(Decimal("0"), min(Decimal("1"), score)).quantize(
+                        Decimal("0.0001")
+                    )
+                else:
+                    consistency = Decimal("0")
+            entries.append(
+                CustomerPaymentAnalyticsEntry(
+                    customer_id=customer_id,
+                    customer_name=None,
+                    payment_count=len(payments),
+                    total_paid=total_paid,
+                    avg_days_to_pay=avg_days,
+                    consistency_score=consistency,
+                )
+            )
+        entries.sort(key=lambda e: e.total_paid, reverse=True)
+        return CustomerPaymentAnalytics(
+            from_date=from_date,
+            to_date=to_date,
             entries=tuple(entries),
         )
 

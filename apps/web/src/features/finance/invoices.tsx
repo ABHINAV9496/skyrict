@@ -64,6 +64,7 @@ import {
     type FinanceColumn,
 } from "@/features/finance/components/finance-table";
 import { PaymentMatchInbox } from "@/features/finance/components/payment-match-inbox";
+import { CustomerPaymentAnalytics } from "@/features/finance/components/customer-payment-analytics";
 import {
     PeriodSelector,
     defaultPeriodValue,
@@ -1241,6 +1242,12 @@ function FinanceInvoices() {
     }
 
     const range = resolvePeriodRange(periodValue);
+    const analyticsFrom =
+        range.from ??
+        (periods.length > 0
+            ? [...periods].map((period) => period.start_date).sort()[0]
+            : today());
+    const analyticsTo = range.to ?? today();
     const visibleInvoices = status.invoices.filter((invoice) => {
         if (range.from && invoice.invoice_date < range.from) return false;
         if (range.to && invoice.invoice_date > range.to) return false;
@@ -1289,6 +1296,7 @@ function FinanceInvoices() {
                             label: "Overdue",
                             count: overdueInvoices.length,
                         },
+                        { key: "analytics", label: "Analytics" },
                     ]}
                     activeTab={statusTab}
                     onTabChange={setStatusTab}
@@ -1335,7 +1343,12 @@ function FinanceInvoices() {
                 />
             </div>
 
-            {status.invoices.length === 0 ? (
+            {statusTab === "analytics" ? (
+                <CustomerPaymentAnalytics
+                    fromDate={analyticsFrom}
+                    toDate={analyticsTo}
+                />
+            ) : status.invoices.length === 0 ? (
                 <FinanceEmptyState
                     icon={ReceiptText}
                     title="No invoices yet"

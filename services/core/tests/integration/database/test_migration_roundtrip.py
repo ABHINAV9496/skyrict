@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 53 revisions, 0001..0053) -> core ``downgrade base`` (all the way back to
+(all 56 revisions, 0001..0056) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -22,7 +22,7 @@ the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), and the five
 approval-workflow tables with their RLS policies (0052, SKY-92), and
-``erp_journal_templates`` with its RLS policy (0053, FIN-AUT-003 B5).
+``erp_journal_templates`` with its RLS policy (0055, FIN-AUT-003 B5).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -82,6 +82,12 @@ _ERP_PERMISSION_KEYS = (
     "erp.payroll.ai.run",
     "erp.payroll.ai.notify",
     "erp.payroll.ai.approve",
+    # 0053: HR-AI-003 L3 narratives gate (renumbered from the 0050 collision
+    # with dev's 0050_ai_docs - this feature branch's permission chain).
+    "erp.hr.ai.management",
+    # 0054: HR-AI-003 L3 refresh gate (renumbered from the 0051 collision
+    # with dev's 0051_crm_transcript).
+    "erp.ai.l3.refresh",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -220,7 +226,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0054", f"head is {version}, expected 0054"
+            assert version == "0056", f"head is {version}, expected 0056"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1124,16 +1130,28 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert (
-                definition_uniq == 1
-            ), "0052 must add the definitions (tenant, resource_type, version) uniqueness"
+            assert definition_uniq == 1, (
+                "0052 must add the definitions (tenant, resource_type, version) uniqueness"
+            )
 
-            # 0053: recurring journal templates (FIN-AUT-003 B5) - the table,
+            # 0053/0054: HR-AI-003 (renumbered from the 0050/0051 collision
+            # with dev's ai_docs/crm_transcript) - the L3 narrative and refresh
+            # permission keys are first-class catalog permissions.
+            for l3_key in ("erp.hr.ai.management", "erp.ai.l3.refresh"):
+                l3_perm = (
+                    await conn.execute(
+                        text("SELECT description FROM core_permissions WHERE key = :key"),
+                        {"key": l3_key},
+                    )
+                ).scalar_one_or_none()
+                assert l3_perm is not None, f"0053/0054 must register {l3_key}"
+
+            # 0055: recurring journal templates (FIN-AUT-003 B5) - the table,
             # its RLS policy, the run-due scan index, and the offset check.
             template_table = (
                 await conn.execute(text("SELECT to_regclass('public.erp_journal_templates')"))
             ).scalar_one()
-            assert template_table is not None, "0053 must create erp_journal_templates"
+            assert template_table is not None, "0055 must create erp_journal_templates"
 
             template_policy = (
                 await conn.execute(
@@ -1144,7 +1162,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert template_policy == 1, "0053 must enable RLS on erp_journal_templates"
+            assert template_policy == 1, "0055 must enable RLS on erp_journal_templates"
 
             template_due_index = (
                 await conn.execute(
@@ -1156,7 +1174,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert template_due_index == 1, "0053 must create the run-due scan index"
+            assert template_due_index == 1, "0055 must create the run-due scan index"
 
             template_offset_check = (
                 await conn.execute(
@@ -1167,14 +1185,14 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert template_offset_check == 1, "0053 must add the entry_date_offset_days check"
+            assert template_offset_check == 1, "0055 must add the entry_date_offset_days check"
 
-            # 0054: payment-matching inbox (FIN-AUT-003 B7) - the table, RLS
+            # 0056: payment-matching inbox (FIN-AUT-003 B7) - the table, RLS
             # policy, dedupe partial-unique stamp, and the amount/status checks.
             intent_table = (
                 await conn.execute(text("SELECT to_regclass('public.erp_payment_intents')"))
             ).scalar_one()
-            assert intent_table is not None, "0054 must create erp_payment_intents"
+            assert intent_table is not None, "0056 must create erp_payment_intents"
 
             intent_policy = (
                 await conn.execute(
@@ -1185,7 +1203,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert intent_policy == 1, "0054 must enable RLS on erp_payment_intents"
+            assert intent_policy == 1, "0056 must enable RLS on erp_payment_intents"
 
             intent_dedupe = (
                 await conn.execute(
@@ -1198,7 +1216,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert intent_dedupe == 1, "0054 must add the (tenant, source, source_ref) stamp"
+            assert intent_dedupe == 1, "0056 must add the (tenant, source, source_ref) stamp"
 
             for constraint in (
                 "ck_erp_payment_intents_amount",
@@ -1210,7 +1228,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                         {"name": constraint},
                     )
                 ).scalar_one()
-                assert snip_intent_constraint == 1, f"0054 must add {constraint}"
+                assert snip_intent_constraint == 1, f"0056 must add {constraint}"
     finally:
         await engine.dispose()
 
@@ -1267,7 +1285,14 @@ async def _assert_downgraded_to_base(url: str) -> None:
 
 
 def test_core_migration_chain_round_trips_up_down_up() -> None:
-    """upgrade head -> downgrade base -> upgrade head must reproduce the schema."""
+    """The full chain must unwind to base and re-apply without schema drift.
+
+    Regression guard for the 0007 incident (schema silently diverged from the
+    migration files): ``upgrade head -> downgrade base -> upgrade head`` must
+    reproduce the schema exactly. If a newer link can't unwind, the fix is a
+    corrective migration or a documented accepted risk - never an edit to an
+    already-applied migration file.
+    """
     base_url = os.environ["CORE_DATABASE_URL"]
     dbname = f"skyrict_core_rt_{uuid.uuid4().hex[:12]}"
     maint_dsn, scratch_url = _db_urls(base_url, dbname)

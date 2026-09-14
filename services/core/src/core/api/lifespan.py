@@ -59,6 +59,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await sync_rbac_from_identity()
     except Exception:
+        # Best-effort bootstrap sync: identity may be unready or unreachable at
+        # boot, and a grants divergence must not take the monolith down. Any
+        # failure (DB, network, seed mismatch) is logged; the grants reconcile
+        # on the next startup and operators are alerted via logs.
         logger.warning("rbac_sync.failed", exc_info=True)
 
     readiness.mark_ready()

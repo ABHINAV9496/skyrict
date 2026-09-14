@@ -148,6 +148,11 @@ def _log_dispatch_failure(task: asyncio.Task[object]) -> None:
     try:
         task.result()
     except Exception:
+        # Fire-and-forget done-callback: the product write already committed in
+        # its own transaction. The embedding POST is a best-effort side effect;
+        # a failure here is unreachable/unrecoverable by any caller (asyncio
+        # would only log it), so we must swallow-and-log. The product row is
+        # re-syncable via `ai-agent inventory reindex`.
         logger.exception(
             "inventory_product.sync_failed",
             message="product embedding sync failed; recovery via `ai-agent inventory reindex`",

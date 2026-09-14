@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.logging import get_logger
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from core.features.ai_hr.anomaly_service import AnomalyService
     from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
+    from core.features.ai_hr.l3_repository import L3Repository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )
@@ -628,6 +630,13 @@ def get_pattern_data_repository(db: AsyncSession = Depends(get_db)) -> PatternDa
     return AiHrPatternDataRepository(db)
 
 
+def get_l3_repository(db: AsyncSession = Depends(get_db)) -> L3Repository:
+    """Composition root for the L3 payroll-cost source data repository (HR-AI-003)."""
+    from core.features.ai_hr.l3_repository import L3Repository
+
+    return L3Repository(db)
+
+
 async def get_hr_ai_individual(
     current_user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -662,7 +671,8 @@ class _PayrollDefaultCurrencyPort:
     async def get_default_currency(self, tenant_id: uuid.UUID) -> str | None:
         try:
             settings = await self._repo.get_settings(tenant_id)
-        except Exception:  # ponytail: tenant may predate payroll seeding
+        except (OperationalError, ProgrammingError):
+            # Tenant predates payroll table/migration — degrade gracefully
             return None
         code = getattr(settings, "default_currency", None)
         return code or None

@@ -62,6 +62,29 @@ export interface NavGroup {
     collapsible?: boolean;
 }
 
+/**
+ * Compare the active path against an internal `/dashboard/*` href. The public
+ * workspace URL strips the prefix (e.g. `/settings`), so normalize it before
+ * comparing so the active state tracks the page regardless of which form the
+ * browser is showing. Non-exact items also match any path nested under their
+ * href; module roots and overview children should set `exact: true` so they do
+ * not light up for sibling routes (e.g. Documents Overview vs All documents).
+ */
+export function isSidebarItemActive(
+    pathname: string,
+    item: Pick<NavItem, "href" | "exact">,
+): boolean {
+    const normalized =
+        pathname === "/"
+            ? "/dashboard"
+            : pathname.startsWith("/dashboard")
+              ? pathname
+              : `/dashboard${pathname}`;
+    const { href, exact } = item;
+    if (href === "/dashboard" || exact) return normalized === href;
+    return normalized === href || normalized.startsWith(`${href}/`);
+}
+
 /** Workspace sidebar (non-module pages). Modules are entered from the Overview launchpad. */
 export const workspaceNavGroups: NavGroup[] = [
     {
@@ -91,6 +114,12 @@ export const workspaceNavGroups: NavGroup[] = [
                 icon: Plug,
                 soon: true,
                 tour: "nav-integrations",
+            },
+            {
+                href: "/dashboard/settings/notifications",
+                label: "Notifications",
+                icon: BellRing,
+                tour: "nav-notifications",
             },
         ],
     },
@@ -322,6 +351,12 @@ export const erpNavGroups: NavGroup[] = [
                         icon: ShieldCheck,
                         permission: "erp.hr.ai.read",
                     },
+                    {
+                        href: "/dashboard/erp/hr/correlation",
+                        label: "Leave · pay correlation",
+                        icon: Activity,
+                        permission: "erp.hr.ai.read",
+                    },
                 ],
             },
             {
@@ -438,6 +473,7 @@ export const erpNavGroups: NavGroup[] = [
                         label: "Overview",
                         icon: LayoutDashboard,
                         permission: "erp.documents.read",
+                        exact: true,
                     },
                     {
                         href: "/dashboard/erp/documents/list",

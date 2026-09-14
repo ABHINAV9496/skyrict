@@ -22,13 +22,8 @@ primary key, ``created_at``/``updated_at`` audit columns, RLS enforced via the
 ``public.current_tenant_id()`` policy (the session sets ``app.current_tenant_id``
 once per connection, so every query is bound to the tenant).
 
-Renumbered from ``0052`` to ``0053`` during the HR-AI-004 branch merge: two
-unmerged branches independently took revision ``0052`` (this SKY-92 approval
-engine and SKY-93's ``erp.hr.ai.planning`` permission seed). HR-AI-004 kept
-``0052``; this SKY-92 table set now chains after it.
-
-Revision ID: 0053
-Revises: 0052
+Revision ID: 0052
+Revises: 0051
 Create Date: 2026-09-13
 """
 
@@ -37,8 +32,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0053"
-down_revision = "0052"
+revision = "0052"
+down_revision = "0051"
 branch_labels = None
 depends_on = None
 

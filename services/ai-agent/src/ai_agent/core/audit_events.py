@@ -71,6 +71,20 @@ AI_FOLLOW_UP_APPLIED = "ai.crm.follow_up.applied"
 AI_FOLLOW_UP_DISMISSED = "ai.crm.follow_up.dismissed"
 """A human dismissed a follow-up suggestion (SKY-61)."""
 
+AI_L3_PAYROLL_COST_GENERATED = "ai.l3.payroll_cost.generated"
+"""The L3 payroll-cost narrative was generated."""
+
+AI_L3_LEAVE_PAY_CORRELATED = "ai.l3.leave_pay.correlated"
+"""The L3 leave-pay-correlation narrative was generated."""
+
+AI_L3_COMPLIANCE_DIGESTED = "ai.l3.compliance.digested"
+"""The L3 compliance-digest narrative was generated."""
+
+AI_L3_ACCESSED = "ai.l3.accessed"
+"""An L3 narrative was retrieved from cache (every read is audited)."""
+
+AI_L3_ABSTAINED = "ai.l3.abstained"
+"""The L3 narrator abstained (no material activity, LLM disabled, or unusable output)."""
 AI_TRANSCRIPT_ANALYZED = "ai.crm.transcript.analyzed"
 """The CRM AI service analyzed a call/meeting transcript (SKY-91)."""
 
@@ -146,6 +160,11 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_FOLLOW_UP_GENERATED,
         AI_FOLLOW_UP_APPLIED,
         AI_FOLLOW_UP_DISMISSED,
+        AI_L3_PAYROLL_COST_GENERATED,
+        AI_L3_LEAVE_PAY_CORRELATED,
+        AI_L3_COMPLIANCE_DIGESTED,
+        AI_L3_ACCESSED,
+        AI_L3_ABSTAINED,
         AI_REPORT_GENERATED,
         AI_REPORT_SAVED,
         AI_TRANSCRIPT_ANALYZED,

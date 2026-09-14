@@ -59,6 +59,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await sync_rbac_from_identity()
     except Exception:
+        # Best-effort bootstrap sync: identity may be unready or unreachable at
+        # boot, and a grants divergence must not take the monolith down. Any
+        # failure (DB, network, seed mismatch) is logged; the grants reconcile
+        # on the next startup and operators are alerted via logs.
         logger.warning("rbac_sync.failed", exc_info=True)
 
     readiness.mark_ready()
@@ -117,6 +121,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         app.state.approval_escalation_worker = None
 
+    # Notification batching worker (SKY-93): a background asyncio loop that
+    # collapses bursts of low/medium notifications into digests. Disabled
+    # under the test environment so integration tests drive process_all()
+    # directly (and via `core notification batch`).
+    if settings.NOTIF_BATCH_WORKER_ENABLED and settings.ENVIRONMENT != Environment.TEST:
+        from core.db.session import async_session_factory
+        from core.features.notifications.worker import NotificationBatchingWorker
+
+        app.state.notification_batching_worker = NotificationBatchingWorker(
+            async_session_factory,
+        )
+        app.state.notification_batching_worker.start()
+    else:
+        app.state.notification_batching_worker = None
+
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate, the AI
     # client and the DB engine so in-flight work can drain cleanly.
@@ -136,5 +155,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     escalation_worker = getattr(app.state, "approval_escalation_worker", None)
     if escalation_worker is not None:
         await escalation_worker.stop()
+    batch_worker = getattr(app.state, "notification_batching_worker", None)
+    if batch_worker is not None:
+        await batch_worker.stop()
     await app.state.ai_client.aclose()
     await engine.dispose()

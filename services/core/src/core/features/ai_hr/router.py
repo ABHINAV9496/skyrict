@@ -22,7 +22,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from core.api.deps import (
@@ -34,7 +34,8 @@ from core.api.deps import (
     get_eval_repository,
     get_finance_service,
     get_hr_ai_individual,
-    get_l4_payroll_repository,
+get_l4_payroll_repository,
+    get_l3_repository,
     get_pattern_data_repository,
     get_payroll_anomaly_service,
     get_quality_service,
@@ -49,7 +50,8 @@ from core.core.permissions import (
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
     ERP_HR_AI_EVAL,
-    ERP_HR_AI_PLANNING,
+ERP_HR_AI_PLANNING,
+    ERP_HR_AI_MANAGEMENT,
     ERP_HR_AI_READ,
     ERP_HR_READ,
     ERP_HR_WRITE,
@@ -64,6 +66,13 @@ from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
 from core.features.ai_hr.l4_repository import PayrollBaseRepository
 from core.features.ai_hr.l4_schemas import ExportBudgetDraftOut, PayrollBaseOut, payroll_base_to_out
+from core.features.ai_hr.l3_repository import L3Repository
+from core.features.ai_hr.l3_schemas import (
+    LeavePayCorrelationOut,
+    PayrollCostMovementOut,
+    leave_pay_to_out,
+    movement_to_out,
+)
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
@@ -116,7 +125,7 @@ from core.features.ai_hr.service import AiHrService
 from core.features.ai_hr.suggestion_service import SuggestionService
 from core.features.ai_hr.utilization_service import UtilizationService
 from core.features.finance.ports import BudgetDraftPort
-from skyrict_common.exceptions import NotFoundError
+from skyrict_common.exceptions import NotFoundError, ValidationError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/ai/hr", tags=["ai-hr"])
@@ -129,6 +138,7 @@ _require_hr_ai_eval = require_permission(ERP_HR_AI_EVAL)
 _require_hr_ai_planning = require_permission(ERP_HR_AI_PLANNING)
 _require_hr_read = require_permission(ERP_HR_READ)
 _require_hr_write = require_permission(ERP_HR_WRITE)
+_require_hr_ai_management = require_permission(ERP_HR_AI_MANAGEMENT)
 
 _AiInvokeDep = Annotated[dict[str, Any], Depends(_require_ai_invoke)]
 _HrAiReadDep = Annotated[dict[str, Any], Depends(_require_hr_ai_read)]
@@ -138,6 +148,7 @@ _HrAiEvalDep = Annotated[dict[str, Any], Depends(_require_hr_ai_eval)]
 _HrAiPlanningDep = Annotated[dict[str, Any], Depends(_require_hr_ai_planning)]
 _HrReadDep = Annotated[dict[str, Any], Depends(_require_hr_read)]
 _HrWriteDep = Annotated[dict[str, Any], Depends(_require_hr_write)]
+_HrAiManagementDep = Annotated[dict[str, Any], Depends(_require_hr_ai_management)]
 _CurrentUserDep = Annotated[dict[str, Any], Depends(get_current_user)]
 _ServiceDep = Annotated[AiHrService, Depends(get_ai_hr_service)]
 _QualityServiceDep = Annotated[QualityService, Depends(get_quality_service)]
@@ -148,6 +159,7 @@ _PayrollAnomalyServiceDep = Annotated[PayrollAnomalyService, Depends(get_payroll
 _ComplianceServiceDep = Annotated[ComplianceService, Depends(get_compliance_service)]
 _EvalRepositoryDep = Annotated[EvalRunRepository, Depends(get_eval_repository)]
 _L4PayrollBaseRepoDep = Annotated[PayrollBaseRepository, Depends(get_l4_payroll_repository)]
+_L3RepoDep = Annotated[L3Repository, Depends(get_l3_repository)]
 _PatternDataRepositoryDep = Annotated[
     AiHrPatternDataRepository, Depends(get_pattern_data_repository)
 ]
@@ -514,7 +526,7 @@ async def create_public_holiday(
             department_id=body.department_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from exc
     return ResponseEnvelope(data=public_holiday_to_out(holiday), message="Public holiday created")
 
 
@@ -561,7 +573,7 @@ async def create_leave_blackout(
             department_id=body.department_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from exc
     return ResponseEnvelope(data=leave_blackout_to_out(blackout), message="Leave blackout created")
 
 
@@ -631,7 +643,7 @@ async def copilot_chat(
     current_user: _HrAiCopilotDep,
     client: _ClientDep,
 ) -> Response:
-    """Forward one HR Copilot message to ai-agent (spec §9 feature 5).
+    """Forward one HR Copilot message to ai-agent (spec Ã‚Â§9 feature 5).
 
     Gated by ``erp.ai.invoke`` + ``erp.hr.ai.copilot``. The caller's JWT and
     tenant slug are relayed so ai-agent makes its aggregate reads (and any PII
@@ -858,10 +870,10 @@ async def l4_scenario_export(
     ``/api/v1/ai/l4/scenarios/{id}``), and its stored projection totals are
     materialized into an ``erp_budget_drafts`` row (source='workforce_plan',
     source_ref=scenario_id) - a *planning* artifact with its own
-    draft→pending→approved flow, deliberately separate from the DRAFT JE
+    draftÃ¢â€ â€™pendingÃ¢â€ â€™approved flow, deliberately separate from the DRAFT JE
     inbox (a what-if projection must not be confused with a booked
     transaction). The ``UNIQUE (tenant_id, source, source_ref)`` lock makes a
-    replayed export idempotent — a retry returns ``already_booked`` instead of
+    replayed export idempotent Ã¢â‚¬â€ a retry returns ``already_booked`` instead of
     creating a second draft.
     """
     tenant_id = _tenant_id(current_user)
@@ -911,3 +923,32 @@ async def l4_scenario_export(
         ),
         message="L4 scenario exported to Finance budget drafts",
     )
+
+
+# --- L3 payroll-cost source data (HR-AI-003) ---
+
+
+@router.get("/l3/payroll-cost", response_model=ResponseEnvelope[PayrollCostMovementOut])
+async def l3_payroll_cost_movement(
+    _management: _HrAiManagementDep,
+    current_user: _AiInvokeDep,
+    repo: _L3RepoDep,
+) -> ResponseEnvelope[PayrollCostMovementOut]:
+    """L3 month-over-month payroll cost movement for the narrator (HR-AI-003)."""
+    movement = await repo.payroll_cost_movement(_tenant_id(current_user))
+    if movement is None:
+        raise NotFoundError(
+            "Insufficient payroll history for cost movement (need 2+ completed runs)"
+        )
+    return ResponseEnvelope(success=True, data=movement_to_out(movement))
+
+
+@router.get("/l3/leave-pay-correlation", response_model=ResponseEnvelope[LeavePayCorrelationOut])
+async def l3_leave_pay_correlation(
+    _management: _HrAiManagementDep,
+    current_user: _AiInvokeDep,
+    repo: _L3RepoDep,
+) -> ResponseEnvelope[LeavePayCorrelationOut]:
+    """L3 monthly (leave days, overtime) series for the narrator (HR-AI-003, C2)."""
+    pairs = await repo.leave_pay_pairs(_tenant_id(current_user))
+    return ResponseEnvelope(success=True, data=leave_pay_to_out(pairs))

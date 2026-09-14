@@ -14,6 +14,13 @@ originally claimed ``revision = "0050"`` with the same ``down_revision =
 ``0050_ai_docs`` merged first and keeps ``0050``; any DB stamped ``0050``
 refers to it, and this transcript column now applies afterwards.
 
+Idempotency: the column already exists on some databases out-of-band (an
+earlier manual ALTER propped it up while the version table lagged), so the
+upgrade uses ``ADD COLUMN IF NOT EXISTS`` — the container boot migration
+(``alembic upgrade head`` in Dockerfile.dev) must not crash on a column that
+is already present. The post-upgrade round-trip probe (``test_migration_roundtrip``)
+still passes because the column ends up present either way.
+
 Revision ID: 0051
 Revises: 0050
 Create Date: 2026-09-11
@@ -21,7 +28,6 @@ Create Date: 2026-09-11
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0051"
@@ -31,11 +37,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "erp_crm_activities",
-        sa.Column("transcript_text", sa.Text(), nullable=True),
-    )
+    op.execute("ALTER TABLE erp_crm_activities ADD COLUMN IF NOT EXISTS transcript_text TEXT")
 
 
 def downgrade() -> None:
-    op.drop_column("erp_crm_activities", "transcript_text")
+    op.execute("ALTER TABLE erp_crm_activities DROP COLUMN IF EXISTS transcript_text")

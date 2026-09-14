@@ -161,6 +161,11 @@ def _log_dispatch_failure(task: asyncio.Task[object]) -> None:
     try:
         task.result()
     except Exception:
+        # Fire-and-forget done-callback: the document write already committed
+        # in its own transaction. The OCR hand-off POST is a best-effort side
+        # effect; a failure here is unreachable/unrecoverable by any caller
+        # (asyncio would only log it), so we must swallow-and-log. The document
+        # stays in a pending state and is re-dispatched on the next reindex.
         logger.exception(
             "documents.ocr.sync_failed",
             message="document ocr dispatch failed; document stays pending for reindex",

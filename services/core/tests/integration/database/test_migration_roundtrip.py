@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 54 revisions, 0001..0054) -> core ``downgrade base`` (all the way back to
+(all 57 revisions, 0001..0057) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -21,8 +21,10 @@ Sentinel assertions probe one representative artefact of each migration:
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), the five
-approval-workflow tables with their RLS policies (0053, SKY-92),
-and the finance budget-draft bridge tables + idempotency lock (0054, SKY-93).
+approval-workflow tables with their RLS policies (0052, SKY-92), the finance
+budget-draft bridge tables + idempotency lock (0057, SKY-93), and the three
+notification-center tables with their RLS policies and dedupe constraints
+(0055, SKY-93).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -82,6 +84,12 @@ _ERP_PERMISSION_KEYS = (
     "erp.payroll.ai.run",
     "erp.payroll.ai.notify",
     "erp.payroll.ai.approve",
+    # 0053: HR-AI-003 L3 narratives gate (renumbered from the 0050 collision
+    # with dev's 0050_ai_docs - this feature branch's permission chain).
+    "erp.hr.ai.management",
+    # 0054: HR-AI-003 L3 refresh gate (renumbered from the 0051 collision
+    # with dev's 0051_crm_transcript).
+    "erp.ai.l3.refresh",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -125,7 +133,17 @@ _APPROVAL_WF_TABLES = (
     "erp_approval_delegations",
 )
 
-# 0054: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4) - proposed
+# 0055: smart notification center (SKY-93, PLT-NOTIF-001) - one tenant-scoped
+# table per aggregate: inbound producer events (idempotent by dedupe_key),
+# per-recipient deliveries with read/snooze/digest state, and per-user category
+# channel preferences.
+_NOTIFICATION_TABLES = (
+    "erp_notification_events",
+    "erp_notifications",
+    "erp_notification_prefs",
+)
+
+# 0057: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4) - proposed
 # budget-draft header + cost-component lines, both tenant-scoped.
 _BUDGET_DRAFT_TABLES = (
     "erp_budget_drafts",
@@ -227,7 +245,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0054", f"head is {version}, expected 0054"
+            assert version == "0057", f"head is {version}, expected 0057"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1115,27 +1133,15 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             ).scalar_one()
             assert transcript_nullable == "YES", "0051 transcript_text must be nullable"
 
-# 0052: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
-            # gains erp.hr.ai.planning, the owner-gated key for L4 what-if
-            # scenario planning and its payroll-base source endpoint.
-            planning_perm = (
-                await conn.execute(
-                    text("SELECT description FROM core_permissions WHERE key = :key"),
-                    {"key": "erp.hr.ai.planning"},
-                )
-            ).scalar_one_or_none()
-            assert planning_perm is not None, "0052 must register erp.hr.ai.planning"
-
-            # 0053: approval workflow engine (SKY-92, renumbered from the 0052
-            # collision with 0052_erp_hr_ai_l4_planning_permission) - all five
-            # tables exist, are tenant-scoped with the tenant_isolation_* RLS
-            # policies, and the definitions table carries the version-immutability
-            # guarantee (UNIQUE (tenant_id, resource_type, version)).
+            # 0052: approval workflow engine (SKY-92) - all five tables exist,
+            # are tenant-scoped with the tenant_isolation_* RLS policies, and
+            # the definitions table carries the version-immutability guarantee
+            # (UNIQUE (tenant_id, resource_type, version)).
             for table in _APPROVAL_WF_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()
-                assert regclass is not None, f"0053 must create {table}"
+                assert regclass is not None, f"0052 must create {table}"
 
             approval_rls_tables = (
                 (
@@ -1166,10 +1172,83 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 )
             ).scalar_one()
             assert definition_uniq == 1, (
-                "0053 must add the definitions (tenant, resource_type, version) uniqueness"
+                "0052 must add the definitions (tenant, resource_type, version) uniqueness"
             )
 
-            # 0054: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4)
+            # 0053/0054: HR-AI-003 - the L3 narrative and refresh permission
+            # keys are first-class catalog permissions.
+            for l3_key in ("erp.hr.ai.management", "erp.ai.l3.refresh"):
+                l3_perm = (
+                    await conn.execute(
+                        text("SELECT description FROM core_permissions WHERE key = :key"),
+                        {"key": l3_key},
+                    )
+                ).scalar_one_or_none()
+                assert l3_perm is not None, f"0053/0054 must register {l3_key}"
+
+            # 0055: smart notification center (SKY-93) - all three tables
+            # exist, are tenant-scoped with the tenant_isolation_* RLS
+            # policies, and carry the dedupe uniqueness guarantees (events and
+            # per-recipient deliveries) plus the per-user category preference
+            # uniqueness.
+            for table in _NOTIFICATION_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0055 must create {table}"
+
+            notification_rls_tables = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = ANY(:names)"
+                        ),
+                        {"names": list(_NOTIFICATION_TABLES)},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(notification_rls_tables) == set(_NOTIFICATION_TABLES), (
+                f"notification tables missing RLS: "
+                f"{set(_NOTIFICATION_TABLES) - set(notification_rls_tables)}"
+            )
+
+            notification_uniqs = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT conname FROM pg_constraint "
+                            "WHERE conname IN "
+                            "('uq_erp_notification_events_tenant_dedupe_key', "
+                            " 'uq_erp_notifications_tenant_recipient_dedupe', "
+                            " 'uq_erp_notification_prefs_tenant_user_category')"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(notification_uniqs) == {
+                "uq_erp_notification_events_tenant_dedupe_key",
+                "uq_erp_notifications_tenant_recipient_dedupe",
+                "uq_erp_notification_prefs_tenant_user_category",
+            }, "0055 must add the notification dedupe / preference uniqueness constraints"
+
+            # 0056: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
+            # gains erp.hr.ai.planning, the owner-gated key for L4 what-if
+            # scenario planning and its payroll-base source endpoint.
+            planning_perm = (
+                await conn.execute(
+                    text("SELECT description FROM core_permissions WHERE key = :key"),
+                    {"key": "erp.hr.ai.planning"},
+                )
+            ).scalar_one_or_none()
+            assert planning_perm is not None, "0056 must register erp.hr.ai.planning"
+
+            # 0057: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4)
             # - the L4 what-if export tables. Both header and lines exist,
             # the (tenant_id, source, source_ref) idempotency lock is present,
             # the status CHECK limits draft->pending->approved, and the lines
@@ -1178,7 +1257,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()
-                assert regclass is not None, f"0054 must create {table}"
+                assert regclass is not None, f"0057 must create {table}"
 
             idempotency_lock = (
                 await conn.execute(
@@ -1189,7 +1268,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 )
             ).scalar_one()
             assert idempotency_lock == 1, (
-                "0054 must add the (tenant_id, source, source_ref) idempotency lock"
+                "0057 must add the (tenant_id, source, source_ref) idempotency lock"
             )
 
             status_check = (
@@ -1200,7 +1279,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert status_check == 1, "0054 must constrain budget-draft status"
+            assert status_check == 1, "0057 must constrain budget-draft status"
 
             line_fk = (
                 await conn.execute(
@@ -1210,7 +1289,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert line_fk == 1, "0054 must FK budget lines to their draft"
+            assert line_fk == 1, "0057 must FK budget lines to their draft"
     finally:
         await engine.dispose()
 
@@ -1256,7 +1335,7 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 ).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
 
-            for table in _BUDGET_DRAFT_TABLES:
+            for table in (*_BUDGET_DRAFT_TABLES, *_NOTIFICATION_TABLES):
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()
@@ -1273,7 +1352,14 @@ async def _assert_downgraded_to_base(url: str) -> None:
 
 
 def test_core_migration_chain_round_trips_up_down_up() -> None:
-    """upgrade head -> downgrade base -> upgrade head must reproduce the schema."""
+    """The full chain must unwind to base and re-apply without schema drift.
+
+    Regression guard for the 0007 incident (schema silently diverged from the
+    migration files): ``upgrade head -> downgrade base -> upgrade head`` must
+    reproduce the schema exactly. If a newer link can't unwind, the fix is a
+    corrective migration or a documented accepted risk - never an edit to an
+    already-applied migration file.
+    """
     base_url = os.environ["CORE_DATABASE_URL"]
     dbname = f"skyrict_core_rt_{uuid.uuid4().hex[:12]}"
     maint_dsn, scratch_url = _db_urls(base_url, dbname)

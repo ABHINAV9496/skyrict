@@ -31,8 +31,13 @@ async function proxy(request: NextRequest) {
   const slug = resolveTenantSlug(request.headers.get("host"));
   const authorization = request.headers.get("authorization");
 
-  const path = `/${request.nextUrl.pathname.replace(/^\/api\/v1\//, "")}${request.nextUrl.search}`;
-  const segment = path.split("/")[1];
+  const pathname = request.nextUrl.pathname.replace(/^\/api\/v1\//, "");
+  const path = `/${pathname}${request.nextUrl.search}`;
+  // Segment comes from the pathname only - the query string belongs to the
+  // last segment and must not leak into the target selection
+  // (e.g. /api/v1/documents?page=1&page_size=20 must route to core, not
+  // identity; otherwise backends answer RFC 7807 404 for the missed route).
+  const segment = pathname.split("/")[0];
 
   // Binary file downloads are streamed straight through (the envelope JSON
   // wrappers below would mangle the byte stream).
@@ -61,7 +66,7 @@ async function proxy(request: NextRequest) {
     });
   }
 
-  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents"].includes(
+  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents", "notifications"].includes(
     segment,
   )
     ? "core"

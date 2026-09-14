@@ -1072,9 +1072,9 @@ async def suggestion_quality(
 
 _VENDOR_INV_RE = re.compile(
     r"(?:"
-    r"(?:invoice|inv)\s*[#:\-]?\s*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r"(?:invoice|inv)[\s#:\-]*([A-Z0-9][A-Z0-9\-]{2,30})"
     r"|"
-    r"(?:reference|ref|po)\s*[#:\-]?\s*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r"(?:reference|ref|po)[\s#:\-]*([A-Z0-9][A-Z0-9\-]{2,30})"
     r")",
     re.IGNORECASE,
 )

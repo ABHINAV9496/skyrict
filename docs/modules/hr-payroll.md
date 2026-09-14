@@ -893,7 +893,7 @@ frozen against a fixed clock.
 | --------------------------------------------------------- | ------ | ---------------------------------------- |
 | Missing/invalid JWT                                       | 401    | `authentication-error`                   |
 | Valid JWT, missing permission                             | 403    | `authorization-error`                    |
-| Unknown/other-tenant resource                             | 404    | `hr-not-found` / `payroll-run-not-found` |
+| Unknown/other-tenant resource                             | 404    | `not-found`                             |
 | Duplicate employee number / department name               | 409    | `duplicate-record`                       |
 | Leave balance would go negative                           | 422    | `leave-balance-exceeded`                 |
 | Self-approval attempted                                   | 422    | `self-approval-forbidden`                |
@@ -901,7 +901,13 @@ frozen against a fixed clock.
 | Edit an approved/paid run's entry                         | 409    | `payroll-entry-immutable`                |
 | Terminated employee: re-hire or post-termination activity | 409    | `employee-terminated`                    |
 | Overlapping payroll period                                | 409    | `payroll-period-conflict`                |
-| Rate limit                                                | 429    | `rate-limit-exceeded`                    |
+
+Every problem type above is the exact suffix of the RFC 7807 `type` returned by
+core's `_STATUS_MAP` (`services/core/src/core/core/exceptions.py`); the base URI
+is always `https://api.skyrict.io/problems`. Unmapped/unexpected failures return
+`/internal-error` (500) with no internals leaked. Core applies no per-request
+rate limiting - upstream rate limits surface as HTTP 429 via the generic
+`http-429` problem type.
 
 ---
 

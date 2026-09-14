@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Annotated, Any
 
 import httpx
@@ -28,8 +29,10 @@ from core.api.deps import (
     get_ai_hr_service,
     get_anomaly_service,
     get_compliance_service,
+    get_core_audit_service,
     get_current_user,
     get_eval_repository,
+    get_finance_service,
     get_hr_ai_individual,
     get_l4_payroll_repository,
     get_pattern_data_repository,
@@ -39,6 +42,8 @@ from core.api.deps import (
     get_utilization_service,
     require_permission,
 )
+from core.core.audit_events import HR_AI_L4_BUDGET_DRAFT_CREATED
+from core.core.constants import BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN
 from core.core.permissions import (
     ERP_AI_INVOKE,
     ERP_HR_AI_ACKNOWLEDGE,
@@ -58,7 +63,7 @@ from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
 from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
 from core.features.ai_hr.l4_repository import PayrollBaseRepository
-from core.features.ai_hr.l4_schemas import PayrollBaseOut, payroll_base_to_out
+from core.features.ai_hr.l4_schemas import ExportBudgetDraftOut, PayrollBaseOut, payroll_base_to_out
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
@@ -110,6 +115,7 @@ from core.features.ai_hr.schemas import (
 from core.features.ai_hr.service import AiHrService
 from core.features.ai_hr.suggestion_service import SuggestionService
 from core.features.ai_hr.utilization_service import UtilizationService
+from core.features.finance.ports import BudgetDraftPort
 from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
@@ -147,6 +153,8 @@ _PatternDataRepositoryDep = Annotated[
 ]
 _ClientDep = Annotated[httpx.AsyncClient, Depends(get_ai_client)]
 _IndividualDep = Annotated[bool, Depends(get_hr_ai_individual)]
+_FinancePortDep = Annotated[BudgetDraftPort, Depends(get_finance_service)]
+_AuditSvcDep = Annotated[Any, Depends(get_core_audit_service)]
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
@@ -830,4 +838,76 @@ async def l4_scenario_get(
         request,
         client,
         f"/api/v1/ai/l4/scenarios/{scenario_id}",
+    )
+
+
+@router.post("/l4/scenarios/{scenario_id}/export", response_model=ResponseEnvelope[ExportBudgetDraftOut])
+async def l4_scenario_export(
+    scenario_id: uuid.UUID,
+    request: Request,
+    _invoke: _AiInvokeDep,
+    current_user: _HrAiPlanningDep,
+    client: _ClientDep,
+    finance: _FinancePortDep,
+    audit: _AuditSvcDep,
+) -> ResponseEnvelope[ExportBudgetDraftOut]:
+    """Export a frozen L4 what-if scenario to Finance as a PROPOSED budget draft.
+
+    SKY-93 (HR-AI-004, Commit 4): bridge the gap where Finance can't see a
+    scenario's totals. The scenario is fetched frozen from ai-agent (GET
+    ``/api/v1/ai/l4/scenarios/{id}``), and its stored projection totals are
+    materialized into an ``erp_budget_drafts`` row (source='workforce_plan',
+    source_ref=scenario_id) - a *planning* artifact with its own
+    draft→pending→approved flow, deliberately separate from the DRAFT JE
+    inbox (a what-if projection must not be confused with a booked
+    transaction). The ``UNIQUE (tenant_id, source, source_ref)`` lock makes a
+    replayed export idempotent — a retry returns ``already_booked`` instead of
+    creating a second draft.
+    """
+    tenant_id = _tenant_id(current_user)
+    actor = current_user["user_id"]
+
+    authorization = request.headers.get("authorization")
+    upstream = await forward_to_ai_agent(
+        client,
+        method="GET",
+        upstream_path=f"/api/v1/ai/l4/scenarios/{scenario_id}",
+        authorization=authorization,
+        tenant_slug=derive_tenant_slug(request),
+    )
+    if upstream.status_code >= 400:
+        return relay_response(upstream)  # 404/403 from ai-agent relayed verbatim.
+
+    payload = upstream.json()["data"] if "data" in upstream.json() else upstream.json()
+    projection = payload["projection"]
+    outcome = await finance.create_workforce_budget_draft(
+        tenant_id=tenant_id,
+        scenario_id=scenario_id,
+        scenario_name=payload["name"],
+        base_as_of=date.fromisoformat(payload["base_as_of"]),
+        horizon=int(projection["horizon"]),
+        currency=projection["currency"],
+        salary_total=Decimal(projection["salary_total"]),
+        benefit_total=Decimal(projection["benefit_total"]),
+        grand_total=Decimal(projection["grand_total"]),
+        created_by=actor,
+    )
+    await audit.log(
+        action=HR_AI_L4_BUDGET_DRAFT_CREATED,
+        target=f"scenario:{scenario_id}",
+        tenant_id=tenant_id,
+        user_id=actor,
+        details={
+            "source": BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
+            "draft_id": str(outcome.draft_id) if outcome.draft_id else None,
+            "already_booked": outcome.already_booked,
+            "grand_total": projection["grand_total"],
+        },
+    )
+    return ResponseEnvelope(
+        data=ExportBudgetDraftOut(
+            draft_id=outcome.draft_id,
+            already_booked=outcome.already_booked,
+        ),
+        message="L4 scenario exported to Finance budget drafts",
     )

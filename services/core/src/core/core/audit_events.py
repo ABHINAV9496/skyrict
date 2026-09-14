@@ -36,6 +36,9 @@ HR_AI_ANOMALY_DISMISSED = "hr.ai.anomaly.dismissed"
 HR_AI_ANOMALY_RESOLVED = "hr.ai.anomaly.resolved"
 HR_AI_COMPLIANCE_ACKNOWLEDGED = "hr.ai.compliance.acknowledged"
 HR_AI_COMPLIANCE_RESOLVED = "hr.ai.compliance.resolved"
+# SKY-93 (HR-AI-004, Commit 4): an L4 what-if scenario was exported to Finance
+# as a proposed budget draft.
+HR_AI_L4_BUDGET_DRAFT_CREATED = "hr.ai.l4.budget_draft.created"
 
 # ---------------------------------------------------------------------------
 # Payroll
@@ -116,6 +119,7 @@ CATALOG: tuple[str, ...] = (
     HR_AI_ANOMALY_RESOLVED,
     HR_AI_COMPLIANCE_ACKNOWLEDGED,
     HR_AI_COMPLIANCE_RESOLVED,
+    HR_AI_L4_BUDGET_DRAFT_CREATED,
     PAYROLL_RUN_CREATED,
     PAYROLL_RUN_COMPUTED,
     PAYROLL_RUN_APPROVED,
@@ -188,6 +192,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_AI_ANOMALY_RESOLVED,
             HR_AI_COMPLIANCE_ACKNOWLEDGED,
             HR_AI_COMPLIANCE_RESOLVED,
+            HR_AI_L4_BUDGET_DRAFT_CREATED,
         ),
     ),
     (

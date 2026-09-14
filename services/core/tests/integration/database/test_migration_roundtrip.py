@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 52 revisions, 0001..0052) -> core ``downgrade base`` (all the way back to
+(all 54 revisions, 0001..0054) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -20,8 +20,9 @@ Sentinel assertions probe one representative artefact of each migration:
 ``erp_leave_movements.ref_id`` varchar(64) (the 0007 drift regression guard),
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
-``current_tenant_id()`` (0001, shared with identity), and the five
-approval-workflow tables with their RLS policies (0052, SKY-92).
+``current_tenant_id()`` (0001, shared with identity), the five
+approval-workflow tables with their RLS policies (0053, SKY-92),
+and the finance budget-draft bridge tables + idempotency lock (0054, SKY-93).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -124,6 +125,13 @@ _APPROVAL_WF_TABLES = (
     "erp_approval_delegations",
 )
 
+# 0054: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4) - proposed
+# budget-draft header + cost-component lines, both tenant-scoped.
+_BUDGET_DRAFT_TABLES = (
+    "erp_budget_drafts",
+    "erp_budget_draft_lines",
+)
+
 
 def _db_urls(base_url: str, dbname: str) -> tuple[str, str]:
     """Split ``base_url`` into a maintenance DSN (asyncpg) and the scratch URL."""
@@ -219,7 +227,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0053", f"head is {version}, expected 0053"
+            assert version == "0054", f"head is {version}, expected 0054"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1160,6 +1168,49 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             assert definition_uniq == 1, (
                 "0053 must add the definitions (tenant, resource_type, version) uniqueness"
             )
+
+            # 0054: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4)
+            # - the L4 what-if export tables. Both header and lines exist,
+            # the (tenant_id, source, source_ref) idempotency lock is present,
+            # the status CHECK limits draft->pending->approved, and the lines
+            # FK cascades with its draft.
+            for table in _BUDGET_DRAFT_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0054 must create {table}"
+
+            idempotency_lock = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'uq_erp_budget_drafts_source_ref'"
+                    )
+                )
+            ).scalar_one()
+            assert idempotency_lock == 1, (
+                "0054 must add the (tenant_id, source, source_ref) idempotency lock"
+            )
+
+            status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'ck_erp_budget_drafts_status'"
+                    )
+                )
+            ).scalar_one()
+            assert status_check == 1, "0054 must constrain budget-draft status"
+
+            line_fk = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'fk_budget_draft_lines_draft'"
+                    )
+                )
+            ).scalar_one()
+            assert line_fk == 1, "0054 must FK budget lines to their draft"
     finally:
         await engine.dispose()
 
@@ -1200,6 +1251,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             for table in _APPROVAL_WF_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is None, f"{table} still exists after downgrade base"
+
+            for table in _BUDGET_DRAFT_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()

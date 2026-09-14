@@ -13,7 +13,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from ai_agent.core.audit_events import AI_L4_SCENARIO_CREATED
+from ai_agent.core.audit_events import (
+    AI_L4_SCENARIO_COMPARED,
+    AI_L4_SCENARIO_CREATED,
+    AI_L4_SCENARIO_VIEWED,
+)
 from ai_agent.core.audit_service import AuditService
 from ai_agent.db.l4_scenario_repository import L4ScenarioRepository
 from ai_agent.features.l4.engine import (
@@ -88,8 +92,20 @@ class L4ScenarioService:
         rows = await self._repo.list_all(tenant_id=tenant_id)
         return [_scenario_row_to_dict(row) for row in rows]
 
-    async def get(self, *, tenant_id: uuid.UUID, scenario_id: uuid.UUID) -> dict[str, object]:
+    async def get(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
+    ) -> dict[str, object]:
         row = await self._repo.get(tenant_id=tenant_id, scenario_id=scenario_id)
+        await self._audit.log(
+            action=AI_L4_SCENARIO_VIEWED,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            input_payload={"scenario_id": str(scenario_id)},
+        )
         return _scenario_row_to_dict(row)
 
     async def compare(
@@ -97,8 +113,17 @@ class L4ScenarioService:
         *,
         tenant_id: uuid.UUID,
         scenario_ids: list[uuid.UUID],
+        user_id: uuid.UUID | None = None,
     ) -> list[dict[str, object]]:
-        rows = [await self._repo.get(tenant_id=tenant_id, scenario_id=sid) for sid in scenario_ids]
+        rows = [
+            await self._repo.get(tenant_id=tenant_id, scenario_id=sid) for sid in scenario_ids
+        ]
+        await self._audit.log(
+            action=AI_L4_SCENARIO_COMPARED,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            input_payload={"scenario_ids": [str(sid) for sid in scenario_ids]},
+        )
         return [_scenario_row_to_dict(row) for row in rows]
 
 

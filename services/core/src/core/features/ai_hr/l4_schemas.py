@@ -1,4 +1,4 @@
-"""Response schemas for the HR-AI-004 payroll-base endpoint (Commit 1).
+"""Response schemas for the HR-AI-004 L4 endpoints (payroll-base, export).
 
 Money is serialized as strings - the L3 narrator convention - so the Decimal
 amounts projected by the ai-agent engine never lose precision to a float
@@ -83,7 +83,20 @@ def payroll_base_to_out(base: PayrollBase) -> PayrollBaseOut:
     )
 
 
+class ExportBudgetDraftOut(BaseModel):
+    """Response envelope for the finance-bridge budget-draft export.
+
+    ``draft_id`` is the created ``erp_budget_drafts`` row; ``already_booked``
+    signals a replayed export hit the idempotency lock (a retry of an already
+    exported scenario is NOT an error — the draft already exists).
+    """
+
+    draft_id: uuid.UUID | None = None
+    already_booked: bool = False
+
+
 __all__ = [
+    "ExportBudgetDraftOut",
     "PayrollBaseEmployeeOut",
     "PayrollBaseOut",
     "payroll_base_to_out",

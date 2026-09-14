@@ -22,6 +22,7 @@ from core.features.ai_hr.l4_repository import (
     PayrollBaseEmployee,
 )
 from core.features.ai_hr.l4_schemas import money, payroll_base_to_out
+from core.features.finance.ports import BudgetDraftOutcome
 
 TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 EMP_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
@@ -253,3 +254,202 @@ def test_proxy_requires_planning_permission() -> None:
     resp = client.get("/api/v1/ai/hr/l4/scenarios")
     assert resp.status_code == 403
     assert seen == []  # never reached ai-agent
+
+
+# --- L4 scenario export -> finance budget draft (Commit 4, SKY-93) ----------
+
+_USER_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+
+class _FakeFinance:
+    def __init__(self, outcome: BudgetDraftOutcome) -> None:
+        self.outcome = outcome
+        self.calls: list[dict] = []
+
+    async def create_workforce_budget_draft(self, *, tenant_id, scenario_id,
+                                            scenario_name, currency, horizon,
+                                            base_as_of, salary_total,
+                                            benefit_total, grand_total,
+                                            created_by) -> BudgetDraftOutcome:
+        self.calls.append(
+            {
+                "tenant_id": str(tenant_id),
+                "scenario_id": str(scenario_id),
+                "scenario_name": scenario_name,
+                "currency": currency,
+                "horizon": horizon,
+                "base_as_of": str(base_as_of),
+                "salary_total": str(salary_total),
+                "benefit_total": str(benefit_total),
+                "grand_total": str(grand_total),
+                "created_by": str(created_by),
+            }
+        )
+        return self.outcome
+
+
+class _FakeAudit:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def log(self, **kwargs) -> None:
+        self.calls.append(kwargs)
+
+
+def _scenario_payload(name: str = "five-percent") -> dict:
+    return {
+        "id": str(_SCENARIO_ID),
+        "name": name,
+        "description": None,
+        "base_as_of": "2026-01-01",
+        "horizon": 12,
+        "currency": "USD",
+        "actions": [],
+        "created_by": str(_USER_ID),
+        "created_at": "2026-01-02T00:00:00Z",
+        "projection": {
+            "currency": "USD",
+            "horizon": 12,
+            "months": [{"month": "2026-01", "salary": "4375.00", "benefit": "437.50"}],
+            "salary_total": "52500.00",
+            "benefit_total": "5250.00",
+            "grand_total": "57750.00",
+        },
+    }
+
+
+def _build_export_app(finance: _FakeFinance, audit: _FakeAudit,
+                      upstream_status: int = 200,
+                      upstream_body: dict | None = None) -> TestClient:
+    app = FastAPI()
+    app.include_router(ai_hr_router.router, prefix="/api/v1")
+    app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {
+        "tenant_id": str(TENANT_ID)
+    }
+    app.dependency_overrides[ai_hr_router._require_hr_ai_planning] = lambda: {
+        "tenant_id": str(TENANT_ID),
+        "user_id": str(_USER_ID),
+    }
+    app.dependency_overrides[ai_hr_router.get_ai_client] = lambda: _client_for(
+        upstream_status, upstream_body
+    )
+    app.dependency_overrides[ai_hr_router.get_finance_service] = lambda: finance
+    app.dependency_overrides[ai_hr_router.get_core_audit_service] = lambda: audit
+    return TestClient(app)
+
+
+def _client_for(status: int, body: dict | None) -> httpx.AsyncClient:
+    if body is None:
+        body = {"success": True, "data": _scenario_payload(), "message": "ok"}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json=body)
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ai-agent.test"
+    )
+
+
+def test_export_creates_budget_draft_and_audits() -> None:
+    finance = _FakeFinance(BudgetDraftOutcome(draft_id=uuid.uuid4(), already_booked=False))
+    audit = _FakeAudit()
+    client = _build_export_app(finance, audit)
+
+    resp = client.post(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}/export",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+    assert body["already_booked"] is False
+    assert body["draft_id"] == str(finance.outcome.draft_id)
+
+    assert finance.calls == [
+        {
+            "tenant_id": str(TENANT_ID),
+            "scenario_id": str(_SCENARIO_ID),
+            "scenario_name": "five-percent",
+            "currency": "USD",
+            "horizon": 12,
+            "base_as_of": "2026-01-01",
+            "salary_total": "52500.00",
+            "benefit_total": "5250.00",
+            "grand_total": "57750.00",
+            "created_by": str(_USER_ID),
+        }
+    ]
+    assert len(audit.calls) == 1
+    assert audit.calls[0]["action"] == "hr.ai.l4.budget_draft.created"
+    assert audit.calls[0]["target"] == f"scenario:{_SCENARIO_ID}"
+    assert audit.calls[0]["tenant_id"] == TENANT_ID
+    assert audit.calls[0]["details"]["grand_total"] == "57750.00"
+
+
+def test_export_replay_reports_already_booked() -> None:
+    draft_id = uuid.uuid4()
+    finance = _FakeFinance(BudgetDraftOutcome(draft_id=draft_id, already_booked=True))
+    audit = _FakeAudit()
+    client = _build_export_app(finance, audit)
+
+    resp = client.post(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}/export",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"] == {
+        "draft_id": str(draft_id),
+        "already_booked": True,
+    }
+    assert len(finance.calls) == 1  # idempotency is enforced in the service
+
+
+def test_export_forwards_wrapped_response_from_ai_agent() -> None:
+    """ai-agent may reply with a bare payload (no {data: ...}); both shapes work."""
+    finance = _FakeFinance(BudgetDraftOutcome(draft_id=uuid.uuid4(), already_booked=False))
+    audit = _FakeAudit()
+    client = _build_export_app(finance, audit, upstream_body=_scenario_payload())
+
+    resp = client.post(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}/export",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 200
+    assert finance.calls[0]["scenario_name"] == "five-percent"
+
+
+def test_export_relays_upstream_failure() -> None:
+    finance = _FakeFinance(BudgetDraftOutcome(draft_id=uuid.uuid4(), already_booked=False))
+    audit = _FakeAudit()
+    client = _build_export_app(
+        finance,
+        audit,
+        upstream_status=404,
+        upstream_body={"success": False, "message": "scenario not found"},
+    )
+
+    resp = client.post(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}/export",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 404
+    assert finance.calls == []  # nothing persisted on a bad upstream read
+    assert audit.calls == []
+
+
+def test_export_requires_planning_permission() -> None:
+    finance = _FakeFinance(BudgetDraftOutcome(draft_id=uuid.uuid4(), already_booked=False))
+    audit = _FakeAudit()
+    client = _build_export_app(finance, audit)
+    client.app.dependency_overrides[ai_hr_router._require_hr_ai_planning] = lambda: _deny()
+
+    resp = client.post(
+        f"/api/v1/ai/hr/l4/scenarios/{_SCENARIO_ID}/export",
+        headers={"authorization": "Bearer tok"},
+    )
+
+    assert resp.status_code == 403
+    assert finance.calls == []  # gate closes before any downstream work

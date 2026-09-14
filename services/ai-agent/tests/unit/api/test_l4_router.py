@@ -71,10 +71,18 @@ class _FakeL4Service:
     async def list_scenarios(self, *, tenant_id: uuid.UUID) -> list[dict]:
         return [dict(_FAKE_SCENARIO)]
 
-    async def get(self, *, tenant_id: uuid.UUID, scenario_id: uuid.UUID) -> dict:
+    async def get(
+        self, *, tenant_id: uuid.UUID, scenario_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> dict:
         return dict(_FAKE_SCENARIO)
 
-    async def compare(self, *, tenant_id: uuid.UUID, scenario_ids: list[uuid.UUID]) -> list[dict]:
+    async def compare(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scenario_ids: list[uuid.UUID],
+        user_id: uuid.UUID | None = None,
+    ) -> list[dict]:
         return [dict(_FAKE_SCENARIO) for _ in scenario_ids]
 
 

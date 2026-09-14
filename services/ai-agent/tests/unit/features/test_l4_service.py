@@ -14,7 +14,11 @@ from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
-from ai_agent.core.audit_events import AI_L4_SCENARIO_CREATED
+from ai_agent.core.audit_events import (
+    AI_L4_SCENARIO_COMPARED,
+    AI_L4_SCENARIO_CREATED,
+    AI_L4_SCENARIO_VIEWED,
+)
 from ai_agent.features.l4.service import L4ScenarioService
 
 _TENANT_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -206,6 +210,29 @@ class TestRepoOperations:
         result = await service.get(tenant_id=_TENANT_ID, scenario_id=row["id"])
         assert result["name"] == "b"
 
+    async def test_get_emits_viewed_audit_event(self) -> None:
+        service, _, _, audit = _make_service()
+        row = await service.create(
+            tenant_id=_TENANT_ID,
+            user_id=_USER_ID,
+            name="view me",
+            description=None,
+            base_as_of=date(2026, 1, 1),
+            horizon=1,
+            actions_raw=[],
+        )
+        _ = await service.get(
+            tenant_id=_TENANT_ID,
+            scenario_id=row["id"],
+            user_id=_USER_ID,
+        )
+        assert len(audit.calls) == 2
+        view_call = audit.calls[1]
+        assert view_call["action"] == AI_L4_SCENARIO_VIEWED
+        assert view_call["tenant_id"] == _TENANT_ID
+        assert view_call["user_id"] == _USER_ID
+        assert view_call["input_payload"]["scenario_id"] == str(row["id"])
+
     async def test_compare_returns_requested_rows(self) -> None:
         service, _, _, _ = _make_service()
         r1 = await service.create(
@@ -229,8 +256,39 @@ class TestRepoOperations:
         result = await service.compare(
             tenant_id=_TENANT_ID,
             scenario_ids=[r1["id"], r2["id"]],
+            user_id=_USER_ID,
         )
         assert [r["name"] for r in result] == ["x", "y"]
+
+    async def test_compare_emits_compared_audit_event(self) -> None:
+        service, _, _, audit = _make_service()
+        r1 = await service.create(
+            tenant_id=_TENANT_ID,
+            user_id=_USER_ID,
+            name="x",
+            description=None,
+            base_as_of=date(2026, 1, 1),
+            horizon=1,
+            actions_raw=[],
+        )
+        r2 = await service.create(
+            tenant_id=_TENANT_ID,
+            user_id=_USER_ID,
+            name="y",
+            description=None,
+            base_as_of=date(2026, 1, 1),
+            horizon=1,
+            actions_raw=[],
+        )
+        _ = await service.compare(
+            tenant_id=_TENANT_ID,
+            scenario_ids=[r1["id"], r2["id"]],
+            user_id=_USER_ID,
+        )
+        assert len(audit.calls) == 3
+        compare_call = audit.calls[2]
+        assert compare_call["action"] == AI_L4_SCENARIO_COMPARED
+        assert compare_call["input_payload"]["scenario_ids"] == [str(r1["id"]), str(r2["id"])]
 
 
 class TestAudit:

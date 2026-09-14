@@ -8,6 +8,8 @@ contract, so the migration runner imports these models directly.
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
+from core.features.finance.models.budget_draft import ErpBudgetDraftModel
+from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
@@ -22,6 +24,8 @@ __all__ = [
     "AiFinanceAnomalyModel",
     "AiFinanceQualityScoreModel",
     "AiFinanceSuggestionModel",
+    "ErpBudgetDraftLineModel",
+    "ErpBudgetDraftModel",
     "ErpChartOfAccountModel",
     "ErpExchangeRateModel",
     "ErpFiscalPeriodModel",

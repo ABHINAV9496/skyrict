@@ -120,7 +120,11 @@ async def compare_scenarios_route(
             status_code=422,
             detail=f"Compare supports at most {_MAX_COMPARE} scenarios",
         )
-    rows = await service.compare(tenant_id=current_user["tenant_id"], scenario_ids=ids)
+    rows = await service.compare(
+        tenant_id=current_user["tenant_id"],
+        scenario_ids=ids,
+        user_id=current_user["user_id"],
+    )
     return [ScenarioCompareItemOut(**_out_dates(r)) for r in rows]
 
 
@@ -135,6 +139,7 @@ async def get_scenario_route(
     result = await service.get(
         tenant_id=current_user["tenant_id"],
         scenario_id=scenario_id,
+        user_id=current_user["user_id"],
     )
     return ScenarioOut(**_out_dates(result))
 

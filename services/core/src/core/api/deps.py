@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.logging import get_logger
@@ -660,7 +661,8 @@ class _PayrollDefaultCurrencyPort:
     async def get_default_currency(self, tenant_id: uuid.UUID) -> str | None:
         try:
             settings = await self._repo.get_settings(tenant_id)
-        except Exception:  # ponytail: tenant may predate payroll seeding
+        except (OperationalError, ProgrammingError):
+            # Tenant predates payroll table/migration — degrade gracefully
             return None
         code = getattr(settings, "default_currency", None)
         return code or None

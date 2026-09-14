@@ -32,6 +32,7 @@ from core.api.deps import (
     require_all_permissions,
     require_permission,
 )
+from core.core.exceptions import AiServiceUnavailableError
 from core.core.permissions import (
     ERP_AI_COACHING_READ,
     ERP_AI_COACHING_REVIEW,
@@ -117,7 +118,7 @@ def get_ai_client(request: Request) -> httpx.AsyncClient:
     """The lifespan-owned pooled client to ai-agent (never per-request)."""
     client: httpx.AsyncClient | None = getattr(request.app.state, "ai_client", None)
     if client is None:
-        raise RuntimeError("AI agent HTTP client is not initialised")
+        raise AiServiceUnavailableError("AI agent HTTP client is not initialised")
     return client
 
 

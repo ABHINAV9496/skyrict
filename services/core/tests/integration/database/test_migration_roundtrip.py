@@ -220,7 +220,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0053", f"head is {version}, expected 0053"
+            assert version == "0054", f"head is {version}, expected 0054"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -260,9 +260,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "created_at",
                 "updated_at",
             }
-            assert expected_cols <= set(policy_cols), (
-                f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
-            )
+            assert expected_cols <= set(
+                policy_cols
+            ), f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
 
             # 0025: erp.inventory.ai.approve is a first-class catalog permission.
             ai_approve_row = (
@@ -338,9 +338,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert attendance_unique_count >= 1, (
-                "(tenant_id, employee_id, work_date) unique constraint missing"
-            )
+            assert (
+                attendance_unique_count >= 1
+            ), "(tenant_id, employee_id, work_date) unique constraint missing"
 
             key_count = (
                 await conn.execute(
@@ -424,9 +424,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 .scalars()
                 .all()
             )
-            assert set(rls_tables) == set(_HR_AI_TABLES), (
-                f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
-            )
+            assert set(rls_tables) == set(
+                _HR_AI_TABLES
+            ), f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
 
             # 0031: payroll automation columns on settings + employees.
             settings_col = (
@@ -439,9 +439,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).one_or_none()
-            assert settings_col is not None, (
-                "0031 must add erp_payroll_settings.ai_automation_enabled"
-            )
+            assert (
+                settings_col is not None
+            ), "0031 must add erp_payroll_settings.ai_automation_enabled"
             assert settings_col[0] == "boolean"
 
             for col_name in ("bank_account", "bank_name"):
@@ -704,9 +704,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert review_status_check == 1, (
-                "0035 must add the payslip review status check constraint"
-            )
+            assert (
+                review_status_check == 1
+            ), "0035 must add the payslip review status check constraint"
 
             # 0036: reporting data layer (RPT-DATA-001).
             for table in ("erp_report_definitions", "erp_report_snapshots"):
@@ -887,9 +887,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert isinstance(drift_col, str) and "0.1000" in drift_col, (
-                "0040 must add prediction_drift_threshold_pct defaulting to 0.1000"
-            )
+            assert (
+                isinstance(drift_col, str) and "0.1000" in drift_col
+            ), "0040 must add prediction_drift_threshold_pct defaulting to 0.1000"
             not_null = (
                 await conn.execute(
                     text(
@@ -1124,9 +1124,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert definition_uniq == 1, (
-                "0052 must add the definitions (tenant, resource_type, version) uniqueness"
-            )
+            assert (
+                definition_uniq == 1
+            ), "0052 must add the definitions (tenant, resource_type, version) uniqueness"
 
             # 0053: recurring journal templates (FIN-AUT-003 B5) - the table,
             # its RLS policy, the run-due scan index, and the offset check.
@@ -1168,6 +1168,49 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 )
             ).scalar_one()
             assert template_offset_check == 1, "0053 must add the entry_date_offset_days check"
+
+            # 0054: payment-matching inbox (FIN-AUT-003 B7) - the table, RLS
+            # policy, dedupe partial-unique stamp, and the amount/status checks.
+            intent_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_payment_intents')"))
+            ).scalar_one()
+            assert intent_table is not None, "0054 must create erp_payment_intents"
+
+            intent_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_payment_intents'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_policy == 1, "0054 must enable RLS on erp_payment_intents"
+
+            intent_dedupe = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_payment_intents' "
+                        "AND indexname = 'uq_erp_payment_intents_source_ref' "
+                        "AND indexdef LIKE '%UNIQUE%'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_dedupe == 1, "0054 must add the (tenant, source, source_ref) stamp"
+
+            for constraint in (
+                "ck_erp_payment_intents_amount",
+                "ck_erp_payment_intents_status",
+            ):
+                snip_intent_constraint = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM pg_constraint WHERE conname = :name"),
+                        {"name": constraint},
+                    )
+                ).scalar_one()
+                assert snip_intent_constraint == 1, f"0054 must add {constraint}"
     finally:
         await engine.dispose()
 
@@ -1196,6 +1239,7 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_documents",
                 "public.erp_document_versions",
                 "public.erp_journal_templates",
+                "public.erp_payment_intents",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"

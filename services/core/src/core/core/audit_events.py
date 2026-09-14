@@ -91,6 +91,11 @@ FINANCE_JOURNAL_TEMPLATE_CREATED = "finance.journal_template.created"
 FINANCE_JOURNAL_TEMPLATE_UPDATED = "finance.journal_template.updated"
 FINANCE_JOURNAL_TEMPLATE_DELETED = "finance.journal_template.deleted"
 FINANCE_JOURNAL_TEMPLATE_GENERATED = "finance.journal_template.generated"
+# FIN-AUT-003 B7: payment-matching inbox.
+FINANCE_PAYMENT_INTENT_REGISTERED = "finance.payment_intent.registered"
+FINANCE_PAYMENT_MATCH_ACCEPTED = "finance.payment_match.accepted"
+FINANCE_PAYMENT_MATCH_UNDONE = "finance.payment_match.undone"
+FINANCE_PAYMENT_MATCH_DISMISSED = "finance.payment_match.dismissed"
 
 # ---------------------------------------------------------------------------
 # Reports (RPT-BE-001)
@@ -165,6 +170,10 @@ CATALOG: tuple[str, ...] = (
     FINANCE_JOURNAL_TEMPLATE_UPDATED,
     FINANCE_JOURNAL_TEMPLATE_DELETED,
     FINANCE_JOURNAL_TEMPLATE_GENERATED,
+    FINANCE_PAYMENT_INTENT_REGISTERED,
+    FINANCE_PAYMENT_MATCH_ACCEPTED,
+    FINANCE_PAYMENT_MATCH_UNDONE,
+    FINANCE_PAYMENT_MATCH_DISMISSED,
     REPORT_EXPORTED,
     REPORT_CREATED,
 )
@@ -253,6 +262,10 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             FINANCE_JOURNAL_TEMPLATE_UPDATED,
             FINANCE_JOURNAL_TEMPLATE_DELETED,
             FINANCE_JOURNAL_TEMPLATE_GENERATED,
+            FINANCE_PAYMENT_INTENT_REGISTERED,
+            FINANCE_PAYMENT_MATCH_ACCEPTED,
+            FINANCE_PAYMENT_MATCH_UNDONE,
+            FINANCE_PAYMENT_MATCH_DISMISSED,
         ),
     ),
     (

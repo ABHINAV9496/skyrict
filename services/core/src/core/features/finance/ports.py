@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         JournalEntry,
         JournalTemplate,
         Payment,
+        PaymentIntent,
         PaymentMethodAnalytics,
         ProfitAndLoss,
         RevenueConcentration,
@@ -57,7 +58,11 @@ if TYPE_CHECKING:
         WorkingCapitalAlert,
         WorkingCapitalSeries,
     )
-    from core.domain.value_objects import EntryStatus, InvoiceStatus
+    from core.domain.value_objects import (
+        EntryStatus,
+        InvoiceStatus,
+        PaymentIntentStatus,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +370,48 @@ class FinanceRepositoryPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Payment-matching inbox repository port (FIN-AUT-003 wave 3, B7)
+# ---------------------------------------------------------------------------
+
+
+class PaymentMatchRepositoryPort(Protocol):
+    """Persistence contract for the payment-matching inbox (B7).
+
+    ``outstanding_invoices`` pairs each APPROVED invoice with its remaining
+    balance (total minus APPLIED payments) so the scorer can rank candidates
+    against live data. Undo support deletes the exact ``erp_payments`` row a
+    prior accept created and flips the invoice back to APPROVED.
+    """
+
+    async def create_payment_intent(self, intent: PaymentIntent) -> PaymentIntent: ...
+
+    async def get_payment_intent(
+        self, intent_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> PaymentIntent | None: ...
+
+    async def list_payment_intents(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: PaymentIntentStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[PaymentIntent]: ...
+
+    async def update_payment_intent(self, intent: PaymentIntent) -> PaymentIntent | None: ...
+
+    async def outstanding_invoices(
+        self, tenant_id: uuid.UUID
+    ) -> Sequence[tuple[Invoice, Decimal]]: ...
+
+    async def delete_payment(self, payment_id: uuid.UUID, tenant_id: uuid.UUID) -> bool: ...
+
+    async def settle_invoice_payment_status(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
+
+# ---------------------------------------------------------------------------
 # Finance repository port (FIN-AUT-003 wave 3) - recurring journal templates
 # ---------------------------------------------------------------------------
 
@@ -376,9 +423,7 @@ class JournalTemplateRepositoryPort(Protocol):
     the wave-3 service depends only on the slice it uses.
     """
 
-    async def create_journal_template(
-        self, template: JournalTemplate
-    ) -> JournalTemplate: ...
+    async def create_journal_template(self, template: JournalTemplate) -> JournalTemplate: ...
 
     async def get_journal_template(
         self, template_id: uuid.UUID, tenant_id: uuid.UUID

@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from core.features.documents.service import DocumentsService
     from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.automation_wave3 import FinanceWave3Service
+    from core.features.finance.payment_match import PaymentMatchService
     from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -1014,6 +1015,30 @@ def get_finance_wave3_service(
         repo=repo,
         entries=repo,
         audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_wave4_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    finance: FinanceService = Depends(get_finance_service),
+) -> PaymentMatchService:
+    """Composition root for the payment-matching inbox (FIN-AUT-003 B7).
+
+    Reuses the ONE request-scoped ``FinanceService`` from ``get_finance_service``
+    so an accepted intent's apply_payment + audit + events stay on the same
+    session/transaction as the intent stamp.
+    """
+    from core.features.audit.repository import AuditRepository
+    from core.features.crm.repository import CrmRepository
+    from core.features.finance.payment_match import PaymentMatchService
+    from core.features.finance.repository import FinanceRepository
+
+    return PaymentMatchService(
+        repo=FinanceRepository(db),
+        finance=finance,
+        audit=cast("AuditSink", AuditRepository(db)),
+        customers=CrmRepository(db),
     )
 
 

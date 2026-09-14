@@ -1294,3 +1294,130 @@ export function runJournalTemplatesDue(): Promise<JournalTemplateRunDue> {
         {},
     );
 }
+
+// ---------------------------------------------------------------------------
+// FIN-AUT-003 (SKY-81/84): payment-matching inbox (wave 3, B7)
+// ---------------------------------------------------------------------------
+
+const PAYMENT_MATCH = "/api/v1/finance/payment-intents";
+
+export type PaymentIntentStatus =
+    "open" | "candidate" | "applied" | "dismissed";
+
+export interface InvoiceSuggestion {
+    invoice_id: string;
+    invoice_number: string;
+    customer_id: string;
+    customer_name: string | null;
+    outstanding: number;
+    score: number;
+}
+
+export interface PaymentIntent {
+    id: string;
+    reference: string | null;
+    amount: number;
+    method: string;
+    paid_at: string;
+    source: string;
+    source_ref: string | null;
+    status: PaymentIntentStatus;
+    score: number | null;
+    customer_name: string | null;
+    suggestions: InvoiceSuggestion[];
+    suggested_invoice_id: string | null;
+    applied_invoice_id: string | null;
+    applied_payment_id: string | null;
+    applied_at: string | null;
+    applied_by: string | null;
+    dismissed_at: string | null;
+    created_at: string | null;
+}
+
+export interface PaymentIntentCreateInput {
+    amount: number;
+    paid_at: string;
+    method?: string;
+    reference?: string;
+    source?: string;
+    source_ref?: string;
+    customer_id?: string;
+}
+
+export interface PaymentMatchBulkResult {
+    intent_id: string;
+    ok: boolean;
+    payment_number: string | null;
+    error: string | null;
+}
+
+export interface PaymentMatchBulkAcceptResponse {
+    results: PaymentMatchBulkResult[];
+}
+
+export type PaymentIntentListParams = {
+    status?: PaymentIntentStatus;
+    offset?: number;
+    limit?: number;
+};
+
+function mapPaymentIntent(payload: PaymentIntent): PaymentIntent {
+    return {
+        ...payload,
+        amount: asNumber(payload.amount) ?? 0,
+        score: asNumber(payload.score),
+        suggestions: (payload.suggestions ?? []).map((s) => ({
+            ...s,
+            outstanding: asNumber(s.outstanding) ?? 0,
+            score: asNumber(s.score) ?? 0,
+        })),
+    };
+}
+
+export function registerPaymentIntent(
+    input: PaymentIntentCreateInput,
+): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(PAYMENT_MATCH, input).then(mapPaymentIntent);
+}
+
+export function listPaymentIntents(
+    params: PaymentIntentListParams = {},
+): Promise<{ data: PaymentIntent[]; meta: PaginationMeta | null }> {
+    return apiFetchWithMeta<PaymentIntent[]>(
+        `${PAYMENT_MATCH}${queryString(params)}`,
+    ).then((result) => ({
+        ...result,
+        data: (result.data ?? []).map(mapPaymentIntent),
+    }));
+}
+
+export function acceptPaymentIntent(
+    intentId: string,
+    invoiceId: string,
+): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(`${PAYMENT_MATCH}/${intentId}/accept`, {
+        invoice_id: invoiceId,
+    }).then(mapPaymentIntent);
+}
+
+export function undoPaymentIntent(intentId: string): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(`${PAYMENT_MATCH}/${intentId}/undo`, {}).then(
+        mapPaymentIntent,
+    );
+}
+
+export function dismissPaymentIntent(intentId: string): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(
+        `${PAYMENT_MATCH}/${intentId}/dismiss`,
+        {},
+    ).then(mapPaymentIntent);
+}
+
+export function bulkAcceptPaymentIntents(
+    items: { intent_id: string; invoice_id: string }[],
+): Promise<PaymentMatchBulkAcceptResponse> {
+    return apiPost<PaymentMatchBulkAcceptResponse>(
+        `${PAYMENT_MATCH}/bulk-accept`,
+        { items },
+    );
+}

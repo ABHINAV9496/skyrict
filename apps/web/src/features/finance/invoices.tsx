@@ -63,6 +63,7 @@ import {
     FinanceTable,
     type FinanceColumn,
 } from "@/features/finance/components/finance-table";
+import { PaymentMatchInbox } from "@/features/finance/components/payment-match-inbox";
 import {
     PeriodSelector,
     defaultPeriodValue,
@@ -1254,6 +1255,7 @@ function FinanceInvoices() {
 
     return (
         <div className="space-y-6">
+            <PaymentMatchInbox />
             <div className="space-y-4">
                 <PageHeader
                     title="Invoices"

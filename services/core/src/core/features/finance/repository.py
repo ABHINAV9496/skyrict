@@ -69,6 +69,7 @@ from core.domain.entities import (
     JournalTemplate,
     JournalTemplateLine,
     Payment,
+    PaymentIntent,
     PaymentMethodAnalytics,
     PaymentMethodAnalyticsEntry,
     PnlLine,
@@ -82,7 +83,13 @@ from core.domain.entities import (
     WorkingCapitalPosition,
     WorkingCapitalSeries,
 )
-from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, PaymentStatus
+from core.domain.value_objects import (
+    AccountType,
+    EntryStatus,
+    InvoiceStatus,
+    PaymentIntentStatus,
+    PaymentStatus,
+)
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
@@ -95,6 +102,7 @@ from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
 from core.features.finance.models.journal_template import ErpJournalTemplateModel
 from core.features.finance.models.payment import ErpPaymentModel
+from core.features.finance.models.payment_intent import ErpPaymentIntentModel
 from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 from skyrict_common.exceptions import ConflictError
 
@@ -111,6 +119,7 @@ _UNIQUE_VIOLATION_MESSAGES: dict[str, str] = {
     "uq_erp_invoices_source_ref": "An invoice for this source document already exists",
     "uq_erp_payments_tenant_number": "A payment with this number already exists",
     "uq_erp_payments_source_ref": "A payment for this source document already exists",
+    "uq_erp_payment_intents_source_ref": "A payment intent for this source document already exists",
     "uq_erp_chart_of_accounts_tenant_code": "An account with this code already exists",
     "uq_erp_fiscal_periods_tenant_name": "A fiscal period with this name already exists",
 }
@@ -265,6 +274,31 @@ def _payment_from_orm(model: ErpPaymentModel) -> Payment:
         status=model.status,
         source=model.source,
         source_ref=model.source_ref,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _payment_intent_from_orm(model: ErpPaymentIntentModel) -> PaymentIntent:
+    return PaymentIntent(
+        tenant_id=model.tenant_id,
+        amount=model.amount,
+        paid_at=model.paid_at,
+        method=model.method,
+        source=model.source,
+        created_by=model.created_by,
+        status=PaymentIntentStatus(model.status),
+        reference=model.reference,
+        source_ref=model.source_ref,
+        customer_id=model.customer_id,
+        score=model.score,
+        suggested_invoice_id=model.suggested_invoice_id,
+        applied_invoice_id=model.applied_invoice_id,
+        applied_payment_id=model.applied_payment_id,
+        applied_at=model.applied_at,
+        applied_by=model.applied_by,
+        dismissed_at=model.dismissed_at,
         id=model.id,
         created_at=model.created_at,
         updated_at=model.updated_at,
@@ -880,6 +914,139 @@ class FinanceRepository:
         return Decimal((await self.session.execute(stmt)).scalar_one())
 
     # ------------------------------------------------------------------
+    # Payment-matching inbox (FIN-AUT-003 B7)
+    # ------------------------------------------------------------------
+
+    async def create_payment_intent(self, intent: PaymentIntent) -> PaymentIntent:
+        model = ErpPaymentIntentModel(
+            tenant_id=intent.tenant_id,
+            source=intent.source,
+            source_ref=intent.source_ref,
+            reference=intent.reference,
+            amount=intent.amount,
+            method=intent.method,
+            paid_at=intent.paid_at,
+            customer_id=intent.customer_id,
+            status=intent.status,
+            score=intent.score,
+            suggested_invoice_id=intent.suggested_invoice_id,
+            created_by=intent.created_by,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _payment_intent_from_orm(model)
+
+    async def get_payment_intent(
+        self, intent_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> PaymentIntent | None:
+        stmt = select(ErpPaymentIntentModel).where(
+            ErpPaymentIntentModel.tenant_id == tenant_id,
+            ErpPaymentIntentModel.id == intent_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _payment_intent_from_orm(model) if model is not None else None
+
+    async def list_payment_intents(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: PaymentIntentStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[PaymentIntent]:
+        stmt = select(ErpPaymentIntentModel).where(ErpPaymentIntentModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpPaymentIntentModel.status == status)
+        stmt = stmt.order_by(ErpPaymentIntentModel.created_at.desc()).offset(offset).limit(limit)
+        models = (await self.session.execute(stmt)).scalars().all()
+        return [_payment_intent_from_orm(m) for m in models]
+
+    async def update_payment_intent(self, intent: PaymentIntent) -> PaymentIntent | None:
+        stmt = select(ErpPaymentIntentModel).where(
+            ErpPaymentIntentModel.tenant_id == intent.tenant_id,
+            ErpPaymentIntentModel.id == intent.id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        model.status = intent.status
+        model.applied_invoice_id = intent.applied_invoice_id
+        model.applied_payment_id = intent.applied_payment_id
+        model.applied_at = intent.applied_at
+        model.applied_by = intent.applied_by
+        model.dismissed_at = intent.dismissed_at
+        model.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _payment_intent_from_orm(model)
+
+    async def outstanding_invoices(self, tenant_id: uuid.UUID) -> Sequence[tuple[Invoice, Decimal]]:
+        """APPROVED invoices with outstanding = total - SUM(APPLIED payments)."""
+        paid_sub = (
+            select(
+                ErpPaymentModel.invoice_id.label("invoice_id"),
+                func.coalesce(func.sum(ErpPaymentModel.amount), 0).label("paid"),
+            )
+            .where(
+                ErpPaymentModel.tenant_id == tenant_id,
+                ErpPaymentModel.status == PaymentStatus.APPLIED,
+            )
+            .group_by(ErpPaymentModel.invoice_id)
+            .subquery()
+        )
+        stmt = (
+            select(ErpInvoiceModel, func.coalesce(paid_sub.c.paid, 0))
+            .outerjoin(paid_sub, ErpInvoiceModel.id == paid_sub.c.invoice_id)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status == InvoiceStatus.APPROVED,
+            )
+            .order_by(ErpInvoiceModel.invoice_date)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        result: list[tuple[Invoice, Decimal]] = []
+        for inv_model, paid in rows:
+            lines = await self._invoice_lines(inv_model.id, tenant_id)
+            outstanding = Decimal(str(inv_model.total)) - Decimal(str(paid))
+            result.append((_invoice_from_orm(inv_model, lines), outstanding))
+        return result
+
+    async def delete_payment(self, payment_id: uuid.UUID, tenant_id: uuid.UUID) -> bool:
+        stmt = select(ErpPaymentModel).where(
+            ErpPaymentModel.tenant_id == tenant_id,
+            ErpPaymentModel.id == payment_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return False
+        await self.session.delete(model)
+        await self.session.flush()
+        return True
+
+    async def settle_invoice_payment_status(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None:
+        """Recompute PAID vs APPROVED from remaining APPLIED payments.
+
+        Used by the payment-matching undo path: after the accepted payment row
+        is deleted, the invoice must reflect the OTHER payments still on it -
+        flipping blindly back to APPROVED would mislabel a still-covered invoice.
+        """
+        model = await self._invoice_model(invoice_id, tenant_id)
+        if model is None:
+            return None
+        applied = await self.sum_payments_for_invoice(invoice_id, tenant_id)
+        model.status = InvoiceStatus.PAID if applied >= model.total else InvoiceStatus.APPROVED
+        await self.session.flush()
+        await self.session.refresh(model)
+        lines = await self._invoice_lines(invoice_id, tenant_id)
+        return _invoice_from_orm(model, lines)
+
+    # ------------------------------------------------------------------
     # Numbering (nextval on the migration-0004 sequences)
     # ------------------------------------------------------------------
 
@@ -956,7 +1123,12 @@ class FinanceRepository:
 
     def _template_payload(self, template: JournalTemplate) -> list[dict[str, object]]:
         return [
-            {"account_code": line.account_code, "debit": line.debit, "credit": line.credit, "currency": line.currency}
+            {
+                "account_code": line.account_code,
+                "debit": line.debit,
+                "credit": line.credit,
+                "currency": line.currency,
+            }
             for line in template.lines
         ]
 
@@ -998,9 +1170,7 @@ class FinanceRepository:
         models = (await self.session.execute(stmt)).scalars().all()
         return [_journal_template_from_orm(model) for model in models]
 
-    async def update_journal_template(
-        self, template: JournalTemplate
-    ) -> JournalTemplate | None:
+    async def update_journal_template(self, template: JournalTemplate) -> JournalTemplate | None:
         stmt = select(ErpJournalTemplateModel).where(
             ErpJournalTemplateModel.tenant_id == template.tenant_id,
             ErpJournalTemplateModel.id == template.id,
@@ -1020,9 +1190,7 @@ class FinanceRepository:
         await self.session.refresh(model)
         return _journal_template_from_orm(model)
 
-    async def delete_journal_template(
-        self, template_id: uuid.UUID, tenant_id: uuid.UUID
-    ) -> bool:
+    async def delete_journal_template(self, template_id: uuid.UUID, tenant_id: uuid.UUID) -> bool:
         stmt = select(ErpJournalTemplateModel).where(
             ErpJournalTemplateModel.tenant_id == tenant_id,
             ErpJournalTemplateModel.id == template_id,

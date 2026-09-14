@@ -29,6 +29,7 @@ from core.domain.value_objects import (
     Money,
     OpportunityStage,
     OrderStatus,
+    PaymentIntentStatus,
 )
 
 if TYPE_CHECKING:
@@ -764,6 +765,52 @@ class Payment:
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PaymentIntent:
+    """An unmatched cash receipt waiting to be matched to an invoice (B7).
+
+    Lives in the payment-matching inbox until a human applies or dismisses it.
+    ``score`` / ``suggested_invoice_id`` record the best deterministic match at
+    create time (so the inbox can sort by confidence); the live candidate list
+    is recomputed per read so outstanding amounts stay fresh. ``applied_*``
+    fields are stamped on accept so the 15-minute undo can find - and delete -
+    the exact payment row it created.
+    """
+
+    tenant_id: uuid.UUID
+    amount: Decimal
+    paid_at: datetime
+    method: str
+    source: str
+    created_by: uuid.UUID
+    status: PaymentIntentStatus = PaymentIntentStatus.OPEN
+    reference: str | None = None
+    source_ref: str | None = None
+    customer_id: uuid.UUID | None = None
+    score: Decimal | None = None
+    suggested_invoice_id: uuid.UUID | None = None
+    applied_invoice_id: uuid.UUID | None = None
+    applied_payment_id: uuid.UUID | None = None
+    applied_at: datetime | None = None
+    applied_by: uuid.UUID | None = None
+    dismissed_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PaymentMatchCandidate:
+    """One scored invoice suggestion for a payment intent (live, read-side)."""
+
+    invoice_id: uuid.UUID
+    invoice_number: str
+    customer_id: uuid.UUID | None
+    customer_name: str | None
+    outstanding: Decimal
+    score: Decimal
 
 
 @dataclass(frozen=True)

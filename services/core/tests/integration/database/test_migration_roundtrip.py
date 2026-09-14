@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 54 revisions, 0001..0054) -> core ``downgrade base`` (all the way back to
+(all 55 revisions, 0001..0055) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -20,8 +20,10 @@ Sentinel assertions probe one representative artefact of each migration:
 ``erp_leave_movements.ref_id`` varchar(64) (the 0007 drift regression guard),
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
-``current_tenant_id()`` (0001, shared with identity), and the five
-approval-workflow tables with their RLS policies (0052, SKY-92).
+``current_tenant_id()`` (0001, shared with identity), the five
+approval-workflow tables with their RLS policies (0052, SKY-92), and the three
+notification-center tables with their RLS policies and dedupe constraints
+(0055, SKY-93 - renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -130,6 +132,16 @@ _APPROVAL_WF_TABLES = (
     "erp_approval_delegations",
 )
 
+# 0055: smart notification center (SKY-93, PLT-NOTIF-001; renumbered from 0053) -
+# one tenant-scoped table per aggregate: inbound producer events (idempotent by
+# dedupe_key), per-recipient deliveries with read/snooze/digest state, and
+# per-user category channel preferences.
+_NOTIFICATION_TABLES = (
+    "erp_notification_events",
+    "erp_notifications",
+    "erp_notification_prefs",
+)
+
 
 def _db_urls(base_url: str, dbname: str) -> tuple[str, str]:
     """Split ``base_url`` into a maintenance DSN (asyncpg) and the scratch URL."""
@@ -225,7 +237,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0054", f"head is {version}, expected 0054"
+            assert version == "0055", f"head is {version}, expected 0055"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1144,6 +1156,57 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 ).scalar_one_or_none()
                 assert l3_perm is not None, f"0053/0054 must register {l3_key}"
+
+            # 0055: smart notification center (SKY-93, renumbered from 0053 on
+            # dev) - all three tables exist, are tenant-scoped with the
+            # tenant_isolation_* RLS policies, and carry the dedupe uniqueness
+            # guarantees (events and per-recipient deliveries) plus the per-user
+            # category preference uniqueness.
+            for table in _NOTIFICATION_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0055 must create {table}"
+
+            notification_rls_tables = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = ANY(:names)"
+                        ),
+                        {"names": list(_NOTIFICATION_TABLES)},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(notification_rls_tables) == set(_NOTIFICATION_TABLES), (
+                f"notification tables missing RLS: "
+                f"{set(_NOTIFICATION_TABLES) - set(notification_rls_tables)}"
+            )
+
+            notification_uniqs = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT conname FROM pg_constraint "
+                            "WHERE conname IN "
+                            "('uq_erp_notification_events_tenant_dedupe_key', "
+                            " 'uq_erp_notifications_tenant_recipient_dedupe', "
+                            " 'uq_erp_notification_prefs_tenant_user_category')"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(notification_uniqs) == {
+                "uq_erp_notification_events_tenant_dedupe_key",
+                "uq_erp_notifications_tenant_recipient_dedupe",
+                "uq_erp_notification_prefs_tenant_user_category",
+            }, "0055 must add the notification dedupe / preference uniqueness constraints"
     finally:
         await engine.dispose()
 
@@ -1182,6 +1245,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             for table in _APPROVAL_WF_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is None, f"{table} still exists after downgrade base"
+
+            for table in _NOTIFICATION_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()

@@ -1,5 +1,9 @@
 """Smart notification center tables (SKY-93, PLT-NOTIF-001).
 
+Renumbered from ``0053`` on merge with dev: dev's HR-AI-003 chain took
+``0053_hr_ai_management_permission`` and ``0054_ai_l3_refresh_permission``,
+so this migration chains after ``0054`` as head ``0055`` (single alembic head).
+
 Creates the three tables backing the unified notification center:
 
 - ``erp_notification_events`` - one row per inbound producer event, idempotent
@@ -26,8 +30,8 @@ are additionally scoped to the recipient in the query layer (RLS only
 guarantees the tenant; recipient scoping is an application rule because the
 worker and producers legitimately write rows for many users).
 
-Revision ID: 0053
-Revises: 0052
+Revision ID: 0055
+Revises: 0054
 Create Date: 2026-09-13
 """
 
@@ -36,8 +40,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0053"
-down_revision = "0052"
+revision = "0055"
+down_revision = "0054"
 branch_labels = None
 depends_on = None
 

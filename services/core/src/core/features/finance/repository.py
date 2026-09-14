@@ -34,7 +34,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import Date, and_, case, cast, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import INVOICE_PREFIX, PAYMENT_PREFIX
@@ -1274,48 +1274,52 @@ class FinanceRepository:
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def duplicates(self, tenant_id: uuid.UUID) -> Sequence[DuplicateGroup]:
+        cnt = (
+            func.count()
+            .over(partition_by=[ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date])
+            .label("cnt")
+        )
         stmt = (
-            select(
-                ErpJournalEntryModel.memo.label("memo"),
-                ErpJournalEntryModel.entry_date.label("entry_date"),
-                func.count().label("cnt"),
-            )
+            select(ErpJournalEntryModel, cnt)
             .where(
                 ErpJournalEntryModel.tenant_id == tenant_id,
                 ErpJournalEntryModel.status == EntryStatus.POSTED,
                 ErpJournalEntryModel.memo.isnot(None),
             )
-            .group_by(ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date)
-            .having(func.count() > 1)
+            .order_by(
+                ErpJournalEntryModel.memo,
+                ErpJournalEntryModel.entry_date,
+                ErpJournalEntryModel.created_at,
+            )
         )
         rows = (await self.session.execute(stmt)).all()
 
         groups: list[DuplicateGroup] = []
-        for row in rows:
-            entry_stmt = (
-                select(ErpJournalEntryModel)
-                .where(
-                    ErpJournalEntryModel.tenant_id == tenant_id,
-                    ErpJournalEntryModel.status == EntryStatus.POSTED,
-                    ErpJournalEntryModel.memo == row.memo,
-                    ErpJournalEntryModel.entry_date == row.entry_date,
+        i = 0
+        while i < len(rows):
+            model, group_size = rows[i]
+            if group_size <= 1:
+                i += 1
+                continue
+            memo = model.memo
+            entry_date = model.entry_date
+            entries: list[DuplicateCandidate] = []
+            while i < len(rows) and rows[i][0].memo == memo and rows[i][0].entry_date == entry_date:
+                entry = rows[i][0]
+                entries.append(
+                    DuplicateCandidate(
+                        entry_id=entry.id,
+                        entry_date=entry.entry_date,
+                        memo=entry.memo,
+                        source_ref=entry.source_ref,
+                    )
                 )
-                .order_by(ErpJournalEntryModel.created_at)
-            )
-            entries = (await self.session.execute(entry_stmt)).scalars().all()
+                i += 1
             groups.append(
                 DuplicateGroup(
-                    key=f"{row.memo}|{row.entry_date.isoformat()}",
-                    reason=f"{len(entries)} entries share memo '{row.memo}' on {row.entry_date}",
-                    entries=tuple(
-                        DuplicateCandidate(
-                            entry_id=e.id,
-                            entry_date=e.entry_date,
-                            memo=e.memo,
-                            source_ref=e.source_ref,
-                        )
-                        for e in entries
-                    ),
+                    key=f"{memo}|{entry_date.isoformat()}",
+                    reason=f"{len(entries)} entries share memo '{memo}' on {entry_date}",
+                    entries=tuple(entries),
                 )
             )
         return tuple(groups)
@@ -1481,14 +1485,56 @@ class FinanceRepository:
         return HealthScore(overall=overall, components=components)
 
     async def cashflow_projection(self, tenant_id: uuid.UUID, as_of: date) -> CashflowProjection:
+        month_starts = [
+            date(as_of.year + (as_of.month + i - 1) // 12, (as_of.month + i - 1) % 12 + 1, 1)
+            for i in range(6)
+        ]
+        first_start = month_starts[0]
+        last_end = _end_of_month(month_starts[-1])
+
+        bucket = cast(func.date_trunc("month", ErpInvoiceModel.due_date), Date).label("month")
+        stmt = (
+            select(
+                bucket,
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ErpInvoiceModel.status.in_(
+                                    [InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]
+                                ),
+                                ErpInvoiceModel.total,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("inflows"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ErpInvoiceModel.status == InvoiceStatus.ISSUED, ErpInvoiceModel.total),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("outflows"),
+            )
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]),
+                ErpInvoiceModel.due_date >= first_start,
+                ErpInvoiceModel.due_date <= last_end,
+            )
+            .group_by(func.date_trunc("month", ErpInvoiceModel.due_date))
+        )
+        rows = (await self.session.execute(stmt)).all()
+        by_month = {row.month: (Decimal(row.inflows), Decimal(row.outflows)) for row in rows}
+
         months: list[CashflowPosition] = []
         opening = Decimal("0")
-        for i in range(6):
-            month_start = date(
-                as_of.year + (as_of.month + i - 1) // 12, (as_of.month + i - 1) % 12 + 1, 1
-            )
-            inflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=True)
-            outflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=False)
+        for month_start in month_starts:
+            inflows, outflows = by_month.get(month_start, (Decimal("0"), Decimal("0")))
             closing = opening + inflows - outflows
             months.append(
                 CashflowPosition(
@@ -1501,21 +1547,6 @@ class FinanceRepository:
             )
             opening = closing
         return CashflowProjection(positions=tuple(months))
-
-    async def _monthly_outstanding(
-        self, tenant_id: uuid.UUID, month_start: date, *, is_inflow: bool
-    ) -> Decimal:
-        month_end = _end_of_month(month_start)
-        statuses = (
-            [InvoiceStatus.ISSUED, InvoiceStatus.APPROVED] if is_inflow else [InvoiceStatus.ISSUED]
-        )
-        stmt = select(func.coalesce(func.sum(ErpInvoiceModel.total), 0)).where(
-            ErpInvoiceModel.tenant_id == tenant_id,
-            ErpInvoiceModel.status.in_(statuses),
-            ErpInvoiceModel.due_date >= month_start,
-            ErpInvoiceModel.due_date <= month_end,
-        )
-        return Decimal((await self.session.execute(stmt)).scalar_one())
 
     async def anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]:
         return await self.list_open_ai_anomalies(tenant_id)
@@ -1607,23 +1638,29 @@ class FinanceRepository:
     async def working_capital_series(
         self, tenant_id: uuid.UUID, as_of: date, months: int = 6
     ) -> WorkingCapitalSeries:
-        positions: list[WorkingCapitalPosition] = []
-        for i in range(months):
-            month_start = date(
-                as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1
+        month_bounds = [
+            (
+                date(as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1),
+                i,
             )
-            month_end = _end_of_month(month_start)
-            balance = await self.balance_sheet(tenant_id, month_end)
-            assets = balance.total_assets
-            liabilities = balance.total_liabilities
-            positions.append(
-                WorkingCapitalPosition(
-                    month=month_start.strftime("%Y-%m"),
-                    assets=assets,
-                    liabilities=liabilities,
-                    working_capital=assets - liabilities,
-                )
+            for i in range(months)
+        ]
+        balances = await self._parallel(
+            tenant_id,
+            *(
+                lambda repo, ms=month_start: repo.balance_sheet(tenant_id, _end_of_month(ms))
+                for month_start, _ in month_bounds
+            ),
+        )
+        positions = [
+            WorkingCapitalPosition(
+                month=month_start.strftime("%Y-%m"),
+                assets=balance.total_assets,
+                liabilities=balance.total_liabilities,
+                working_capital=balance.total_assets - balance.total_liabilities,
             )
+            for balance, (month_start, _) in zip(balances, month_bounds, strict=False)
+        ]
         positions.reverse()
         return WorkingCapitalSeries(positions=tuple(positions))
 

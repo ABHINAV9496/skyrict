@@ -11,8 +11,8 @@ This migration only seeds the key into ``core_permissions`` (same
 ``ON CONFLICT DO NOTHING`` pattern as 0049/0044/0030) - no schema, no extra
 data beyond the catalog row.
 
-Revision ID: 0052
-Revises: 0051
+Revision ID: 0056
+Revises: 0055
 Create Date: 2026-09-13
 """
 
@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0052"
-down_revision = "0051"
+revision = "0056"
+down_revision = "0055"
 branch_labels = None
 depends_on = None
 

@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from core.features.crm.workspace_service import CrmWorkspaceService
     from core.features.documents.service import DocumentsService
     from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.automation_wave3 import FinanceWave3Service
     from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
     from core.features.hr.repository import HrRepository
@@ -994,6 +995,25 @@ def get_finance_automation_service(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         customers=CrmRepository(db),
+    )
+
+
+def get_finance_wave3_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceWave3Service:
+    """Composition root for the finance automation wave-3 feature (FIN-AUT-003 B5)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.automation_wave3 import FinanceWave3Service
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    repo = FinanceRepository(db)
+    return FinanceWave3Service(
+        repo=repo,
+        entries=repo,
+        audit=cast("AuditSink", AuditRepository(db)),
     )
 
 

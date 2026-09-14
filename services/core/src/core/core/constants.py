@@ -159,6 +159,11 @@ JOURNAL_SOURCE_INVOICE = "invoice"
 JOURNAL_SOURCE_PAYMENT = "payment"
 JOURNAL_SOURCE_COGS = "cogs"
 JOURNAL_SOURCE_PAYROLL = "payroll"
+# FIN-AUT-003 B5: recurring journal templates stamp their generated drafts with
+# source='journal_template' + source_ref=f"{template_id}:{entry_date}" so the
+# UNIQUE (tenant, source, source_ref) lock makes every scheduled occurrence
+# generate exactly once.
+JOURNAL_SOURCE_TEMPLATE = "journal_template"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

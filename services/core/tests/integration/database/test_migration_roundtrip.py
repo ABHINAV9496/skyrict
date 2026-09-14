@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 52 revisions, 0001..0052) -> core ``downgrade base`` (all the way back to
+(all 53 revisions, 0001..0053) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -21,7 +21,8 @@ Sentinel assertions probe one representative artefact of each migration:
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), and the five
-approval-workflow tables with their RLS policies (0052, SKY-92).
+approval-workflow tables with their RLS policies (0052, SKY-92), and
+``erp_journal_templates`` with its RLS policy (0053, FIN-AUT-003 B5).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -219,7 +220,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0052", f"head is {version}, expected 0052"
+            assert version == "0053", f"head is {version}, expected 0053"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1126,6 +1127,47 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             assert definition_uniq == 1, (
                 "0052 must add the definitions (tenant, resource_type, version) uniqueness"
             )
+
+            # 0053: recurring journal templates (FIN-AUT-003 B5) - the table,
+            # its RLS policy, the run-due scan index, and the offset check.
+            template_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_journal_templates')"))
+            ).scalar_one()
+            assert template_table is not None, "0053 must create erp_journal_templates"
+
+            template_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_journal_templates'"
+                    )
+                )
+            ).scalar_one()
+            assert template_policy == 1, "0053 must enable RLS on erp_journal_templates"
+
+            template_due_index = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_journal_templates' "
+                        "AND indexname = 'ix_erp_journal_templates_tenant_due'"
+                    )
+                )
+            ).scalar_one()
+            assert template_due_index == 1, "0053 must create the run-due scan index"
+
+            template_offset_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_journal_templates'::regclass "
+                        "AND conname = 'ck_erp_journal_templates_entry_date_offset_days'"
+                    )
+                )
+            ).scalar_one()
+            assert template_offset_check == 1, "0053 must add the entry_date_offset_days check"
     finally:
         await engine.dispose()
 
@@ -1153,6 +1195,7 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_revenue_forecast",
                 "public.erp_documents",
                 "public.erp_document_versions",
+                "public.erp_journal_templates",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"

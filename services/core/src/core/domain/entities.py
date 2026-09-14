@@ -784,6 +784,47 @@ class FiscalPeriod:
     updated_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class JournalTemplateLine:
+    """One line of a recurring journal template (FIN-AUT-003 B5).
+
+    ``account_code`` is resolved to an account id at generate time, so a
+    template stays readable even as a tenant renames individual accounts.
+    """
+
+    account_code: str
+    debit: Decimal | None = None
+    credit: Decimal | None = None
+    currency: str = "USD"
+
+
+@dataclass(frozen=True)
+class JournalTemplate:
+    """A recurring journal template (FIN-AUT-003 B5).
+
+    ``cron_expression`` is a 5-field cron string used to compute ``next_run_at``.
+    On each fire the service creates a DRAFT journal entry stamped
+    ``source='journal_template'`` / ``source_ref=f"{id}:{entry_date}"``, so the
+    ``UNIQUE (tenant_id, source, source_ref)`` lock makes every scheduled
+    occurrence generate exactly once. Generated drafts enter the existing
+    approval path (SKY-92) when posted.
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    cron_expression: str
+    entry_date_offset_days: int
+    lines: tuple[JournalTemplateLine, ...]
+    description: str | None = None
+    memo: str | None = None
+    enabled: bool = True
+    last_fired_at: datetime | None = None
+    next_run_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 # ---------------------------------------------------------------------------
 # Report read-models (derived from posted journal lines - never stored).
 # ---------------------------------------------------------------------------

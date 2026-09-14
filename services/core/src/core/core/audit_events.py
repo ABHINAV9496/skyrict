@@ -86,6 +86,11 @@ FINANCE_AI_TAX_SUMMARY_REJECTED = "finance.ai.tax_summary.rejected"
 FINANCE_AI_DOC_GENERATED = "finance.ai.doc.generated"
 FINANCE_AI_DOC_APPROVED = "finance.ai.doc.approved"
 FINANCE_AI_AUDIT_NARRATED = "finance.ai.audit.narrated"
+# FIN-AUT-003 B5: recurring journal templates.
+FINANCE_JOURNAL_TEMPLATE_CREATED = "finance.journal_template.created"
+FINANCE_JOURNAL_TEMPLATE_UPDATED = "finance.journal_template.updated"
+FINANCE_JOURNAL_TEMPLATE_DELETED = "finance.journal_template.deleted"
+FINANCE_JOURNAL_TEMPLATE_GENERATED = "finance.journal_template.generated"
 
 # ---------------------------------------------------------------------------
 # Reports (RPT-BE-001)
@@ -156,6 +161,10 @@ CATALOG: tuple[str, ...] = (
     FINANCE_AI_DOC_GENERATED,
     FINANCE_AI_DOC_APPROVED,
     FINANCE_AI_AUDIT_NARRATED,
+    FINANCE_JOURNAL_TEMPLATE_CREATED,
+    FINANCE_JOURNAL_TEMPLATE_UPDATED,
+    FINANCE_JOURNAL_TEMPLATE_DELETED,
+    FINANCE_JOURNAL_TEMPLATE_GENERATED,
     REPORT_EXPORTED,
     REPORT_CREATED,
 )
@@ -240,6 +249,10 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             FINANCE_AI_DOC_GENERATED,
             FINANCE_AI_DOC_APPROVED,
             FINANCE_AI_AUDIT_NARRATED,
+            FINANCE_JOURNAL_TEMPLATE_CREATED,
+            FINANCE_JOURNAL_TEMPLATE_UPDATED,
+            FINANCE_JOURNAL_TEMPLATE_DELETED,
+            FINANCE_JOURNAL_TEMPLATE_GENERATED,
         ),
     ),
     (
@@ -294,6 +307,10 @@ __all__ = [
     "FINANCE_JOURNAL_ENTRY_POSTED",
     "FINANCE_JOURNAL_ENTRY_REVERSED",
     "FINANCE_JOURNAL_ENTRY_VOIDED",
+    "FINANCE_JOURNAL_TEMPLATE_CREATED",
+    "FINANCE_JOURNAL_TEMPLATE_DELETED",
+    "FINANCE_JOURNAL_TEMPLATE_GENERATED",
+    "FINANCE_JOURNAL_TEMPLATE_UPDATED",
     "FINANCE_PAYMENT_APPLIED",
     "HR_AI_ANOMALY_ACKNOWLEDGED",
     "HR_AI_ANOMALY_DISMISSED",

@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         HealthScore,
         Invoice,
         JournalEntry,
+        JournalTemplate,
         Payment,
         PaymentMethodAnalytics,
         ProfitAndLoss,
@@ -361,6 +362,43 @@ class FinanceRepositoryPort(Protocol):
     async def list_exchange_rates(
         self, tenant_id: uuid.UUID, *, currency: str | None = None
     ) -> Sequence[ExchangeRate]: ...
+
+
+# ---------------------------------------------------------------------------
+# Finance repository port (FIN-AUT-003 wave 3) - recurring journal templates
+# ---------------------------------------------------------------------------
+
+
+class JournalTemplateRepositoryPort(Protocol):
+    """Persistence contract for recurring journal templates (B5).
+
+    Kept as a separate Protocol (not merged into ``FinanceRepositoryPort``) so
+    the wave-3 service depends only on the slice it uses.
+    """
+
+    async def create_journal_template(
+        self, template: JournalTemplate
+    ) -> JournalTemplate: ...
+
+    async def get_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> JournalTemplate | None: ...
+
+    async def list_journal_templates(
+        self, tenant_id: uuid.UUID, *, enabled: bool | None = None
+    ) -> Sequence[JournalTemplate]: ...
+
+    async def update_journal_template(
+        self, template: JournalTemplate
+    ) -> JournalTemplate | None: ...
+
+    async def delete_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> bool: ...
+
+    async def list_journal_templates_due(
+        self, tenant_id: uuid.UUID, at: datetime
+    ) -> Sequence[JournalTemplate]: ...
 
 
 # ---------------------------------------------------------------------------

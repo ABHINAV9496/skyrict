@@ -25,6 +25,7 @@ from core.features.crm.router import router as crm_router
 from core.features.crm.workspace_router import router as crm_workspace_router
 from core.features.documents.router import router as documents_router
 from core.features.finance.automation import router as finance_automation_router
+from core.features.finance.automation_wave3 import router as finance_automation_wave3_router
 from core.features.finance.router import router as finance_router
 from core.features.inventory.router import router as inventory_router
 from core.features.reporting.reports_router import router as reports_router
@@ -43,6 +44,7 @@ api_router.include_router(payroll_automation_router)
 api_router.include_router(portal_router)
 api_router.include_router(finance_router)
 api_router.include_router(finance_automation_router)
+api_router.include_router(finance_automation_wave3_router)
 api_router.include_router(revenue_forecast_router)
 api_router.include_router(inventory_router)
 api_router.include_router(reporting_router)

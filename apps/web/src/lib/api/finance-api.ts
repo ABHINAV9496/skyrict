@@ -1153,3 +1153,144 @@ export function narrateFinanceAudit(input: {
 export function askFinanceDocs(question: string): Promise<DocQaAnswer> {
     return apiPost<DocQaAnswer>(`${AI_DOCS}/doc-qa`, { question });
 }
+
+// ---------------------------------------------------------------------------
+// FIN-AUT-003 (SKY-81/84): recurring journal templates (wave 3, B5)
+// ---------------------------------------------------------------------------
+
+const WAVE3 = "/api/v1/finance/automation/wave3";
+
+export interface JournalTemplateLine {
+    account_code: string;
+    debit: number | null;
+    credit: number | null;
+}
+
+export interface JournalTemplateLineInput {
+    account_code: string;
+    debit?: number | null;
+    credit?: number | null;
+}
+
+export interface JournalTemplate {
+    id: string;
+    name: string;
+    cron_expression: string;
+    entry_date_offset_days: number;
+    description: string | null;
+    memo: string | null;
+    lines: JournalTemplateLine[];
+    enabled: boolean;
+    last_fired_at: string | null;
+    next_run_at: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface JournalTemplateCreateInput {
+    name: string;
+    cron_expression: string;
+    entry_date_offset_days?: number;
+    description?: string | null;
+    memo?: string | null;
+    lines: JournalTemplateLineInput[];
+}
+
+export interface JournalTemplateUpdateInput {
+    name?: string;
+    cron_expression?: string;
+    entry_date_offset_days?: number;
+    description?: string | null;
+    memo?: string | null;
+    enabled?: boolean;
+    lines?: JournalTemplateLineInput[];
+}
+
+export interface JournalTemplateGenerated {
+    template_id: string;
+    template_name: string;
+    entry_date: string;
+    entry_id: string | null;
+    memo: string | null;
+    created: boolean;
+}
+
+export interface JournalTemplateFailure {
+    template_id: string;
+    template_name: string;
+    reason: string;
+}
+
+export interface JournalTemplateRunDue {
+    ran_at: string;
+    total_due: number;
+    generated: JournalTemplateGenerated[];
+    failed: JournalTemplateFailure[];
+}
+
+function mapJournalTemplate(payload: JournalTemplate): JournalTemplate {
+    return {
+        ...payload,
+        lines: (payload.lines ?? []).map((line) => ({
+            ...line,
+            debit: asNumber(line.debit),
+            credit: asNumber(line.credit),
+        })),
+    };
+}
+
+export function listJournalTemplates(): Promise<JournalTemplate[]> {
+    return apiFetch<JournalTemplate[]>(`${WAVE3}/templates`).then((rows) =>
+        (rows ?? []).map(mapJournalTemplate),
+    );
+}
+
+export function getJournalTemplate(
+    templateId: string,
+): Promise<JournalTemplate> {
+    return apiFetch<JournalTemplate>(`${WAVE3}/templates/${templateId}`).then(
+        mapJournalTemplate,
+    );
+}
+
+export function createJournalTemplate(
+    input: JournalTemplateCreateInput,
+): Promise<JournalTemplate> {
+    return apiPost<JournalTemplate>(`${WAVE3}/templates`, input).then(
+        mapJournalTemplate,
+    );
+}
+
+export function updateJournalTemplate(
+    templateId: string,
+    input: JournalTemplateUpdateInput,
+): Promise<JournalTemplate> {
+    return apiFetch<JournalTemplate>(`${WAVE3}/templates/${templateId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    }).then(mapJournalTemplate);
+}
+
+export function deleteJournalTemplate(
+    templateId: string,
+): Promise<{ deleted: boolean }> {
+    return apiFetch<{ deleted: boolean }>(`${WAVE3}/templates/${templateId}`, {
+        method: "DELETE",
+    });
+}
+
+export function generateJournalTemplate(
+    templateId: string,
+): Promise<JournalTemplateGenerated> {
+    return apiPost<JournalTemplateGenerated>(
+        `${WAVE3}/templates/${templateId}/generate`,
+        {},
+    );
+}
+
+export function runJournalTemplatesDue(): Promise<JournalTemplateRunDue> {
+    return apiPost<JournalTemplateRunDue>(
+        `${WAVE3}/templates/due/generate`,
+        {},
+    );
+}

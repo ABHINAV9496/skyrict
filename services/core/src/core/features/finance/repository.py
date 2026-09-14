@@ -66,6 +66,8 @@ from core.domain.entities import (
     InvoiceLine,
     JournalEntry,
     JournalLine,
+    JournalTemplate,
+    JournalTemplateLine,
     Payment,
     PaymentMethodAnalytics,
     PaymentMethodAnalyticsEntry,
@@ -91,6 +93,7 @@ from core.features.finance.models.invoice import ErpInvoiceModel
 from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
+from core.features.finance.models.journal_template import ErpJournalTemplateModel
 from core.features.finance.models.payment import ErpPaymentModel
 from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 from skyrict_common.exceptions import ConflictError
@@ -274,6 +277,44 @@ def _tenant_setting_from_orm(model: ErpTenantSettingModel) -> TenantSetting:
         key=model.key,
         value=model.value,
         id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _template_lines_from_json(
+    payload: list[dict[str, object]] | None,
+) -> tuple[JournalTemplateLine, ...]:
+    if not payload:
+        return ()
+    lines: list[JournalTemplateLine] = []
+    for row in payload:
+        debit_raw = row.get("debit")
+        credit_raw = row.get("credit")
+        lines.append(
+            JournalTemplateLine(
+                account_code=str(row["account_code"]),
+                debit=None if debit_raw is None else Decimal(str(debit_raw)),
+                credit=None if credit_raw is None else Decimal(str(credit_raw)),
+                currency=str(row.get("currency", "USD")),
+            )
+        )
+    return tuple(lines)
+
+
+def _journal_template_from_orm(model: ErpJournalTemplateModel) -> JournalTemplate:
+    return JournalTemplate(
+        tenant_id=model.tenant_id,
+        id=model.id,
+        name=model.name,
+        description=model.description,
+        cron_expression=model.cron_expression,
+        entry_date_offset_days=model.entry_date_offset_days,
+        memo=model.memo,
+        lines=_template_lines_from_json(model.lines),
+        enabled=model.enabled,
+        last_fired_at=model.last_fired_at,
+        next_run_at=model.next_run_at,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -908,6 +949,106 @@ class FinanceRepository:
         stmt = select(text("nextval('seq_erp_payment_number')"))
         seq = int((await self.session.execute(stmt)).scalar_one())
         return _document_number(PAYMENT_PREFIX, year, seq)
+
+    # ------------------------------------------------------------------
+    # Recurring journal templates (FIN-AUT-003 B5)
+    # ------------------------------------------------------------------
+
+    def _template_payload(self, template: JournalTemplate) -> list[dict[str, object]]:
+        return [
+            {"account_code": line.account_code, "debit": line.debit, "credit": line.credit, "currency": line.currency}
+            for line in template.lines
+        ]
+
+    async def create_journal_template(self, template: JournalTemplate) -> JournalTemplate:
+        model = ErpJournalTemplateModel(
+            tenant_id=template.tenant_id,
+            name=template.name,
+            description=template.description,
+            cron_expression=template.cron_expression,
+            entry_date_offset_days=template.entry_date_offset_days,
+            memo=template.memo,
+            lines=self._template_payload(template),
+            enabled=template.enabled,
+            last_fired_at=template.last_fired_at,
+            next_run_at=template.next_run_at,
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _journal_template_from_orm(model)
+
+    async def get_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> JournalTemplate | None:
+        stmt = select(ErpJournalTemplateModel).where(
+            ErpJournalTemplateModel.tenant_id == tenant_id,
+            ErpJournalTemplateModel.id == template_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _journal_template_from_orm(model) if model is not None else None
+
+    async def list_journal_templates(
+        self, tenant_id: uuid.UUID, *, enabled: bool | None = None
+    ) -> Sequence[JournalTemplate]:
+        stmt = select(ErpJournalTemplateModel).where(ErpJournalTemplateModel.tenant_id == tenant_id)
+        if enabled is not None:
+            stmt = stmt.where(ErpJournalTemplateModel.enabled.is_(enabled))
+        stmt = stmt.order_by(ErpJournalTemplateModel.name)
+        models = (await self.session.execute(stmt)).scalars().all()
+        return [_journal_template_from_orm(model) for model in models]
+
+    async def update_journal_template(
+        self, template: JournalTemplate
+    ) -> JournalTemplate | None:
+        stmt = select(ErpJournalTemplateModel).where(
+            ErpJournalTemplateModel.tenant_id == template.tenant_id,
+            ErpJournalTemplateModel.id == template.id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        model.name = template.name
+        model.description = template.description
+        model.cron_expression = template.cron_expression
+        model.entry_date_offset_days = template.entry_date_offset_days
+        model.memo = template.memo
+        model.lines = self._template_payload(template)
+        model.enabled = template.enabled
+        model.next_run_at = template.next_run_at
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _journal_template_from_orm(model)
+
+    async def delete_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> bool:
+        stmt = select(ErpJournalTemplateModel).where(
+            ErpJournalTemplateModel.tenant_id == tenant_id,
+            ErpJournalTemplateModel.id == template_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return False
+        await self.session.delete(model)
+        await self.session.flush()
+        return True
+
+    async def list_journal_templates_due(
+        self, tenant_id: uuid.UUID, at: datetime
+    ) -> Sequence[JournalTemplate]:
+        stmt = (
+            select(ErpJournalTemplateModel)
+            .where(
+                ErpJournalTemplateModel.tenant_id == tenant_id,
+                ErpJournalTemplateModel.enabled.is_(True),
+                ErpJournalTemplateModel.next_run_at.is_not(None),
+                ErpJournalTemplateModel.next_run_at <= at,
+            )
+            .order_by(ErpJournalTemplateModel.next_run_at)
+        )
+        models = (await self.session.execute(stmt)).scalars().all()
+        return [_journal_template_from_orm(model) for model in models]
 
     # ------------------------------------------------------------------
     # Reports (aggregate POSTED lines on read - never stored)

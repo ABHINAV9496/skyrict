@@ -12,33 +12,13 @@ import {
 } from "lucide-react";
 
 import { Logo, type LogoMarkTone } from "@/components/brand/logo";
-import type {
-    NavGroup,
-    NavItem,
+import {
+    isSidebarItemActive,
+    type NavGroup,
+    type NavItem,
 } from "@/components/dashboard/workspace/sidebar-config";
 import { UserMenu } from "@/components/dashboard/workspace/user-menu";
 import { cn } from "@/lib/utils";
-
-/**
- * Compare the active path against an internal `/dashboard/*` href. The public
- * workspace URL strips the prefix (e.g. `/settings`), so normalize it before
- * comparing so the active state tracks the page regardless of which form the
- * browser is showing.
- */
-function isActive(
-    pathname: string,
-    item: Pick<NavItem, "href" | "exact">,
-): boolean {
-    const normalized =
-        pathname === "/"
-            ? "/dashboard"
-            : pathname.startsWith("/dashboard")
-              ? pathname
-              : `/dashboard${pathname}`;
-    const { href, exact } = item;
-    if (href === "/dashboard" || exact) return normalized === href;
-    return normalized === href || normalized.startsWith(`${href}/`);
-}
 
 function SidebarLink({
     item,
@@ -54,7 +34,7 @@ function SidebarLink({
     /** Render as a nested row inside a collapsible group (content indented, same full width). */
     indented?: boolean;
 }) {
-    const active = isActive(pathname, item);
+    const active = isSidebarItemActive(pathname, item);
     const Icon = item.icon;
     const padding = collapsed
         ? "justify-center px-0 py-2.5"
@@ -157,8 +137,8 @@ function CollapsibleNavItem({
 }) {
     const Icon = item.icon;
     const children = item.children ?? [];
-    const parentActive = isActive(pathname, item);
-    const hasActiveChild = children.some((child) => isActive(pathname, child));
+    const parentActive = isSidebarItemActive(pathname, item);
+    const hasActiveChild = children.some((child) => isSidebarItemActive(pathname, child));
 
     const handleParentClick = useCallback(() => {
         onCloseMobile();
@@ -284,7 +264,7 @@ export function AppSidebar({
             if (!group.collapsible) return true;
             const key = `g:${group.label}`;
             if (openGroups[key] !== undefined) return openGroups[key];
-            return group.items.some((item) => isActive(pathname, item));
+            return group.items.some((item) => isSidebarItemActive(pathname, item));
         },
         [openGroups, pathname],
     );
@@ -305,7 +285,7 @@ export function AppSidebar({
             if (!item.children) return true;
             const key = `i:${item.label}`;
             if (openGroups[key] !== undefined) return openGroups[key];
-            return item.children.some((child) => isActive(pathname, child));
+            return item.children.some((child) => isSidebarItemActive(pathname, child));
         },
         [openGroups, pathname],
     );
@@ -407,7 +387,7 @@ export function AppSidebar({
                         const open = isGroupOpen(group);
                         const headerActive = group.collapsible
                             ? group.items.some((item) =>
-                                  isActive(pathname, item),
+                                  isSidebarItemActive(pathname, item),
                               )
                             : false;
 

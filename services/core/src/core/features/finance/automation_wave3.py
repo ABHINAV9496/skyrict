@@ -78,9 +78,7 @@ class FinanceWave3Service:
     entries: FinanceRepositoryPort
     audit: AuditSink
 
-    def _validated_lines(
-        self, raw_lines: list[Any]
-    ) -> tuple[JournalTemplateLine, ...]:
+    def _validated_lines(self, raw_lines: list[Any]) -> tuple[JournalTemplateLine, ...]:
         lines: list[JournalTemplateLine] = []
         debit_total = 0.0
         credit_total = 0.0
@@ -147,9 +145,7 @@ class FinanceWave3Service:
         )
         return created
 
-    async def get_template(
-        self, tenant_id: uuid.UUID, template_id: uuid.UUID
-    ) -> JournalTemplate:
+    async def get_template(self, tenant_id: uuid.UUID, template_id: uuid.UUID) -> JournalTemplate:
         template = await self.repo.get_journal_template(template_id, tenant_id)
         if template is None:
             raise NotFoundError(f"Journal template {template_id} not found")
@@ -165,11 +161,7 @@ class FinanceWave3Service:
     ) -> JournalTemplate:
         current = await self.get_template(tenant_id, template_id)
         cron = body.cron_expression if body.cron_expression is not None else current.cron_expression
-        lines = (
-            self._validated_lines(body.lines)
-            if body.lines is not None
-            else current.lines
-        )
+        lines = self._validated_lines(body.lines) if body.lines is not None else current.lines
         updated = replace(
             current,
             name=body.name if body.name is not None else current.name,
@@ -329,9 +321,7 @@ async def create_journal_template(
     current_user: dict[str, Any] = Depends(require_finance_write),
     svc: FinanceWave3Service = Depends(get_finance_wave3_service),
 ) -> ResponseEnvelope[JournalTemplateResponse]:
-    template = await svc.create_template(
-        _tenant_id(current_user), _user_id(current_user), body
-    )
+    template = await svc.create_template(_tenant_id(current_user), _user_id(current_user), body)
     return ResponseEnvelope(data=JournalTemplateResponse.model_validate(template))
 
 
@@ -342,9 +332,7 @@ async def list_journal_templates(
     svc: FinanceWave3Service = Depends(get_finance_wave3_service),
 ) -> ResponseEnvelope[list[JournalTemplateResponse]]:
     templates = await svc.list_templates(_tenant_id(current_user), enabled)
-    return ResponseEnvelope(
-        data=[JournalTemplateResponse.model_validate(t) for t in templates]
-    )
+    return ResponseEnvelope(data=[JournalTemplateResponse.model_validate(t) for t in templates])
 
 
 # Registered before /templates/{template_id}-routes so 'due' is never captured
@@ -361,9 +349,7 @@ async def run_due_templates(
     return ResponseEnvelope(data=result)
 
 
-@router.get(
-    "/templates/{template_id}", response_model=ResponseEnvelope[JournalTemplateResponse]
-)
+@router.get("/templates/{template_id}", response_model=ResponseEnvelope[JournalTemplateResponse])
 async def get_journal_template(
     template_id: uuid.UUID,
     current_user: dict[str, Any] = Depends(require_finance_read),
@@ -373,9 +359,7 @@ async def get_journal_template(
     return ResponseEnvelope(data=JournalTemplateResponse.model_validate(template))
 
 
-@router.put(
-    "/templates/{template_id}", response_model=ResponseEnvelope[JournalTemplateResponse]
-)
+@router.put("/templates/{template_id}", response_model=ResponseEnvelope[JournalTemplateResponse])
 async def update_journal_template(
     template_id: uuid.UUID,
     body: JournalTemplateUpdateRequest,
@@ -406,9 +390,7 @@ async def generate_journal_template(
     return ResponseEnvelope(data=result)
 
 
-@router.delete(
-    "/templates/{template_id}", response_model=ResponseEnvelope[dict[str, bool]]
-)
+@router.delete("/templates/{template_id}", response_model=ResponseEnvelope[dict[str, bool]])
 async def delete_journal_template(
     template_id: uuid.UUID,
     current_user: dict[str, Any] = Depends(require_finance_write),

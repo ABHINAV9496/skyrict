@@ -266,9 +266,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "created_at",
                 "updated_at",
             }
-            assert expected_cols <= set(
-                policy_cols
-            ), f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
+            assert expected_cols <= set(policy_cols), (
+                f"erp_leave_policies missing columns: {expected_cols - set(policy_cols)}"
+            )
 
             # 0025: erp.inventory.ai.approve is a first-class catalog permission.
             ai_approve_row = (
@@ -344,9 +344,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert (
-                attendance_unique_count >= 1
-            ), "(tenant_id, employee_id, work_date) unique constraint missing"
+            assert attendance_unique_count >= 1, (
+                "(tenant_id, employee_id, work_date) unique constraint missing"
+            )
 
             key_count = (
                 await conn.execute(
@@ -430,9 +430,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 .scalars()
                 .all()
             )
-            assert set(rls_tables) == set(
-                _HR_AI_TABLES
-            ), f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
+            assert set(rls_tables) == set(_HR_AI_TABLES), (
+                f"HR-AI tables missing RLS: {set(_HR_AI_TABLES) - set(rls_tables)}"
+            )
 
             # 0031: payroll automation columns on settings + employees.
             settings_col = (
@@ -445,9 +445,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).one_or_none()
-            assert (
-                settings_col is not None
-            ), "0031 must add erp_payroll_settings.ai_automation_enabled"
+            assert settings_col is not None, (
+                "0031 must add erp_payroll_settings.ai_automation_enabled"
+            )
             assert settings_col[0] == "boolean"
 
             for col_name in ("bank_account", "bank_name"):
@@ -710,9 +710,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert (
-                review_status_check == 1
-            ), "0035 must add the payslip review status check constraint"
+            assert review_status_check == 1, (
+                "0035 must add the payslip review status check constraint"
+            )
 
             # 0036: reporting data layer (RPT-DATA-001).
             for table in ("erp_report_definitions", "erp_report_snapshots"):
@@ -893,9 +893,9 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 )
             ).scalar_one()
-            assert (
-                isinstance(drift_col, str) and "0.1000" in drift_col
-            ), "0040 must add prediction_drift_threshold_pct defaulting to 0.1000"
+            assert isinstance(drift_col, str) and "0.1000" in drift_col, (
+                "0040 must add prediction_drift_threshold_pct defaulting to 0.1000"
+            )
             not_null = (
                 await conn.execute(
                     text(

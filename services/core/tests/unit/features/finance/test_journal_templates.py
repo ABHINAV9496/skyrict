@@ -135,20 +135,24 @@ async def test_create_template_balances_and_schedules() -> None:
 
 async def test_create_template_rejects_unbalanced_lines() -> None:
     _, _, service = _fresh_service()
-    bad = _body(lines=[
-        SimpleNamespace(account_code="6010", debit=Decimal("1000"), credit=None),
-        SimpleNamespace(account_code="1200", debit=None, credit=Decimal("999")),
-    ])
+    bad = _body(
+        lines=[
+            SimpleNamespace(account_code="6010", debit=Decimal("1000"), credit=None),
+            SimpleNamespace(account_code="1200", debit=None, credit=Decimal("999")),
+        ]
+    )
     with pytest.raises(ValidationError, match="balance"):
         await service.create_template(uuid.uuid4(), uuid.uuid4(), bad)
 
 
 async def test_create_template_rejects_line_with_both_amounts() -> None:
     _, _, service = _fresh_service()
-    bad = _body(lines=[
-        SimpleNamespace(account_code="6010", debit=Decimal("10"), credit=Decimal("10")),
-        SimpleNamespace(account_code="1200", debit=None, credit=Decimal("20")),
-    ])
+    bad = _body(
+        lines=[
+            SimpleNamespace(account_code="6010", debit=Decimal("10"), credit=Decimal("10")),
+            SimpleNamespace(account_code="1200", debit=None, credit=Decimal("20")),
+        ]
+    )
     with pytest.raises(ValidationError, match="exactly one"):
         await service.create_template(uuid.uuid4(), uuid.uuid4(), bad)
 

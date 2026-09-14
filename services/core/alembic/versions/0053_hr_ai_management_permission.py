@@ -8,16 +8,23 @@ exactly like its ``erp.hr.ai.*`` siblings in migration 0021 and the
 the core edge. Identity (0025) seeds the same string for role grants.
 
 Revision ID: 0045
-Revises: 0049
+Revises: 0052
 Create Date: 2026-09-08
+
+Renumbered from ``0050`` to ``0053`` (chains after ``0052_approval_workflow``)
+to repair the duplicate-revision collision with dev's ``0050_ai_docs``: two
+files claimed ``revision = "0050"`` with the same ``down_revision = "0049"``,
+which broke ``alembic upgrade head`` with "Multiple head revisions". Dev's
+``0050_ai_docs`` keeps ``0050``; any DB stamped ``0050`` refers to it, and
+this permission now applies afterwards.
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0050"
-down_revision = "0049"
+revision = "0053"
+down_revision = "0052"
 branch_labels = None
 depends_on = None
 

@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 52 revisions, 0001..0052) -> core ``downgrade base`` (all the way back to
+(all 54 revisions, 0001..0054) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -81,6 +81,12 @@ _ERP_PERMISSION_KEYS = (
     "erp.payroll.ai.run",
     "erp.payroll.ai.notify",
     "erp.payroll.ai.approve",
+    # 0053: HR-AI-003 L3 narratives gate (renumbered from the 0050 collision
+    # with dev's 0050_ai_docs - this feature branch's permission chain).
+    "erp.hr.ai.management",
+    # 0054: HR-AI-003 L3 refresh gate (renumbered from the 0051 collision
+    # with dev's 0051_crm_transcript).
+    "erp.ai.l3.refresh",
 )
 
 # 0021: tenant-scoped tables created by the HR/Payroll AI migrations.
@@ -219,8 +225,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0051", f"head is {version}, expected 0051"
-            assert version == "0052", f"head is {version}, expected 0052"
+            assert version == "0054", f"head is {version}, expected 0054"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1127,6 +1132,18 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             assert definition_uniq == 1, (
                 "0052 must add the definitions (tenant, resource_type, version) uniqueness"
             )
+
+            # 0053/0054: HR-AI-003 (renumbered from the 0050/0051 collision
+            # with dev's ai_docs/crm_transcript) - the L3 narrative and refresh
+            # permission keys are first-class catalog permissions.
+            for l3_key in ("erp.hr.ai.management", "erp.ai.l3.refresh"):
+                l3_perm = (
+                    await conn.execute(
+                        text("SELECT description FROM core_permissions WHERE key = :key"),
+                        {"key": l3_key},
+                    )
+                ).scalar_one_or_none()
+                assert l3_perm is not None, f"0053/0054 must register {l3_key}"
     finally:
         await engine.dispose()
 

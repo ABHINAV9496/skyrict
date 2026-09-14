@@ -76,7 +76,7 @@ _AI_TABLES = (
     "ai_lead_scores",
     "ai_deal_health",
     "ai_follow_up_suggestions",
-    # HR-AI-003 L3 narrative snapshots (migration 0020)
+    # HR-AI-003 L3 narrative snapshots (migration 0024)
     "ai_l3_narrative_snapshots",
     # SKY-91 transcript analyses (migration 0022)
     "ai_transcript_analyses",

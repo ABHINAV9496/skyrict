@@ -8,16 +8,22 @@ the same way, so ``require_all_permissions`` can enforce it at the core edge.
 Identity (0026) seeds the same string for role grants.
 
 Revision ID: 0046
-Revises: 0050
+Revises: 0053
 Create Date: 2026-09-09
+
+Renumbered from ``0051`` to ``0054`` (chains after ``0053_hr_ai_management_permission``)
+to repair the duplicate-revision collision with dev's ``0051_crm_transcript``:
+two files claimed ``revision = "0051"``. Dev's ``0051_crm_transcript`` keeps
+``0051``; any DB stamped ``0051`` refers to it, and this permission now applies
+afterwards.
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0051"
-down_revision = "0050"
+revision = "0054"
+down_revision = "0053"
 branch_labels = None
 depends_on = None
 

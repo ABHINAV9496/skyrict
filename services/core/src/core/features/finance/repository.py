@@ -29,15 +29,16 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import INVOICE_PREFIX, PAYMENT_PREFIX
+from core.db.parallel import parallel_reads
 from core.domain.entities import (
     AccountCodeSuggestion,
     AiFinanceAnomaly,
@@ -335,6 +336,30 @@ class FinanceRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def _parallel(
+        self,
+        tenant_id: object,
+        *jobs: Callable[[FinanceRepository], Awaitable[Any]],
+    ) -> list[Any]:
+        """Run independent read queries concurrently on forked pooled sessions.
+
+        Each job is invoked with a fresh ``FinanceRepository`` bound to its own
+        RLS-scoped session, so the jobs' queries genuinely overlap instead of
+        serializing on this repository's single connection. Results come back in
+        ``jobs`` order. Only safe for read-only work - forks are discarded after
+        the gather.
+        """
+
+        def _with_forked_session(
+            job: Callable[[FinanceRepository], Awaitable[Any]],
+        ) -> Callable[[AsyncSession], Awaitable[Any]]:
+            async def _run(session: AsyncSession) -> Any:
+                return await job(FinanceRepository(session))
+
+            return _run
+
+        return await parallel_reads(tenant_id, [_with_forked_session(job) for job in jobs])
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -1176,7 +1201,13 @@ class FinanceRepository:
             return CloseChecklist(period_id=period_id, period_name="", items=(), ready=False)
         items: list[CloseChecklistItem] = []
 
-        periods = await self.list_fiscal_periods(tenant_id)
+        periods, entry_count, trial, aging = await self._parallel(
+            tenant_id,
+            lambda repo: repo.list_fiscal_periods(tenant_id),
+            lambda repo: repo._count_posted_entries_in_period(tenant_id, period),
+            lambda repo: repo.trial_balance(tenant_id, period.end_date),
+            lambda repo: repo.ar_aging(tenant_id, period.end_date),
+        )
         items.append(
             CloseChecklistItem(
                 label="Previous period closed",
@@ -1186,8 +1217,6 @@ class FinanceRepository:
                 detail="All earlier periods must be closed before this one",
             )
         )
-
-        entry_count = await self._count_posted_entries_in_period(tenant_id, period)
         items.append(
             CloseChecklistItem(
                 label="Journal entries posted",
@@ -1196,7 +1225,6 @@ class FinanceRepository:
             )
         )
 
-        trial = await self.trial_balance(tenant_id, period.end_date)
         balanced = trial.total_debit == trial.total_credit
         items.append(
             CloseChecklistItem(
@@ -1210,7 +1238,6 @@ class FinanceRepository:
             )
         )
 
-        aging = await self.ar_aging(tenant_id, period.end_date)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
         unreconciled = (over_90.amount if over_90 else Decimal("0")) > Decimal("0")
         items.append(
@@ -1429,16 +1456,19 @@ class FinanceRepository:
 
     async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> HealthScore:
         quantum = Decimal("0.01")
-        wc = await self.working_capital_alert(tenant_id, as_of)
+        wc, aging, entries = await self._parallel(
+            tenant_id,
+            lambda repo: repo.working_capital_alert(tenant_id, as_of),
+            lambda repo: repo.ar_aging(tenant_id, as_of),
+            lambda repo: repo.list_journal_entries(tenant_id, limit=100),
+        )
         wc_score = Decimal("100") if not wc.alert else Decimal("50")
 
-        aging = await self.ar_aging(tenant_id, as_of)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
         over_90_amount = over_90.amount if over_90 else Decimal("0")
         ar_ok = over_90_amount <= (aging.total_ar * Decimal("0.2"))
         ar_score = Decimal("100") if ar_ok else Decimal("60")
 
-        entries = await self.list_journal_entries(tenant_id, limit=100)
         drafts = sum(1 for e in entries if e.status == EntryStatus.DRAFT)
         drafts_score = max(Decimal("100") - Decimal(drafts) * Decimal("10"), Decimal("0"))
 
@@ -1498,8 +1528,11 @@ class FinanceRepository:
         prior_from: date,
         prior_to: date,
     ) -> ComparativePnl:
-        current = await self.profit_and_loss(tenant_id, current_from, current_to)
-        prior = await self.profit_and_loss(tenant_id, prior_from, prior_to)
+        current, prior = await self._parallel(
+            tenant_id,
+            lambda repo: repo.profit_and_loss(tenant_id, current_from, current_to),
+            lambda repo: repo.profit_and_loss(tenant_id, prior_from, prior_to),
+        )
         by_code = {line.code: line for line in prior.revenue + prior.expenses}
         rows: list[ComparativePnlRow] = []
         for line in current.revenue + current.expenses:
@@ -1655,16 +1688,27 @@ class FinanceRepository:
         from datetime import date as _date
 
         today = _date.today()
-        trial = await self.trial_balance(tenant_id, today)
-        entries = await self.list_journal_entries(tenant_id, limit=1000)
+        (
+            trial,
+            entries,
+            open_anomalies,
+            dup_groups,
+            aging,
+            periods,
+            draft_invoices,
+        ) = await self._parallel(
+            tenant_id,
+            lambda repo: repo.trial_balance(tenant_id, today),
+            lambda repo: repo.list_journal_entries(tenant_id, limit=1000),
+            lambda repo: repo.list_open_ai_anomalies(tenant_id),
+            lambda repo: repo.duplicates(tenant_id),
+            lambda repo: repo.ar_aging(tenant_id, today),
+            lambda repo: repo.list_fiscal_periods(tenant_id),
+            lambda repo: repo._count_invoice_status(tenant_id, InvoiceStatus.DRAFT),
+        )
         posted_count = sum(1 for e in entries if e.status == EntryStatus.POSTED)
         unposted_count = len(entries) - posted_count
-        open_anomalies = await self.list_open_ai_anomalies(tenant_id)
-        dup_groups = await self.duplicates(tenant_id)
-        aging = await self.ar_aging(tenant_id, today)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
-        periods = await self.list_fiscal_periods(tenant_id)
-        draft_invoices = await self._count_invoice_status(tenant_id, InvoiceStatus.DRAFT)
 
         facts: _AuditReadinessFacts = {
             "trial_balanced": trial.total_debit == trial.total_credit,

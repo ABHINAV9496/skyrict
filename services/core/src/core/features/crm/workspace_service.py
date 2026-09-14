@@ -679,26 +679,89 @@ class CrmWorkspaceService:
         today_end = today_start + timedelta(days=1)
         completed_since = now - timedelta(days=30)
 
-        status_counts = await self._repo.lead_status_counts(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
-        )
+        from core.features.crm.repository import CrmRepository as _ConcreteRepo
+
+        repo = self._repo
+        if isinstance(repo, _ConcreteRepo):
+            (
+                status_counts,
+                source_counts,
+                funnel,
+                terminal,
+                customers,
+                activity_counts,
+                recent_won,
+                top,
+            ) = await repo.parallel(
+                tenant_id,
+                lambda r: r.lead_status_counts(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+                ),
+                lambda r: r.lead_source_counts(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+                ),
+                lambda r: r.opportunity_funnel(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+                ),
+                lambda r: r.won_lost_counts(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+                ),
+                lambda r: r.customer_counts(tenant_id=tenant_id),
+                lambda r: r.activity_window_counts(
+                    tenant_id=tenant_id,
+                    scope=scope,
+                    user_id=user_id,
+                    team_id=team_id,
+                    today_start=today_start,
+                    today_end=today_end,
+                    completed_since=completed_since,
+                ),
+                lambda r: r.recent_won_opportunities(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
+                ),
+                lambda r: r.top_opportunities(
+                    tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
+                ),
+            )
+            customers_total, customers_active = customers
+        else:
+            # Fake/test repos: preserve original sequential path so port-based
+            # test doubles don't need a parallel() implementation.
+            status_counts = await repo.lead_status_counts(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+            )
+            source_counts = await repo.lead_source_counts(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+            )
+            funnel = await repo.opportunity_funnel(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+            )
+            terminal = await repo.won_lost_counts(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
+            )
+            customers_total, customers_active = await repo.customer_counts(tenant_id=tenant_id)
+            activity_counts = await repo.activity_window_counts(
+                tenant_id=tenant_id,
+                scope=scope,
+                user_id=user_id,
+                team_id=team_id,
+                today_start=today_start,
+                today_end=today_end,
+                completed_since=completed_since,
+            )
+            recent_won = await repo.recent_won_opportunities(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
+            )
+            top = await repo.top_opportunities(
+                tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
+            )
+
         by_status = tuple(
             LeadStatusCount(status=status, count=count) for status, count in status_counts
         )
         lead_total = sum(count for _, count in status_counts)
-
-        source_counts = await self._repo.lead_source_counts(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
-        )
         by_source = tuple(
             LeadSourceCount(source=source, count=count) for source, count in source_counts
-        )
-
-        funnel = await self._repo.opportunity_funnel(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
-        )
-        terminal = await self._repo.won_lost_counts(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id
         )
         by_stage = tuple(
             _stage_bucket(stage, currency, count, amount)
@@ -732,23 +795,6 @@ class CrmWorkspaceService:
         win_rate = None
         if won_count + lost_count > 0:
             win_rate = Decimal(won_count) / Decimal(won_count + lost_count)
-
-        customers_total, customers_active = await self._repo.customer_counts(tenant_id=tenant_id)
-        activity_counts = await self._repo.activity_window_counts(
-            tenant_id=tenant_id,
-            scope=scope,
-            user_id=user_id,
-            team_id=team_id,
-            today_start=today_start,
-            today_end=today_end,
-            completed_since=completed_since,
-        )
-        recent_won = await self._repo.recent_won_opportunities(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
-        )
-        top = await self._repo.top_opportunities(
-            tenant_id=tenant_id, scope=scope, user_id=user_id, team_id=team_id, limit=5
-        )
 
         return CrmOverview(
             leads=LeadsOverview(total=lead_total, by_status=by_status, by_source=by_source),

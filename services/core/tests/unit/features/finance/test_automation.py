@@ -32,7 +32,10 @@ from core.domain.entities import (
     ReminderDraft,
 )
 from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus
-from core.features.finance.automation import FinanceAutomationService
+from core.features.finance.automation import (
+    FinanceAutomationService,
+    extract_vendor_ref,
+)
 from skyrict_common.exceptions import NotFoundError
 
 
@@ -781,3 +784,21 @@ async def test_suggestion_quality_no_signal_is_not_low_quality() -> None:
     assert result.overall_acceptance_rate is None
     assert result.low_quality is False
     assert repo.quality_upserts == []
+
+
+# ---------------------------------------------------------------------------
+# B23: vendor-invoice-number extraction
+# ---------------------------------------------------------------------------
+
+
+def test_extract_vendor_ref_invoice_forms() -> None:
+    assert extract_vendor_ref("Payment for Invoice INV-2024-0117") == "2024-0117"
+    assert extract_vendor_ref("inv: ACR-8821") == "ACR-8821"
+    assert extract_vendor_ref("reference #VB-1033") == "VB-1033"
+    assert extract_vendor_ref("PO-7777") == "7777"
+
+
+def test_extract_vendor_ref_no_match() -> None:
+    assert extract_vendor_ref("thank you") is None
+    assert extract_vendor_ref("") is None
+    assert extract_vendor_ref("   ") is None

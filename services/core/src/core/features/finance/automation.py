@@ -5,7 +5,8 @@ automation widgets: close checklist, duplicates, account-code suggestions,
 working-capital alert, health score, cash-flow projection, anomalies,
 comparative P&L, journal-entry reversal, and tenant automation settings. Wave
 2 adds revenue concentration, working-capital trend, payment-method analytics,
-audit readiness, and audit-log search.
+audit readiness, and audit-log search. Wave 3 adds customer payment analytics
+and vendor-ref extraction.
 
 Reads use ``erp.finance.read``; the reversal (a money moment) uses
 ``erp.finance.approve``; settings writes use ``erp.finance.write``.
@@ -13,6 +14,7 @@ Reads use ``erp.finance.read``; the reversal (a money moment) uses
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -84,6 +86,8 @@ from core.features.finance.schemas import (
     SuggestInvoiceLinesRequest,
     SuggestionQualityResponse,
     TenantSettingsResponse,
+    VendorRefExtractionRequest,
+    VendorRefExtractionResponse,
     WorkingCapitalAlertResponse,
     WorkingCapitalSeriesResponse,
     WorkingCapitalSettingsRequest,
@@ -1060,3 +1064,41 @@ async def suggestion_quality(
 ) -> ResponseEnvelope[SuggestionQualityResponse]:
     result = await svc.suggestion_quality(_tenant_id(current_user), window_days)
     return ResponseEnvelope(data=result)
+
+
+# ---------------------------------------------------------------------------
+# B23: Vendor-invoice-number extraction (SKY-84)
+# ---------------------------------------------------------------------------
+
+_VENDOR_INV_RE = re.compile(
+    r"(?:"
+    r"(?:invoice|inv)\s*[#:\-]?\s*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r"|"
+    r"(?:reference|ref|po)\s*[#:\-]?\s*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def extract_vendor_ref(reference: str) -> str | None:
+    """Best-effort extraction of a vendor invoice number from free text."""
+    match = _VENDOR_INV_RE.search(reference)
+    if match is None:
+        return None
+    token = (match.group(1) or match.group(2)).strip()
+    token = re.sub(r"^(?:invoice|inv)\b[\-_:]?\s*", "", token, flags=re.IGNORECASE)
+    return token or None
+
+
+@router.post(
+    "/extract-vendor-ref",
+    response_model=ResponseEnvelope[VendorRefExtractionResponse],
+)
+async def extract_vendor_invoice_ref(
+    body: VendorRefExtractionRequest,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+) -> ResponseEnvelope[VendorRefExtractionResponse]:
+    _ = current_user  # pure function, no tenant context needed
+    return ResponseEnvelope(
+        data=VendorRefExtractionResponse(extracted=extract_vendor_ref(body.reference))
+    )

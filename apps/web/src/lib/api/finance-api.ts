@@ -949,6 +949,17 @@ export function getCustomerAnalytics(
     ).then(mapCustomerPaymentAnalytics);
 }
 
+// ---------------------------------------------------------------------------
+// SKY-84 (FIN-AUT-003): vendor-ref extraction (B23)
+// ---------------------------------------------------------------------------
+
+export function extractVendorRef(reference: string): Promise<string | null> {
+    return apiFetch<{ extracted: string | null }>(
+        `${AUTOMATION}/extract-vendor-ref`,
+        { method: "POST", body: JSON.stringify({ reference }) },
+    ).then((res) => res.extracted);
+}
+
 export function getAuditReadiness(): Promise<AuditReadiness> {
     return apiFetch<AuditReadiness>(`${AUTOMATION}/audit-readiness`);
 }

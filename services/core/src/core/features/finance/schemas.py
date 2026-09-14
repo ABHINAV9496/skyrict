@@ -651,3 +651,11 @@ class AuditLogSearchResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class VendorRefExtractionRequest(BaseModel):
+    reference: str
+
+
+class VendorRefExtractionResponse(BaseModel):
+    extracted: str | None = None

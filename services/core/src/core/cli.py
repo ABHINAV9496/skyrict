@@ -423,17 +423,27 @@ def notification_batch(
 
 
 @app.command()
-def notification_demo() -> None:
+def notification_demo(
+    tenant_id: str = typer.Option(
+        None,
+        "--tenant-id",
+        help="UUID of a tenant to seed sample notifications (defaults to the default tenant)",
+    ),
+) -> None:
     """Seed a handful of sample notifications for the notification center UI.
 
     Emits a finance B34 working-capital breach (high severity) plus a burst
-    of low inventory notifications for the default tenant's finance readers,
-    then runs one batching pass so the burst collapses into a digest - the
-    exact state the drawer and preferences page are designed to show.
+    of low inventory notifications for the tenant's finance/inventory
+    readers, then runs one batching pass so the burst collapses into a
+    digest - the exact state the drawer and preferences page are designed
+    to show. The tenant is DETERMINED BY GRANTS: every user whose roles
+    grant ``erp.finance.read`` or ``erp.inventory.read`` - including owner
+    (``"*"``) roles - becomes a recipient.
     """
     import asyncio
 
     from core.core.config import settings
+    from core.core.permissions import ERP_FINANCE_READ, ERP_INVENTORY_READ
     from core.core.tenant_context import TenantContext
     from core.db.session import async_session_factory
     from core.features.notifications.domain import (
@@ -444,10 +454,10 @@ def notification_demo() -> None:
     from core.features.notifications.producer import NotificationProducer
 
     async def _run() -> None:
-        tenant_id = uuid.UUID(settings.DEFAULT_TENANT_ID)
-        TenantContext.set(str(tenant_id))
+        resolved = uuid.UUID(tenant_id) if tenant_id else uuid.UUID(settings.DEFAULT_TENANT_ID)
+        TenantContext.set(str(resolved))
         try:
-            await _emit_demo_burst(tenant_id)
+            await _emit_demo_burst(resolved)
             from core.features.notifications.worker import NotificationBatchingWorker
 
             outcome = await NotificationBatchingWorker(
@@ -461,7 +471,7 @@ def notification_demo() -> None:
         finally:
             TenantContext.reset()
 
-    async def _emit_demo_burst(tenant_id: uuid.UUID) -> None:
+    async def _emit_demo_burst(resolved_tenant: uuid.UUID) -> None:
         async with async_session_factory() as session:
             producer = NotificationProducer(session)
             drafts = [
@@ -476,8 +486,8 @@ def notification_demo() -> None:
                         "The working capital ratio dropped below the configured "
                         "threshold. Review current assets vs current liabilities."
                     ),
-                    recipients=RecipientSpec.from_permissions("ERP_FINANCE_READ"),
-                    relevance_key="erp.finance.read",
+                    recipients=RecipientSpec.from_permissions(ERP_FINANCE_READ),
+                    relevance_key=ERP_FINANCE_READ,
                 ),
                 *[
                     NotificationDraft(
@@ -491,8 +501,8 @@ def notification_demo() -> None:
                             f"Sku {1000 + i} stock level fell below its reorder "
                             "point. Replenishment is recommended."
                         ),
-                        recipients=RecipientSpec.from_permissions("ERP_INVENTORY_READ"),
-                        relevance_key="erp.inventory.read",
+                        recipients=RecipientSpec.from_permissions(ERP_INVENTORY_READ),
+                        relevance_key=ERP_INVENTORY_READ,
                     )
                     for i in range(8)
                 ],

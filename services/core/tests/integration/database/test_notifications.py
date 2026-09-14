@@ -26,7 +26,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select
 
-from core.core.permissions import ERP_FINANCE_READ, ERP_INVENTORY_READ
+from core.core.permissions import ERP_FINANCE_READ, ERP_INVENTORY_READ, WILDCARD
 from core.core.tenant_context import TenantContext
 from core.db.session import async_session_factory
 from core.domain.entities import WorkingCapitalAlert
@@ -39,6 +39,7 @@ from core.features.notifications.domain import (
 )
 from core.features.notifications.models.event import ErpNotificationEventModel
 from core.features.notifications.models.notification import ErpNotificationModel
+from core.features.notifications.models.role_grant import user_ids_for_permissions
 from core.features.notifications.producer import NotificationProducer
 from core.features.notifications.service import NotificationService
 from core.models.core_role import CoreRoleModel
@@ -115,6 +116,41 @@ async def seed_world(session: object) -> dict[str, str]:
         "user_a": str(user_a),
         "user_b": str(user_b),
     }
+
+
+async def seed_world_with_owner(session: object) -> dict[str, str]:
+    """seed_world + an owner role holder whose permissions array is {*, ...}.
+
+    The owner mirrors real tenant_owner roles: the WILDCARD ``"*"`` grants
+    every catalogued permission. Asserts the reverse RBAC lookup used by the
+    notification producer honors ``"*"`` exactly like the forward
+    ``grants_permission`` check.
+    """
+    base = await seed_world(session)
+    s = session  # type: ignore[assignment]
+    tenant = uuid.UUID(base["tenant"])
+    owner = uuid.uuid4()
+    owner_role = uuid.uuid4()
+
+    s.add(
+        CoreRoleModel(
+            tenant_id=tenant,
+            id=owner_role,
+            name="Tenant Owner",
+            permissions=[WILDCARD, "invitations:send"],
+        )
+    )
+    await s.flush()  # type: ignore[attr-defined]
+    s.add(
+        CoreUserRoleModel(
+            tenant_id=tenant,
+            id=uuid.uuid4(),
+            user_id=owner,
+            role_id=owner_role,
+        )
+    )
+    await s.commit()  # type: ignore[attr-defined]
+    return {**base, "user_owner": str(owner)}
 
 
 def _finance_draft(*, dedupe_key: str, severity: NotificationSeverity) -> NotificationDraft:
@@ -283,6 +319,70 @@ class TestProducerFanOut:
                     recipients=RecipientSpec.from_users(world["user_a"]),
                 )
                 await NotificationProducer(session).emit(draft)
+            TenantContext.reset()
+
+
+class TestPermissionAudienceWildcard:
+    """Reverse RBAC must honor the ``*`` owner wildcard like grants_permission().
+
+    Regression coverage for the SKY-93 production bug: permission-addressed
+    notifications never reached owner users because the SQL ``@>`` array
+    containment treated ``"*"`` as a literal element.
+    """
+
+    @pytest.mark.asyncio
+    async def test_user_ids_for_permissions_includes_wildcard_holder(
+        self, migrated_schema: None
+    ) -> None:
+        async with async_session_factory() as session:
+            world = await seed_world_with_owner(session)
+            tenant = uuid.UUID(world["tenant"])
+
+            finance_holders = await user_ids_for_permissions(session, tenant, [ERP_FINANCE_READ])
+            assert uuid.UUID(world["user_a"]) in finance_holders
+            assert uuid.UUID(world["user_owner"]) in finance_holders
+
+            inventory_holders = await user_ids_for_permissions(
+                session, tenant, [ERP_INVENTORY_READ]
+            )
+            assert uuid.UUID(world["user_b"]) in inventory_holders
+            assert uuid.UUID(world["user_owner"]) in inventory_holders
+            TenantContext.reset()
+
+    @pytest.mark.asyncio
+    async def test_emit_fans_out_to_wildcard_owner(self, migrated_schema: None) -> None:
+        async with async_session_factory() as session:
+            world = await seed_world_with_owner(session)
+            TenantContext.set(world["tenant"])
+            outcome = await NotificationProducer(session, now=lambda: NOW).emit(
+                _finance_draft(dedupe_key="wildcard.1", severity=NotificationSeverity.HIGH)
+            )
+            await session.commit()
+            assert outcome.recipients == 2  # concrete finance holder + owner
+
+            tenant = uuid.UUID(world["tenant"])
+            for user_id in (uuid.UUID(world["user_a"]), uuid.UUID(world["user_owner"])):
+                row = await session.scalar(
+                    select(ErpNotificationModel).where(
+                        ErpNotificationModel.tenant_id == tenant,
+                        ErpNotificationModel.recipient_user_id == user_id,
+                    )
+                )
+                assert row is not None
+            TenantContext.reset()
+
+    @pytest.mark.asyncio
+    async def test_wildcard_holder_scoped_to_own_tenant(self, migrated_schema: None) -> None:
+        async with async_session_factory() as session:
+            world_a = await seed_world_with_owner(session)
+            world_b = await seed_world(session)
+            tenant_b = uuid.UUID(world_b["tenant"])
+
+            # The owner in tenant A must never resolve for tenant B even when
+            # tenant B requests the same permission keys.
+            holdings_b = await user_ids_for_permissions(session, tenant_b, [ERP_FINANCE_READ])
+            assert uuid.UUID(world_a["user_owner"]) not in holdings_b
+            assert uuid.UUID(world_b["user_a"]) in holdings_b
             TenantContext.reset()
 
 

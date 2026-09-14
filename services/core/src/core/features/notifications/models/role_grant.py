@@ -13,6 +13,7 @@ import uuid
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.core.permissions import WILDCARD
 from core.models.core_role import CoreRoleModel
 from core.models.core_user_role import CoreUserRoleModel
 
@@ -27,13 +28,22 @@ async def user_ids_for_permissions(
     Uses ``CoreRoleModel.permissions`` (ARRAY(String)) with PostgreSQL
     ``@>`` (contains) to find roles that grant at least one of the keys,
     then joins through ``core_user_roles`` for the user ids.
+
+    Mirrors ``grants_permission``: the ``WILDCARD`` (``"*"``) owner role
+    grants every catalogued permission, so a role whose permissions array
+    contains ``"*"`` resolves its holders for any requested key - not only
+    keys held concretely.
     """
     if not permission_keys:
         return []
 
     # Build OR predicates so each permission key is checked against the
-    # ARRAY column independently: ``permissions @> ARRAY[key]``.
+    # ARRAY column independently: ``permissions @> ARRAY[key]``. The
+    # wildcard (owner) role is a universal grant: a role containing "*"
+    # satisfies every requested key, exactly as grants_permission() decides.
     array_contains = [CoreRoleModel.permissions.contains([key]) for key in permission_keys]
+    if WILDCARD not in permission_keys:
+        array_contains.append(CoreRoleModel.permissions.contains([WILDCARD]))
 
     stmt = (
         select(CoreUserRoleModel.user_id)

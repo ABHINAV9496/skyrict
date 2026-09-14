@@ -20,6 +20,7 @@ import {
 } from "@/features/finance/components/finance-table";
 import { StatusBadge } from "@/features/finance/components/status-badge";
 import { FinanceEmptyState } from "@/features/finance/components/state-cards";
+import { RecordPaymentDialog } from "@/features/finance/components/record-payment-dialog";
 
 const UNRESOLVED_STATUSES = new Set(["open", "candidate"]);
 
@@ -48,6 +49,7 @@ function IntentStatusBadge({ status }: { status: string }) {
 export function PaymentMatchInbox() {
     const { permissions } = useModuleAccess();
     const canRead = hasPermission(permissions, "erp.finance.read");
+    const canWrite = hasPermission(permissions, "erp.finance.write");
     const [intents, setIntents] = useState<PaymentIntent[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -266,15 +268,20 @@ export function PaymentMatchInbox() {
                         </span>
                     ) : null}
                 </div>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void load()}
-                >
-                    Refresh
-                </Button>
+                <div className="flex items-center gap-2">
+                    {canWrite ? (
+                        <RecordPaymentDialog onRecorded={() => void load()} />
+                    ) : null}
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void load()}
+                    >
+                        Refresh
+                    </Button>
+                </div>
             </div>
 
             {error ? (

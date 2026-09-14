@@ -115,6 +115,12 @@ export const workspaceNavGroups: NavGroup[] = [
                 soon: true,
                 tour: "nav-integrations",
             },
+            {
+                href: "/dashboard/settings/notifications",
+                label: "Notifications",
+                icon: BellRing,
+                tour: "nav-notifications",
+            },
         ],
     },
 ];

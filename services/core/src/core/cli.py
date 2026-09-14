@@ -386,5 +386,137 @@ def approval_escalation(
     asyncio.run(_run())
 
 
+@app.command()
+def notification_batch(
+    window: int = typer.Option(
+        None,
+        "--window",
+        min=1,
+        help="Batch window minutes (default: NOTIF_BATCH_WINDOW_MINUTES, 60)",
+    ),
+) -> None:
+    """Run one notification batching pass (manual/CI equivalent of the worker).
+
+    Collapses each tenant's burst of low/medium notifications within the
+    rolling window into one digest per (module, category, recipient). High,
+    critical and mandatory-category notifications are never collapsed.
+    """
+    import asyncio
+
+    from core.core.config import settings
+    from core.db.session import async_session_factory
+    from core.features.notifications.worker import NotificationBatchingWorker
+
+    async def _run() -> None:
+        window_minutes = window if window is not None else settings.NOTIF_BATCH_WINDOW_MINUTES
+        outcome = await NotificationBatchingWorker(
+            async_session_factory,
+            window_minutes=window_minutes,
+        ).process_all()
+        typer.echo(
+            f"notification batch pass complete: {outcome.tenants_processed} tenants, "
+            f"{outcome.digests_created} digests created, "
+            f"{outcome.members_suppressed} members suppressed"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command()
+def notification_demo(
+    tenant_id: str = typer.Option(
+        None,
+        "--tenant-id",
+        help="UUID of a tenant to seed sample notifications (defaults to the default tenant)",
+    ),
+) -> None:
+    """Seed a handful of sample notifications for the notification center UI.
+
+    Emits a finance B34 working-capital breach (high severity) plus a burst
+    of low inventory notifications for the tenant's finance/inventory
+    readers, then runs one batching pass so the burst collapses into a
+    digest - the exact state the drawer and preferences page are designed
+    to show. The tenant is DETERMINED BY GRANTS: every user whose roles
+    grant ``erp.finance.read`` or ``erp.inventory.read`` - including owner
+    (``"*"``) roles - becomes a recipient.
+    """
+    import asyncio
+
+    from core.core.config import settings
+    from core.core.permissions import ERP_FINANCE_READ, ERP_INVENTORY_READ
+    from core.core.tenant_context import TenantContext
+    from core.db.session import async_session_factory
+    from core.features.notifications.domain import (
+        NotificationDraft,
+        NotificationSeverity,
+        RecipientSpec,
+    )
+    from core.features.notifications.producer import NotificationProducer
+
+    async def _run() -> None:
+        resolved = uuid.UUID(tenant_id) if tenant_id else uuid.UUID(settings.DEFAULT_TENANT_ID)
+        TenantContext.set(str(resolved))
+        try:
+            await _emit_demo_burst(resolved)
+            from core.features.notifications.worker import NotificationBatchingWorker
+
+            outcome = await NotificationBatchingWorker(
+                async_session_factory,
+                window_minutes=settings.NOTIF_BATCH_WINDOW_MINUTES,
+            ).process_all()
+            typer.echo(
+                f"batch pass: {outcome.tenants_processed} tenants, "
+                f"{outcome.digests_created} digests, {outcome.members_suppressed} suppressed"
+            )
+        finally:
+            TenantContext.reset()
+
+    async def _emit_demo_burst(resolved_tenant: uuid.UUID) -> None:
+        async with async_session_factory() as session:
+            producer = NotificationProducer(session)
+            drafts = [
+                NotificationDraft(
+                    dedupe_key="demo.b34.working-capital",
+                    event_type="finance.working_capital_alert",
+                    category="finance",
+                    module="finance",
+                    severity=NotificationSeverity.HIGH,
+                    title="Working capital below threshold",
+                    body=(
+                        "The working capital ratio dropped below the configured "
+                        "threshold. Review current assets vs current liabilities."
+                    ),
+                    recipients=RecipientSpec.from_permissions(ERP_FINANCE_READ),
+                    relevance_key=ERP_FINANCE_READ,
+                ),
+                *[
+                    NotificationDraft(
+                        dedupe_key=f"demo.inventory.low-stock.{i}",
+                        event_type="inventory.low_stock",
+                        category="inventory",
+                        module="inventory",
+                        severity=NotificationSeverity.LOW,
+                        title=f"SKU-{1000 + i} below reorder point",
+                        body=(
+                            f"Sku {1000 + i} stock level fell below its reorder "
+                            "point. Replenishment is recommended."
+                        ),
+                        recipients=RecipientSpec.from_permissions(ERP_INVENTORY_READ),
+                        relevance_key=ERP_INVENTORY_READ,
+                    )
+                    for i in range(8)
+                ],
+            ]
+            for draft in drafts:
+                outcome = await producer.emit(draft)
+                typer.echo(
+                    f"emitted {draft.event_type} (dedupe={outcome.deduped}, "
+                    f"recipients={outcome.recipients})"
+                )
+            await session.commit()
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()

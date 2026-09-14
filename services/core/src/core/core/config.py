@@ -338,6 +338,54 @@ class Settings(BaseSettings):
         description="max overdue steps one escalation pass marks escalated per tenant",
     )
 
+    # --- Notification batching worker (SKY-93, notification center commit) ---
+    NOTIF_BATCH_WORKER_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "run the in-process notification batching worker (a background "
+            "asyncio loop that collapses bursts of low/medium notifications "
+            "into digests). Disabled under the test environment so integration "
+            "tests drive the batch pass directly."
+        ),
+    )
+    NOTIF_BATCH_POLL_SECONDS: float = Field(
+        default=300.0,
+        gt=0,
+        description="interval between batching passes while idle (seconds)",
+    )
+    NOTIF_BATCH_WINDOW_MINUTES: int = Field(
+        default=60,
+        ge=1,
+        description="rolling window width (minutes) for grouping notifications into one digest",
+    )
+    NOTIF_BATCH_MIN_COUNT: int = Field(
+        default=1,
+        ge=1,
+        description="minimum number of low/medium notifications required to trigger a digest",
+    )
+    NOTIF_EMAIL_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "enable the log-only email adapter in the channel dispatcher. "
+            "Kept off by default: the log-only adapter records a structured "
+            "would-send event without dialling SMTP, but the flag still gates "
+            "select_channels so the inbox message remains accurate."
+        ),
+    )
+    NOTIF_WEBHOOK_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "enable the log-only webhook adapter in the channel dispatcher. "
+            "Same semantics as NOTIF_EMAIL_ENABLED."
+        ),
+    )
+    NOTIF_INBOX_PAGE_SIZE: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="default page size for the /notifications/inbox endpoint",
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
 

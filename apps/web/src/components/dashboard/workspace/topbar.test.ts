@@ -7,6 +7,9 @@ describe("resolvePageTitle", () => {
         expect(resolvePageTitle("/dashboard")).toBe("Overview");
         expect(resolvePageTitle("/dashboard/erp")).toBe("Business Operations");
         expect(resolvePageTitle("/dashboard/agents")).toBe("AI Agents");
+        expect(resolvePageTitle("/dashboard/settings/notifications")).toBe(
+            "Notification preferences",
+        );
     });
 
     it("filters hyphenated UUID segments from the breadcrumb", () => {

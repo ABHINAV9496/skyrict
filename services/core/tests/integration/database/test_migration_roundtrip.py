@@ -1242,7 +1242,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "uq_erp_notification_prefs_tenant_user_category",
             }, "0055 must add the notification dedupe / preference uniqueness constraints"
 
-# 0056: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
+            # 0056: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
             # gains erp.hr.ai.planning, the owner-gated key for L4 what-if
             # scenario planning and its payroll-base source endpoint.
             planning_perm = (

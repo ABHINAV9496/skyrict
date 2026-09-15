@@ -63,7 +63,7 @@ class TestProvisioning:
                     select(TenantModel).where(TenantModel.slug == tenant["slug"])
                 )
                 assert row is not None
-                assert row.plan_tier == "professional"
+                assert row.plan_tier == "pro"
 
                 roles = (
                     await session.scalars(select(RoleModel).where(RoleModel.tenant_id == row.id))

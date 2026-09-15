@@ -240,7 +240,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-assert version == "0057", f"head is {version}, expected 0057"
+            assert version == "0057", f"head is {version}, expected 0057"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1160,7 +1160,7 @@ assert version == "0057", f"head is {version}, expected 0057"
                 ).scalar_one_or_none()
                 assert l3_perm is not None, f"0053/0054 must register {l3_key}"
 
-# 0055: smart notification center (SKY-93, renumbered from 0053 on
+            # 0055: smart notification center (SKY-93, renumbered from 0053 on
             # dev) - all three tables exist, are tenant-scoped with the
             # tenant_isolation_* RLS policies, and carry the dedupe uniqueness
             # guarantees (events and per-recipient deliveries) plus the per-user

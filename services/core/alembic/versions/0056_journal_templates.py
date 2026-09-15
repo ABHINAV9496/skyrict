@@ -15,11 +15,11 @@ every scheduled occurrence exactly-once without a scheduler.
 Follows core's tenancy convention: composite ``(tenant_id, id)`` PK,
 ``created_at``/``updated_at``, RLS via ``public.current_tenant_id()``.
 
-Renumbered from ``0053`` to ``0055`` when dev's HR-AI-003 L3 migrations
-occupied 0053/0054.
+Renumbered from ``0053`` when dev's HR-AI-003 L3 migrations occupied 0053/0054,
+then to ``0056`` when dev's SKY-93 notification-center chain took 0055.
 
-Revision ID: 0055
-Revises: 0054
+Revision ID: 0056
+Revises: 0055
 Create Date: 2026-09-14
 """
 
@@ -28,8 +28,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0055"
-down_revision = "0054"
+revision = "0056"
+down_revision = "0055"
 branch_labels = None
 depends_on = None
 

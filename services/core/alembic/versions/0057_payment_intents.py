@@ -17,11 +17,11 @@ Follows core's tenancy convention: composite ``(tenant_id, id)`` PK,
 Invoice FKs are issued as bare UUIDs (mirroring ``erp_invoices.customer_id``)
 so intent rows survive invoice voiding without guarding RESTRICT cascades.
 
-Renumbered from ``0054`` to ``0056`` when dev's HR-AI-003 L3 migrations
-occupied 0053/0054.
+Renumbered from ``0054`` when dev's HR-AI-003 L3 migrations occupied 0053/0054,
+then to ``0057`` when dev's SKY-93 notification-center chain took 0055.
 
-Revision ID: 0056
-Revises: 0055
+Revision ID: 0057
+Revises: 0056
 Create Date: 2026-09-14
 """
 
@@ -30,8 +30,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0056"
-down_revision = "0055"
+revision = "0057"
+down_revision = "0056"
 branch_labels = None
 depends_on = None
 

@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import structlog
 
+from ai_agent.cache.response_cache import ResponseCache, tool_cache_key
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
@@ -402,10 +403,14 @@ class CrmAssistantDelegator:
         llm_router: LlmRouter,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]],
         memory_service: MemoryService | None = None,
+        tool_cache: ResponseCache | None = None,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._llm_router = llm_router
         self._crm_gateway_factory = crm_gateway_factory
         self._memory = memory_service
+        self._tool_cache = tool_cache
+        self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
 
     async def stream(
         self,
@@ -416,7 +421,7 @@ class CrmAssistantDelegator:
         citations: list[Citation],
     ) -> AsyncIterator[str]:
         # Try deterministic NL actions first.
-        action_result = await self._try_nl_action(query)
+        action_result = await self._try_nl_action(query, tenant_id=tenant_id)
         if action_result is not None:
             for delta in _iter_text_deltas(action_result):
                 yield delta
@@ -575,15 +580,44 @@ class CrmAssistantDelegator:
 
         return "\n".join(parts)
 
-    async def _try_nl_action(self, query: str) -> str | None:
+    async def _try_nl_action(self, query: str, *, tenant_id: uuid.UUID) -> str | None:
         """Match query keywords to a deterministic CRM NL action."""
         lower = query.lower()
         for keyword, (action, entity_type) in self._ACTION_KEYWORDS.items():
             if keyword in lower:
-                return await self._execute_nl_action(action, entity_type, lower)
+                return await self._execute_nl_action(
+                    action,
+                    entity_type,
+                    lower,
+                    tenant_id=tenant_id,
+                )
         return None
 
-    async def _execute_nl_action(self, action: str, entity_type: str | None, query: str) -> str:
+    async def _execute_nl_action(
+        self,
+        action: str,
+        entity_type: str | None,
+        query: str,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> str:
+        """Run one deterministic CRM NL action, cached per tenant (SKY-100).
+
+        NL actions are read-only aggregations over the same gateway data core
+        returns to the acting user, so their result is stable for the cache
+        TTL and safe to reuse across identical questions.
+        """
+        cache_key: str | None = None
+        if self._tool_cache is not None:
+            cache_key = tool_cache_key(
+                tenant_id=tenant_id,
+                agent=self.key,
+                parts=(action, entity_type or "", query),
+            )
+            cached = await self._tool_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         from ai_agent.features.crm import nl_actions
 
         gateway = await self._crm_gateway_factory()
@@ -605,6 +639,12 @@ class CrmAssistantDelegator:
             )
         else:
             return "This CRM action is not yet implemented."
+        if cache_key is not None and self._tool_cache is not None:
+            await self._tool_cache.set(
+                cache_key,
+                result.answer,
+                ttl_seconds=self._tool_cache_ttl_seconds,
+            )
         return result.answer
 
     @staticmethod
@@ -647,9 +687,13 @@ class FinanceDelegator:
         *,
         llm_router: LlmRouter,
         finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]],
+        tool_cache: ResponseCache | None = None,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._llm_router = llm_router
         self._finance_gateway_factory = finance_gateway_factory
+        self._tool_cache = tool_cache
+        self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
 
     async def stream(
         self,
@@ -659,7 +703,7 @@ class FinanceDelegator:
         user_id: uuid.UUID,
         citations: list[Citation],
     ) -> AsyncIterator[str]:
-        del tenant_id, user_id
+        del user_id
         # A finance-only delegate must never invent figures: if finance is
         # unreachable at ANY point we stream the clean unavailable message, we
         # do not fall back to an ungrounded LLM answer.
@@ -702,7 +746,7 @@ class FinanceDelegator:
 
         # Deterministic finance summary first (no LLM cost).
         try:
-            deterministic = await self._try_deterministic(query)
+            deterministic = await self._try_deterministic(query, tenant_id=tenant_id)
         except AiUnavailableError:
             logger.warning("supervisor.finance_unavailable")
             for delta in _iter_text_deltas(FINANCE_UNAVAILABLE):
@@ -785,8 +829,25 @@ class FinanceDelegator:
 
         return "\n".join(parts)
 
-    async def _try_deterministic(self, query: str) -> str | None:
-        """Return a deterministic answer for a few well-scoped finance questions."""
+    async def _try_deterministic(self, query: str, *, tenant_id: uuid.UUID) -> str | None:
+        """Return a deterministic answer for a few well-scoped finance questions.
+
+        Results are read-only aggregations over the acting user's own finance
+        reads (core enforces ``erp.finance.read`` + tenant isolation), so the
+        answer is cached per tenant for the short tool TTL (SKY-100) - a
+        repeated "how many invoices" question skips the gateway fetch.
+        """
+        cache_key: str | None = None
+        if self._tool_cache is not None:
+            cache_key = tool_cache_key(
+                tenant_id=tenant_id,
+                agent=self.key,
+                parts=(query,),
+            )
+            cached = await self._tool_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         lowered = query.casefold()
         try:
             gateway = await self._finance_gateway_factory()
@@ -797,26 +858,35 @@ class FinanceDelegator:
             pnl = await gateway.get_pnl()
             if pnl is None:
                 return None
-            return (
+            answer = (
                 f"P&L for {pnl.from_date} to {pnl.to_date}: revenue {pnl.total_revenue}, "
                 f"expenses {pnl.total_expenses}, net income {pnl.net_income}."
             )
-
-        if "receivable" in lowered or "ar aging" in lowered or "owed" in lowered:
+        elif "receivable" in lowered or "ar aging" in lowered or "owed" in lowered:
             ar = await gateway.get_ar_aging()
             if ar is None:
                 return None
             buckets = "; ".join(f"{bucket.bucket} {bucket.amount}" for bucket in ar.buckets)
-            return f"Accounts receivable total {ar.total_ar} as of {ar.as_of}. Buckets: {buckets}."
-
-        if "invoice" in lowered:
+            answer = (
+                f"Accounts receivable total {ar.total_ar} as of {ar.as_of}. Buckets: {buckets}."
+            )
+        elif "invoice" in lowered:
             invoices = await gateway.list_invoices()
             if not invoices:
                 return "No invoices found in the finance service."
             counts = _count_by_status(invoices)
             summary = ", ".join(f"{status} {count}" for status, count in counts.items())
-            return f"There are {len(invoices)} invoices: {summary}."
-        return None
+            answer = f"There are {len(invoices)} invoices: {summary}."
+        else:
+            return None
+
+        if cache_key is not None and self._tool_cache is not None:
+            await self._tool_cache.set(
+                cache_key,
+                answer,
+                ttl_seconds=self._tool_cache_ttl_seconds,
+            )
+        return answer
 
     async def _has_sufficient_history(self, gateway: FinanceGatewayPort) -> bool:
         """A3 guardrail: abstain from report figures under 3 months of history.

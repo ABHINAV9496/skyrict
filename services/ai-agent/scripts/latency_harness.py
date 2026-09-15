@@ -18,9 +18,9 @@ Scenarios
     agent: classifier ``complete()`` + streaming delegate (the one true
     streaming path - the target for first-token optimization).
 ``supervisor``
-    "tell me a joke about accounting" hits no module keyword, abstains and
-    answers as the general supervisor via ``complete()`` - the path that gets
-    a prompt/response cache.
+    The stub classifier abstains (no module keyword), so the turn answers as
+    the general supervisor via ``complete()`` - the path that gets a
+    prompt/response cache.
 
 Usage
 -----
@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from ai_agent.cache.response_cache import MemoryResponseCache
 from ai_agent.core.providers import LlmCompletion, LlmRequest
 from ai_agent.core.providers.base import LlmStreamChunk
 from ai_agent.features.nl_query.gateway import ProductRef, StockLevelRow
@@ -61,6 +62,7 @@ DEFAULT_WARM_SAMPLES = 1
 DEFAULT_PROVIDER_DELAY_MS = 200
 
 _CLASSIFY_ANSWER = '{"agents": ["inventory_monitor"], "confidence": 0.9}'
+_ABSTAIN_ANSWER = '{"agents": [], "confidence": 0.1}'
 
 _ANONYMOUS_ANSWER = (
     "Here is the summary the monitor has right now. "
@@ -90,9 +92,16 @@ class StubRouter:
     delay, which simulates real provider round-trip latency.
     """
 
-    def __init__(self, *, delay_ms: int, has_providers: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        delay_ms: int,
+        has_providers: bool = True,
+        classify_text: str = _CLASSIFY_ANSWER,
+    ) -> None:
         self.has_providers = has_providers
         self._delay_ms = delay_ms
+        self._classify_text = classify_text
         self.complete_calls = 0
         self.stream_calls = 0
 
@@ -103,7 +112,11 @@ class StubRouter:
     async def complete(self, request: LlmRequest) -> LlmCompletion:
         self.complete_calls += 1
         await asyncio.sleep(self._delay_ms / 1000)
-        text = _CLASSIFY_ANSWER if request.system_prompt == CLASSIFY_SYSTEM_PROMPT else _ANONYMOUS_ANSWER
+        text = (
+            self._classify_text
+            if request.system_prompt == CLASSIFY_SYSTEM_PROMPT
+            else _ANONYMOUS_ANSWER
+        )
         return LlmCompletion(text=text, model_used="stub", latency_ms=self._delay_ms)
 
     async def stream(self, request: LlmRequest) -> AsyncIterator[LlmStreamChunk]:
@@ -160,8 +173,13 @@ class StubGateway:
         return []
 
 
-def build_service(*, router: StubRouter) -> SupervisorService:
-    """SupervisorService with scripted fakes - no DB, no network."""
+def build_service(*, router: StubRouter, caches: bool = False) -> SupervisorService:
+    """SupervisorService with scripted fakes - no DB, no network.
+
+    With ``caches`` the classification + response caches are wired as
+    in-memory stores so a repeated identical turn skips the provider calls -
+    the warm-path the SKY-100 gate commits to.
+    """
 
     gateway = StubGateway()
 
@@ -172,6 +190,10 @@ def build_service(*, router: StubRouter) -> SupervisorService:
         llm_router=router,
         gateway_factory=gateway_factory,
         provisioned={"inventory_monitor": True},
+        classification_cache=MemoryResponseCache() if caches else None,
+        response_cache=MemoryResponseCache() if caches else None,
+        classification_cache_ttl_seconds=300,
+        response_cache_ttl_seconds=300,
     )
 
 
@@ -181,8 +203,13 @@ async def run_turn(
     query: str,
     router: StubRouter,
 ) -> TurnResult:
-    """Run one turn; first_token_ms is time to the first TokenEvent."""
+    """Run one turn; first_token_ms is time to the first TokenEvent.
+
+    provider_calls counts calls made during THIS turn only (delta from before
+    the turn), so warm-up and cache effects are reported per measured turn.
+    """
     started = time.perf_counter()
+    calls_before = router.provider_calls
     first_token_ms: float | None = None
     async for event in _iter_events(service, query):
         if isinstance(event, TokenEvent) and first_token_ms is None:
@@ -191,13 +218,11 @@ async def run_turn(
     return TurnResult(
         first_token_ms=first_token_ms,
         total_ms=total_ms,
-        provider_calls=router.provider_calls,
+        provider_calls=router.provider_calls - calls_before,
     )
 
 
-async def _iter_events(
-    service: SupervisorService, query: str
-) -> AsyncIterator[SupervisorEvent]:
+async def _iter_events(service: SupervisorService, query: str) -> AsyncIterator[SupervisorEvent]:
     async for event in service.stream_answer(
         query=query,
         tenant_id=TENANT_ID,
@@ -237,13 +262,10 @@ def _word_deltas(text: str) -> list[str]:
 
 
 async def amain(args: argparse.Namespace) -> dict[str, object]:
-    router = StubRouter(delay_ms=args.provider_delay_ms)
-    service = build_service(router=router)
-    query = (
-        _INVENTORY_QUERY
-        if args.scenario == "inventory"
-        else _SUPERVISOR_QUERY
-    )
+    classify_text = _ABSTAIN_ANSWER if args.scenario == "supervisor" else _CLASSIFY_ANSWER
+    router = StubRouter(delay_ms=args.provider_delay_ms, classify_text=classify_text)
+    service = build_service(router=router, caches=args.cache)
+    query = _INVENTORY_QUERY if args.scenario == "inventory" else _SUPERVISOR_QUERY
 
     # Warm caches (a cache-aware build is wired in when --cache is used).
     if args.cache:
@@ -254,7 +276,7 @@ async def amain(args: argparse.Namespace) -> dict[str, object]:
     summary = summarize(
         results,
         target_ms=args.target_ms,
-        provider_calls=router.provider_calls - (args.warm_samples if args.cache else 0),
+        provider_calls=sum(result.provider_calls for result in results),
     )
     summary["scenario"] = args.scenario
     summary["cache"] = bool(args.cache)

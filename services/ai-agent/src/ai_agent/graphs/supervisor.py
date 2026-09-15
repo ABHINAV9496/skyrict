@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from ai_agent.api.v1.schemas.chat import AttachmentData
+    from ai_agent.cache.response_cache import ResponseCache
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.features.crm.gateway import CrmGatewayPort
     from ai_agent.features.crm.memory import MemoryService
@@ -78,6 +79,12 @@ class SupervisorRuntime:
         coach_suggestions: CoachSuggestionPort | None = None,
         guardian_reports: GuardianReportPort | None = None,
         confidence_threshold: float = 0.75,
+        classification_cache: ResponseCache | None = None,
+        response_cache: ResponseCache | None = None,
+        tool_cache: ResponseCache | None = None,
+        classification_cache_ttl_seconds: int = 300,
+        response_cache_ttl_seconds: int = 300,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._session = session
         self._llm_router = llm_router
@@ -91,6 +98,12 @@ class SupervisorRuntime:
         self._coach_suggestions = coach_suggestions
         self._guardian_reports = guardian_reports
         self._confidence_threshold = confidence_threshold
+        self._classification_cache = classification_cache
+        self._response_cache = response_cache
+        self._tool_cache = tool_cache
+        self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
+        self._response_cache_ttl_seconds = response_cache_ttl_seconds
+        self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
 
     async def stream_answer(
         self,
@@ -129,4 +142,10 @@ class SupervisorRuntime:
             conversation_history=ConversationRepository(self._session),
             provisioned=provisioned,
             confidence_threshold=self._confidence_threshold,
+            classification_cache=self._classification_cache,
+            response_cache=self._response_cache,
+            tool_cache=self._tool_cache,
+            classification_cache_ttl_seconds=self._classification_cache_ttl_seconds,
+            response_cache_ttl_seconds=self._response_cache_ttl_seconds,
+            tool_cache_ttl_seconds=self._tool_cache_ttl_seconds,
         )

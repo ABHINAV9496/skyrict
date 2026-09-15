@@ -24,6 +24,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
+from ai_agent.cache.response_cache import (
+    ResponseCache,
+    classification_cache_key,
+    response_cache_key,
+)
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
@@ -190,11 +195,24 @@ class SupervisorService:
         conversation_history: ConversationHistoryPort | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
+        classification_cache: ResponseCache | None = None,
+        response_cache: ResponseCache | None = None,
+        tool_cache: ResponseCache | None = None,
+        classification_cache_ttl_seconds: int = 300,
+        response_cache_ttl_seconds: int = 300,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._conversation_history = conversation_history
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
+        self._classification_cache = classification_cache
+        self._response_cache = response_cache
+        self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
+        self._response_cache_ttl_seconds = response_cache_ttl_seconds
+        # Cache-hit markers feed the per-turn latency telemetry (SKY-100).
+        self._classification_cache_hit = False
+        self._response_cache_hit = False
 
         delegates: dict[str, Delegator] = {
             AGENT_INVENTORY: InventoryMonitorDelegator(
@@ -211,11 +229,15 @@ class SupervisorService:
                 llm_router=llm_router,
                 crm_gateway_factory=crm_gateway_factory,
                 memory_service=memory_service,
+                tool_cache=tool_cache,
+                tool_cache_ttl_seconds=tool_cache_ttl_seconds,
             )
         if finance_gateway_factory is not None:
             delegates[AGENT_FINANCE] = FinanceDelegator(
                 llm_router=llm_router,
                 finance_gateway_factory=finance_gateway_factory,
+                tool_cache=tool_cache,
+                tool_cache_ttl_seconds=tool_cache_ttl_seconds,
             )
         if coach_suggestions is not None:
             delegates[AGENT_SALES_COACH] = SalesCoachDelegator(
@@ -229,7 +251,12 @@ class SupervisorService:
             )
         self._delegates = delegates
 
-    async def classify(self, query: str) -> RouteDecision:
+    async def classify(
+        self,
+        query: str,
+        *,
+        tenant_id: uuid.UUID | None = None,
+    ) -> RouteDecision:
         """Route one question; never raises - falls back to keywords.
 
         The classifier LLM occasionally truncates its output (a one-token
@@ -238,7 +265,34 @@ class SupervisorService:
         a query that clearly mentions a module still reaches it even when the
         classifier LLM is flaky. Queries without any known keyword degrade to
         the supervisor answer path regardless.
+
+        When a classification cache is wired AND ``tenant_id`` is provided,
+        a repeated identical question is routed from the cache (SKY-100) -
+        the first provider call of the turn is skipped on cache hit.
         """
+        if self._classification_cache is not None and tenant_id is not None:
+            cached = await self._classification_cache.get(
+                classification_cache_key(tenant_id=tenant_id, query=query)
+            )
+            if cached is not None:
+                self._classification_cache_hit = True
+                try:
+                    agents, confidence = _parse_classification(cached)
+                except ValueError:
+                    # Stored values are always parse-valid; treat corruption
+                    # as a miss rather than routing garbage.
+                    self._classification_cache_hit = False
+                    return await self._classify_via_provider(query, tenant_id=tenant_id)
+                return self._decision_from_parts(agents, confidence)
+        self._classification_cache_hit = False
+        return await self._classify_via_provider(query, tenant_id=tenant_id)
+
+    async def _classify_via_provider(
+        self,
+        query: str,
+        *,
+        tenant_id: uuid.UUID | None,
+    ) -> RouteDecision:
         if not self._llm_router.has_providers:
             return _keyword_route(query)
         for attempt in range(2):
@@ -269,6 +323,20 @@ class SupervisorService:
                     reason="unparseable_classifier_output",
                 )
             return fallback
+        if self._classification_cache is not None and tenant_id is not None:
+            await self._classification_cache.set(
+                classification_cache_key(tenant_id=tenant_id, query=query),
+                completion.text,
+                ttl_seconds=self._classification_cache_ttl_seconds,
+            )
+        return self._decision_from_parts(agents, confidence)
+
+    def _decision_from_parts(
+        self,
+        agents: tuple[str, ...],
+        confidence: float,
+    ) -> RouteDecision:
+        """Derive the routing outcome (threshold + abstention) from parsed parts."""
         if not agents:
             return RouteDecision(agents=(), confidence=confidence, abstain=True, reason="no_agents")
         if confidence < self._confidence_threshold:
@@ -318,7 +386,7 @@ class SupervisorService:
             )
 
         # --- Classify intent (uses original query for routing, not file content) ---
-        decision = await self.classify(query)
+        decision = await self.classify(query, tenant_id=tenant_id)
         yield ClassificationEvent(
             agents=decision.agents,
             confidence=decision.confidence,
@@ -342,6 +410,7 @@ class SupervisorService:
                     query=enhanced_query,
                     image_blocks=processed.image_blocks,
                     conversation_history=conversation_history,
+                    tenant_id=tenant_id,
                 ):
                     yield sup_event
             yield CitationsEvent(agent="supervisor", citations=())
@@ -392,6 +461,7 @@ class SupervisorService:
         query: str,
         image_blocks: list[dict[str, object]] | None = None,
         conversation_history: str = "",
+        tenant_id: uuid.UUID | None = None,
     ) -> AsyncIterator[SupervisorEvent]:
         """Answer as the general supervisor, varying with the actual question.
 
@@ -405,7 +475,25 @@ class SupervisorService:
 
         When ``conversation_history`` is provided, it is prepended to the
         system prompt so the LLM has multi-turn context.
+
+        A response cache (SKY-100) short-circuits repeated identical questions:
+        the second provider call of the turn is skipped on cache hit. Multimodal
+        image requests are never cached (payloads vary and are large).
         """
+        cache_key: str | None = None
+        if self._response_cache is not None and tenant_id is not None and not image_blocks:
+            cache_key = response_cache_key(
+                tenant_id=tenant_id,
+                query=query.strip(),
+                conversation_history=conversation_history,
+            )
+            cached = await self._response_cache.get(cache_key)
+            if cached:
+                self._response_cache_hit = True
+                for event in _yield_text(agent="supervisor", text=cached):
+                    yield event
+                return
+        self._response_cache_hit = False
         if not self._llm_router.has_providers:
             for event in _yield_text(agent="supervisor", text=ABSTENTION):
                 yield event
@@ -434,6 +522,12 @@ class SupervisorService:
                 yield event
             return
         text = (completion.text or "").strip()
+        if cache_key is not None and self._response_cache is not None and text:
+            await self._response_cache.set(
+                cache_key,
+                text,
+                ttl_seconds=self._response_cache_ttl_seconds,
+            )
         for event in _yield_text(agent="supervisor", text=text or ABSTENTION):
             yield event
 

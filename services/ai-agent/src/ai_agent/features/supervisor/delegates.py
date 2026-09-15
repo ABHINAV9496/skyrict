@@ -36,6 +36,7 @@ from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
 from ai_agent.features.finance_intents.schemas import INTENT_META
+from ai_agent.features.memory_compaction.budget import ContextBudgetManager
 from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
     CRM_SYSTEM_PROMPT,
@@ -81,6 +82,12 @@ logger = structlog.get_logger("ai_agent.supervisor.delegates")
 # Catalogue reads are capped the same way the nl_query gateway caps them.
 _FORECAST_CATALOG_LIMIT = 200
 _FORECAST_ROWS_SHOWN = 3
+
+# Per-agent context budgeting for every delegate prompt builder (SKY-100).
+# Each delegator trims the live context it assembles to its token budget
+# instead of relying on ad-hoc character caps, so a bounded context is the
+# rule across all module agents - not just the supervisor history path.
+_BUDGET = ContextBudgetManager()
 
 
 class RagSearchPort(Protocol):
@@ -173,7 +180,6 @@ class InventoryMonitorDelegator:
         "replenish",
         "next month",
     )
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -204,9 +210,7 @@ class InventoryMonitorDelegator:
                 yield delta
             return
 
-        context_text = "\n".join(context_parts)
-        if len(context_text) > self._MAX_CONTEXT_CHARS:
-            context_text = context_text[: self._MAX_CONTEXT_CHARS] + "…"
+        context_text = _BUDGET.trim_to_budget(agent=AGENT_INVENTORY, parts=context_parts)
         request = LlmRequest(
             system_prompt=INVENTORY_SYSTEM_PROMPT,
             user_prompt=(
@@ -436,7 +440,9 @@ class CrmAssistantDelegator:
             if crm_context:
                 system_prompt = f"{system_prompt}\n\nLive CRM data:\n{crm_context}"
 
-            # Inject relevant memories into context.
+            # Inject relevant memories into context, bounded to the per-agent
+            # budget together with the live CRM block (SKY-100). When under
+            # budget the join reproduces the pre-budget formatting exactly.
             if self._memory is not None:
                 memory_ctx = await self._memory.recall_context(
                     tenant_id=tenant_id,
@@ -444,7 +450,10 @@ class CrmAssistantDelegator:
                     query=query,
                 )
                 if memory_ctx:
-                    system_prompt = f"{system_prompt}\n\n{memory_ctx}"
+                    system_prompt = _BUDGET.trim_to_budget(
+                        agent=AGENT_CRM,
+                        parts=[system_prompt, f"\n{memory_ctx}"],
+                    )
 
             completion = await self._llm_router.complete(
                 LlmRequest(
@@ -760,6 +769,8 @@ class FinanceDelegator:
         # Fallback: LLM with live finance context.
         try:
             context = await self._gather_finance_context(query)
+            if context:
+                context = _BUDGET.trim_to_budget(agent=AGENT_FINANCE, parts=[context])
             system_prompt = (
                 f"{FINANCE_SYSTEM_PROMPT}\n\nLive finance data:\n{context}"
                 if context
@@ -919,7 +930,6 @@ class SalesCoachDelegator:
     display_name = "Sales Coach"
 
     _MAX_SUGGESTIONS = 5
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -968,7 +978,8 @@ class SalesCoachDelegator:
                     system_prompt=SALES_COACH_SYSTEM_PROMPT,
                     user_prompt=(
                         f"Question: {query.strip()}\n\n"
-                        f"Pending coaching suggestions:\n{context[: self._MAX_CONTEXT_CHARS]}"
+                        "Pending coaching suggestions:\n"
+                        f"{_BUDGET.trim_to_budget(agent=AGENT_SALES_COACH, parts=[context])}"
                     ),
                     max_tokens=300,
                     temperature=0.2,
@@ -1006,7 +1017,6 @@ class AuditGuardianDelegator:
     display_name = "Audit Guardian"
 
     _MAX_FLAGGED = 6
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -1073,7 +1083,8 @@ class AuditGuardianDelegator:
                     system_prompt=GUARDIAN_SYSTEM_PROMPT,
                     user_prompt=(
                         f"Question: {query.strip()}\n\n"
-                        f"Latest report context:\n{context[: self._MAX_CONTEXT_CHARS]}"
+                        "Latest report context:\n"
+                        f"{_BUDGET.trim_to_budget(agent=AGENT_AUDIT_GUARDIAN, parts=[context])}"
                     ),
                     max_tokens=300,
                     temperature=0.2,

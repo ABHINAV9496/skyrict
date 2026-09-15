@@ -1163,7 +1163,7 @@ def get_finance_automation_service_with_ai(
             tenant_slug=tenant_slug,
             customer_name=customer_name,
             invoice_number=invoice_number,
-            amount=float(amount),
+            amount=amount,
             days_overdue=days_overdue,
             tone=tone,
         )

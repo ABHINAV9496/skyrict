@@ -10,6 +10,7 @@ watermarked PDF can never be mistaken for an approved one; approval clears
 from __future__ import annotations
 
 import io
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from reportlab.lib import colors
@@ -28,8 +29,11 @@ from reportlab.platypus import (
 )
 
 
-def _num(value: Any) -> float:
-    return float(value or 0)
+def _num(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value or 0))
+    except InvalidOperation:
+        return Decimal("0")
 
 
 def _fmt(value: Any) -> str:

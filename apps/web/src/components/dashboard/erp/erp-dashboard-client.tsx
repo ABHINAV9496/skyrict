@@ -3,10 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Blocks, Settings } from "lucide-react";
 
-import {
-    AiSuggestionPreview,
-    type SuggestionLayoutItem,
-} from "./ai-suggestion-preview";
 import { CustomizeMode, type CustomizeLayoutItem } from "./customize-mode";
 import { WidgetGrid, type LayoutItem } from "./widget-grid";
 import { Button } from "@/components/ui/button";
@@ -15,7 +11,6 @@ import {
     fetchLayout,
     saveLayout,
     resetLayout,
-    fetchAiSuggestion,
 } from "@/lib/dashboard/layout-api";
 import { getDefaultLayout } from "@/lib/dashboard/widget-registry";
 import { trackWidgetEvent } from "@/lib/dashboard/widget-events";
@@ -30,17 +25,9 @@ import { trackWidgetEvent } from "@/lib/dashboard/widget-events";
 export function ErpDashboardClient() {
     const [layout, setLayout] = useState<LayoutItem[]>([]);
     const [customizing, setCustomizing] = useState(false);
-    const [aiLoading, setAiLoading] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [errorNotice, setErrorNotice] = useState<string | null>(null);
-
-    // AI suggestion state
-    const [aiSuggestion, setAiSuggestion] = useState<{
-        layout: SuggestionLayoutItem[];
-        reasoning: string;
-        confidence: number;
-    } | null>(null);
 
     // Load layout on mount
     useEffect(() => {
@@ -104,42 +91,6 @@ export function ErpDashboardClient() {
         }
     }, []);
 
-    const handleAiSuggestion = useCallback(async () => {
-        setAiLoading(true);
-        try {
-            const result = await fetchAiSuggestion();
-            setAiSuggestion({
-                layout: result.suggested_layout,
-                reasoning: result.reasoning,
-                confidence: result.confidence,
-            });
-        } catch {
-            // AI suggestion failed - stay in customize mode
-        } finally {
-            setAiLoading(false);
-        }
-    }, []);
-
-    const handleApplySuggestion = useCallback(
-        async (suggestedLayout: SuggestionLayoutItem[]) => {
-            try {
-                await saveLayout(suggestedLayout);
-                setLayout(suggestedLayout);
-                setAiSuggestion(null);
-                setCustomizing(false);
-            } catch {
-                setLayout(suggestedLayout);
-                setAiSuggestion(null);
-                setCustomizing(false);
-            }
-        },
-        [],
-    );
-
-    const handleDismissSuggestion = useCallback(() => {
-        setAiSuggestion(null);
-    }, []);
-
     const handleWidgetShow = useCallback((widgetId: string) => {
         trackWidgetEvent(widgetId, "open");
     }, []);
@@ -181,17 +132,6 @@ export function ErpDashboardClient() {
                 </Button>
             </div>
 
-            {/* AI suggestion preview (shown above the grid when available) */}
-            {aiSuggestion && (
-                <AiSuggestionPreview
-                    suggestedLayout={aiSuggestion.layout}
-                    reasoning={aiSuggestion.reasoning}
-                    confidence={aiSuggestion.confidence}
-                    onApply={handleApplySuggestion}
-                    onDismiss={handleDismissSuggestion}
-                />
-            )}
-
             <WidgetGrid layout={layout} onWidgetShow={handleWidgetShow} />
 
             {customizing && (
@@ -206,8 +146,6 @@ export function ErpDashboardClient() {
                         setErrorNotice(null);
                         setCustomizing(false);
                     }}
-                    onAiSuggestion={handleAiSuggestion}
-                    aiLoading={aiLoading}
                     errorNotice={errorNotice}
                     isSaving={isSaving}
                 />

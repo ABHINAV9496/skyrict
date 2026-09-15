@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 59 revisions, 0001..0059) -> core ``downgrade base`` (all the way back to
+(all 60 revisions, 0001..0060) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -154,6 +154,32 @@ _BUDGET_DRAFT_TABLES = (
     "erp_budget_draft_lines",
 )
 
+# 0060: finance automation wave 4 (FIN-AUT-004, SKY-85) - budgets, depreciation
+# engine, expense policy, and the compliance calendar.
+_WAVE4_TABLES = (
+    "erp_budgets",
+    "erp_budget_lines",
+    "erp_fixed_assets",
+    "erp_depreciation_entries",
+    "erp_expense_policies",
+    "erp_expense_claims",
+    "erp_expense_policy_violations",
+    "erp_compliance_items",
+)
+
+_WAVE4_PERMISSIONS = (
+    "erp.budget.read",
+    "erp.budget.write",
+    "erp.asset.read",
+    "erp.asset.write",
+    "erp.asset.run",
+    "erp.expense.read",
+    "erp.expense.write",
+    "erp.expense.approve",
+    "erp.compliance.read",
+    "erp.compliance.write",
+)
+
 
 def _db_urls(base_url: str, dbname: str) -> tuple[str, str]:
     """Split ``base_url`` into a maintenance DSN (asyncpg) and the scratch URL."""
@@ -249,7 +275,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0059", f"head is {version}, expected 0059"
+            assert version == "0060", f"head is {version}, expected 0060"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1380,6 +1406,52 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 ).scalar_one()
                 assert snip_intent_constraint == 1, f"0059 must add {constraint}"
+
+            # 0060: finance automation wave 4 (FIN-AUT-004, SKY-85) - budgets,
+            # depreciation, expense policy, compliance calendar. All eight
+            # tables exist with tenant RLS; budget-line dedupe, depreciation
+            # exactly-once, claim source-ref, and policy category stamps are in
+            # place; the ten erp.{budget,asset,expense,compliance}.* permission
+            # keys are seeded.
+            for table in _WAVE4_TABLES:
+                regclass = (
+                    await conn.execute(text(f"SELECT to_regclass('public.{table}')"))
+                ).scalar_one()
+                assert regclass is not None, f"0060 must create {table} table"
+
+                policy_count = (
+                    await conn.execute(
+                        text(
+                            f"SELECT count(*) FROM pg_policies "
+                            "WHERE schemaname = 'public' "
+                            f"AND policyname = 'tenant_isolation_{table}'"
+                        )
+                    )
+                ).scalar_one()
+                assert policy_count == 1, f"0060 must enable RLS on {table}"
+
+            for key in _WAVE4_PERMISSIONS:
+                perm_row = (
+                    await conn.execute(
+                        text("SELECT key FROM core_permissions WHERE key = :key"),
+                        {"key": key},
+                    )
+                ).scalar_one_or_none()
+                assert perm_row is not None, f"0060 must seed permission {key}"
+
+            for constraint in (
+                "uq_erp_budget_lines_tenant_budget_code",
+                "uq_erp_depreciation_entries_tenant_asset_period",
+                "uq_erp_expense_claims_source_ref",
+                "uq_erp_expense_policies_tenant_category",
+            ):
+                count = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM pg_constraint WHERE conname = :name"),
+                        {"name": constraint},
+                    )
+                ).scalar_one()
+                assert count == 1, f"0060 must add {constraint}"
     finally:
         await engine.dispose()
 
@@ -1428,6 +1500,12 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 assert regclass is None, f"{table} still exists after downgrade base"
 
             for table in (*_BUDGET_DRAFT_TABLES, *_NOTIFICATION_TABLES):
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is None, f"{table} still exists after downgrade base"
+
+            for table in _WAVE4_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()

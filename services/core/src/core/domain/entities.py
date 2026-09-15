@@ -22,14 +22,22 @@ from core.core.constants import (
 )
 from core.domain.value_objects import (
     ActivityKind,
+    BudgetStatus,
+    ComplianceItemStatus,
+    ComplianceRecurrence,
     CreditCheckResult,
     CrmEntityType,
     CrmTimelineEventType,
+    DepreciationMethod,
+    ExpenseClaimStatus,
+    ExpenseViolationReason,
+    FixedAssetStatus,
     LeadStatus,
     Money,
     OpportunityStage,
     OrderStatus,
     PaymentIntentStatus,
+    ViolationOutcome,
 )
 
 if TYPE_CHECKING:
@@ -872,9 +880,189 @@ class JournalTemplate:
     updated_at: datetime | None = None
 
 
-# ---------------------------------------------------------------------------
-# Report read-models (derived from posted journal lines - never stored).
-# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Budget:
+    """A fiscal-year operating budget (FIN-AUT-004, SKY-85 B21).
+
+    ``draft`` is editable; ``active`` freezes the plan (the fiscal year it
+    applies to) and is the state variance reporting compares against;
+    ``closed`` is terminal after the fiscal year ends. Lines reference
+    ``account_code`` (like journal templates) so the plan stays readable across
+    account renames; the variance read-side resolves each line's code to its
+    account id and compares against posted journal activity for the same
+    fiscal year.
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    fiscal_year: int
+    status: BudgetStatus = BudgetStatus.DRAFT
+    description: str | None = None
+    currency: str = "USD"
+    created_by: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class BudgetLine:
+    """One account's planned amount inside a budget (FIN-AUT-004, SKY-85 B21)."""
+
+    tenant_id: uuid.UUID
+    budget_id: uuid.UUID
+    account_code: str
+    amount: Decimal
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class FixedAsset:
+    """A capital asset on the books (FIN-AUT-004, SKY-85 B13/B28).
+
+    Depreciation accrues against ``acquisition_date`` with the chosen method
+    (v1: straight-line) over ``useful_life_years`` to ``salvage_value``.
+    ``status`` moves ``active -> fully_depreciated`` once cumulative
+    depreciation reaches cost minus salvage, and ``-> disposed`` on disposal
+    (which reverses the remaining NBV as a DRAFT journal entry).
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    cost: Decimal
+    acquisition_date: date
+    useful_life_years: int
+    status: FixedAssetStatus = FixedAssetStatus.ACTIVE
+    category: str | None = None
+    depreciation_method: DepreciationMethod = DepreciationMethod.STRAIGHT_LINE
+    salvage_value: Decimal = Decimal("0")
+    accumulated_depreciation: Decimal = Decimal("0")
+    disposed_at: date | None = None
+    created_by: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class DepreciationEntry:
+    """One period's depreciation accrual for a fixed asset (B13/B28).
+
+    Created by the idempotent monthly run. ``period`` is ``YYYY-MM``. The run
+    stamps a DRAFT journal entry (``source='depreciation'``,
+    ``source_ref=f"{asset_id}:{period}"``) through the existing
+    ``UNIQUE (tenant_id, source, source_ref)`` lock, so every
+    ``(asset, period)`` accrues exactly once no matter how often the run is
+    replayed.
+    """
+
+    tenant_id: uuid.UUID
+    asset_id: uuid.UUID
+    period: str
+    amount: Decimal
+    journal_entry_id: uuid.UUID | None = None
+    status: str = "draft"
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ExpensePolicy:
+    """Per-category expense rules (FIN-AUT-004, SKY-85 B16).
+
+    ``cap_amount`` is the per-claim cap for the category; ``requires_receipt``
+    gate claims with no receipt URL; ``advance_limit`` caps the advance
+    associated with a claim. One policy row per category (the DEFAULT category
+    applies when no explicit policy matches).
+    """
+
+    tenant_id: uuid.UUID
+    category: str
+    cap_amount: Decimal | None = None
+    requires_receipt: bool = False
+    advance_limit: Decimal | None = None
+    name: str | None = None
+    created_by: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ExpensePolicyViolation:
+    """A persisted policy breach (FIN-AUT-004, SKY-85 B16).
+
+    Stored on every evaluation that did not pass clean so reporting can group
+    by ``reason_code`` later. A ``BLOCKED`` violation means the claim was
+    refused outright (409, no expense row created); a ``WARNING`` violation
+    persisted the reason code but the claim went through for human review.
+    """
+
+    tenant_id: uuid.UUID
+    category: str
+    reason_code: ExpenseViolationReason
+    outcome: ViolationOutcome
+    amount: Decimal
+    claim_id: uuid.UUID | None = None
+    submitted_by: uuid.UUID | None = None
+    message: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ExpenseClaim:
+    """A submitted employee expense (FIN-AUT-004, SKY-85 B16).
+
+    ``source_ref`` mirrors journal templates so a replayed submission stamp
+    stays idempotent. A claim only becomes a real row after policy evaluation
+    allows it (hard blocks 409 before this entity is created).
+    """
+
+    tenant_id: uuid.UUID
+    category: str
+    amount: Decimal
+    description: str | None = None
+    receipt_url: str | None = None
+    advance_amount: Decimal | None = None
+    status: ExpenseClaimStatus = ExpenseClaimStatus.SUBMITTED
+    source_ref: str | None = None
+    submitted_by: uuid.UUID | None = None
+    approved_by: uuid.UUID | None = None
+    approved_at: datetime | None = None
+    rejection_reason: str | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ComplianceItem:
+    """A recurring compliance obligation (FIN-AUT-004, SKY-85 B27).
+
+    ``due_on`` is the next occurrence date; ``recurrence`` advances ``due_on``
+    after completion (monthly/quarterly/yearly). Open items with
+    ``due_on <= today + lead_days`` drive the reminder emission into the
+    notification center's mandatory ``compliance`` category with dedupe key
+    ``compliance:{obligation_id}:{due_on}``.
+    """
+
+    tenant_id: uuid.UUID
+    title: str
+    due_on: date
+    description: str | None = None
+    obligation_type: str | None = None
+    recurrence: ComplianceRecurrence | None = None
+    lead_days: int = 7
+    status: ComplianceItemStatus = ComplianceItemStatus.OPEN
+    assignee_id: uuid.UUID | None = None
+    completed_at: datetime | None = None
+    completed_by: uuid.UUID | None = None
+    created_by: uuid.UUID | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)

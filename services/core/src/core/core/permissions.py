@@ -147,6 +147,34 @@ ERP_AI_COACHING_REVIEW = "erp.ai.coaching.review"
 ERP_AI_GUARDIAN_READ = "erp.ai.guardian.read"
 ERP_AI_GUARDIAN_REVIEW = "erp.ai.guardian.review"
 
+# Budgets (FIN-AUT-004, SKY-85 B21): read gates budget CRUD + actual-vs-budget
+# variance reporting; write gates create/activate/close. Seeded by migration
+# 0060 into core_permissions (same strings as the identity catalog so grants
+# stay portable across the platform).
+ERP_BUDGET_READ = "erp.budget.read"
+ERP_BUDGET_WRITE = "erp.budget.write"
+
+# Depreciation engine (FIN-AUT-004, SKY-85 B13/B28): read gates the asset
+# register and depreciation history; write gates asset CRUD/disposal; run gates
+# the idempotent monthly depreciation run (creates DRAFT journal entries only).
+ERP_ASSET_READ = "erp.asset.read"
+ERP_ASSET_WRITE = "erp.asset.write"
+ERP_ASSET_RUN = "erp.asset.run"
+
+# Expense policy (FIN-AUT-004, SKY-85 B16): read gates policies + claims;
+# write gates policy CRUD and claim submission; approve gates the
+# approval/rejection decision on submitted claims.
+ERP_EXPENSE_READ = "erp.expense.read"
+ERP_EXPENSE_WRITE = "erp.expense.write"
+ERP_EXPENSE_APPROVE = "erp.expense.approve"
+
+# Compliance calendar (FIN-AUT-004, SKY-85 B27): read gates the obligation
+# list + upcoming deadlines; write gates item CRUD/completion. Reminder
+# emissions read the ledger but use the notification producer's mandatory
+# ``compliance`` category (no permission needed to receive).
+ERP_COMPLIANCE_READ = "erp.compliance.read"
+ERP_COMPLIANCE_WRITE = "erp.compliance.write"
+
 # Every catalogued permission, in catalog order.
 CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_READ,
@@ -205,6 +233,16 @@ CATALOG: tuple[str, ...] = (
     ERP_AI_COACHING_REVIEW,
     ERP_AI_GUARDIAN_READ,
     ERP_AI_GUARDIAN_REVIEW,
+    ERP_BUDGET_READ,
+    ERP_BUDGET_WRITE,
+    ERP_ASSET_READ,
+    ERP_ASSET_WRITE,
+    ERP_ASSET_RUN,
+    ERP_EXPENSE_READ,
+    ERP_EXPENSE_WRITE,
+    ERP_EXPENSE_APPROVE,
+    ERP_COMPLIANCE_READ,
+    ERP_COMPLIANCE_WRITE,
 )
 # Permission module groupings.
 # Each entry: (module_key, module_label, (permission_keys, ...))
@@ -277,6 +315,26 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "Audit Guardian AI",
         (ERP_AI_GUARDIAN_READ, ERP_AI_GUARDIAN_REVIEW),
     ),
+    (
+        "budget",
+        "Budgets",
+        (ERP_BUDGET_READ, ERP_BUDGET_WRITE),
+    ),
+    (
+        "assets",
+        "Fixed assets",
+        (ERP_ASSET_READ, ERP_ASSET_WRITE, ERP_ASSET_RUN),
+    ),
+    (
+        "expenses",
+        "Expense policy",
+        (ERP_EXPENSE_READ, ERP_EXPENSE_WRITE, ERP_EXPENSE_APPROVE),
+    ),
+    (
+        "compliance",
+        "Compliance calendar",
+        (ERP_COMPLIANCE_READ, ERP_COMPLIANCE_WRITE),
+    ),
 )
 
 
@@ -308,11 +366,21 @@ __all__ = [
     "ERP_AI_INVOKE",
     "ERP_AI_L3_REFRESH",
     "ERP_AI_NARRATOR_REFRESH",
+    "ERP_ASSET_READ",
+    "ERP_ASSET_RUN",
+    "ERP_ASSET_WRITE",
+    "ERP_BUDGET_READ",
+    "ERP_BUDGET_WRITE",
+    "ERP_COMPLIANCE_READ",
+    "ERP_COMPLIANCE_WRITE",
     "ERP_CRM_READ",
     "ERP_CRM_WRITE",
     "ERP_DOCUMENTS_DELETE",
     "ERP_DOCUMENTS_READ",
     "ERP_DOCUMENTS_WRITE",
+    "ERP_EXPENSE_APPROVE",
+    "ERP_EXPENSE_READ",
+    "ERP_EXPENSE_WRITE",
     "ERP_FINANCE_AI_READ",
     "ERP_FINANCE_AI_WRITE",
     "ERP_FINANCE_APPROVE",

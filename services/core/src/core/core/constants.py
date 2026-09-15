@@ -167,6 +167,10 @@ JOURNAL_SOURCE_TEMPLATE = "journal_template"
 # HR-AI-004 (SKY-93, Commit 4): idempotency source key for proposed budget
 # drafts exported from the L4 what-if planner (erp_budget_drafts).
 BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN = "workforce_plan"
+# FIN-AUT-004 (SKY-85): depreciation run stamps its DRAFT journal entries with
+# source='depreciation' + source_ref=f"{asset_id}:{period}" so the UNIQUE lock
+# makes every (asset, period) accrual exactly-once across replayed runs.
+JOURNAL_SOURCE_DEPRECIATION = "depreciation"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

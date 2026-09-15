@@ -265,6 +265,110 @@ class DataScope(StrEnum):
     ALL = "all"
 
 
+class BudgetStatus(StrEnum):
+    """Lifecycle of a budget (FIN-AUT-004, SKY-85 B21).
+
+    ``draft`` is editable and not yet committed; ``active`` freezes the plan
+    (activating snapshots the year it applies to) and is the state that
+    variance reporting compares against; ``closed`` is terminal after the
+    fiscal year ends. The DB CHECK ties status to timestamps.
+    """
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+
+class FixedAssetStatus(StrEnum):
+    """Lifecycle of a fixed asset (FIN-AUT-004, SKY-85 B13/B28).
+
+    ``active`` assets depreciate each period; ``fully_depreciated`` has hit its
+    salvage value and stops accruing; ``disposed`` left the books (disposal
+    reverses the remaining net book value). The DB CHECK ties status to its
+    timestamp and forbids ``disposed`` without a disposal date.
+    """
+
+    ACTIVE = "active"
+    FULLY_DEPRECIATED = "fully_depreciated"
+    DISPOSED = "disposed"
+
+
+class DepreciationMethod(StrEnum):
+    """Depreciation method on a fixed asset (FIN-AUT-004, SKY-85 B13/B28).
+
+    v1 ships ``straight_line``; ``declining_balance`` is a planned follow-on.
+    The method is stored as a string so the engine can branch without a
+    migration when declining-balance lands.
+    """
+
+    STRAIGHT_LINE = "straight_line"
+    DECLINING_BALANCE = "declining_balance"
+
+
+class ExpenseClaimStatus(StrEnum):
+    """Lifecycle of an expense claim (FIN-AUT-004, SKY-85 B16).
+
+    ``draft`` is a submitter's in-progress form; ``submitted`` entered policy
+    evaluation; ``approved`` (or ``rejected``) is the terminal, approver-made
+    decision. ``rejected`` fees a stored ``rejection_reason``.
+    """
+
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ExpenseViolationReason(StrEnum):
+    """Machine keys for an expense policy breach (FIN-AUT-004, SKY-85 B16).
+
+    Stored verbatim on the violation row so reporting can group by reason code
+    - ``category_cap_exceeded``, ``receipt_required``, and
+    ``advance_limit_exceeded`` are the v1 evaluator's vocabulary.
+    """
+
+    CATEGORY_CAP_EXCEEDED = "category_cap_exceeded"
+    RECEIPT_REQUIRED = "receipt_required"
+    ADVANCE_LIMIT_EXCEEDED = "advance_limit_exceeded"
+
+
+class ViolationOutcome(StrEnum):
+    """Outcome of policy evaluation for a submitted claim (FIN-AUT-004).
+
+    A ``blocked`` violation refuses the claim outright (409, no expense row is
+    created); a ``warning`` violation persists the reason code but lets the
+    claim through for human review.
+    """
+
+    BLOCKED = "blocked"
+    WARNING = "warning"
+
+
+class ComplianceRecurrence(StrEnum):
+    """Recurrence of a compliance obligation (FIN-AUT-004, SKY-85 B27).
+
+    Drives how ``due_on`` advances after a completion or across reminder runs.
+    One-off obligations use none of these - the value is ``None`` in the DB.
+    """
+
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
+
+
+class ComplianceItemStatus(StrEnum):
+    """Lifecycle of a compliance calendar item (FIN-AUT-004, SKY-85 B27).
+
+    ``open`` items drive the upcoming-deadline list and reminder emissions;
+    ``completed`` records when/who closed the obligation (``completed_at`` /
+    ``completed_by``). Overdue is a derived view (``open AND due_on < today``),
+    not a stored state - the endpoint computes it per read.
+    """
+
+    OPEN = "open"
+    COMPLETED = "completed"
+
+
 def _require_currency(currency: str) -> None:
     """Validate a currency code against the supported ISO 4217 set."""
     normalized = currency.strip().upper()

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { apiBase, resolveTenantSlug } from "@/lib/server/auth";
+import { captureBffException } from "@/lib/server/sentry";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,12 @@ export async function GET(
             `${apiBase()}/api/v1/avatars/${encodeURIComponent(userId)}/${encodeURIComponent(filename)}`,
             { headers: { "X-Tenant-Slug": slug }, cache: "no-store" },
         );
-    } catch {
+    } catch (error) {
+        captureBffException(
+            error,
+            `/avatars/${userId}/${filename}`,
+            "identity",
+        );
         return new NextResponse(null, { status: 404 });
     }
 

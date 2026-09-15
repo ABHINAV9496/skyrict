@@ -35,6 +35,7 @@ from ai_agent.core.providers import LlmRequest
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
 from ai_agent.features.conversation_summary import ConversationSummaryStore, is_summary_fresh
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
+from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.delegates import (
     AuditGuardianDelegator,
     CoachSuggestionPort,
@@ -178,6 +179,19 @@ _HISTORY_MESSAGE_LIMIT = 20
 # overflows this budget, the rolling conversation summary (SKY-100) stands in
 # for the older context and the window is trimmed to fit.
 _BUDGET = ContextBudgetManager()
+
+# Stable-prefix prompt builders: the classification and supervisor-answer
+# routes start every LLM request with the same leading system-prompt bytes
+# (KV-cache-friendly), and dynamic per-turn content is appended only after the
+# stable prefix. Reuse telemetry is emitted per route (SKY-100).
+_CLASSIFY_PROMPT_BUILDER = StablePromptBuilder(
+    prefix=CLASSIFY_SYSTEM_PROMPT,
+    route="classify",
+)
+_SUPERVISOR_ANSWER_BUILDER = StablePromptBuilder(
+    prefix=SUPERVISOR_SYSTEM_PROMPT,
+    route="supervisor_answer",
+)
 
 
 def _format_summary_block(summary_text: str) -> str:
@@ -325,8 +339,7 @@ class SupervisorService:
         for attempt in range(2):
             try:
                 completion = await self._llm_router.complete(
-                    LlmRequest(
-                        system_prompt=CLASSIFY_SYSTEM_PROMPT,
+                    _CLASSIFY_PROMPT_BUILDER.build(
                         user_prompt=query.strip(),
                         max_tokens=128,
                         temperature=0.0,
@@ -575,18 +588,17 @@ class SupervisorService:
                 yield event
             return
         try:
-            system_prompt = SUPERVISOR_SYSTEM_PROMPT
+            system_tail = ""
             if conversation_history:
-                system_prompt = (
-                    f"{SUPERVISOR_SYSTEM_PROMPT}\n\n"
+                system_tail = (
                     f"--- Conversation history ---\n"
                     f"{conversation_history}\n"
                     f"--- End of conversation history ---"
                 )
             completion = await self._llm_router.complete(
-                LlmRequest(
-                    system_prompt=system_prompt,
+                _SUPERVISOR_ANSWER_BUILDER.build(
                     user_prompt=query.strip(),
+                    system_tail=system_tail,
                     max_tokens=512,
                     temperature=0.3,
                     image_blocks=image_blocks,

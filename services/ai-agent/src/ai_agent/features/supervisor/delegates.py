@@ -37,6 +37,7 @@ from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
 from ai_agent.features.finance_intents.schemas import INTENT_META
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
+from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
     CRM_SYSTEM_PROMPT,
@@ -88,6 +89,20 @@ _FORECAST_ROWS_SHOWN = 3
 # instead of relying on ad-hoc character caps, so a bounded context is the
 # rule across all module agents - not just the supervisor history path.
 _BUDGET = ContextBudgetManager()
+
+# Stable-prefix prompt builders for the two delegates whose module prompt has
+# a dynamic live-data tail (SKY-100). CRM and Finance keep the module persona
+# as a byte-stable leading system-prompt prefix and append only the live
+# context after it, so provider KV caches can reuse the leading tokens across
+# turns. Reuse telemetry is emitted per route.
+_CRM_PROMPT_BUILDER = StablePromptBuilder(
+    prefix=CRM_SYSTEM_PROMPT,
+    route="crm_assistant",
+)
+_FINANCE_PROMPT_BUILDER = StablePromptBuilder(
+    prefix=FINANCE_SYSTEM_PROMPT,
+    route="finance_assistant",
+)
 
 
 class RagSearchPort(Protocol):
@@ -433,16 +448,16 @@ class CrmAssistantDelegator:
 
         # Fallback: LLM with live CRM context + memory.
         try:
-            system_prompt = CRM_SYSTEM_PROMPT
-
             # Gather live CRM data from the database so the LLM can see it.
             crm_context = await self._gather_crm_context(query)
-            if crm_context:
-                system_prompt = f"{system_prompt}\n\nLive CRM data:\n{crm_context}"
 
             # Inject relevant memories into context, bounded to the per-agent
-            # budget together with the live CRM block (SKY-100). When under
-            # budget the join reproduces the pre-budget formatting exactly.
+            # budget together with the live CRM block (SKY-100). The module
+            # persona (CRM_SYSTEM_PROMPT) stays a stable leading prefix; only
+            # the live tail is budgeted, and it is appended after the prefix.
+            tail_parts: list[str] = []
+            if crm_context:
+                tail_parts.append(f"Live CRM data:\n{crm_context}")
             if self._memory is not None:
                 memory_ctx = await self._memory.recall_context(
                     tenant_id=tenant_id,
@@ -450,15 +465,13 @@ class CrmAssistantDelegator:
                     query=query,
                 )
                 if memory_ctx:
-                    system_prompt = _BUDGET.trim_to_budget(
-                        agent=AGENT_CRM,
-                        parts=[system_prompt, f"\n{memory_ctx}"],
-                    )
+                    tail_parts.append(f"\n{memory_ctx}" if tail_parts else memory_ctx)
+            system_tail = _BUDGET.trim_to_budget(agent=AGENT_CRM, parts=tail_parts)
 
             completion = await self._llm_router.complete(
-                LlmRequest(
-                    system_prompt=system_prompt,
+                _CRM_PROMPT_BUILDER.build(
                     user_prompt=query.strip(),
+                    system_tail=system_tail,
                     max_tokens=512,
                     temperature=0.0,
                 )
@@ -771,15 +784,11 @@ class FinanceDelegator:
             context = await self._gather_finance_context(query)
             if context:
                 context = _BUDGET.trim_to_budget(agent=AGENT_FINANCE, parts=[context])
-            system_prompt = (
-                f"{FINANCE_SYSTEM_PROMPT}\n\nLive finance data:\n{context}"
-                if context
-                else FINANCE_SYSTEM_PROMPT
-            )
+            system_tail = f"Live finance data:\n{context}" if context else ""
             completion = await self._llm_router.complete(
-                LlmRequest(
-                    system_prompt=system_prompt,
+                _FINANCE_PROMPT_BUILDER.build(
                     user_prompt=query.strip(),
+                    system_tail=system_tail,
                     max_tokens=512,
                     temperature=0.0,
                 )

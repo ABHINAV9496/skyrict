@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Inbox, Menu, Play } from "lucide-react";
+import { Menu, Play } from "lucide-react";
 
+import { NotificationCenter } from "@/features/notifications/notification-center";
 import { cn } from "@/lib/utils";
 import { resolvePageTitle } from "@/lib/page-title";
 import { PAGE_TITLE_EVENT } from "@/lib/topbar-title";
@@ -71,14 +72,7 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
                         <Play aria-hidden="true" className="size-5" />
                     </button>
                 )}
-                <button
-                    type="button"
-                    aria-label="Inbox"
-                    title="Inbox"
-                    className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
-                >
-                    <Inbox aria-hidden="true" className="size-5" />
-                </button>
+                <NotificationCenter />
             </div>
         </header>
     );

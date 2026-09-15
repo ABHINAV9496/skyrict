@@ -29,6 +29,7 @@ from core.features.finance.automation_wave3 import router as finance_automation_
 from core.features.finance.payment_match import router as finance_payment_match_router
 from core.features.finance.router import router as finance_router
 from core.features.inventory.router import router as inventory_router
+from core.features.notifications.router import router as notifications_router
 from core.features.reporting.reports_router import router as reports_router
 from core.features.reporting.router import router as reporting_router
 from core.features.revenue_forecast.router import router as revenue_forecast_router
@@ -49,6 +50,7 @@ api_router.include_router(finance_automation_wave3_router)
 api_router.include_router(finance_payment_match_router)
 api_router.include_router(revenue_forecast_router)
 api_router.include_router(inventory_router)
+api_router.include_router(notifications_router)
 api_router.include_router(reporting_router)
 api_router.include_router(reports_router)
 api_router.include_router(crm_router)

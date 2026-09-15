@@ -1450,3 +1450,18 @@ def get_report_service(
     export path.
     """
     return make_report_service(db, audit)
+
+
+# --- Notifications (SKY-93) deps ---
+
+
+def get_notification_service(db: AsyncSession = Depends(get_db)) -> object:
+    """Composition root for the SKY-93 notification inbox API.
+
+    Keeps the ``core.db`` session import in the api layer so
+    ``core.features.notifications.router`` never touches the database layer
+    directly (import-linter: "Only repositories touch the database layer").
+    """
+    from core.features.notifications.service import NotificationService
+
+    return NotificationService(db)

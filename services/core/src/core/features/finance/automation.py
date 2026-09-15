@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.api.deps import (
     get_core_audit_service,
@@ -40,6 +41,9 @@ from core.core.audit_events import (
 )
 from core.core.constants import INVOICE_PREFIX
 from core.core.exceptions import AiServiceUnavailableError
+from core.core.logging import get_logger
+from core.core.permissions import ERP_FINANCE_READ
+from core.db.session import get_db
 from core.domain.entities import (
     AccountCodeSuggestion,
     AiFinanceAnomaly,
@@ -55,6 +59,7 @@ from core.domain.entities import (
     ReminderDraft,
     RevenueConcentration,
     RevenueConcentrationEntry,
+    WorkingCapitalAlert,
 )
 from core.features.finance.ports import AuditSink, CustomerPort, FinanceRepositoryPort
 from core.features.finance.reminder_email import send_reminder_email
@@ -95,7 +100,69 @@ from core.features.finance.schemas import (
 from skyrict_common.exceptions import NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
+logger = get_logger("core.finance.automation")
+
 router = APIRouter(prefix="/finance/automation", tags=["finance-automation"])
+
+
+async def emit_working_capital_notification(
+    db: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    alert: WorkingCapitalAlert,
+    as_of: date,
+) -> None:
+    """Emit a B34 working-capital breach notification (best-effort).
+
+    FIN-AUT B34 wire-up (SKY-93): when the working-capital ratio is below
+    the configured threshold, the automation GET is the first producer
+    consumer of the notification SDK. The emission is treated as a side
+    effect - a producer failure must never turn a read-only GET into a 500 -
+    hence try/except + logged exception and a stable dedupe key
+    (``finance.b34.working-capital:{tenant}:{as_of}``) so repeated reads and
+    retries deliver exactly once per day.
+    """
+    if not alert.alert:
+        return
+
+    from core.features.notifications.domain import (
+        NotificationDraft,
+        NotificationSeverity,
+        RecipientSpec,
+    )
+    from core.features.notifications.producer import NotificationProducer
+
+    draft = NotificationDraft(
+        dedupe_key=f"finance.b34.working-capital:{tenant_id}:{as_of.isoformat()}",
+        event_type="finance.working_capital_alert",
+        category="finance",
+        module="finance",
+        severity=NotificationSeverity.HIGH,
+        title="Working capital below threshold",
+        body=(
+            f"Working capital ratio {alert.ratio.normalize()} is below the "
+            f"{alert.threshold.normalize()} threshold "
+            f"(assets {alert.current_assets.normalize()} / "
+            f"liabilities {alert.current_liabilities.normalize()})."
+        ),
+        recipients=RecipientSpec.from_permissions(ERP_FINANCE_READ),
+        relevance_key=ERP_FINANCE_READ,
+        payload={
+            "as_of": as_of.isoformat(),
+            "ratio": str(alert.ratio),
+            "threshold": str(alert.threshold),
+        },
+    )
+    try:
+        await NotificationProducer(db).emit(draft)
+    except Exception:
+        logger.exception(
+            "finance.notifications.b34_failed",
+            tenant_id=str(tenant_id),
+            as_of=as_of.isoformat(),
+            message="B34 notification emission failed; the alert response is unaffected",
+        )
+
 
 require_finance_read = require_permission("erp.finance.read")
 require_finance_write = require_permission("erp.finance.write")
@@ -695,8 +762,15 @@ async def get_working_capital_alert(
     as_of: date,
     current_user: dict[str, Any] = Depends(require_finance_read),
     svc: FinanceAutomationService = Depends(get_finance_automation_service),
+    db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[WorkingCapitalAlertResponse]:
     alert = await svc.working_capital_alert(_tenant_id(current_user), as_of)
+    await emit_working_capital_notification(
+        db,
+        tenant_id=_tenant_id(current_user),
+        alert=alert,
+        as_of=as_of,
+    )
     return ResponseEnvelope(data=WorkingCapitalAlertResponse.model_validate(alert))
 
 

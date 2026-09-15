@@ -234,6 +234,7 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
     memory_service = MemoryService(
         llm_router=request.app.state.llm_router,
         repo=MemoryRepository(session),
+        embedding_provider=embedding_provider,
     )
 
     return SupervisorRuntime(

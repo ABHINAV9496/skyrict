@@ -515,6 +515,8 @@ def notification_demo(
                 )
             await session.commit()
 
+    asyncio.run(_run())
+
 
 @app.command()
 def sweep_report_cache() -> None:

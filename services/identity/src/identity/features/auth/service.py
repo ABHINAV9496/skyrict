@@ -617,6 +617,13 @@ class TokenService:
 
         session = await self.session_service.get_session(session_id) if session_id else None
 
+        # A session is bound to one tenant at creation. The token's tenant_id
+        # claim must match the stored session tenant, or the refresh is an
+        # access violation - not token reuse - so it is rejected cleanly
+        # instead of arming the family chain-kill side effects.
+        if session is not None and session.tenant_id != uuid.UUID(tenant_id):
+            raise TokenInvalidError("Session does not belong to this tenant")
+
         # A terminal session was already handled when it died - a client
         # retrying that refresh token is rejected quietly so the reuse handler
         # (family revoke + audit log) is not re-armed on every retry.

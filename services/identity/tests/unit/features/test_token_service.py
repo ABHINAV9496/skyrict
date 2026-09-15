@@ -187,6 +187,22 @@ class TestRefreshTokens:
         session_id = uuid.UUID(verify_jwt(token)["session_id"])
         assert service.session_service.sessions[session_id].token_family_id == family_id
 
+    async def test_rejects_session_from_another_tenant(self) -> None:
+        token, _ = uuid_token_and_session()
+        session = _bound_session(token)
+        session.tenant_id = uuid.uuid4()  # tenant different from the token claim
+        session_service = FakeSessionService([session])
+        audit = FakeAuditService()
+        service = TokenService(session_service, audit)
+
+        with pytest.raises(TokenInvalidError):
+            await service.refresh_tokens(token)
+
+        assert session_service.rotations == []
+        assert session_service.revoked_families == []
+        assert session_service.committed is False
+        assert audit.events == []
+
     async def test_old_token_after_rotation_triggers_family_chain_kill(self) -> None:
         token, _ = uuid_token_and_session()
         family_id = uuid.uuid4()

@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.features.approval_workflow.models.instance import ErpApprovalWorkflowInstanceModel
@@ -210,30 +210,38 @@ class ApprovalWorkflowInstanceRepository:
     ) -> ErpApprovalWorkflowStepModel | None:
         """Approve/reject a step and record who decided.
 
+        Atomic AND guarded: the UPDATE is conditional on the step still being
+        ``pending``/``escalated``, so two concurrent decisions for the same
+        step can never both land - the loser matches zero rows and returns
+        ``None`` (the caller raises ``ConflictError``) instead of
+        double-approving the resource and firing the module port twice.
+
         ``decided_by`` is None for system actors (auto approval, escalation) -
         the audit transition carries ``actor_type='system'`` instead.
         ``delegated_from`` preserves the delegator when a delegate decides
         (the ``assigned_to``/``delegated_from`` triple is the step's effective
         assignee history contract).
         """
+        values: dict[str, object] = {
+            "status": status,
+            "decided_by": decided_by,
+            "decided_at": decided_at,
+        }
+        if delegated_from is not None:
+            values["assigned_to"] = decided_by
+            values["delegated_from"] = delegated_from
         result = await self._db.execute(
-            select(ErpApprovalWorkflowStepModel).where(
+            update(ErpApprovalWorkflowStepModel)
+            .where(
                 ErpApprovalWorkflowStepModel.tenant_id == tenant_id,
                 ErpApprovalWorkflowStepModel.id == step_id,
+                ErpApprovalWorkflowStepModel.status.in_(("pending", "escalated")),
             )
+            .values(**values)
+            .returning(ErpApprovalWorkflowStepModel)
+            .execution_options(synchronize_session="fetch")
         )
-        step = result.scalar_one_or_none()
-        if step is None:
-            return None
-        step.status = status
-        step.decided_by = decided_by
-        step.decided_at = decided_at
-        if delegated_from is not None:
-            step.assigned_to = decided_by
-            step.delegated_from = delegated_from
-        await self._db.flush()
-        await self._db.refresh(step)
-        return step
+        return result.scalars().one_or_none()
 
     async def update_instance_status(
         self,

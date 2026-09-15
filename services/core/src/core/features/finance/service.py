@@ -1062,9 +1062,7 @@ class FinanceService:
             existing = await self._repo.get_workforce_budget_draft_id(
                 tenant_id=tenant_id, source_ref=str(scenario_id)
             )
-            return BudgetDraftOutcome(
-                draft_id=existing, already_booked=True
-            )
+            return BudgetDraftOutcome(draft_id=existing, already_booked=True)
         assert created.id is not None
         return BudgetDraftOutcome(draft_id=created.id)
 

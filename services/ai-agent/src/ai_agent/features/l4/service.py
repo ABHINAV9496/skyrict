@@ -115,9 +115,7 @@ class L4ScenarioService:
         scenario_ids: list[uuid.UUID],
         user_id: uuid.UUID | None = None,
     ) -> list[dict[str, object]]:
-        rows = [
-            await self._repo.get(tenant_id=tenant_id, scenario_id=sid) for sid in scenario_ids
-        ]
+        rows = [await self._repo.get(tenant_id=tenant_id, scenario_id=sid) for sid in scenario_ids]
         await self._audit.log(
             action=AI_L4_SCENARIO_COMPARED,
             tenant_id=tenant_id,

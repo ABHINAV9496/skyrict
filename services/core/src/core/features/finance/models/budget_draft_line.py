@@ -38,9 +38,7 @@ class ErpBudgetDraftLineModel(Base):
         Index("ix_budget_draft_lines_draft", "tenant_id", "draft_id"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
-    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     draft_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     line_no: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(120), nullable=False)

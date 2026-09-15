@@ -35,10 +35,7 @@ class _FakeRepo:
         return _Session()
 
     async def create_budget_draft(self, draft: BudgetDraft) -> BudgetDraft:
-        if any(
-            d.source == draft.source and d.source_ref == draft.source_ref
-            for d in self.saved
-        ):
+        if any(d.source == draft.source and d.source_ref == draft.source_ref for d in self.saved):
             raise ConflictError("Budget draft already exists for this scenario")
         created = BudgetDraft(
             tenant_id=draft.tenant_id,

@@ -36,9 +36,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("scenario_id", sa.UUID(), nullable=False),
         sa.Column("scenario_name", sa.String(200), nullable=False),
-        sa.Column(
-            "status", sa.String(16), nullable=False, server_default=sa.text("'draft'")
-        ),
+        sa.Column("status", sa.String(16), nullable=False, server_default=sa.text("'draft'")),
         sa.Column("source", sa.String(32), nullable=False),
         sa.Column("source_ref", sa.String(64), nullable=False),
         sa.Column("currency", sa.String(8), nullable=False),
@@ -48,8 +46,12 @@ def upgrade() -> None:
         sa.Column("benefit_total", sa.Numeric(16, 2), nullable=False),
         sa.Column("grand_total", sa.Numeric(16, 2), nullable=False),
         sa.Column("created_by", sa.UUID(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "status IN ('draft', 'pending', 'approved')",
             name="ck_erp_budget_drafts_status",
@@ -81,7 +83,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("draft_id", "line_no"),
     )
-    op.create_index("ix_budget_draft_lines_draft", "erp_budget_draft_lines", ["tenant_id", "draft_id"])
+    op.create_index(
+        "ix_budget_draft_lines_draft", "erp_budget_draft_lines", ["tenant_id", "draft_id"]
+    )
 
 
 def downgrade() -> None:

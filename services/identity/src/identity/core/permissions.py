@@ -215,7 +215,13 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "erp_hr_ai",
         "ERP HR & Payroll AI",
-        (ERP_HR_AI_READ, ERP_HR_AI_INDIVIDUAL, ERP_HR_AI_ACKNOWLEDGE, ERP_HR_AI_COPILOT, ERP_HR_AI_PLANNING),
+        (
+            ERP_HR_AI_READ,
+            ERP_HR_AI_INDIVIDUAL,
+            ERP_HR_AI_ACKNOWLEDGE,
+            ERP_HR_AI_COPILOT,
+            ERP_HR_AI_PLANNING,
+        ),
     ),
     (
         "erp_payroll_ai",

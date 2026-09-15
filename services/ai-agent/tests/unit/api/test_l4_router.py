@@ -103,9 +103,7 @@ def _app(
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: _CALLER
     app.dependency_overrides[get_db] = lambda: (
-        _FakePermSession(perm_rows)
-        if perm_rows is not None
-        else None
+        _FakePermSession(perm_rows) if perm_rows is not None else None
     )
     if permission_override:
         app.dependency_overrides[l4_router._require_hr_ai_planning] = lambda: None
@@ -265,7 +263,9 @@ class _PermDeniedApp:
             ("GET", f"/api/v1/ai/l4/scenarios/compare?ids={_SCENARIO_ID}&ids={uuid.uuid4()}"),
             ("GET", f"/api/v1/ai/l4/scenarios/{_SCENARIO_ID}"),
         ):
-            response = client.request(method, url, headers=headers, json=body if method == "POST" else None)
+            response = client.request(
+                method, url, headers=headers, json=body if method == "POST" else None
+            )
             assert response.status_code == 403, f"{method} {url}"
 
     def test_granted_by_key(self, monkeypatch: pytest.MonkeyPatch) -> None:

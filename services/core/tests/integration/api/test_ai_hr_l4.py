@@ -165,16 +165,20 @@ class TestL4BudgetDraftExport:
 
             async with async_session_factory() as session:
                 draft = (
-                    await session.execute(
-                        text(
-                            "SELECT scenario_id, scenario_name, status, source, "
-                            "source_ref, currency, horizon, salary_total, "
-                            "benefit_total, grand_total FROM erp_budget_drafts "
-                            "WHERE tenant_id = :tenant AND id = :id"
-                        ),
-                        {"tenant": integration_db["acme_id"], "id": draft_id},
+                    (
+                        await session.execute(
+                            text(
+                                "SELECT scenario_id, scenario_name, status, source, "
+                                "source_ref, currency, horizon, salary_total, "
+                                "benefit_total, grand_total FROM erp_budget_drafts "
+                                "WHERE tenant_id = :tenant AND id = :id"
+                            ),
+                            {"tenant": integration_db["acme_id"], "id": draft_id},
+                        )
                     )
-                ).mappings().one()
+                    .mappings()
+                    .one()
+                )
                 assert draft["scenario_id"] == scenario_id
                 assert draft["scenario_name"] == "phase-2-headcount"
                 assert draft["status"] == "draft"
@@ -187,14 +191,18 @@ class TestL4BudgetDraftExport:
                 assert str(draft["grand_total"]) == "252000.00"
 
                 lines = (
-                    await session.execute(
-                        text(
-                            "SELECT line_no, label, amount FROM erp_budget_draft_lines "
-                            "WHERE tenant_id = :tenant AND draft_id = :id ORDER BY line_no"
-                        ),
-                        {"tenant": integration_db["acme_id"], "id": draft_id},
+                    (
+                        await session.execute(
+                            text(
+                                "SELECT line_no, label, amount FROM erp_budget_draft_lines "
+                                "WHERE tenant_id = :tenant AND draft_id = :id ORDER BY line_no"
+                            ),
+                            {"tenant": integration_db["acme_id"], "id": draft_id},
+                        )
                     )
-                ).mappings().all()
+                    .mappings()
+                    .all()
+                )
                 assert [(r["line_no"], r["label"]) for r in lines] == [
                     (1, "Salary"),
                     (2, "Benefits"),

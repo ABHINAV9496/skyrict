@@ -1082,7 +1082,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 ).scalar_one_or_none()
                 assert perm_row is not None, f"0048 must register {perm_key}"
 
-# 0050: document & tax AI suite (FIN-AI-004, SKY-83) - the two
+            # 0050: document & tax AI suite (FIN-AI-004, SKY-83) - the two
             # versioned, DRAFT-gated artifact tables behind the finance AI
             # document features.
             for table in ("erp_ai_documents", "erp_tax_summaries"):

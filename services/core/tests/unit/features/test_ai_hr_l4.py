@@ -266,11 +266,20 @@ class _FakeFinance:
         self.outcome = outcome
         self.calls: list[dict] = []
 
-    async def create_workforce_budget_draft(self, *, tenant_id, scenario_id,
-                                            scenario_name, currency, horizon,
-                                            base_as_of, salary_total,
-                                            benefit_total, grand_total,
-                                            created_by) -> BudgetDraftOutcome:
+    async def create_workforce_budget_draft(
+        self,
+        *,
+        tenant_id,
+        scenario_id,
+        scenario_name,
+        currency,
+        horizon,
+        base_as_of,
+        salary_total,
+        benefit_total,
+        grand_total,
+        created_by,
+    ) -> BudgetDraftOutcome:
         self.calls.append(
             {
                 "tenant_id": str(tenant_id),
@@ -318,9 +327,12 @@ def _scenario_payload(name: str = "five-percent") -> dict:
     }
 
 
-def _build_export_app(finance: _FakeFinance, audit: _FakeAudit,
-                      upstream_status: int = 200,
-                      upstream_body: dict | None = None) -> TestClient:
+def _build_export_app(
+    finance: _FakeFinance,
+    audit: _FakeAudit,
+    upstream_status: int = 200,
+    upstream_body: dict | None = None,
+) -> TestClient:
     app = FastAPI()
     app.include_router(ai_hr_router.router, prefix="/api/v1")
     app.dependency_overrides[ai_hr_router._require_ai_invoke] = lambda: {

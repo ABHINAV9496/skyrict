@@ -1,4 +1,4 @@
-﻿"""``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
+"""``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
 
 L1 aggregates (``/overview``, ``/tenure``) are computed in-core and never
 proxied - no employee row leaves the service. The attrition endpoints
@@ -853,7 +853,9 @@ async def l4_scenario_get(
     )
 
 
-@router.post("/l4/scenarios/{scenario_id}/export", response_model=ResponseEnvelope[ExportBudgetDraftOut])
+@router.post(
+    "/l4/scenarios/{scenario_id}/export", response_model=ResponseEnvelope[ExportBudgetDraftOut]
+)
 async def l4_scenario_export(
     scenario_id: uuid.UUID,
     request: Request,

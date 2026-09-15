@@ -53,8 +53,13 @@ _SUPERVISOR_ANSWER = (
 class FakeLlmRouter:
     """Scripted router: classifier JSON or supervisor answer by system prompt."""
 
-    def __init__(self, *, classify_text: str = _CLASSIFY_ANSWER) -> None:
-        self.has_providers = True
+    def __init__(
+        self,
+        *,
+        classify_text: str = _CLASSIFY_ANSWER,
+        has_providers: bool = True,
+    ) -> None:
+        self.has_providers = has_providers
         self._classify_text = classify_text
         self.complete_calls = 0
         self.stream_calls = 0
@@ -128,14 +133,37 @@ class FakeFinanceGateway:
 
 
 class FakeConversationHistory:
-    def __init__(self) -> None:
+    def __init__(self, message_count: int = 1) -> None:
         self.get_messages_calls = 0
+        self.last_limit: int | None = None
+        self._messages = [
+            {"role": "user", "content": f"message {index}"} for index in range(message_count)
+        ]
 
     async def get_messages(
-        self, *, tenant_id: uuid.UUID, conversation_id: uuid.UUID
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        limit: int | None = None,
     ) -> list[dict[str, str]]:
+        del tenant_id, conversation_id
         self.get_messages_calls += 1
-        return [{"role": "user", "content": "previous question"}]
+        self.last_limit = limit
+        return self._messages
+
+
+class RecordingSupervisorRouter(FakeLlmRouter):
+    """Records the supervisor-answer prompt so tests can assert its contents."""
+
+    def __init__(self) -> None:
+        super().__init__(classify_text=_ABSTAIN_ANSWER)
+        self.last_supervisor_prompt: str | None = None
+
+    async def complete(self, request: LlmRequest) -> LlmCompletion:
+        if request.system_prompt != CLASSIFY_SYSTEM_PROMPT:
+            self.last_supervisor_prompt = request.system_prompt
+        return await super().complete(request)
 
 
 def make_service(
@@ -152,7 +180,7 @@ def make_service(
         return gateway
 
     return SupervisorService(
-        llm_router=router or FakeLlmRouter(has_providers=True),
+        llm_router=router or FakeLlmRouter(),
         gateway_factory=gateway_factory,
         conversation_history=conversation_history,
         provisioned=provisioned or {"inventory_monitor": True},
@@ -408,6 +436,37 @@ async def test_abstain_path_loads_conversation_history() -> None:
 
     assert history.get_messages_calls == 1
     assert tokens_text(events) == _SUPERVISOR_ANSWER
+
+
+async def test_abstain_history_is_bounded_to_recent_window() -> None:
+    """Only the most recent 20 messages enter the prompt - never the full log.
+
+    Guards the repo/port ``limit`` (SKY-100): a long conversation must not
+    grow the supervisor prompt without bound, and the history read must not
+    transfer every row from the database.
+    """
+    history = FakeConversationHistory(message_count=25)
+    router = RecordingSupervisorRouter()
+    service = make_service(router=router, conversation_history=history)
+
+    events = [
+        event
+        async for event in service.stream_answer(
+            query="tell me about multi-turn accounting",
+            conversation_id=uuid.uuid4(),
+            tenant_id=TENANT_A,
+            user_id=USER_ID,
+        )
+    ]
+
+    assert tokens_text(events) == _SUPERVISOR_ANSWER
+    assert history.last_limit == 20
+    prompt = router.last_supervisor_prompt
+    assert prompt is not None
+    user_lines = [line for line in prompt.splitlines() if line.startswith("User: message ")]
+    assert len(user_lines) == 20
+    assert any(line == "User: message 24" for line in user_lines)  # newest kept
+    assert not any(line == "User: message 0" for line in user_lines)  # oldest dropped
 
 
 # --- tool cache -------------------------------------------------------------

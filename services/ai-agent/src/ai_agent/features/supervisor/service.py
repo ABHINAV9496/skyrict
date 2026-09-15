@@ -168,12 +168,18 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+# Most-recent messages injected into the supervisor prompt per turn (bounded
+# so multi-turn context can never grow the prompt without limit, SKY-100).
+_HISTORY_MESSAGE_LIMIT = 20
+
+
 class ConversationHistoryPort(Protocol):
     async def get_messages(
         self,
         *,
         tenant_id: uuid.UUID,
         conversation_id: uuid.UUID,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]: ...
 
 
@@ -600,12 +606,14 @@ class SupervisorService:
             messages = await self._conversation_history.get_messages(
                 tenant_id=tenant_id,
                 conversation_id=conversation_id,
+                limit=_HISTORY_MESSAGE_LIMIT,
             )
             if not messages:
                 return ""
 
-            # Take the last 20 messages to stay within token limits.
-            recent = messages[-20:]
+            # The port may return the bounded window already; the slice keeps
+            # the same contract for fakes that ignore the limit.
+            recent = messages[-_HISTORY_MESSAGE_LIMIT:]
             lines: list[str] = []
             for msg in recent:
                 role = "User" if msg["role"] == "user" else "Assistant"

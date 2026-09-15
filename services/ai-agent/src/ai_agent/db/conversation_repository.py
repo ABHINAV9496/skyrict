@@ -226,8 +226,17 @@ class ConversationRepository:
         *,
         tenant_id: uuid.UUID,
         conversation_id: uuid.UUID,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Fetch all messages for a conversation, ordered by created_at ASC."""
+        """Fetch messages for a conversation, ordered by created_at ASC.
+
+        When ``limit`` is given, only the most recent ``limit`` messages are
+        returned (ordered ASC for callers that render oldest-first). Without
+        a limit the full history is returned - the conversations list endpoint
+        and the title feature need the complete (or earliest) exchange, so the
+        bounded default is only applied by callers that explicitly ask for it
+        (the supervisor history window, SKY-100).
+        """
         stmt = (
             select(AiConversationMessage)
             .where(
@@ -236,6 +245,13 @@ class ConversationRepository:
             )
             .order_by(AiConversationMessage.created_at)
         )
+        if limit is not None:
+            # Most-recent N: order DESC + LIMIT in SQL, then reverse in memory
+            # so the returned list stays ASC (oldest-first) - the supervisor
+            # renders history oldest-first for the prompt.
+            stmt = stmt.order_by(desc(AiConversationMessage.created_at)).limit(limit)
+            result = await self._session.execute(stmt)
+            return [_message_to_dict(row) for row in reversed(result.scalars().all())]
         result = await self._session.execute(stmt)
         return [_message_to_dict(row) for row in result.scalars().all()]
 

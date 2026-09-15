@@ -56,6 +56,60 @@ def test_after_commit_drains_buffered_events() -> None:
     assert key == str(tenant_id)
 
 
+def test_events_not_published_before_commit() -> None:
+    tenant_id = uuid.uuid4()
+    producer = FakeProducer()
+    engine = create_engine("sqlite://")
+
+    with Session(engine) as session:
+        publisher = FinanceEventPublisher(SimpleNamespace(sync_session=session), producer=producer)
+        publisher.invoice_created(
+            invoice_id=uuid.uuid4(),
+            invoice_number="INV-2026-00002",
+            tenant_id=tenant_id,
+            correlation_id="test-correlation",
+        )
+
+        assert publisher.pending_count == 1
+        assert producer.published == []
+
+        session.execute(text("SELECT 1"))
+        session.commit()
+
+    assert len(producer.published) == 1
+
+
+def test_rollback_discards_buffered_events() -> None:
+    """Regression: a rolled-back transaction must never publish stale events.
+
+    The publisher previously only listened for ``after_commit``; a session
+    reused after a rollback (or a later commit) would have published money
+    that never persisted.
+    """
+    tenant_id = uuid.uuid4()
+    producer = FakeProducer()
+    engine = create_engine("sqlite://")
+
+    with Session(engine) as session:
+        publisher = FinanceEventPublisher(SimpleNamespace(sync_session=session), producer=producer)
+        publisher.invoice_created(
+            invoice_id=uuid.uuid4(),
+            invoice_number="INV-2026-00003",
+            tenant_id=tenant_id,
+            correlation_id="test-correlation",
+        )
+        session.execute(text("SELECT 1"))
+        session.rollback()
+
+        assert publisher.pending_count == 0
+        assert producer.published == []
+
+        session.execute(text("SELECT 1"))
+        session.commit()
+
+    assert producer.published == []
+
+
 def test_after_commit_with_no_pending_events_is_noop() -> None:
     engine = create_engine("sqlite://")
 

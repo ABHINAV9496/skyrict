@@ -1006,6 +1006,7 @@ def get_finance_automation_service(
     from core.features.audit.repository import AuditRepository
     from core.features.crm.repository import CrmRepository
     from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.report_cache import ReportCacheRepository
     from core.features.finance.repository import FinanceRepository
 
     correlation_id = getattr(request.state, "request_id", None)
@@ -1014,6 +1015,7 @@ def get_finance_automation_service(
         repo=FinanceRepository(db),
         audit=cast("AuditSink", AuditRepository(db)),
         customers=CrmRepository(db),
+        cache=ReportCacheRepository(db),
     )
 
 
@@ -1104,6 +1106,7 @@ def get_finance_automation_service_with_ai(
         suggest_invoice_lines_with_ai,
     )
     from core.features.finance.automation import FinanceAutomationService
+    from core.features.finance.report_cache import ReportCacheRepository
     from core.features.finance.repository import FinanceRepository
 
     client = get_ai_client(request)
@@ -1177,6 +1180,7 @@ def get_finance_automation_service_with_ai(
         ai_narrate=ai_narrate,
         ai_remind=ai_remind,
         ai_lines=ai_lines,
+        cache=ReportCacheRepository(db),
     )
 
 
@@ -1370,10 +1374,12 @@ def get_crm_workspace_service(
     """Composition root for the CRM workspace surface."""
     from core.features.crm.repository import CrmRepository
     from core.features.crm.workspace_service import CrmWorkspaceService
+    from core.features.finance.report_cache import ReportCacheRepository
 
     return CrmWorkspaceService(
         repository=CrmRepository(db),
         audit=audit_service,
+        cache=ReportCacheRepository(db),
     )
 
 

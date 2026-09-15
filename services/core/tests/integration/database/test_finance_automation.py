@@ -647,6 +647,28 @@ async def test_working_capital_series_shape(wave2_world: dict[str, str]) -> None
         assert position.working_capital == position.assets - position.liabilities
 
 
+async def test_cashflow_projection_runs_on_postgres(wave2_world: dict[str, str]) -> None:
+    """Regression: the monthly aggregation must group by the CAST'd trunc.
+
+    The SKY-99 rewrite selected ``CAST(date_trunc(...) AS DATE)`` but grouped
+    by the raw ``date_trunc(...)``, which Postgres rejected
+    (``GROUPING ERROR: column due_date must appear in the GROUP BY``); the
+    sqlite unit suite is laxer and never caught it. The benchmark harness did.
+    """
+    tenant_id = uuid.UUID(wave2_world["tenant_id"])
+    async with async_session_factory() as session:
+        repo = FinanceRepository(session)
+        projection = await repo.cashflow_projection(tenant_id, date(2026, 6, 30))
+        await session.rollback()
+
+    assert len(projection.positions) == 6
+    months = [position.month for position in projection.positions]
+    assert months == sorted(months)
+    assert months[0] == "2026-06"
+    for position in projection.positions:
+        assert position.closing == position.opening + position.inflows - position.outflows
+
+
 async def test_payment_method_analytics_groups_by_method(wave2_world: dict[str, str]) -> None:
     tenant_id = uuid.UUID(wave2_world["tenant_id"])
     async with async_session_factory() as session:

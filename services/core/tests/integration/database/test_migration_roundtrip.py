@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 59 revisions, 0001..0059) -> core ``downgrade base`` (all the way back to
+(all 60 revisions, 0001..0060) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -27,8 +27,9 @@ notification-center tables with their RLS policies and dedupe constraints
 the HR-AI-004 planning permission and finance budget-draft bridge tables with
 their idempotency lock (0056/0057, SKY-93), ``erp_journal_templates`` with its
 RLS policy (0058, FIN-AUT-003 B5, renumbered from 0056 when dev's HR-AI-004
-chain took 0056/0057), and ``erp_payment_intents`` with its RLS policy and
-dedupe stamp (0059, FIN-AUT-003 B7).
+chain took 0056/0057), ``erp_payment_intents`` with its RLS policy and
+dedupe stamp (0059, FIN-AUT-003 B7), and the ``erp_report_cache``
+aggregate-cache table (0060, SKY-99).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -1380,6 +1381,50 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 ).scalar_one()
                 assert snip_intent_constraint == 1, f"0059 must add {constraint}"
+
+            # 0060: erp_report_cache (SKY-99, renumbered from 0056 after dev's
+            # HR-AI-004 / FIN-AUT-003 chain took 0056-0059) - the aggregate-cache
+            # table exists, is RLS-covered with the tenant_isolation policy, and
+            # carries the unique (tenant_id, cache_key) index plus the expires_at
+            # sweep index.
+            cache_regclass = (
+                await conn.execute(text("SELECT to_regclass('public.erp_report_cache')"))
+            ).scalar_one()
+            assert cache_regclass is not None, "0060 must create erp_report_cache table"
+
+            cache_rls = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = 'erp_report_cache'"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert cache_rls == ["erp_report_cache"], "0060 must enable RLS on erp_report_cache"
+
+            cache_indexes = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT indexname FROM pg_indexes "
+                            "WHERE schemaname = 'public' AND tablename = 'erp_report_cache' "
+                            "AND indexname IN "
+                            "('uq_erp_report_cache_tenant_key', 'ix_erp_report_cache_expires')"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(cache_indexes) == {
+                "uq_erp_report_cache_tenant_key",
+                "ix_erp_report_cache_expires",
+            }, "0060 must add both erp_report_cache indexes"
     finally:
         await engine.dispose()
 

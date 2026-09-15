@@ -63,6 +63,12 @@ from core.domain.entities import (
 )
 from core.features.finance.ports import AuditSink, CustomerPort, FinanceRepositoryPort
 from core.features.finance.reminder_email import send_reminder_email
+from core.features.finance.report_cache import (
+    REPORT_CACHE_TTL_SECONDS,
+    ReportCacheRepository,
+    hash_report_key,
+    serialize_entity,
+)
 from core.features.finance.schemas import (
     AccountCodeSuggestionResponse,
     AnomalyNarrationResponse,
@@ -205,6 +211,34 @@ class FinanceAutomationService:
     ai_narrate: AiNarrater | None = field(default=None)
     ai_remind: AiReminder | None = field(default=None)
     ai_lines: AiLineSuggester | None = field(default=None)
+    cache: ReportCacheRepository | None = field(default=None)
+
+    async def _cached(
+        self,
+        tenant_id: uuid.UUID,
+        key_parts: tuple[str, ...],
+        compute: Callable[..., Awaitable[Any]],
+    ) -> Any:
+        """Look up cache; on miss, call *compute*, store, and return.
+
+        If ``self.cache`` is ``None`` (default in tests), always hits compute.
+        On a hit the stored dict is returned directly — the router layer calls
+        ``model_validate()`` which accepts dicts natively.
+        """
+        if self.cache is None:
+            return await compute()
+        cache_key = hash_report_key(*key_parts)
+        hit = await self.cache.get(tenant_id=tenant_id, cache_key=cache_key)
+        if hit is not None:
+            return hit
+        entity = await compute()
+        await self.cache.put(
+            tenant_id=tenant_id,
+            cache_key=cache_key,
+            payload=serialize_entity(entity),
+            ttl_seconds=REPORT_CACHE_TTL_SECONDS,
+        )
+        return entity
 
     async def close_checklist(self, tenant_id: uuid.UUID, period_id: uuid.UUID) -> Any:
         return await self.repo.close_checklist(tenant_id, period_id)
@@ -347,10 +381,18 @@ class FinanceAutomationService:
         return await self.repo.working_capital_alert(tenant_id, as_of)
 
     async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> Any:
-        return await self.repo.health_score(tenant_id, as_of)
+        return await self._cached(
+            tenant_id,
+            ("health_score", as_of.isoformat()),
+            lambda: self.repo.health_score(tenant_id, as_of),
+        )
 
     async def cashflow_projection(self, tenant_id: uuid.UUID, as_of: date) -> Any:
-        return await self.repo.cashflow_projection(tenant_id, as_of)
+        return await self._cached(
+            tenant_id,
+            ("cashflow_projection", as_of.isoformat()),
+            lambda: self.repo.cashflow_projection(tenant_id, as_of),
+        )
 
     async def run_anomaly_scan(self, tenant_id: uuid.UUID) -> Any:
         detected: list[AiFinanceAnomaly] = []
@@ -397,40 +439,61 @@ class FinanceAutomationService:
         prior_from: date,
         prior_to: date,
     ) -> Any:
-        return await self.repo.comparative_pnl(
-            tenant_id, current_from, current_to, prior_from, prior_to
+        return await self._cached(
+            tenant_id,
+            (
+                "comparative_pnl",
+                current_from.isoformat(),
+                current_to.isoformat(),
+                prior_from.isoformat(),
+                prior_to.isoformat(),
+            ),
+            lambda: self.repo.comparative_pnl(
+                tenant_id, current_from, current_to, prior_from, prior_to
+            ),
         )
 
     async def revenue_concentration(
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> Any:
-        report = await self.repo.revenue_concentration(tenant_id, from_date, to_date)
-        if self.customers is not None and report.entries:
-            names = await self.customers.get_customer_names(
-                [e.customer_id for e in report.entries], tenant_id=tenant_id
-            )
-            report = RevenueConcentration(
-                from_date=report.from_date,
-                to_date=report.to_date,
-                threshold=report.threshold,
-                total_revenue=report.total_revenue,
-                entries=tuple(
-                    RevenueConcentrationEntry(
-                        customer_id=e.customer_id,
-                        customer_name=names.get(e.customer_id),
-                        amount=e.amount,
-                        share=e.share,
-                        above_threshold=e.above_threshold,
-                    )
-                    for e in report.entries
-                ),
-            )
-        return report
+        async def _compute() -> RevenueConcentration:
+            report = await self.repo.revenue_concentration(tenant_id, from_date, to_date)
+            if self.customers is not None and report.entries:
+                names = await self.customers.get_customer_names(
+                    [e.customer_id for e in report.entries], tenant_id=tenant_id
+                )
+                report = RevenueConcentration(
+                    from_date=report.from_date,
+                    to_date=report.to_date,
+                    threshold=report.threshold,
+                    total_revenue=report.total_revenue,
+                    entries=tuple(
+                        RevenueConcentrationEntry(
+                            customer_id=e.customer_id,
+                            customer_name=names.get(e.customer_id),
+                            amount=e.amount,
+                            share=e.share,
+                            above_threshold=e.above_threshold,
+                        )
+                        for e in report.entries
+                    ),
+                )
+            return report
+
+        return await self._cached(
+            tenant_id,
+            ("revenue_concentration", from_date.isoformat(), to_date.isoformat()),
+            _compute,
+        )
 
     async def working_capital_series(
         self, tenant_id: uuid.UUID, as_of: date, months: int = 6
     ) -> Any:
-        return await self.repo.working_capital_series(tenant_id, as_of, months)
+        return await self._cached(
+            tenant_id,
+            ("working_capital_series", as_of.isoformat(), str(months)),
+            lambda: self.repo.working_capital_series(tenant_id, as_of, months),
+        )
 
     async def payment_method_analytics(
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
@@ -463,7 +526,11 @@ class FinanceAutomationService:
         return report
 
     async def audit_readiness(self, tenant_id: uuid.UUID) -> Any:
-        return await self.repo.audit_readiness(tenant_id)
+        return await self._cached(
+            tenant_id,
+            ("audit_readiness",),
+            lambda: self.repo.audit_readiness(tenant_id),
+        )
 
     async def reverse_journal_entry(
         self, tenant_id: uuid.UUID, user_id: uuid.UUID, entry_id: uuid.UUID

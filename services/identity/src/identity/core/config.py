@@ -50,6 +50,39 @@ class Settings(BaseSettings):
     # --- Database (CRITICAL - no default) ---
     DATABASE_URL: str = Field(..., description="async PostgreSQL connection string - REQUIRED")
 
+    # --- DB connection pool (SKY-99, ADR-007) ---
+    # Env-driven so staging/production can size the pool to the actual
+    # Postgres max_connections and replica topology without a code change.
+    # Defaults preserve the historical dev/test behaviour (20 + 10 overflow).
+    # pool_recycle guards against the provider killing idle connections
+    # (Azure default idle timeout is 4-8 minutes; 1800s keeps a connection
+    # fresh well inside that window, and pool_pre_ping still validates on
+    # checkout regardless).
+    DB_POOL_SIZE: int = Field(
+        default=20,
+        ge=1,
+        description="asyncpg pool_size: steady-state check-out slots per process",
+    )
+    DB_MAX_OVERFLOW: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "asyncpg max_overflow: additional slots beyond pool_size under load. "
+            "Total max connections = pool_size + max_overflow. Keep "
+            "(pool_size + max_overflow) well under Postgres max_connections "
+            "divided by the replica/web-replica count."
+        ),
+    )
+    DB_POOL_RECYCLE: int = Field(
+        default=1800,
+        ge=60,
+        description=(
+            "asyncpg pool_recycle: seconds a connection is reused before it is "
+            "closed and reopened. Must stay below the provider's idle-connection "
+            "drop timeout to avoid 'server closed the connection unexpectedly'."
+        ),
+    )
+
     # --- Redis (CRITICAL - no default) ---
     REDIS_URL: str = Field(..., description="Redis connection - REQUIRED")
 

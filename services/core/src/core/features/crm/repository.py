@@ -31,9 +31,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ColumnElement, String, cast, false, func, literal, or_, select
+from sqlalchemy import ColumnElement, Select, String, cast, false, func, literal, or_, select
 from sqlalchemy.orm import Mapped
 
+from core.db.parallel import parallel_reads
 from core.domain.entities import (
     Activity,
     Contact,
@@ -273,6 +274,31 @@ class CrmRepository:
     ) -> None:
         self.session = session
         self._next_sequence = next_sequence
+
+    async def parallel(
+        self,
+        tenant_id: object,
+        *jobs: Callable[[CrmRepository], Awaitable[Any]],
+    ) -> list[Any]:
+        """Run independent read queries concurrently on forked pooled sessions.
+
+        Each job runs against a fresh ``CrmRepository`` bound to its own
+        RLS-scoped session, so the queries genuinely overlap instead of
+        serializing on this repository's single connection (a single
+        ``AsyncSession`` serializes ``execute()`` on its one connection).
+        Results come back in ``jobs`` order. Read-only only - forks are
+        discarded after the gather and never flush.
+        """
+
+        def _with_forked_session(
+            job: Callable[[CrmRepository], Awaitable[Any]],
+        ) -> Callable[[AsyncSession], Awaitable[Any]]:
+            async def _run(session: AsyncSession) -> Any:
+                return await job(CrmRepository(session))
+
+            return _run
+
+        return await parallel_reads(tenant_id, [_with_forked_session(job) for job in jobs])
 
     async def next_customer_sequence(self, tenant_id: uuid.UUID) -> int:
         """Claim the next customer-code sequence value (entity ``customer_code``).
@@ -1483,28 +1509,38 @@ class CrmRepository:
         if scoped is not None:
             base = base.where(scoped)
 
-        async def _window_count(predicate: ColumnElement[bool]) -> int:
-            return int((await self.session.execute(base.where(predicate))).scalar_one())
-
-        counts: dict[str, int] = {
-            "today": await _window_count(ErpCrmActivityModel.due_at >= today_start),
-            "overdue": await _window_count(ErpCrmActivityModel.due_at < today_start),
-            "upcoming": await _window_count(ErpCrmActivityModel.due_at >= today_end),
-        }
-        counts["completed_30d"] = int(
-            (
-                await self.session.execute(
-                    select(func.count())
-                    .select_from(ErpCrmActivityModel)
-                    .where(
-                        ErpCrmActivityModel.tenant_id == tenant_id,
-                        ErpCrmActivityModel.completed_at.is_not(None),
-                        ErpCrmActivityModel.completed_at >= completed_since,
-                    )
-                )
-            ).scalar_one()
+        today, overdue, upcoming, completed_30d = await self.parallel(
+            tenant_id,
+            lambda repo: repo._scoped_count(base.where(ErpCrmActivityModel.due_at >= today_start)),
+            lambda repo: repo._scoped_count(base.where(ErpCrmActivityModel.due_at < today_start)),
+            lambda repo: repo._scoped_count(base.where(ErpCrmActivityModel.due_at >= today_end)),
+            lambda repo: repo._count_completed_activities(
+                tenant_id=tenant_id, completed_since=completed_since
+            ),
         )
-        return counts
+        return {
+            "today": today,
+            "overdue": overdue,
+            "upcoming": upcoming,
+            "completed_30d": completed_30d,
+        }
+
+    async def _scoped_count(self, stmt: Select[Any]) -> int:
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def _count_completed_activities(
+        self, *, tenant_id: uuid.UUID, completed_since: datetime
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ErpCrmActivityModel)
+            .where(
+                ErpCrmActivityModel.tenant_id == tenant_id,
+                ErpCrmActivityModel.completed_at.is_not(None),
+                ErpCrmActivityModel.completed_at >= completed_since,
+            )
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
 
     async def recent_won_opportunities(
         self,

@@ -29,12 +29,12 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
-from sqlalchemy import and_, func, select, text, update
+from sqlalchemy import Date, and_, case, cast, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import (
@@ -42,6 +42,7 @@ from core.core.constants import (
     INVOICE_PREFIX,
     PAYMENT_PREFIX,
 )
+from core.db.parallel import parallel_reads
 from core.domain.entities import (
     AccountCodeSuggestion,
     AiFinanceAnomaly,
@@ -451,6 +452,30 @@ class FinanceRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def _parallel(
+        self,
+        tenant_id: object,
+        *jobs: Callable[[FinanceRepository], Awaitable[Any]],
+    ) -> list[Any]:
+        """Run independent read queries concurrently on forked pooled sessions.
+
+        Each job is invoked with a fresh ``FinanceRepository`` bound to its own
+        RLS-scoped session, so the jobs' queries genuinely overlap instead of
+        serializing on this repository's single connection. Results come back in
+        ``jobs`` order. Only safe for read-only work - forks are discarded after
+        the gather.
+        """
+
+        def _with_forked_session(
+            job: Callable[[FinanceRepository], Awaitable[Any]],
+        ) -> Callable[[AsyncSession], Awaitable[Any]]:
+            async def _run(session: AsyncSession) -> Any:
+                return await job(FinanceRepository(session))
+
+            return _run
+
+        return await parallel_reads(tenant_id, [_with_forked_session(job) for job in jobs])
 
     # ------------------------------------------------------------------
     # Chart of accounts
@@ -1593,7 +1618,13 @@ class FinanceRepository:
             return CloseChecklist(period_id=period_id, period_name="", items=(), ready=False)
         items: list[CloseChecklistItem] = []
 
-        periods = await self.list_fiscal_periods(tenant_id)
+        periods, entry_count, trial, aging = await self._parallel(
+            tenant_id,
+            lambda repo: repo.list_fiscal_periods(tenant_id),
+            lambda repo: repo._count_posted_entries_in_period(tenant_id, period),
+            lambda repo: repo.trial_balance(tenant_id, period.end_date),
+            lambda repo: repo.ar_aging(tenant_id, period.end_date),
+        )
         items.append(
             CloseChecklistItem(
                 label="Previous period closed",
@@ -1603,8 +1634,6 @@ class FinanceRepository:
                 detail="All earlier periods must be closed before this one",
             )
         )
-
-        entry_count = await self._count_posted_entries_in_period(tenant_id, period)
         items.append(
             CloseChecklistItem(
                 label="Journal entries posted",
@@ -1613,7 +1642,6 @@ class FinanceRepository:
             )
         )
 
-        trial = await self.trial_balance(tenant_id, period.end_date)
         balanced = trial.total_debit == trial.total_credit
         items.append(
             CloseChecklistItem(
@@ -1627,7 +1655,6 @@ class FinanceRepository:
             )
         )
 
-        aging = await self.ar_aging(tenant_id, period.end_date)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
         unreconciled = (over_90.amount if over_90 else Decimal("0")) > Decimal("0")
         items.append(
@@ -1664,48 +1691,52 @@ class FinanceRepository:
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def duplicates(self, tenant_id: uuid.UUID) -> Sequence[DuplicateGroup]:
+        cnt = (
+            func.count()
+            .over(partition_by=[ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date])
+            .label("cnt")
+        )
         stmt = (
-            select(
-                ErpJournalEntryModel.memo.label("memo"),
-                ErpJournalEntryModel.entry_date.label("entry_date"),
-                func.count().label("cnt"),
-            )
+            select(ErpJournalEntryModel, cnt)
             .where(
                 ErpJournalEntryModel.tenant_id == tenant_id,
                 ErpJournalEntryModel.status == EntryStatus.POSTED,
                 ErpJournalEntryModel.memo.isnot(None),
             )
-            .group_by(ErpJournalEntryModel.memo, ErpJournalEntryModel.entry_date)
-            .having(func.count() > 1)
+            .order_by(
+                ErpJournalEntryModel.memo,
+                ErpJournalEntryModel.entry_date,
+                ErpJournalEntryModel.created_at,
+            )
         )
         rows = (await self.session.execute(stmt)).all()
 
         groups: list[DuplicateGroup] = []
-        for row in rows:
-            entry_stmt = (
-                select(ErpJournalEntryModel)
-                .where(
-                    ErpJournalEntryModel.tenant_id == tenant_id,
-                    ErpJournalEntryModel.status == EntryStatus.POSTED,
-                    ErpJournalEntryModel.memo == row.memo,
-                    ErpJournalEntryModel.entry_date == row.entry_date,
+        i = 0
+        while i < len(rows):
+            model, group_size = rows[i]
+            if group_size <= 1:
+                i += 1
+                continue
+            memo = model.memo
+            entry_date = model.entry_date
+            entries: list[DuplicateCandidate] = []
+            while i < len(rows) and rows[i][0].memo == memo and rows[i][0].entry_date == entry_date:
+                entry = rows[i][0]
+                entries.append(
+                    DuplicateCandidate(
+                        entry_id=entry.id,
+                        entry_date=entry.entry_date,
+                        memo=entry.memo,
+                        source_ref=entry.source_ref,
+                    )
                 )
-                .order_by(ErpJournalEntryModel.created_at)
-            )
-            entries = (await self.session.execute(entry_stmt)).scalars().all()
+                i += 1
             groups.append(
                 DuplicateGroup(
-                    key=f"{row.memo}|{row.entry_date.isoformat()}",
-                    reason=f"{len(entries)} entries share memo '{row.memo}' on {row.entry_date}",
-                    entries=tuple(
-                        DuplicateCandidate(
-                            entry_id=e.id,
-                            entry_date=e.entry_date,
-                            memo=e.memo,
-                            source_ref=e.source_ref,
-                        )
-                        for e in entries
-                    ),
+                    key=f"{memo}|{entry_date.isoformat()}",
+                    reason=f"{len(entries)} entries share memo '{memo}' on {entry_date}",
+                    entries=tuple(entries),
                 )
             )
         return tuple(groups)
@@ -1846,16 +1877,19 @@ class FinanceRepository:
 
     async def health_score(self, tenant_id: uuid.UUID, as_of: date) -> HealthScore:
         quantum = Decimal("0.01")
-        wc = await self.working_capital_alert(tenant_id, as_of)
+        wc, aging, entries = await self._parallel(
+            tenant_id,
+            lambda repo: repo.working_capital_alert(tenant_id, as_of),
+            lambda repo: repo.ar_aging(tenant_id, as_of),
+            lambda repo: repo.list_journal_entries(tenant_id, limit=100),
+        )
         wc_score = Decimal("100") if not wc.alert else Decimal("50")
 
-        aging = await self.ar_aging(tenant_id, as_of)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
         over_90_amount = over_90.amount if over_90 else Decimal("0")
         ar_ok = over_90_amount <= (aging.total_ar * Decimal("0.2"))
         ar_score = Decimal("100") if ar_ok else Decimal("60")
 
-        entries = await self.list_journal_entries(tenant_id, limit=100)
         drafts = sum(1 for e in entries if e.status == EntryStatus.DRAFT)
         drafts_score = max(Decimal("100") - Decimal(drafts) * Decimal("10"), Decimal("0"))
 
@@ -1868,14 +1902,57 @@ class FinanceRepository:
         return HealthScore(overall=overall, components=components)
 
     async def cashflow_projection(self, tenant_id: uuid.UUID, as_of: date) -> CashflowProjection:
+        month_starts = [
+            date(as_of.year + (as_of.month + i - 1) // 12, (as_of.month + i - 1) % 12 + 1, 1)
+            for i in range(6)
+        ]
+        first_start = month_starts[0]
+        last_end = _end_of_month(month_starts[-1])
+
+        bucket_expr = cast(func.date_trunc("month", ErpInvoiceModel.due_date), Date)
+        bucket = bucket_expr.label("month")
+        stmt = (
+            select(
+                bucket,
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ErpInvoiceModel.status.in_(
+                                    [InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]
+                                ),
+                                ErpInvoiceModel.total,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("inflows"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (ErpInvoiceModel.status == InvoiceStatus.ISSUED, ErpInvoiceModel.total),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("outflows"),
+            )
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.APPROVED]),
+                ErpInvoiceModel.due_date >= first_start,
+                ErpInvoiceModel.due_date <= last_end,
+            )
+            .group_by(bucket_expr)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        by_month = {row.month: (Decimal(row.inflows), Decimal(row.outflows)) for row in rows}
+
         months: list[CashflowPosition] = []
         opening = Decimal("0")
-        for i in range(6):
-            month_start = date(
-                as_of.year + (as_of.month + i - 1) // 12, (as_of.month + i - 1) % 12 + 1, 1
-            )
-            inflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=True)
-            outflows = await self._monthly_outstanding(tenant_id, month_start, is_inflow=False)
+        for month_start in month_starts:
+            inflows, outflows = by_month.get(month_start, (Decimal("0"), Decimal("0")))
             closing = opening + inflows - outflows
             months.append(
                 CashflowPosition(
@@ -1889,21 +1966,6 @@ class FinanceRepository:
             opening = closing
         return CashflowProjection(positions=tuple(months))
 
-    async def _monthly_outstanding(
-        self, tenant_id: uuid.UUID, month_start: date, *, is_inflow: bool
-    ) -> Decimal:
-        month_end = _end_of_month(month_start)
-        statuses = (
-            [InvoiceStatus.ISSUED, InvoiceStatus.APPROVED] if is_inflow else [InvoiceStatus.ISSUED]
-        )
-        stmt = select(func.coalesce(func.sum(ErpInvoiceModel.total), 0)).where(
-            ErpInvoiceModel.tenant_id == tenant_id,
-            ErpInvoiceModel.status.in_(statuses),
-            ErpInvoiceModel.due_date >= month_start,
-            ErpInvoiceModel.due_date <= month_end,
-        )
-        return Decimal((await self.session.execute(stmt)).scalar_one())
-
     async def anomalies(self, tenant_id: uuid.UUID) -> Sequence[AiFinanceAnomaly]:
         return await self.list_open_ai_anomalies(tenant_id)
 
@@ -1915,8 +1977,11 @@ class FinanceRepository:
         prior_from: date,
         prior_to: date,
     ) -> ComparativePnl:
-        current = await self.profit_and_loss(tenant_id, current_from, current_to)
-        prior = await self.profit_and_loss(tenant_id, prior_from, prior_to)
+        current, prior = await self._parallel(
+            tenant_id,
+            lambda repo: repo.profit_and_loss(tenant_id, current_from, current_to),
+            lambda repo: repo.profit_and_loss(tenant_id, prior_from, prior_to),
+        )
         by_code = {line.code: line for line in prior.revenue + prior.expenses}
         rows: list[ComparativePnlRow] = []
         for line in current.revenue + current.expenses:
@@ -1991,23 +2056,29 @@ class FinanceRepository:
     async def working_capital_series(
         self, tenant_id: uuid.UUID, as_of: date, months: int = 6
     ) -> WorkingCapitalSeries:
-        positions: list[WorkingCapitalPosition] = []
-        for i in range(months):
-            month_start = date(
-                as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1
+        month_bounds = [
+            (
+                date(as_of.year + (as_of.month - i - 1) // 12, (as_of.month - i - 1) % 12 + 1, 1),
+                i,
             )
-            month_end = _end_of_month(month_start)
-            balance = await self.balance_sheet(tenant_id, month_end)
-            assets = balance.total_assets
-            liabilities = balance.total_liabilities
-            positions.append(
-                WorkingCapitalPosition(
-                    month=month_start.strftime("%Y-%m"),
-                    assets=assets,
-                    liabilities=liabilities,
-                    working_capital=assets - liabilities,
-                )
+            for i in range(months)
+        ]
+        balances = await self._parallel(
+            tenant_id,
+            *(
+                lambda repo, ms=month_start: repo.balance_sheet(tenant_id, _end_of_month(ms))
+                for month_start, _ in month_bounds
+            ),
+        )
+        positions = [
+            WorkingCapitalPosition(
+                month=month_start.strftime("%Y-%m"),
+                assets=balance.total_assets,
+                liabilities=balance.total_liabilities,
+                working_capital=balance.total_assets - balance.total_liabilities,
             )
+            for balance, (month_start, _) in zip(balances, month_bounds, strict=False)
+        ]
         positions.reverse()
         return WorkingCapitalSeries(positions=tuple(positions))
 
@@ -2138,16 +2209,27 @@ class FinanceRepository:
         from datetime import date as _date
 
         today = _date.today()
-        trial = await self.trial_balance(tenant_id, today)
-        entries = await self.list_journal_entries(tenant_id, limit=1000)
+        (
+            trial,
+            entries,
+            open_anomalies,
+            dup_groups,
+            aging,
+            periods,
+            draft_invoices,
+        ) = await self._parallel(
+            tenant_id,
+            lambda repo: repo.trial_balance(tenant_id, today),
+            lambda repo: repo.list_journal_entries(tenant_id, limit=1000),
+            lambda repo: repo.list_open_ai_anomalies(tenant_id),
+            lambda repo: repo.duplicates(tenant_id),
+            lambda repo: repo.ar_aging(tenant_id, today),
+            lambda repo: repo.list_fiscal_periods(tenant_id),
+            lambda repo: repo._count_invoice_status(tenant_id, InvoiceStatus.DRAFT),
+        )
         posted_count = sum(1 for e in entries if e.status == EntryStatus.POSTED)
         unposted_count = len(entries) - posted_count
-        open_anomalies = await self.list_open_ai_anomalies(tenant_id)
-        dup_groups = await self.duplicates(tenant_id)
-        aging = await self.ar_aging(tenant_id, today)
         over_90 = next((b for b in aging.buckets if b.bucket == "over_90"), None)
-        periods = await self.list_fiscal_periods(tenant_id)
-        draft_invoices = await self._count_invoice_status(tenant_id, InvoiceStatus.DRAFT)
 
         facts: _AuditReadinessFacts = {
             "trial_balanced": trial.total_debit == trial.total_credit,

@@ -100,6 +100,7 @@ class FinanceEventPublisher:
         sync_session = getattr(session, "sync_session", None)
         if sync_session is not None:
             event.listen(sync_session, "after_commit", self._on_commit)
+            event.listen(sync_session, "after_rollback", self._on_rollback)
 
     # --- Sink methods (FinanceEventSink protocol shape) ---
 
@@ -199,6 +200,21 @@ class FinanceEventPublisher:
             self._drain()
         except Exception:  # pragma: no cover - defensive, no failure path today
             logger.exception("finance_events.publish_failed", pending=len(self._pending))
+            self._pending = []
+
+    def _on_rollback(self, _session: Session) -> None:
+        """Discard buffered events when the transaction rolls back.
+
+        Nothing that did not commit may be observable (money-moment events
+        announce persisted money); without this, a session reused after a
+        rollback would publish stale, never-committed events on its next
+        commit.
+        """
+        if self._pending:
+            logger.warning(
+                "finance_events.discarded_on_rollback",
+                pending=len(self._pending),
+            )
             self._pending = []
 
     @property

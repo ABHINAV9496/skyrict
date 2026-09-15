@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
     from core.domain.entities import AuditLogEntry, ErpSequence
 
+type AuditPage = "list[AuditLogEntry]"
+
 
 class SequenceRepositoryPort(Protocol):
     """Persistence contract for the tenant-scoped document counters."""
@@ -47,6 +49,21 @@ class AuditLogRepositoryPort(Protocol):
     ) -> list[AuditLogEntry]: ...
 
     async def get(self, tenant_id: uuid.UUID, entry_id: uuid.UUID) -> AuditLogEntry | None: ...
+
+    async def list_with_total(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        action: str | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        q: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[AuditPage, int]:
+        # One query via COUNT(*) OVER(): page + filtered total in one round trip.
+        ...
 
     async def count(
         self,

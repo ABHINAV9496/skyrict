@@ -180,6 +180,7 @@ jobs:
           IDENTITY_JWT_PUBLIC_KEY_PATH: ${{ github.workspace }}/.dev/keys/public.pem
           IDENTITY_JWKS_ISSUER: ${{ env.CORE_JWKS_ISSUER }}
           IDENTITY_JWKS_AUDIENCE: ${{ env.CORE_JWKS_AUDIENCE }}
+          CORE_JWT_PUBLIC_KEY_PATH: ${{ github.workspace }}/.dev/keys/public.pem
         run: |
           export IDENTITY_MFA_ENCRYPTION_KEY="$(
             uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

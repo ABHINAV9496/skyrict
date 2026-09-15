@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 class SessionRepositoryPort(Protocol):
     """Persistence operations for user sessions."""
 
-    async def get_by_id(self, session_id: str | uuid.UUID) -> Session | None: ...
+    async def get_by_id(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> Session | None: ...
 
     async def create(self, session: Session) -> Session: ...
 
@@ -27,19 +29,33 @@ class SessionRepositoryPort(Protocol):
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
     ) -> list[Session]: ...
 
-    async def get_active_by_family(self, family_id: str | uuid.UUID) -> list[Session]: ...
+    async def get_active_by_family(
+        self, family_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> list[Session]: ...
 
-    async def revoke_session(self, session_id: str | uuid.UUID) -> None: ...
+    async def revoke_session(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> None: ...
 
     async def revoke_all_for_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID | None = None
     ) -> None: ...
 
-    async def revoke_family(self, family_id: str | uuid.UUID) -> None: ...
+    async def revoke_family(
+        self, family_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> None: ...
 
-    async def set_trusted(self, session_id: str | uuid.UUID, is_trusted: bool) -> None: ...
+    async def set_trusted(
+        self,
+        session_id: str | uuid.UUID,
+        is_trusted: bool,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None: ...
 
-    async def mark_expired(self, session_id: str | uuid.UUID) -> None: ...
+    async def mark_expired(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> None: ...
 
     async def rotate(
         self,
@@ -47,6 +63,7 @@ class SessionRepositoryPort(Protocol):
         *,
         refresh_token_hash: str,
         expires_at: datetime,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> None: ...
 
     async def commit(self) -> None: ...

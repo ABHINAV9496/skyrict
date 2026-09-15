@@ -640,7 +640,7 @@ class TokenService:
 
         assert session.id is not None
         if session.expires_at <= datetime.now(UTC):
-            await self.session_service.expire_session(session.id)
+            await self.session_service.expire_session(session.id, tenant_id=tenant_id)
             raise TokenExpiredError()
 
         tokens = await self.create_token_pair(
@@ -652,6 +652,7 @@ class TokenService:
             session.id,
             refresh_token_hash=hash_refresh_token(tokens.refresh_token),
             expires_at=datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            tenant_id=tenant_id,
         )
         assert rotated is not None and rotated.id is not None
         await self.audit_service.log(
@@ -675,7 +676,10 @@ class TokenService:
         the whole chain that token belongs to is killed, not just one session.
         """
         if session is not None and session.token_family_id is not None:
-            await self.session_service.revoke_family(session.token_family_id)
+            await self.session_service.revoke_family(
+                session.token_family_id,
+                tenant_id=session.tenant_id,
+            )
         else:
             await self.session_service.revoke_all_sessions(user_id)
         await self.audit_service.log(
@@ -693,12 +697,17 @@ class TokenService:
             raise TokenInvalidError("Token is not a refresh token")
 
         user_id = payload["sub"]
+        tenant_id = payload["tenant_id"]
         session_id = payload.get("session_id")
-        session = await self.session_service.get_session(session_id) if session_id else None
+        session = (
+            await self.session_service.get_session(session_id, tenant_id=tenant_id)
+            if session_id
+            else None
+        )
         if session is not None and session.id is not None and session.user_id == uuid.UUID(user_id):
             # Idempotent logout - already-revoked sessions are fine.
             with suppress(SessionNotFoundError):
-                await self.session_service.revoke_session(user_id, session.id)
+                await self.session_service.revoke_session(user_id, session.id, tenant_id=tenant_id)
 
     async def introspect(self, token: str) -> dict[str, Any]:
         """Introspect a token - return its claims if valid."""

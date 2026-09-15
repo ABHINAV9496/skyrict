@@ -36,6 +36,7 @@ from ai_agent.core.audit_events import (
     AI_L3_COMPLIANCE_DIGESTED,
     AI_L3_LEAVE_PAY_CORRELATED,
     AI_L3_PAYROLL_COST_GENERATED,
+    AI_L4_SCENARIO_CREATED,
     AI_LEAD_SCORED,
     AI_NARRATOR_GENERATED,
     AI_NARRATOR_REFRESHED,
@@ -102,6 +103,8 @@ class TestAppendixBVocabulary:
         assert AI_COACHING_SUGGESTION_DISMISSED == "ai.coaching.suggestion.dismissed"
         assert AI_GUARDIAN_REPORT_GENERATED == "ai.guardian.report.generated"
         assert AI_GUARDIAN_EVENT_FLAGGED == "ai.guardian.event.flagged"
+        # SKY-93 L4 what-if planning events.
+        assert AI_L4_SCENARIO_CREATED == "ai.l4.scenario.created"
 
     def test_all_events_covers_exactly_the_documented_constants(self) -> None:
         expected = {
@@ -133,6 +136,9 @@ class TestAppendixBVocabulary:
             audit_events.AI_CRM_ANOMALY_DETECTED,
             audit_events.AI_CRM_ANOMALY_RESOLVED,
             audit_events.AI_CRM_ANOMALY_DISMISSED,
+            audit_events.AI_L4_SCENARIO_CREATED,
+            audit_events.AI_L4_SCENARIO_VIEWED,
+            audit_events.AI_L4_SCENARIO_COMPARED,
             audit_events.AI_REPORT_GENERATED,
             audit_events.AI_REPORT_SAVED,
             audit_events.AI_COACHING_SUGGESTION_CREATED,

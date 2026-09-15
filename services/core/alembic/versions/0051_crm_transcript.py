@@ -7,12 +7,12 @@ that transcript (summary, objection score, next-best-action) is AI product data
 the ai-agent owns in its own table (``ai_transcript_analyses``) - core only
 ever stores the input, never AI outputs on CRM rows.
 
-Renumbered from ``0050`` to ``0051`` (chains after ``0050_ai_docs``) to repair
-the duplicate-revision collision: two files originally claimed ``revision =
-"0050"`` with the same ``down_revision = "0049"``, which broke ``alembic
-upgrade head`` with "Multiple head revisions". ``0050_ai_docs`` was merged
-first and keeps ``0050``; any DB stamped ``0050`` refers to it, and this
-transcript column now applies afterwards.
+Chains after 0050 (FIN-AI-004 document & tax AI suite). Renumbered from
+``0050`` to ``0051`` to repair the duplicate-revision collision: two files
+originally claimed ``revision = "0050"`` with the same ``down_revision =
+"0049"``, which broke ``alembic upgrade head`` with "Multiple head revisions".
+``0050_ai_docs`` merged first and keeps ``0050``; any DB stamped ``0050``
+refers to it, and this transcript column now applies afterwards.
 
 Idempotency: the column already exists on some databases out-of-band (an
 earlier manual ALTER propped it up while the version table lagged), so the

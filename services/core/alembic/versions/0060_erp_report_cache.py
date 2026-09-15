@@ -5,8 +5,13 @@ aggregates (health_score, cashflow_projection, etc.) keyed by a SHA-256
 ``cache_key``.  The default TTL is 300 seconds (5 minutes); the
 ``core sweep-report-cache`` CLI command purges expired rows.
 
-Revision ID: 0056
-Revises: 0055
+Renumbered from ``0056`` on merge with dev: dev's HR-AI-004 / FIN-AUT-003
+chain took ``0056``-``0059`` (l4 planning permission, budget-draft bridge,
+journal templates, payment intents), so this migration chains after ``0059``
+as head ``0060`` (single alembic head).
+
+Revision ID: 0060
+Revises: 0059
 Create Date: 2026-09-14
 """
 
@@ -15,8 +20,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0056"
-down_revision = "0055"
+revision = "0060"
+down_revision = "0059"
 branch_labels = None
 depends_on = None
 

@@ -904,6 +904,62 @@ export function getPaymentMethodAnalytics(
     );
 }
 
+// ---------------------------------------------------------------------------
+// SKY-84 (FIN-AUT-003): customer payment analytics (B14)
+// ---------------------------------------------------------------------------
+
+export interface CustomerPaymentAnalyticsEntry {
+    customer_id: string;
+    customer_name: string | null;
+    payment_count: number;
+    total_paid: number;
+    avg_days_to_pay: number | null;
+    consistency_score: number | null;
+}
+
+export interface CustomerPaymentAnalytics {
+    from_date: string;
+    to_date: string;
+    entries: CustomerPaymentAnalyticsEntry[];
+}
+
+function mapCustomerPaymentAnalytics(
+    payload: CustomerPaymentAnalytics,
+): CustomerPaymentAnalytics {
+    return {
+        ...payload,
+        entries: (payload.entries ?? []).map((entry) => ({
+            ...entry,
+            total_paid: asNumber(entry.total_paid) ?? 0,
+            avg_days_to_pay: asNumber(entry.avg_days_to_pay),
+            consistency_score: asNumber(entry.consistency_score),
+        })),
+    };
+}
+
+export function getCustomerAnalytics(
+    fromDate: string,
+    toDate: string,
+): Promise<CustomerPaymentAnalytics> {
+    return apiFetch<CustomerPaymentAnalytics>(
+        `${AUTOMATION}/customer-analytics${queryString({
+            from_date: fromDate,
+            to_date: toDate,
+        })}`,
+    ).then(mapCustomerPaymentAnalytics);
+}
+
+// ---------------------------------------------------------------------------
+// SKY-84 (FIN-AUT-003): vendor-ref extraction (B23)
+// ---------------------------------------------------------------------------
+
+export function extractVendorRef(reference: string): Promise<string | null> {
+    return apiFetch<{ extracted: string | null }>(
+        `${AUTOMATION}/extract-vendor-ref`,
+        { method: "POST", body: JSON.stringify({ reference }) },
+    ).then((res) => res.extracted);
+}
+
 export function getAuditReadiness(): Promise<AuditReadiness> {
     return apiFetch<AuditReadiness>(`${AUTOMATION}/audit-readiness`);
 }
@@ -1152,4 +1208,272 @@ export function narrateFinanceAudit(input: {
 
 export function askFinanceDocs(question: string): Promise<DocQaAnswer> {
     return apiPost<DocQaAnswer>(`${AI_DOCS}/doc-qa`, { question });
+}
+
+// ---------------------------------------------------------------------------
+// FIN-AUT-003 (SKY-81/84): recurring journal templates (wave 3, B5)
+// ---------------------------------------------------------------------------
+
+const WAVE3 = "/api/v1/finance/automation/wave3";
+
+export interface JournalTemplateLine {
+    account_code: string;
+    debit: number | null;
+    credit: number | null;
+}
+
+export interface JournalTemplateLineInput {
+    account_code: string;
+    debit?: number | null;
+    credit?: number | null;
+}
+
+export interface JournalTemplate {
+    id: string;
+    name: string;
+    cron_expression: string;
+    entry_date_offset_days: number;
+    description: string | null;
+    memo: string | null;
+    lines: JournalTemplateLine[];
+    enabled: boolean;
+    last_fired_at: string | null;
+    next_run_at: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface JournalTemplateCreateInput {
+    name: string;
+    cron_expression: string;
+    entry_date_offset_days?: number;
+    description?: string | null;
+    memo?: string | null;
+    lines: JournalTemplateLineInput[];
+}
+
+export interface JournalTemplateUpdateInput {
+    name?: string;
+    cron_expression?: string;
+    entry_date_offset_days?: number;
+    description?: string | null;
+    memo?: string | null;
+    enabled?: boolean;
+    lines?: JournalTemplateLineInput[];
+}
+
+export interface JournalTemplateGenerated {
+    template_id: string;
+    template_name: string;
+    entry_date: string;
+    entry_id: string | null;
+    memo: string | null;
+    created: boolean;
+}
+
+export interface JournalTemplateFailure {
+    template_id: string;
+    template_name: string;
+    reason: string;
+}
+
+export interface JournalTemplateRunDue {
+    ran_at: string;
+    total_due: number;
+    generated: JournalTemplateGenerated[];
+    failed: JournalTemplateFailure[];
+}
+
+function mapJournalTemplate(payload: JournalTemplate): JournalTemplate {
+    return {
+        ...payload,
+        lines: (payload.lines ?? []).map((line) => ({
+            ...line,
+            debit: asNumber(line.debit),
+            credit: asNumber(line.credit),
+        })),
+    };
+}
+
+export function listJournalTemplates(): Promise<JournalTemplate[]> {
+    return apiFetch<JournalTemplate[]>(`${WAVE3}/templates`).then((rows) =>
+        (rows ?? []).map(mapJournalTemplate),
+    );
+}
+
+export function getJournalTemplate(
+    templateId: string,
+): Promise<JournalTemplate> {
+    return apiFetch<JournalTemplate>(`${WAVE3}/templates/${templateId}`).then(
+        mapJournalTemplate,
+    );
+}
+
+export function createJournalTemplate(
+    input: JournalTemplateCreateInput,
+): Promise<JournalTemplate> {
+    return apiPost<JournalTemplate>(`${WAVE3}/templates`, input).then(
+        mapJournalTemplate,
+    );
+}
+
+export function updateJournalTemplate(
+    templateId: string,
+    input: JournalTemplateUpdateInput,
+): Promise<JournalTemplate> {
+    return apiFetch<JournalTemplate>(`${WAVE3}/templates/${templateId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    }).then(mapJournalTemplate);
+}
+
+export function deleteJournalTemplate(
+    templateId: string,
+): Promise<{ deleted: boolean }> {
+    return apiFetch<{ deleted: boolean }>(`${WAVE3}/templates/${templateId}`, {
+        method: "DELETE",
+    });
+}
+
+export function generateJournalTemplate(
+    templateId: string,
+): Promise<JournalTemplateGenerated> {
+    return apiPost<JournalTemplateGenerated>(
+        `${WAVE3}/templates/${templateId}/generate`,
+        {},
+    );
+}
+
+export function runJournalTemplatesDue(): Promise<JournalTemplateRunDue> {
+    return apiPost<JournalTemplateRunDue>(
+        `${WAVE3}/templates/due/generate`,
+        {},
+    );
+}
+
+// ---------------------------------------------------------------------------
+// FIN-AUT-003 (SKY-81/84): payment-matching inbox (wave 3, B7)
+// ---------------------------------------------------------------------------
+
+const PAYMENT_MATCH = "/api/v1/finance/payment-intents";
+
+export type PaymentIntentStatus =
+    "open" | "candidate" | "applied" | "dismissed";
+
+export interface InvoiceSuggestion {
+    invoice_id: string;
+    invoice_number: string;
+    customer_id: string;
+    customer_name: string | null;
+    outstanding: number;
+    score: number;
+}
+
+export interface PaymentIntent {
+    id: string;
+    reference: string | null;
+    amount: number;
+    method: string;
+    paid_at: string;
+    source: string;
+    source_ref: string | null;
+    status: PaymentIntentStatus;
+    score: number | null;
+    customer_name: string | null;
+    suggestions: InvoiceSuggestion[];
+    suggested_invoice_id: string | null;
+    applied_invoice_id: string | null;
+    applied_payment_id: string | null;
+    applied_at: string | null;
+    applied_by: string | null;
+    dismissed_at: string | null;
+    created_at: string | null;
+}
+
+export interface PaymentIntentCreateInput {
+    amount: number;
+    paid_at: string;
+    method?: string;
+    reference?: string;
+    source?: string;
+    source_ref?: string;
+    customer_id?: string;
+}
+
+export interface PaymentMatchBulkResult {
+    intent_id: string;
+    ok: boolean;
+    payment_number: string | null;
+    error: string | null;
+}
+
+export interface PaymentMatchBulkAcceptResponse {
+    results: PaymentMatchBulkResult[];
+}
+
+export type PaymentIntentListParams = {
+    status?: PaymentIntentStatus;
+    offset?: number;
+    limit?: number;
+};
+
+function mapPaymentIntent(payload: PaymentIntent): PaymentIntent {
+    return {
+        ...payload,
+        amount: asNumber(payload.amount) ?? 0,
+        score: asNumber(payload.score),
+        suggestions: (payload.suggestions ?? []).map((s) => ({
+            ...s,
+            outstanding: asNumber(s.outstanding) ?? 0,
+            score: asNumber(s.score) ?? 0,
+        })),
+    };
+}
+
+export function registerPaymentIntent(
+    input: PaymentIntentCreateInput,
+): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(PAYMENT_MATCH, input).then(mapPaymentIntent);
+}
+
+export function listPaymentIntents(
+    params: PaymentIntentListParams = {},
+): Promise<{ data: PaymentIntent[]; meta: PaginationMeta | null }> {
+    return apiFetchWithMeta<PaymentIntent[]>(
+        `${PAYMENT_MATCH}${queryString(params)}`,
+    ).then((result) => ({
+        ...result,
+        data: (result.data ?? []).map(mapPaymentIntent),
+    }));
+}
+
+export function acceptPaymentIntent(
+    intentId: string,
+    invoiceId: string,
+): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(`${PAYMENT_MATCH}/${intentId}/accept`, {
+        invoice_id: invoiceId,
+    }).then(mapPaymentIntent);
+}
+
+export function undoPaymentIntent(intentId: string): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(`${PAYMENT_MATCH}/${intentId}/undo`, {}).then(
+        mapPaymentIntent,
+    );
+}
+
+export function dismissPaymentIntent(intentId: string): Promise<PaymentIntent> {
+    return apiPost<PaymentIntent>(
+        `${PAYMENT_MATCH}/${intentId}/dismiss`,
+        {},
+    ).then(mapPaymentIntent);
+}
+
+export function bulkAcceptPaymentIntents(
+    items: { intent_id: string; invoice_id: string }[],
+): Promise<PaymentMatchBulkAcceptResponse> {
+    return apiPost<PaymentMatchBulkAcceptResponse>(
+        `${PAYMENT_MATCH}/bulk-accept`,
+        { items },
+    );
 }

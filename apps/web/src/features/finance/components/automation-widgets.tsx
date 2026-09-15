@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
     CircleCheck,
@@ -9,16 +9,29 @@ import {
     LineChart as LineChartIcon,
     LoaderCircle,
     PieChart,
+    Play,
+    Plus,
+    RefreshCw,
+    Repeat,
     ScanSearch,
     ShieldCheck,
     Sparkles,
     SquarePen,
+    Trash2,
     TrendingUp,
     TriangleAlert,
     Wand2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/http";
@@ -30,11 +43,19 @@ import {
     toMoney,
 } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
+import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import {
     acceptSuggestion,
+    createJournalTemplate,
+    deleteJournalTemplate,
     dismissSuggestion,
+    generateJournalTemplate,
+    listAccounts,
+    listJournalTemplates,
     narrateAnomaly,
+    runJournalTemplatesDue,
     suggestAccountCode,
+    updateJournalTemplate,
     type Account,
     type AccountCodeSuggestion,
     type ArAging,
@@ -45,6 +66,8 @@ import {
     type DuplicateGroup,
     type FinanceAnomaly,
     type HealthScore,
+    type JournalTemplate,
+    type JournalTemplateLine,
     type PaymentMethodAnalytics,
     type RevenueConcentration,
     type WorkingCapitalAlert,
@@ -1313,6 +1336,627 @@ export function AuditReadinessCard({
                     ))}
                 </ul>
             )}
+        </WidgetCard>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// FIN-AUT-003 (SKY-81/84): recurring journal templates (wave 3, B5)
+// ---------------------------------------------------------------------------
+
+function TemplateBalanceTag({ lines }: { lines: JournalTemplateLine[] }) {
+    const debit = lines.reduce((sum, line) => sum + (line.debit ?? 0), 0);
+    const credit = lines.reduce((sum, line) => sum + (line.credit ?? 0), 0);
+    const balanced = Math.abs(debit - credit) < 0.005;
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center gap-1.5 text-xs font-medium",
+                balanced
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400",
+            )}
+        >
+            {balanced ? (
+                <CircleCheck aria-hidden="true" className="size-3.5" />
+            ) : (
+                <TriangleAlert aria-hidden="true" className="size-3.5" />
+            )}
+            {formatMoney(debit)} / {formatMoney(credit)}
+        </span>
+    );
+}
+
+function TemplateLineRow({
+    index,
+    line,
+    accounts,
+    canRemove,
+    onChange,
+    onRemove,
+}: {
+    index: number;
+    line: { account_code: string; debit: string; credit: string };
+    accounts: Account[];
+    canRemove: boolean;
+    onChange: (
+        patch: Partial<{ account_code: string; debit: string; credit: string }>,
+    ) => void;
+    onRemove: () => void;
+}) {
+    return (
+        <tr className="border-b border-border/60 last:border-0">
+            <td className="px-3 py-1">
+                <AccountCombobox
+                    accounts={accounts}
+                    value={line.account_code}
+                    onChange={(code) => onChange({ account_code: code })}
+                    invalid={!line.account_code.trim()}
+                />
+            </td>
+            <td className="w-28 px-3 py-1">
+                <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    aria-label={`Line ${index + 1} debit`}
+                    value={line.debit}
+                    onChange={(event) =>
+                        onChange({ debit: event.target.value, credit: "" })
+                    }
+                />
+            </td>
+            <td className="w-28 px-3 py-1">
+                <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    aria-label={`Line ${index + 1} credit`}
+                    value={line.credit}
+                    onChange={(event) =>
+                        onChange({ credit: event.target.value, debit: "" })
+                    }
+                />
+            </td>
+            <td className="px-3 py-1 text-right">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Remove line"
+                    disabled={canRemove}
+                    onClick={onRemove}
+                >
+                    <Trash2 aria-hidden="true" className="size-3.5" />
+                </Button>
+            </td>
+        </tr>
+    );
+}
+
+function JournalTemplateDialog({
+    open,
+    onOpenChange,
+    accounts,
+    onCreated,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    accounts: Account[];
+    onCreated: (template: JournalTemplate) => void;
+}) {
+    const emptyLine = () => ({ account_code: "", debit: "", credit: "" });
+    const [name, setName] = useState("");
+    const [cron, setCron] = useState("0 9 * * MON");
+    const [offsetDays, setOffsetDays] = useState("0");
+    const [memo, setMemo] = useState("");
+    const [lines, setLines] = useState([emptyLine(), emptyLine()]);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+
+    const debit = lines.reduce(
+        (sum, line) => sum + (Number(line.debit) || 0),
+        0,
+    );
+    const credit = lines.reduce(
+        (sum, line) => sum + (Number(line.credit) || 0),
+        0,
+    );
+    const balanced = Math.abs(debit - credit) < 0.005;
+    const valid =
+        Boolean(name.trim()) &&
+        Boolean(cron.trim()) &&
+        lines.every(
+            (line) =>
+                Boolean(line.account_code.trim()) &&
+                (Number(line.debit) > 0 || Number(line.credit) > 0),
+        ) &&
+        balanced;
+
+    function updateLine(
+        index: number,
+        patch: Partial<{ account_code: string; debit: string; credit: string }>,
+    ) {
+        setLines((prev) =>
+            prev.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+        );
+    }
+
+    async function create() {
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            const template = await createJournalTemplate({
+                name: name.trim(),
+                cron_expression: cron.trim(),
+                entry_date_offset_days: Number(offsetDays) || 0,
+                memo: memo.trim() || null,
+                lines: lines.map((line) => {
+                    const d = Number(line.debit);
+                    const c = Number(line.credit);
+                    return {
+                        account_code: line.account_code.trim(),
+                        debit: d > 0 ? d : null,
+                        credit: c > 0 ? c : null,
+                    };
+                }),
+            });
+            onCreated(template);
+            setName("");
+            setCron("0 9 * * MON");
+            setOffsetDays("0");
+            setMemo("");
+            setLines([emptyLine(), emptyLine()]);
+            onOpenChange(false);
+        } catch (err) {
+            setSubmitError(message(err, "The template could not be created."));
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-3xl">
+                <div className="flex items-start gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Repeat aria-hidden="true" className="size-5" />
+                    </div>
+                    <DialogHeader>
+                        <DialogTitle>New recurring template</DialogTitle>
+                        <DialogDescription>
+                            Balanced lines fire on a schedule and create draft
+                            journal entries. Accounts resolve by code at
+                            generate time.
+                        </DialogDescription>
+                    </DialogHeader>
+                </div>
+                <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-name">Name</Label>
+                            <Input
+                                id="template-name"
+                                value={name}
+                                onChange={(event) =>
+                                    setName(event.target.value)
+                                }
+                                placeholder="e.g. Monthly rent"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-memo">Memo</Label>
+                            <Input
+                                id="template-memo"
+                                value={memo}
+                                onChange={(event) =>
+                                    setMemo(event.target.value)
+                                }
+                                placeholder="Uses {date} for the entry date"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-cron">
+                                Cron expression
+                            </Label>
+                            <Input
+                                id="template-cron"
+                                value={cron}
+                                onChange={(event) =>
+                                    setCron(event.target.value)
+                                }
+                                placeholder="0 9 * * MON"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Weekday pattern, e.g. 0 9 * * MON.
+                            </p>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-offset">
+                                Entry date offset (days)
+                            </Label>
+                            <Input
+                                id="template-offset"
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={offsetDays}
+                                onChange={(event) =>
+                                    setOffsetDays(event.target.value)
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Lines</Label>
+                        <div className="overflow-hidden rounded-lg border border-border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted/40 text-left text-xs text-muted-foreground uppercase">
+                                    <tr>
+                                        <th className="px-3 py-2 font-semibold">
+                                            Account
+                                        </th>
+                                        <th className="px-3 py-2 text-right font-semibold">
+                                            Debit
+                                        </th>
+                                        <th className="px-3 py-2 text-right font-semibold">
+                                            Credit
+                                        </th>
+                                        <th className="w-10" />
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {lines.map((line, index) => (
+                                        <TemplateLineRow
+                                            key={index}
+                                            index={index}
+                                            line={line}
+                                            accounts={accounts}
+                                            canRemove={lines.length === 1}
+                                            onChange={(patch) =>
+                                                updateLine(index, patch)
+                                            }
+                                            onRemove={() =>
+                                                setLines((prev) =>
+                                                    prev.filter(
+                                                        (_, i) => i !== index,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                    setLines((prev) => [...prev, emptyLine()])
+                                }
+                            >
+                                <Plus aria-hidden="true" className="size-3.5" />
+                                Add line
+                            </Button>
+                            <span
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 text-xs font-medium",
+                                    balanced
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-amber-600 dark:text-amber-400",
+                                )}
+                            >
+                                {balanced ? (
+                                    <CircleCheck
+                                        aria-hidden="true"
+                                        className="size-3.5"
+                                    />
+                                ) : (
+                                    <TriangleAlert
+                                        aria-hidden="true"
+                                        className="size-3.5"
+                                    />
+                                )}
+                                Debit {formatMoney(debit)} � Credit{" "}
+                                {formatMoney(credit)}
+                            </span>
+                        </div>
+                    </div>
+
+                    {submitError ? (
+                        <p
+                            role="alert"
+                            className="text-sm font-medium text-destructive"
+                        >
+                            {submitError}
+                        </p>
+                    ) : null}
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={!valid || submitting}
+                            onClick={() => void create()}
+                        >
+                            {submitting ? (
+                                <LoaderCircle
+                                    aria-hidden="true"
+                                    className="size-4 animate-spin"
+                                />
+                            ) : (
+                                <Plus aria-hidden="true" className="size-4" />
+                            )}
+                            Create template
+                        </Button>
+                    </DialogFooter>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export function JournalTemplatesWidget({ canWrite }: { canWrite: boolean }) {
+    const router = useRouter();
+    const [templates, setTemplates] = useState<JournalTemplate[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [runningDue, setRunningDue] = useState(false);
+    const [runSummary, setRunSummary] = useState<string | null>(null);
+    const [accounts, setAccounts] = useState<Account[]>([]);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [rows, fetchedAccounts] = await Promise.all([
+                listJournalTemplates(),
+                canWrite ? listAccounts(true) : Promise.resolve([]),
+            ]);
+            setTemplates(rows);
+            setAccounts(fetchedAccounts);
+        } catch (err) {
+            setError(message(err, "Could not load journal templates."));
+        } finally {
+            setLoading(false);
+        }
+    }, [canWrite]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    async function toggleEnabled(template: JournalTemplate) {
+        try {
+            const updated = await updateJournalTemplate(template.id, {
+                enabled: !template.enabled,
+            });
+            setTemplates((prev) =>
+                prev.map((t) => (t.id === updated.id ? updated : t)),
+            );
+        } catch (err) {
+            setError(message(err, "Could not update the template."));
+        }
+    }
+
+    async function generateNow(template: JournalTemplate) {
+        try {
+            const result = await generateJournalTemplate(template.id);
+            if (result.entry_id) {
+                router.push(
+                    `/dashboard/erp/finance/journal-entries/${result.entry_id}`,
+                );
+            }
+        } catch (err) {
+            setError(message(err, "Could not generate the draft entry."));
+        }
+    }
+
+    async function removeTemplate(template: JournalTemplate) {
+        try {
+            await deleteJournalTemplate(template.id);
+            setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+        } catch (err) {
+            setError(message(err, "Could not delete the template."));
+        }
+    }
+
+    async function runDue() {
+        setRunningDue(true);
+        setRunSummary(null);
+        try {
+            const result = await runJournalTemplatesDue();
+            setRunSummary(
+                `${result.generated.length} created (${result.total_due} due${
+                    result.failed.length
+                        ? `, ${result.failed.length} failed`
+                        : ""
+                })`,
+            );
+            await load();
+        } catch (err) {
+            setError(message(err, "Could not run the due templates."));
+        } finally {
+            setRunningDue(false);
+        }
+    }
+
+    return (
+        <WidgetCard
+            title="Recurring templates"
+            icon={<Repeat aria-hidden="true" className="size-4" />}
+            hint="Cron-scheduled draft journal entries"
+            action={
+                canWrite ? (
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={runningDue}
+                            onClick={() => void runDue()}
+                        >
+                            {runningDue ? (
+                                <LoaderCircle
+                                    aria-hidden="true"
+                                    className="size-3.5 animate-spin"
+                                />
+                            ) : (
+                                <RefreshCw
+                                    aria-hidden="true"
+                                    className="size-3.5"
+                                />
+                            )}
+                            Run due
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setCreateOpen(true)}
+                        >
+                            <Plus aria-hidden="true" className="size-3.5" />
+                            New template
+                        </Button>
+                    </div>
+                ) : null
+            }
+        >
+            {loading ? (
+                <div className="flex h-16 items-center justify-center text-sm text-muted-foreground">
+                    Loading templates�
+                </div>
+            ) : error ? (
+                <FinanceErrorState
+                    message={error}
+                    onRetry={() => void load()}
+                />
+            ) : templates.length === 0 ? (
+                <FinanceEmptyState
+                    icon={Repeat}
+                    title="No recurring templates"
+                    description={
+                        canWrite
+                            ? "Create a template to schedule recurring draft journal entries."
+                            : "No recurring journal templates."
+                    }
+                />
+            ) : (
+                <div className="space-y-2">
+                    {runSummary ? (
+                        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                            {runSummary}
+                        </p>
+                    ) : null}
+                    {templates.map((template) => (
+                        <div
+                            key={template.id}
+                            className="rounded-lg border border-border bg-card p-3"
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-foreground">
+                                        {template.name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {template.cron_expression} � next{" "}
+                                        {template.next_run_at
+                                            ? formatDate(
+                                                  template.next_run_at.slice(
+                                                      0,
+                                                      10,
+                                                  ),
+                                              )
+                                            : "�"}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <TemplateBalanceTag
+                                        lines={template.lines}
+                                    />
+                                    {template.enabled ? (
+                                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                            On
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                            Off
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {canWrite ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-1">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                            void toggleEnabled(template)
+                                        }
+                                    >
+                                        {template.enabled ? "Pause" : "Resume"}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                            void generateNow(template)
+                                        }
+                                    >
+                                        <Play
+                                            aria-hidden="true"
+                                            className="size-3.5"
+                                        />
+                                        Generate
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-destructive"
+                                        onClick={() =>
+                                            void removeTemplate(template)
+                                        }
+                                    >
+                                        <Trash2
+                                            aria-hidden="true"
+                                            className="size-3.5"
+                                        />
+                                        Delete
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </div>
+                    ))}
+                </div>
+            )}
+            {canWrite ? (
+                <JournalTemplateDialog
+                    open={createOpen}
+                    onOpenChange={setCreateOpen}
+                    accounts={accounts}
+                    onCreated={(template) =>
+                        setTemplates((prev) => [template, ...prev])
+                    }
+                />
+            ) : null}
         </WidgetCard>
     );
 }

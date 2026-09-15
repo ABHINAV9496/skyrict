@@ -36,6 +36,9 @@ HR_AI_ANOMALY_DISMISSED = "hr.ai.anomaly.dismissed"
 HR_AI_ANOMALY_RESOLVED = "hr.ai.anomaly.resolved"
 HR_AI_COMPLIANCE_ACKNOWLEDGED = "hr.ai.compliance.acknowledged"
 HR_AI_COMPLIANCE_RESOLVED = "hr.ai.compliance.resolved"
+# SKY-93 (HR-AI-004, Commit 4): an L4 what-if scenario was exported to Finance
+# as a proposed budget draft.
+HR_AI_L4_BUDGET_DRAFT_CREATED = "hr.ai.l4.budget_draft.created"
 # HR-AI-003: L3 analytics narrative generation (every access audited, aggregates only).
 HR_AI_L3_PAYROLL_COST_NARRATED = "hr.ai.l3.payroll_cost.narrated"
 HR_AI_L3_LEAVE_PAY_CORRELATED = "hr.ai.l3.leave_pay.correlated"
@@ -90,6 +93,16 @@ FINANCE_AI_TAX_SUMMARY_REJECTED = "finance.ai.tax_summary.rejected"
 FINANCE_AI_DOC_GENERATED = "finance.ai.doc.generated"
 FINANCE_AI_DOC_APPROVED = "finance.ai.doc.approved"
 FINANCE_AI_AUDIT_NARRATED = "finance.ai.audit.narrated"
+# FIN-AUT-003 B5: recurring journal templates.
+FINANCE_JOURNAL_TEMPLATE_CREATED = "finance.journal_template.created"
+FINANCE_JOURNAL_TEMPLATE_UPDATED = "finance.journal_template.updated"
+FINANCE_JOURNAL_TEMPLATE_DELETED = "finance.journal_template.deleted"
+FINANCE_JOURNAL_TEMPLATE_GENERATED = "finance.journal_template.generated"
+# FIN-AUT-003 B7: payment-matching inbox.
+FINANCE_PAYMENT_INTENT_REGISTERED = "finance.payment_intent.registered"
+FINANCE_PAYMENT_MATCH_ACCEPTED = "finance.payment_match.accepted"
+FINANCE_PAYMENT_MATCH_UNDONE = "finance.payment_match.undone"
+FINANCE_PAYMENT_MATCH_DISMISSED = "finance.payment_match.dismissed"
 
 # ---------------------------------------------------------------------------
 # Reports (RPT-BE-001)
@@ -120,6 +133,7 @@ CATALOG: tuple[str, ...] = (
     HR_AI_ANOMALY_RESOLVED,
     HR_AI_COMPLIANCE_ACKNOWLEDGED,
     HR_AI_COMPLIANCE_RESOLVED,
+    HR_AI_L4_BUDGET_DRAFT_CREATED,
     HR_AI_L3_PAYROLL_COST_NARRATED,
     HR_AI_L3_LEAVE_PAY_CORRELATED,
     HR_AI_L3_COMPLIANCE_DIGESTED,
@@ -163,6 +177,14 @@ CATALOG: tuple[str, ...] = (
     FINANCE_AI_DOC_GENERATED,
     FINANCE_AI_DOC_APPROVED,
     FINANCE_AI_AUDIT_NARRATED,
+    FINANCE_JOURNAL_TEMPLATE_CREATED,
+    FINANCE_JOURNAL_TEMPLATE_UPDATED,
+    FINANCE_JOURNAL_TEMPLATE_DELETED,
+    FINANCE_JOURNAL_TEMPLATE_GENERATED,
+    FINANCE_PAYMENT_INTENT_REGISTERED,
+    FINANCE_PAYMENT_MATCH_ACCEPTED,
+    FINANCE_PAYMENT_MATCH_UNDONE,
+    FINANCE_PAYMENT_MATCH_DISMISSED,
     REPORT_EXPORTED,
     REPORT_CREATED,
 )
@@ -195,6 +217,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_AI_ANOMALY_RESOLVED,
             HR_AI_COMPLIANCE_ACKNOWLEDGED,
             HR_AI_COMPLIANCE_RESOLVED,
+            HR_AI_L4_BUDGET_DRAFT_CREATED,
             HR_AI_L3_PAYROLL_COST_NARRATED,
             HR_AI_L3_LEAVE_PAY_CORRELATED,
             HR_AI_L3_COMPLIANCE_DIGESTED,
@@ -250,6 +273,14 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             FINANCE_AI_DOC_GENERATED,
             FINANCE_AI_DOC_APPROVED,
             FINANCE_AI_AUDIT_NARRATED,
+            FINANCE_JOURNAL_TEMPLATE_CREATED,
+            FINANCE_JOURNAL_TEMPLATE_UPDATED,
+            FINANCE_JOURNAL_TEMPLATE_DELETED,
+            FINANCE_JOURNAL_TEMPLATE_GENERATED,
+            FINANCE_PAYMENT_INTENT_REGISTERED,
+            FINANCE_PAYMENT_MATCH_ACCEPTED,
+            FINANCE_PAYMENT_MATCH_UNDONE,
+            FINANCE_PAYMENT_MATCH_DISMISSED,
         ),
     ),
     (
@@ -304,6 +335,10 @@ __all__ = [
     "FINANCE_JOURNAL_ENTRY_POSTED",
     "FINANCE_JOURNAL_ENTRY_REVERSED",
     "FINANCE_JOURNAL_ENTRY_VOIDED",
+    "FINANCE_JOURNAL_TEMPLATE_CREATED",
+    "FINANCE_JOURNAL_TEMPLATE_DELETED",
+    "FINANCE_JOURNAL_TEMPLATE_GENERATED",
+    "FINANCE_JOURNAL_TEMPLATE_UPDATED",
     "FINANCE_PAYMENT_APPLIED",
     "HR_AI_ANOMALY_ACKNOWLEDGED",
     "HR_AI_ANOMALY_DISMISSED",

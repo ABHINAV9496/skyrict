@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from core.domain.entities import (
         AccountCodeSuggestion,
         AiFinanceAnomaly,
@@ -37,17 +39,21 @@ if TYPE_CHECKING:
         ArAging,
         AuditReadiness,
         BalanceSheet,
+        BudgetDraft,
         CashflowProjection,
         ChartOfAccount,
         CloseChecklist,
         ComparativePnl,
+        CustomerPaymentAnalytics,
         DuplicateGroup,
         ExchangeRate,
         FiscalPeriod,
         HealthScore,
         Invoice,
         JournalEntry,
+        JournalTemplate,
         Payment,
+        PaymentIntent,
         PaymentMethodAnalytics,
         ProfitAndLoss,
         RevenueConcentration,
@@ -56,7 +62,11 @@ if TYPE_CHECKING:
         WorkingCapitalAlert,
         WorkingCapitalSeries,
     )
-    from core.domain.value_objects import EntryStatus, InvoiceStatus
+    from core.domain.value_objects import (
+        EntryStatus,
+        InvoiceStatus,
+        PaymentIntentStatus,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +287,10 @@ class FinanceRepositoryPort(Protocol):
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> PaymentMethodAnalytics: ...
 
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> CustomerPaymentAnalytics: ...
+
     async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness: ...
 
     async def reverse_journal_entry(
@@ -361,6 +375,95 @@ class FinanceRepositoryPort(Protocol):
     async def list_exchange_rates(
         self, tenant_id: uuid.UUID, *, currency: str | None = None
     ) -> Sequence[ExchangeRate]: ...
+
+    # --- Workforce-plan budget drafts (HR-AI-004, SKY-93) ---
+    session: AsyncSession
+
+    async def create_budget_draft(self, draft: BudgetDraft) -> BudgetDraft: ...
+
+    async def get_workforce_budget_draft_id(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        source_ref: str,
+    ) -> uuid.UUID | None: ...
+
+
+# ---------------------------------------------------------------------------
+# Payment-matching inbox repository port (FIN-AUT-003 wave 3, B7)
+# ---------------------------------------------------------------------------
+
+
+class PaymentMatchRepositoryPort(Protocol):
+    """Persistence contract for the payment-matching inbox (B7).
+
+    ``outstanding_invoices`` pairs each APPROVED invoice with its remaining
+    balance (total minus APPLIED payments) so the scorer can rank candidates
+    against live data. Undo support deletes the exact ``erp_payments`` row a
+    prior accept created and flips the invoice back to APPROVED.
+    """
+
+    async def create_payment_intent(self, intent: PaymentIntent) -> PaymentIntent: ...
+
+    async def get_payment_intent(
+        self, intent_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> PaymentIntent | None: ...
+
+    async def list_payment_intents(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: PaymentIntentStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[PaymentIntent]: ...
+
+    async def update_payment_intent(self, intent: PaymentIntent) -> PaymentIntent | None: ...
+
+    async def outstanding_invoices(
+        self, tenant_id: uuid.UUID
+    ) -> Sequence[tuple[Invoice, Decimal]]: ...
+
+    async def delete_payment(self, payment_id: uuid.UUID, tenant_id: uuid.UUID) -> bool: ...
+
+    async def settle_invoice_payment_status(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
+
+# ---------------------------------------------------------------------------
+# Finance repository port (FIN-AUT-003 wave 3) - recurring journal templates
+# ---------------------------------------------------------------------------
+
+
+class JournalTemplateRepositoryPort(Protocol):
+    """Persistence contract for recurring journal templates (B5).
+
+    Kept as a separate Protocol (not merged into ``FinanceRepositoryPort``) so
+    the wave-3 service depends only on the slice it uses.
+    """
+
+    async def create_journal_template(self, template: JournalTemplate) -> JournalTemplate: ...
+
+    async def get_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> JournalTemplate | None: ...
+
+    async def list_journal_templates(
+        self, tenant_id: uuid.UUID, *, enabled: bool | None = None
+    ) -> Sequence[JournalTemplate]: ...
+
+    async def update_journal_template(
+        self, template: JournalTemplate
+    ) -> JournalTemplate | None: ...
+
+    async def delete_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> bool: ...
+
+    async def list_journal_templates_due(
+        self, tenant_id: uuid.UUID, at: datetime
+    ) -> Sequence[JournalTemplate]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +635,54 @@ class PayrollAccrualPort(Protocol):
         gross: Decimal,
         net: Decimal,
     ) -> PayrollAccrualOutcome: ...
+
+
+@dataclass(frozen=True)
+class BudgetDraftOutcome:
+    """Result of a proposed-budget-draft export attempt (SKY-93, Commit 4).
+
+    ``draft_id`` is set when a new draft was created; ``already_booked`` is
+    set when the ``UNIQUE (tenant_id, source, source_ref)`` idempotency lock
+    held (source='workforce_plan', source_ref=scenario_id) — a replayed export
+    never creates a second draft.
+    """
+
+    draft_id: uuid.UUID | None = None
+    already_booked: bool = False
+
+
+class BudgetDraftPort(Protocol):
+    """HR-AI-004 export seam — implemented by ``FinanceService``.
+
+    The core AI-HR router calls this to materialize a frozen L4 what-if
+    scenario as a *proposed budget draft* in the finance inbox. It deliberately
+    creates a planning artifact (``erp_budget_drafts``), never a journal entry:
+    a what-if projection must not share the JE inbox strictly separates planned
+    figures from real accualls. The AI-HR feature never imports finance
+    modules, mirroring the payroll/COGS seam philosophy.
+    """
+
+    async def create_workforce_budget_draft(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        scenario_name: str,
+        base_as_of: date,
+        horizon: int,
+        currency: str,
+        salary_total: Decimal,
+        benefit_total: Decimal,
+        grand_total: Decimal,
+        created_by: uuid.UUID,
+    ) -> BudgetDraftOutcome: ...
+
+    async def get_workforce_budget_draft_id(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        source_ref: str,
+    ) -> uuid.UUID | None: ...
 
 
 # ---------------------------------------------------------------------------

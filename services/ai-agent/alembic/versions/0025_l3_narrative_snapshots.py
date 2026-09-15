@@ -14,8 +14,8 @@ Rows are insert-per-generation; cache semantics are derived (repository picks
 the newest row for a (kind, as_of) pair), mirroring ai_digest_snapshots (0007)
 and 0001/0012 RLS conventions. Aggregates only - no employee-level data.
 
-Revision ID: 0020
-Revises: 0023
+Revision ID: 0025
+Revises: 0024
 Create Date: 2026-09-08
 
 Renumbered from ``0022`` to ``0024`` (chains after ``0023_crm_anomalies``) to
@@ -23,7 +23,9 @@ repair the duplicate-revision collision with dev's ``0022_crm_transcript_analyse
 two files claimed ``revision = "0022"`` with the same ``down_revision = "0021"``,
 which broke ``alembic upgrade head`` with "Multiple head revisions". Dev's
 ``0022_crm_transcript_analyses`` keeps ``0022``; any DB stamped ``0022`` refers
-to it, and these snapshot tables now apply afterwards.
+to it, and these snapshot tables now apply afterwards. Further renumbered to
+``0025`` on merge (HR-AI-004) so it chains after ``0024_ai_l4_scenario_versions``
+instead of colliding with it.
 """
 
 from __future__ import annotations
@@ -32,8 +34,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision = "0024"
-down_revision = "0023"
+revision = "0025"
+down_revision = "0024"
 branch_labels = None
 depends_on = None
 

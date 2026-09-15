@@ -72,7 +72,10 @@ import {
     FinanceEmptyState,
     FinanceErrorState,
 } from "@/features/finance/components/state-cards";
-import { DuplicatesWidget } from "@/features/finance/components/automation-widgets";
+import {
+    DuplicatesWidget,
+    JournalTemplatesWidget,
+} from "@/features/finance/components/automation-widgets";
 import { cn } from "@/lib/utils";
 import { AccountCombobox } from "@/features/finance/components/account-combobox";
 import {
@@ -1152,6 +1155,8 @@ function FinanceJournalEntries() {
                     onRetry={() => void loadDuplicates()}
                 />
             </div>
+
+            <JournalTemplatesWidget canWrite={canWrite} />
 
             {(() => {
                 const needle = query.trim().toLowerCase();

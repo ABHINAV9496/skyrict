@@ -5,7 +5,8 @@ automation widgets: close checklist, duplicates, account-code suggestions,
 working-capital alert, health score, cash-flow projection, anomalies,
 comparative P&L, journal-entry reversal, and tenant automation settings. Wave
 2 adds revenue concentration, working-capital trend, payment-method analytics,
-audit readiness, and audit-log search.
+audit readiness, and audit-log search. Wave 3 adds customer payment analytics
+and vendor-ref extraction.
 
 Reads use ``erp.finance.read``; the reversal (a money moment) uses
 ``erp.finance.approve``; settings writes use ``erp.finance.write``.
@@ -13,6 +14,7 @@ Reads use ``erp.finance.read``; the reversal (a money moment) uses
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -49,6 +51,8 @@ from core.domain.entities import (
     AiFinanceSuggestion,
     AnomalyNarration,
     ChartOfAccount,
+    CustomerPaymentAnalytics,
+    CustomerPaymentAnalyticsEntry,
     DraftEntry,
     DraftEntryLine,
     InvoiceLineSuggestion,
@@ -76,6 +80,7 @@ from core.features.finance.schemas import (
     CashflowProjectionResponse,
     CloseChecklistResponse,
     ComparativePnlResponse,
+    CustomerPaymentAnalyticsResponse,
     DraftEntryLineResponse,
     DraftEntryResponse,
     DuplicateGroupResponse,
@@ -92,6 +97,8 @@ from core.features.finance.schemas import (
     SuggestInvoiceLinesRequest,
     SuggestionQualityResponse,
     TenantSettingsResponse,
+    VendorRefExtractionRequest,
+    VendorRefExtractionResponse,
     WorkingCapitalAlertResponse,
     WorkingCapitalSeriesResponse,
     WorkingCapitalSettingsRequest,
@@ -492,6 +499,31 @@ class FinanceAutomationService:
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> Any:
         return await self.repo.payment_method_analytics(tenant_id, from_date, to_date)
+
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> Any:
+        report = await self.repo.customer_payment_analytics(tenant_id, from_date, to_date)
+        if self.customers is not None and report.entries:
+            names = await self.customers.get_customer_names(
+                [e.customer_id for e in report.entries], tenant_id=tenant_id
+            )
+            report = CustomerPaymentAnalytics(
+                from_date=report.from_date,
+                to_date=report.to_date,
+                entries=tuple(
+                    CustomerPaymentAnalyticsEntry(
+                        customer_id=e.customer_id,
+                        customer_name=names.get(e.customer_id),
+                        payment_count=e.payment_count,
+                        total_paid=e.total_paid,
+                        avg_days_to_pay=e.avg_days_to_pay,
+                        consistency_score=e.consistency_score,
+                    )
+                    for e in report.entries
+                ),
+            )
+        return report
 
     async def audit_readiness(self, tenant_id: uuid.UUID) -> Any:
         return await self._cached(
@@ -907,6 +939,20 @@ async def get_payment_method_analytics(
     return ResponseEnvelope(data=PaymentMethodAnalyticsResponse.model_validate(analytics))
 
 
+@router.get(
+    "/customer-analytics",
+    response_model=ResponseEnvelope[CustomerPaymentAnalyticsResponse],
+)
+async def get_customer_payment_analytics(
+    from_date: date,
+    to_date: date,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+    svc: FinanceAutomationService = Depends(get_finance_automation_service),
+) -> ResponseEnvelope[CustomerPaymentAnalyticsResponse]:
+    analytics = await svc.customer_payment_analytics(_tenant_id(current_user), from_date, to_date)
+    return ResponseEnvelope(data=CustomerPaymentAnalyticsResponse.model_validate(analytics))
+
+
 @router.get("/audit-readiness", response_model=ResponseEnvelope[AuditReadinessResponse])
 async def get_audit_readiness(
     current_user: dict[str, Any] = Depends(require_finance_read),
@@ -1159,3 +1205,41 @@ async def suggestion_quality(
 ) -> ResponseEnvelope[SuggestionQualityResponse]:
     result = await svc.suggestion_quality(_tenant_id(current_user), window_days)
     return ResponseEnvelope(data=result)
+
+
+# ---------------------------------------------------------------------------
+# B23: Vendor-invoice-number extraction (SKY-84)
+# ---------------------------------------------------------------------------
+
+_VENDOR_INV_RE = re.compile(
+    r"(?:"
+    r"(?:invoice|inv)[\s#:\-]*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r"|"
+    r"(?:reference|ref|po)[\s#:\-]*([A-Z0-9][A-Z0-9\-]{2,30})"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def extract_vendor_ref(reference: str) -> str | None:
+    """Best-effort extraction of a vendor invoice number from free text."""
+    match = _VENDOR_INV_RE.search(reference)
+    if match is None:
+        return None
+    token = (match.group(1) or match.group(2)).strip()
+    token = re.sub(r"^(?:invoice|inv)\b[\-_:]?\s*", "", token, flags=re.IGNORECASE)
+    return token or None
+
+
+@router.post(
+    "/extract-vendor-ref",
+    response_model=ResponseEnvelope[VendorRefExtractionResponse],
+)
+async def extract_vendor_invoice_ref(
+    body: VendorRefExtractionRequest,
+    current_user: dict[str, Any] = Depends(require_finance_read),
+) -> ResponseEnvelope[VendorRefExtractionResponse]:
+    _ = current_user  # pure function, no tenant context needed
+    return ResponseEnvelope(
+        data=VendorRefExtractionResponse(extracted=extract_vendor_ref(body.reference))
+    )

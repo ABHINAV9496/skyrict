@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 56 revisions, 0001..0056) -> core ``downgrade base`` (all the way back to
+(all 60 revisions, 0001..0060) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -21,10 +21,15 @@ Sentinel assertions probe one representative artefact of each migration:
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), the five
-approval-workflow tables with their RLS policies (0052, SKY-92), and the three
+approval-workflow tables with their RLS policies (0052, SKY-92), the three
 notification-center tables with their RLS policies and dedupe constraints
-(0055, SKY-93 - renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054),
-and the ``erp_report_cache`` aggregate-cache table (0056, SKY-99).
+(0055, SKY-93, renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054),
+the HR-AI-004 planning permission and finance budget-draft bridge tables with
+their idempotency lock (0056/0057, SKY-93), ``erp_journal_templates`` with its
+RLS policy (0058, FIN-AUT-003 B5, renumbered from 0056 when dev's HR-AI-004
+chain took 0056/0057), ``erp_payment_intents`` with its RLS policy and
+dedupe stamp (0059, FIN-AUT-003 B7), and the ``erp_report_cache``
+aggregate-cache table (0060, SKY-99).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -133,14 +138,21 @@ _APPROVAL_WF_TABLES = (
     "erp_approval_delegations",
 )
 
-# 0055: smart notification center (SKY-93, PLT-NOTIF-001; renumbered from 0053) -
-# one tenant-scoped table per aggregate: inbound producer events (idempotent by
-# dedupe_key), per-recipient deliveries with read/snooze/digest state, and
-# per-user category channel preferences.
+# 0055: smart notification center (SKY-93, PLT-NOTIF-001) - one tenant-scoped
+# table per aggregate: inbound producer events (idempotent by dedupe_key),
+# per-recipient deliveries with read/snooze/digest state, and per-user category
+# channel preferences.
 _NOTIFICATION_TABLES = (
     "erp_notification_events",
     "erp_notifications",
     "erp_notification_prefs",
+)
+
+# 0057: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4) - proposed
+# budget-draft header + cost-component lines, both tenant-scoped.
+_BUDGET_DRAFT_TABLES = (
+    "erp_budget_drafts",
+    "erp_budget_draft_lines",
 )
 
 
@@ -238,7 +250,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0056", f"head is {version}, expected 0056"
+            assert version == "0060", f"head is {version}, expected 0060"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1075,6 +1087,28 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 ).scalar_one_or_none()
                 assert perm_row is not None, f"0048 must register {perm_key}"
 
+            # 0050: document & tax AI suite (FIN-AI-004, SKY-83) - the two
+            # versioned, DRAFT-gated artifact tables behind the finance AI
+            # document features.
+            for table in ("erp_ai_documents", "erp_tax_summaries"):
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0050 must create {table}"
+
+            ai_doc_cols = {
+                row[0]
+                for row in await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'erp_ai_documents'"
+                    )
+                )
+            }
+            assert "watermarked" in ai_doc_cols, (
+                "0050 erp_ai_documents must keep the draft watermark column"
+            )
+
             # 0051: CRM transcript ingestion (SKY-91, renumbered from the 0050
             # collision with 0050_ai_docs) - erp_crm_activities gets
             # a nullable TEXT transcript column (nullable so existing rows and
@@ -1146,9 +1180,8 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "0052 must add the definitions (tenant, resource_type, version) uniqueness"
             )
 
-            # 0053/0054: HR-AI-003 (renumbered from the 0050/0051 collision
-            # with dev's ai_docs/crm_transcript) - the L3 narrative and refresh
-            # permission keys are first-class catalog permissions.
+            # 0053/0054: HR-AI-003 - the L3 narrative and refresh permission
+            # keys are first-class catalog permissions.
             for l3_key in ("erp.hr.ai.management", "erp.ai.l3.refresh"):
                 l3_perm = (
                     await conn.execute(
@@ -1158,11 +1191,11 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 ).scalar_one_or_none()
                 assert l3_perm is not None, f"0053/0054 must register {l3_key}"
 
-            # 0055: smart notification center (SKY-93, renumbered from 0053 on
-            # dev) - all three tables exist, are tenant-scoped with the
-            # tenant_isolation_* RLS policies, and carry the dedupe uniqueness
-            # guarantees (events and per-recipient deliveries) plus the per-user
-            # category preference uniqueness.
+            # 0055: smart notification center (SKY-93) - all three tables
+            # exist, are tenant-scoped with the tenant_isolation_* RLS
+            # policies, and carry the dedupe uniqueness guarantees (events and
+            # per-recipient deliveries) plus the per-user category preference
+            # uniqueness.
             for table in _NOTIFICATION_TABLES:
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
@@ -1209,14 +1242,155 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "uq_erp_notification_prefs_tenant_user_category",
             }, "0055 must add the notification dedupe / preference uniqueness constraints"
 
-            # 0056: erp_report_cache (SKY-99, renumbered from 0053 on dev) -
-            # the aggregate-cache table exists, is RLS-covered with the
-            # tenant_isolation policy, and carries the unique (tenant_id,
-            # cache_key) index plus the expires_at sweep index.
+# 0056: HR-AI-004 workforce cost planning (SKY-93) - core_permissions
+            # gains erp.hr.ai.planning, the owner-gated key for L4 what-if
+            # scenario planning and its payroll-base source endpoint.
+            planning_perm = (
+                await conn.execute(
+                    text("SELECT description FROM core_permissions WHERE key = :key"),
+                    {"key": "erp.hr.ai.planning"},
+                )
+            ).scalar_one_or_none()
+            assert planning_perm is not None, "0056 must register erp.hr.ai.planning"
+
+            # 0057: finance budget-draft bridge (HR-AI-004, SKY-93, Commit 4)
+            # - the L4 what-if export tables. Both header and lines exist,
+            # the (tenant_id, source, source_ref) idempotency lock is present,
+            # the status CHECK limits draft->pending->approved, and the lines
+            # FK cascades with its draft.
+            for table in _BUDGET_DRAFT_TABLES:
+                regclass = (
+                    await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
+                ).scalar_one()
+                assert regclass is not None, f"0057 must create {table}"
+
+            idempotency_lock = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'uq_erp_budget_drafts_source_ref'"
+                    )
+                )
+            ).scalar_one()
+            assert idempotency_lock == 1, (
+                "0057 must add the (tenant_id, source, source_ref) idempotency lock"
+            )
+
+            status_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'ck_erp_budget_drafts_status'"
+                    )
+                )
+            ).scalar_one()
+            assert status_check == 1, "0057 must constrain budget-draft status"
+
+            line_fk = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'fk_budget_draft_lines_draft'"
+                    )
+                )
+            ).scalar_one()
+            assert line_fk == 1, "0057 must FK budget lines to their draft"
+
+            # 0058: recurring journal templates (FIN-AUT-003 B5) - the table,
+            # its RLS policy, the run-due scan index, and the offset check.
+            # (Renumbered from 0056 when dev's HR-AI-004 chain took 0056/0057.)
+            template_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_journal_templates')"))
+            ).scalar_one()
+            assert template_table is not None, "0058 must create erp_journal_templates"
+
+            template_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_journal_templates'"
+                    )
+                )
+            ).scalar_one()
+            assert template_policy == 1, "0058 must enable RLS on erp_journal_templates"
+
+            template_due_index = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_journal_templates' "
+                        "AND indexname = 'ix_erp_journal_templates_tenant_due'"
+                    )
+                )
+            ).scalar_one()
+            assert template_due_index == 1, "0058 must create the run-due scan index"
+
+            template_offset_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_journal_templates'::regclass "
+                        "AND conname = 'ck_erp_journal_templates_entry_date_offset_days'"
+                    )
+                )
+            ).scalar_one()
+            assert template_offset_check == 1, "0058 must add the entry_date_offset_days check"
+
+            # 0059: payment-matching inbox (FIN-AUT-003 B7) - the table, RLS
+            # policy, dedupe partial-unique stamp, and the amount/status checks.
+            # (Renumbered from 0057 when dev's HR-AI-004 chain took 0056/0057.)
+            intent_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_payment_intents')"))
+            ).scalar_one()
+            assert intent_table is not None, "0059 must create erp_payment_intents"
+
+            intent_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_payment_intents'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_policy == 1, "0059 must enable RLS on erp_payment_intents"
+
+            intent_dedupe = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_payment_intents' "
+                        "AND indexname = 'uq_erp_payment_intents_source_ref' "
+                        "AND indexdef LIKE '%UNIQUE%'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_dedupe == 1, "0059 must add the (tenant, source, source_ref) stamp"
+
+            for constraint in (
+                "ck_erp_payment_intents_amount",
+                "ck_erp_payment_intents_status",
+            ):
+                snip_intent_constraint = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM pg_constraint WHERE conname = :name"),
+                        {"name": constraint},
+                    )
+                ).scalar_one()
+                assert snip_intent_constraint == 1, f"0059 must add {constraint}"
+
+            # 0060: erp_report_cache (SKY-99, renumbered from 0056 after dev's
+            # HR-AI-004 / FIN-AUT-003 chain took 0056-0059) - the aggregate-cache
+            # table exists, is RLS-covered with the tenant_isolation policy, and
+            # carries the unique (tenant_id, cache_key) index plus the expires_at
+            # sweep index.
             cache_regclass = (
                 await conn.execute(text("SELECT to_regclass('public.erp_report_cache')"))
             ).scalar_one()
-            assert cache_regclass is not None, "0056 must create erp_report_cache table"
+            assert cache_regclass is not None, "0060 must create erp_report_cache table"
 
             cache_rls = (
                 (
@@ -1231,7 +1405,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 .scalars()
                 .all()
             )
-            assert cache_rls == ["erp_report_cache"], "0056 must enable RLS on erp_report_cache"
+            assert cache_rls == ["erp_report_cache"], "0060 must enable RLS on erp_report_cache"
 
             cache_indexes = (
                 (
@@ -1250,7 +1424,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             assert set(cache_indexes) == {
                 "uq_erp_report_cache_tenant_key",
                 "ix_erp_report_cache_expires",
-            }, "0056 must add both erp_report_cache indexes"
+            }, "0060 must add both erp_report_cache indexes"
     finally:
         await engine.dispose()
 
@@ -1278,6 +1452,10 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_revenue_forecast",
                 "public.erp_documents",
                 "public.erp_document_versions",
+                "public.erp_journal_templates",
+                "public.erp_payment_intents",
+                "public.erp_ai_documents",
+                "public.erp_tax_summaries",
             ):
                 regclass = (await conn.execute(text(f"SELECT to_regclass('{table}')"))).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
@@ -1294,7 +1472,7 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 ).scalar_one()
                 assert regclass is None, f"{table} still exists after downgrade base"
 
-            for table in _NOTIFICATION_TABLES:
+            for table in (*_BUDGET_DRAFT_TABLES, *_NOTIFICATION_TABLES):
                 regclass = (
                     await conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"})
                 ).scalar_one()

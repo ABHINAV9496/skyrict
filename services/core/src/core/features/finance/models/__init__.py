@@ -8,6 +8,8 @@ contract, so the migration runner imports these models directly.
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
+from core.features.finance.models.budget_draft import ErpBudgetDraftModel
+from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.erp_report_cache import ErpReportCacheModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
@@ -16,6 +18,7 @@ from core.features.finance.models.invoice import ErpInvoiceModel
 from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
+from core.features.finance.models.journal_template import ErpJournalTemplateModel
 from core.features.finance.models.payment import ErpPaymentModel
 from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 
@@ -23,6 +26,8 @@ __all__ = [
     "AiFinanceAnomalyModel",
     "AiFinanceQualityScoreModel",
     "AiFinanceSuggestionModel",
+    "ErpBudgetDraftLineModel",
+    "ErpBudgetDraftModel",
     "ErpChartOfAccountModel",
     "ErpExchangeRateModel",
     "ErpFiscalPeriodModel",
@@ -30,6 +35,7 @@ __all__ = [
     "ErpInvoiceModel",
     "ErpJournalEntryModel",
     "ErpJournalLineModel",
+    "ErpJournalTemplateModel",
     "ErpPaymentModel",
     "ErpReportCacheModel",
     "ErpTenantSettingModel",

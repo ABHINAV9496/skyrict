@@ -161,10 +161,18 @@ class ApprovalWorkflowDefinitionRepository:
         existing active version is retired first (soft removal); the seal is
         the point of no return - the JSONB body of an active definition is
         never edited in place.
+
+        Serialized per family via ``advisory_family_lock`` (same key as
+        ``next_version``): two concurrent activations of different drafts for
+        one resource_type must not both seal - that would leave two active
+        versions and violate the "single active" invariant the engine routes on.
+        The lock is held until commit, so the second caller retires the first's
+        newly active version instead of racing it.
         """
         model = await self.get(tenant_id, definition_id)
         if model is None or model.status != "draft":
             return None
+        await advisory_family_lock(self._db, "approval_definition", tenant_id, model.resource_type)
         active_rows = await self._db.execute(
             select(ErpApprovalWorkflowDefinitionModel).where(
                 ErpApprovalWorkflowDefinitionModel.tenant_id == tenant_id,

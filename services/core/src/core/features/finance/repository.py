@@ -1492,7 +1492,8 @@ class FinanceRepository:
         first_start = month_starts[0]
         last_end = _end_of_month(month_starts[-1])
 
-        bucket = cast(func.date_trunc("month", ErpInvoiceModel.due_date), Date).label("month")
+        bucket_expr = cast(func.date_trunc("month", ErpInvoiceModel.due_date), Date)
+        bucket = bucket_expr.label("month")
         stmt = (
             select(
                 bucket,
@@ -1526,7 +1527,7 @@ class FinanceRepository:
                 ErpInvoiceModel.due_date >= first_start,
                 ErpInvoiceModel.due_date <= last_end,
             )
-            .group_by(func.date_trunc("month", ErpInvoiceModel.due_date))
+            .group_by(bucket_expr)
         )
         rows = (await self.session.execute(stmt)).all()
         by_month = {row.month: (Decimal(row.inflows), Decimal(row.outflows)) for row in rows}

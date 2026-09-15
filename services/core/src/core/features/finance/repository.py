@@ -34,7 +34,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, TypedDict
 
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import (
@@ -2193,16 +2193,26 @@ class FinanceRepository:
         reversed_by_user_id: uuid.UUID,
         reversed_at: datetime,
     ) -> JournalEntry | None:
-        stmt = select(ErpJournalEntryModel).where(
-            ErpJournalEntryModel.tenant_id == tenant_id,
-            ErpJournalEntryModel.id == entry_id,
+        """Mark a posted entry ``reversed`` (atomic guarded transition).
+
+        The UPDATE is conditional on the entry still being ``posted``, so two
+        concurrent reversals can never both succeed - the loser matches zero
+        rows and returns ``None`` instead of double-reversing and emitting two
+        reversal audit events.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.POSTED,
+            )
+            .values(status=EntryStatus.REVERSED)
+            .returning(ErpJournalEntryModel)
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
-        if model is None or model.status != EntryStatus.POSTED:
+        if model is None:
             return None
-
-        model.status = EntryStatus.REVERSED
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)

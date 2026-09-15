@@ -477,7 +477,7 @@ class FinanceAutomationService:
             entry_id,
             tenant_id,
             reversed_by_user_id=user_id,
-            reversed_at=datetime.now(),
+            reversed_at=datetime.now(UTC),
         )
         if reversed_entry is None:
             raise NotFoundError("Journal entry could not be reversed")

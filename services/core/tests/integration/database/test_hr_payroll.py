@@ -48,7 +48,7 @@ _ERP_CHILD_TABLES = (
 
 @pytest.fixture(scope="module")
 def erp_world(migrated_schema: None) -> dict[str, str]:
-    """Seed two tenants; tenant A gets an employee + annual leave type.
+    """Seed two tenants; tenant A gets an employee + casual/sick leave types.
 
     Plain (sync) fixture: all DB work runs inside one ``asyncio.run()`` and
     the engine pool is disposed before that run's loop closes, so the
@@ -102,23 +102,41 @@ def erp_world(migrated_schema: None) -> dict[str, str]:
                         job_title="Engineer",
                         hire_date=date(2025, 1, 1),
                     ),
-                    # Annual leave type in BOTH tenants, so FK tests differ only
-                    # by tenant - never by a missing catalogue entry.
+                    # Casual+sick leave types in BOTH tenants, so FK tests
+                    # differ only by tenant - never by a missing catalogue
+                    # entry. Mirrors the post-rework (ff822f8) catalog where
+                    # policy-driven casual+sick accrue and "annual" is gone.
                     LeaveTypeModel(
                         tenant_id=uuid.UUID(tenant_a),
                         id=uuid.uuid4(),
-                        code="annual",
-                        name="Annual Leave",
+                        code="casual",
+                        name="Casual Leave",
+                        is_accrual=True,
+                        accrual_days_per_year=20,
+                    ),
+                    LeaveTypeModel(
+                        tenant_id=uuid.UUID(tenant_a),
+                        id=uuid.uuid4(),
+                        code="sick",
+                        name="Sick Leave",
+                        is_accrual=True,
+                        accrual_days_per_year=8,
+                    ),
+                    LeaveTypeModel(
+                        tenant_id=uuid.UUID(tenant_b),
+                        id=uuid.uuid4(),
+                        code="casual",
+                        name="Casual Leave",
                         is_accrual=True,
                         accrual_days_per_year=20,
                     ),
                     LeaveTypeModel(
                         tenant_id=uuid.UUID(tenant_b),
                         id=uuid.uuid4(),
-                        code="annual",
-                        name="Annual Leave",
+                        code="sick",
+                        name="Sick Leave",
                         is_accrual=True,
-                        accrual_days_per_year=20,
+                        accrual_days_per_year=8,
                     ),
                 ]
             )
@@ -234,7 +252,7 @@ class TestErpRls:
                 (erp_world["tenant_a"],),
             )
             a_types = (await conn.execute(text("SELECT code FROM erp_leave_types"))).scalars().all()
-            assert a_types == ["annual"]  # tenant A's own catalogue entry
+            assert a_types == ["casual", "sick"]  # tenant A's own catalogue entries
             await conn.exec_driver_sql("RESET ROLE")
 
         await engine.dispose()
@@ -276,7 +294,7 @@ class TestErpCompositeFkConvention:
         # The table owner bypasses RLS, so this can ONLY be stopped by the
         # composite FK (tenant_b, employee_a) -> erp_employees(tenant_b, id):
         # employee_a belongs to tenant A, so the composite key doesn't exist.
-        # The annual leave type DOES exist in tenant B - so the employee FK is
+        # The casual leave type DOES exist in tenant B - so the employee FK is
         # the only constraint that can fire, keeping the assertion deterministic.
         async with engine.connect() as conn:
             with pytest.raises(Exception) as excinfo:
@@ -286,7 +304,7 @@ class TestErpCompositeFkConvention:
                         "(tenant_id, id, employee_id, leave_type, start_date, "
                         "end_date, days) "
                         "VALUES (:tenant_b, gen_random_uuid(), :employee_a, "
-                        "'annual', '2026-02-01', '2026-02-02', 2)"
+                        "'casual', '2026-02-01', '2026-02-02', 2)"
                     ),
                     {
                         "tenant_b": uuid.UUID(erp_world["tenant_b"]),
@@ -308,7 +326,7 @@ class TestErpConstraints:
                     text(
                         "INSERT INTO erp_leave_balances "
                         "(tenant_id, id, employee_id, leave_type, balance) "
-                        "VALUES (:tid, gen_random_uuid(), :emp, 'annual', -1)"
+                        "VALUES (:tid, gen_random_uuid(), :emp, 'casual', -1)"
                     ),
                     {
                         "tid": uuid.UUID(erp_world["tenant_a"]),

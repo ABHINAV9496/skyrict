@@ -518,5 +518,24 @@ def notification_demo(
     asyncio.run(_run())
 
 
+@app.command()
+def sweep_report_cache() -> None:
+    """Purge expired ``erp_report_cache`` aggregate cache rows per-tenant.
+
+    The table is RLS-covered (``tenant_id = public.current_tenant_id()``), so
+    the sweep enumerates tenants and deletes per-tenant with the RLS context
+    pinned - mirroring the ``ai-agent sweep-caches`` pattern.
+    """
+    import asyncio
+
+    from core.features.finance.report_cache_sweep import sweep_expired_report_cache
+
+    async def _run() -> None:
+        deleted = await sweep_expired_report_cache()
+        typer.echo(f"swept report cache: {deleted} expired rows deleted")
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()

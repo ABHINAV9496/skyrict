@@ -11,6 +11,7 @@ from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggesti
 from core.features.finance.models.budget_draft import ErpBudgetDraftModel
 from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+from core.features.finance.models.erp_report_cache import ErpReportCacheModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
@@ -36,5 +37,6 @@ __all__ = [
     "ErpJournalLineModel",
     "ErpJournalTemplateModel",
     "ErpPaymentModel",
+    "ErpReportCacheModel",
     "ErpTenantSettingModel",
 ]

@@ -93,8 +93,10 @@ class AuditService:
         """Search the audit trail with the same filters as ``feed``, plus a total.
 
         Returns ``(entries, total)`` for paginated search (FIN-AUT-002 B22).
+        The total comes from the same ``COUNT(*) OVER()`` query as the page -
+        no separate count round trip.
         """
-        entries = await self._repository.list(
+        entries, total = await self._repository.list_with_total(
             tenant_id,
             action=action,
             actor_user_id=actor_user_id,
@@ -103,13 +105,5 @@ class AuditService:
             to_date=to_date,
             offset=offset,
             limit=limit,
-        )
-        total = await self._repository.count(
-            tenant_id,
-            action=action,
-            actor_user_id=actor_user_id,
-            q=q,
-            from_date=from_date,
-            to_date=to_date,
         )
         return entries, total

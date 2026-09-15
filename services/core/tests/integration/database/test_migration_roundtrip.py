@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 55 revisions, 0001..0055) -> core ``downgrade base`` (all the way back to
+(all 56 revisions, 0001..0056) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -23,7 +23,8 @@ permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), the five
 approval-workflow tables with their RLS policies (0052, SKY-92), and the three
 notification-center tables with their RLS policies and dedupe constraints
-(0055, SKY-93 - renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054).
+(0055, SKY-93 - renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054),
+and the ``erp_report_cache`` aggregate-cache table (0056, SKY-99).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -237,7 +238,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0055", f"head is {version}, expected 0055"
+            assert version == "0056", f"head is {version}, expected 0056"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1207,6 +1208,49 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 "uq_erp_notifications_tenant_recipient_dedupe",
                 "uq_erp_notification_prefs_tenant_user_category",
             }, "0055 must add the notification dedupe / preference uniqueness constraints"
+
+            # 0056: erp_report_cache (SKY-99, renumbered from 0053 on dev) -
+            # the aggregate-cache table exists, is RLS-covered with the
+            # tenant_isolation policy, and carries the unique (tenant_id,
+            # cache_key) index plus the expires_at sweep index.
+            cache_regclass = (
+                await conn.execute(text("SELECT to_regclass('public.erp_report_cache')"))
+            ).scalar_one()
+            assert cache_regclass is not None, "0056 must create erp_report_cache table"
+
+            cache_rls = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = 'erp_report_cache'"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert cache_rls == ["erp_report_cache"], "0056 must enable RLS on erp_report_cache"
+
+            cache_indexes = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT indexname FROM pg_indexes "
+                            "WHERE schemaname = 'public' AND tablename = 'erp_report_cache' "
+                            "AND indexname IN "
+                            "('uq_erp_report_cache_tenant_key', 'ix_erp_report_cache_expires')"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(cache_indexes) == {
+                "uq_erp_report_cache_tenant_key",
+                "ix_erp_report_cache_expires",
+            }, "0056 must add both erp_report_cache indexes"
     finally:
         await engine.dispose()
 

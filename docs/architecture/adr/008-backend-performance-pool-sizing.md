@@ -1,4 +1,4 @@
-# ADR-007: Env-driven asyncpg pool sizing with safe defaults
+# ADR-008: Env-driven asyncpg pool sizing with safe defaults
 
 ## Status
 

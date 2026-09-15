@@ -123,7 +123,7 @@ kubectl create secret generic identity-secrets-staging \
 > missing (fail-fast config).
 >
 > DB connection pool sizing (`IDENTITY_DB_POOL_SIZE`, `IDENTITY_DB_MAX_OVERFLOW`,
-> `IDENTITY_DB_POOL_RECYCLE`, SKY-99/ADR-007) is also set in the deployment
+> `IDENTITY_DB_POOL_RECYCLE`, SKY-99/ADR-008) is also set in the deployment
 > manifest, not the secret. When you change the Postgres tier, update **all
 > three** together: keep `(pool_size + max_overflow) * replicas` (plus tooling
 > and admin connections) well under the tier's `max_connections`, and keep

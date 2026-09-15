@@ -95,7 +95,8 @@ class HandoffService:
 
         assert handoff.id is not None
         consumed = await self.handoff_repo.mark_consumed(handoff.id)
-        assert consumed is not None
+        if consumed is None:
+            raise HandoffTokenAlreadyUsedError("Handoff token has already been used")
 
         await self.audit_service.log(
             action=HANDOFF_REDEEMED,

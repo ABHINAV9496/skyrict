@@ -31,11 +31,9 @@ from ai_agent.cache.response_cache import (
     response_cache_key,
 )
 from ai_agent.core.exceptions import AiUnavailableError
-from ai_agent.core.providers import LlmRequest
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
 from ai_agent.features.conversation_summary import ConversationSummaryStore, is_summary_fresh
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
-from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.delegates import (
     AuditGuardianDelegator,
     CoachSuggestionPort,
@@ -50,6 +48,7 @@ from ai_agent.features.supervisor.delegates import (
     RagSearchPort,
     SalesCoachDelegator,
 )
+from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     ABSTENTION,
     CLASSIFY_SYSTEM_PROMPT,

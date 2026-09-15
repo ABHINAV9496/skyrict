@@ -651,7 +651,11 @@ class FinanceService:
             raise ConflictError("Only draft invoices can be issued")
 
         issued = await self._repo.issue_invoice(invoice_id, tenant_id, issued_at=datetime.now(UTC))
-        assert issued is not None
+        if issued is None:
+            raise ConflictError(
+                "Invoice could not be issued; it is no longer draft "
+                "(another request issued or voided it concurrently)"
+            )
         await self._audit.log(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -719,7 +723,11 @@ class FinanceService:
         approved = await self._repo.approve_invoice(
             invoice_id, tenant_id, approved_at=datetime.now(UTC)
         )
-        assert approved is not None
+        if approved is None:
+            raise ConflictError(
+                "Invoice could not be approved; it is no longer issued "
+                "(another request approved, voided, or paid it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -765,7 +773,11 @@ class FinanceService:
             raise ConflictError("Only draft or issued invoices can be voided")
 
         voided = await self._repo.void_invoice(invoice_id, tenant_id, voided_at=datetime.now(UTC))
-        assert voided is not None
+        if voided is None:
+            raise ConflictError(
+                "Invoice could not be voided; it is not draft or issued "
+                "(another request transitioned it concurrently)"
+            )
         await self._audit.log(
             tenant_id=tenant_id,
             user_id=user_id,

@@ -394,6 +394,59 @@ async def test_concurrent_posts_only_one_wins(migrated_schema: None) -> None:
     assert wins == 1
 
 
+async def test_concurrent_issues_only_one_wins(migrated_schema: None) -> None:
+    """Two sessions issuing the same DRAFT invoice - exactly one wins.
+
+    Regression for the unguarded select-then-mutate issue/approve/void/mark-paid
+    family: both racers used to read DRAFT and both flip ISSUED, emitting two
+    ``FINANCE_INVOICE_ISSUED`` audits. The guarded UPDATE now serialises them
+    and the loser matches zero rows.
+    """
+    tenant_id = uuid.uuid4()
+    invoice_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            TenantModel(
+                id=tenant_id,
+                name="Issue Race Tenant",
+                slug=f"issuerace-{tenant_id.hex[:8]}",
+                plan_tier="free",
+                is_active=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            ErpInvoiceModel(
+                id=invoice_id,
+                tenant_id=tenant_id,
+                invoice_number="RACE-0001",
+                customer_id=uuid.uuid4(),
+                invoice_date=date(2026, 6, 1),
+                due_date=date(2026, 7, 1),
+                total=Decimal("200"),
+                status=InvoiceStatus.DRAFT,
+                currency="USD",
+            )
+        )
+        await session.commit()
+
+    async def _issue() -> bool:
+        async with async_session_factory() as session:
+            repo = FinanceRepository(session)
+            got = await repo.issue_invoice(
+                invoice_id, tenant_id, issued_at=datetime(2026, 6, 1, tzinfo=UTC)
+            )
+            await session.commit()
+            return got is not None
+
+    async with asyncio.TaskGroup() as tg:
+        racer_a = tg.create_task(_issue())
+        racer_b = tg.create_task(_issue())
+
+    wins = sum([await racer_a, await racer_b])
+    assert wins == 1
+
+
 class _NoopAuditSink:
     async def log(self, **kwargs: object) -> None:
         pass

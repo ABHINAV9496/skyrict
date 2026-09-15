@@ -863,10 +863,12 @@ class FinanceRepository:
     async def issue_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, issued_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Issue a DRAFT invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.DRAFT, InvoiceStatus.ISSUED
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.ISSUED
         model.issued_at = issued_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -876,10 +878,12 @@ class FinanceRepository:
     async def approve_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, approved_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Approve an ISSUED invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.ISSUED, InvoiceStatus.APPROVED
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.APPROVED
         model.approved_at = approved_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -889,10 +893,15 @@ class FinanceRepository:
     async def void_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Void a DRAFT or ISSUED invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id,
+            tenant_id,
+            (InvoiceStatus.DRAFT, InvoiceStatus.ISSUED),
+            InvoiceStatus.VOIDED,
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.VOIDED
         model.voided_at = voided_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -902,14 +911,39 @@ class FinanceRepository:
     async def mark_invoice_paid(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Mark an APPROVED invoice PAID (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.APPROVED, InvoiceStatus.PAID
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.PAID
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._invoice_lines(invoice_id, tenant_id)
         return _invoice_from_orm(model, lines)
+
+    async def _flip_invoice_status(
+        self,
+        invoice_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        expected: InvoiceStatus | tuple[InvoiceStatus, ...],
+        new_status: InvoiceStatus,
+    ) -> ErpInvoiceModel | None:
+        guard = (
+            ErpInvoiceModel.status.in_(expected)
+            if isinstance(expected, tuple)
+            else ErpInvoiceModel.status == expected
+        )
+        stmt = (
+            update(ErpInvoiceModel)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.id == invoice_id,
+                guard,
+            )
+            .values(status=new_status)
+            .returning(ErpInvoiceModel)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def _invoice_model(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID

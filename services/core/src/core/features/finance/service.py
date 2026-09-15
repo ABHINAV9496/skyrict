@@ -771,6 +771,35 @@ class FinanceService:
     # Payments
     # ------------------------------------------------------------------
 
+    async def preflight_payment(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        amount: Decimal,
+    ) -> tuple[Invoice, Decimal]:
+        """Raise unless this payment could be applied; returns ``(invoice, outstanding)``.
+
+        The enforcement of ``apply_payment`` - the invoice must be approved,
+        the amount positive, and it must not exceed the outstanding balance -
+        lives here so callers that must commit to a whole batch up front
+        (payment-match bulk accept) can validate every item before any money
+        moves.
+        """
+        invoice = await self.get_invoice(tenant_id, invoice_id)
+        if invoice.status != InvoiceStatus.APPROVED:
+            raise ConflictError("Only approved invoices can receive payments")
+        if amount <= 0:
+            raise ValidationError("Payment amount must be positive")
+
+        already_paid = await self._repo.sum_payments_for_invoice(invoice_id, tenant_id)
+        outstanding = invoice.total - already_paid
+        if amount > outstanding:
+            raise ValidationError(
+                f"Payment {amount} exceeds the outstanding balance of {outstanding}"
+            )
+        return invoice, outstanding
+
     async def apply_payment(
         self,
         *,
@@ -788,18 +817,9 @@ class FinanceService:
         zero the invoice is marked paid in the same transaction. Idempotent per
         ``(source, source_ref)`` - a replayed request can never double-book.
         """
-        invoice = await self.get_invoice(tenant_id, invoice_id)
-        if invoice.status != InvoiceStatus.APPROVED:
-            raise ConflictError("Only approved invoices can receive payments")
-        if amount <= 0:
-            raise ValidationError("Payment amount must be positive")
-
-        already_paid = await self._repo.sum_payments_for_invoice(invoice_id, tenant_id)
-        outstanding = invoice.total - already_paid
-        if amount > outstanding:
-            raise ValidationError(
-                f"Payment {amount} exceeds the outstanding balance of {outstanding}"
-            )
+        invoice, outstanding = await self.preflight_payment(
+            tenant_id=tenant_id, invoice_id=invoice_id, amount=amount
+        )
 
         payment = Payment(
             tenant_id=tenant_id,

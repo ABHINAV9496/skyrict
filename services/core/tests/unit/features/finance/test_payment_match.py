@@ -27,6 +27,7 @@ from core.core.audit_events import (
 )
 from core.domain.entities import Invoice, PaymentIntent
 from core.domain.value_objects import InvoiceStatus, PaymentIntentStatus
+from core.features.finance.models.payment_intent import ErpPaymentIntentModel
 from core.features.finance.payment_match import (
     PaymentMatchService,
     _compute_candidates,
@@ -113,18 +114,22 @@ class StubIntentRepo:
 
 
 class FakeFinance:
-    """Duck-typed FinanceService slice: apply_payment with outstanding guard."""
+    """Duck-typed FinanceService slice: preflight + apply_payment with outstanding guard."""
 
     def __init__(self, repo: StubIntentRepo) -> None:
         self.repo = repo
         self.applied: list[dict[str, object]] = []
         self._seq = 0
 
-    async def apply_payment(self, *, tenant_id, user_id, invoice_id, amount, method, paid_at):
+    async def preflight_payment(self, *, tenant_id, invoice_id, amount):
         # Outstanding guard mirrors the real validation that would reject overpay.
         for inv, outstanding in self.repo.outstanding:
             if inv.id == invoice_id and amount > outstanding:
                 raise ValidationError("exceeds the outstanding balance")
+        return None
+
+    async def apply_payment(self, *, tenant_id, user_id, invoice_id, amount, method, paid_at):
+        await self.preflight_payment(tenant_id=tenant_id, invoice_id=invoice_id, amount=amount)
         self._seq += 1
         payment = SimpleNamespace(
             id=uuid.uuid4(), payment_number=f"PAY-2026-{self._seq:05d}", amount=amount
@@ -442,8 +447,8 @@ async def test_dismiss_closes_without_money() -> None:
         await service.dismiss(TENANT_ID, uuid.uuid4(), intent.id)
 
 
-async def test_bulk_accept_reports_per_item_outcomes() -> None:
-    repo, finance, _audit, service = _fresh_service()
+async def test_bulk_accept_all_or_nothing_rejects_before_applying() -> None:
+    repo, finance, audit, service = _fresh_service()
     repo.outstanding = [
         _invoice(INVOICE_A_ID, "INV-2026-00042", "500", CUSTOMER_A, "500"),
         _invoice(INVOICE_B_ID, "INV-2026-00099", "100", CUSTOMER_A, "100"),
@@ -451,12 +456,49 @@ async def test_bulk_accept_reports_per_item_outcomes() -> None:
     a = await service.register(TENANT_ID, uuid.uuid4(), _body(amount=Decimal("500")))
     b = await service.register(TENANT_ID, uuid.uuid4(), _body(amount=Decimal("500")))
 
+    with pytest.raises(ValidationError, match="outstanding"):
+        await service.bulk_accept(
+            TENANT_ID, uuid.uuid4(), [(a.id, INVOICE_A_ID), (b.id, INVOICE_B_ID)]
+        )
+
+    # Nothing applied, no intent stamped: the batch was rejected as a whole.
+    assert finance.applied == []
+    assert repo.intents[a.id].status == PaymentIntentStatus.CANDIDATE
+    assert repo.intents[b.id].status == PaymentIntentStatus.CANDIDATE
+    assert FINANCE_PAYMENT_MATCH_ACCEPTED not in [log["action"] for log in audit.logs]
+
+
+async def test_bulk_accept_all_valid_applies_every_item() -> None:
+    repo, finance, _audit, service = _fresh_service()
+    repo.outstanding = [
+        _invoice(INVOICE_A_ID, "INV-2026-00042", "500", CUSTOMER_A, "500"),
+        _invoice(INVOICE_B_ID, "INV-2026-00099", "100", CUSTOMER_A, "100"),
+    ]
+    a = await service.register(TENANT_ID, uuid.uuid4(), _body(amount=Decimal("500")))
+    b = await service.register(TENANT_ID, uuid.uuid4(), _body(amount=Decimal("100")))
+
     results = await service.bulk_accept(
         TENANT_ID, uuid.uuid4(), [(a.id, INVOICE_A_ID), (b.id, INVOICE_B_ID)]
     )
 
     assert len(results) == 2
     assert results[0].ok is True
-    assert results[1].ok is False, "an under-bar intent still guards overpay"
-    assert "outstanding" in results[1].error
-    assert len(finance.applied) == 1
+    assert results[1].ok is True
+    assert len(finance.applied) == 2
+    assert repo.intents[a.id].status == PaymentIntentStatus.APPLIED
+    assert repo.intents[b.id].status == PaymentIntentStatus.APPLIED
+
+
+def test_intent_model_declares_source_ref_idempotency_stamp() -> None:
+    """Model metadata must mirror migration 0059's partial-unique dedupe stamp."""
+    stamp = next(
+        (
+            i
+            for i in ErpPaymentIntentModel.__table__.indexes
+            if i.name == "uq_erp_payment_intents_source_ref"
+        ),
+        None,
+    )
+    assert stamp is not None, "model is missing the (source, source_ref) idempotency stamp"
+    assert stamp.unique is True
+    assert stamp.dialect_options["postgresql"]["where"] is not None

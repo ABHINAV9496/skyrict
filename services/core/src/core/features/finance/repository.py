@@ -37,7 +37,11 @@ from typing import TYPE_CHECKING, TypedDict
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import IntegrityError
 
-from core.core.constants import INVOICE_PREFIX, PAYMENT_PREFIX
+from core.core.constants import (
+    BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
+    INVOICE_PREFIX,
+    PAYMENT_PREFIX,
+)
 from core.domain.entities import (
     AccountCodeSuggestion,
     AiFinanceAnomaly,
@@ -49,6 +53,8 @@ from core.domain.entities import (
     AuditReadinessCheck,
     BalanceSheet,
     BalanceSheetLine,
+    BudgetDraft,
+    BudgetDraftLine,
     CashflowPosition,
     CashflowProjection,
     ChartOfAccount,
@@ -84,6 +90,8 @@ from core.domain.value_objects import AccountType, EntryStatus, InvoiceStatus, P
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
+from core.features.finance.models.budget_draft import ErpBudgetDraftModel
+from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
@@ -215,6 +223,37 @@ def _invoice_line_from_orm(model: ErpInvoiceLineModel) -> InvoiceLine:
         amount=model.amount,
         id=model.id,
         created_at=model.created_at,
+    )
+
+
+def _budget_draft_from_orm(
+    model: ErpBudgetDraftModel, line_models: Sequence[ErpBudgetDraftLineModel]
+) -> BudgetDraft:
+    return BudgetDraft(
+        tenant_id=model.tenant_id,
+        scenario_id=model.scenario_id,
+        scenario_name=model.scenario_name,
+        status=model.status,
+        source=model.source,
+        source_ref=model.source_ref,
+        currency=model.currency,
+        horizon=model.horizon,
+        base_as_of=model.base_as_of,
+        salary_total=model.salary_total,
+        benefit_total=model.benefit_total,
+        grand_total=model.grand_total,
+        created_by=model.created_by,
+        lines=tuple(
+            BudgetDraftLine(
+                line_no=lm.line_no,
+                label=lm.label,
+                amount=lm.amount,
+            )
+            for lm in line_models
+        ),
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
     )
 
 
@@ -2066,3 +2105,61 @@ class FinanceRepository:
                 _invoice_from_orm(model, [_invoice_line_from_orm(lm) for lm in line_models])
             )
         return invoices
+
+    async def create_budget_draft(self, draft: BudgetDraft) -> BudgetDraft:
+        """Insert a proposed budget draft (header + lines, one transaction).
+
+        ``UNIQUE (tenant_id, source, source_ref)`` is the idempotency lock: a
+        replayed export raises a unique violation here, translated by the
+        shared ``_conflict_or_reraise`` to a 409 ``ConflictError`` that the
+        service reports as ``already_booked``.
+        """
+        model = ErpBudgetDraftModel(
+            tenant_id=draft.tenant_id,
+            scenario_id=draft.scenario_id,
+            scenario_name=draft.scenario_name,
+            status=draft.status,
+            source=draft.source,
+            source_ref=draft.source_ref,
+            currency=draft.currency,
+            horizon=draft.horizon,
+            base_as_of=draft.base_as_of,
+            salary_total=draft.salary_total,
+            benefit_total=draft.benefit_total,
+            grand_total=draft.grand_total,
+            created_by=draft.created_by,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+
+        line_models = [
+            ErpBudgetDraftLineModel(
+                tenant_id=draft.tenant_id,
+                draft_id=model.id,
+                line_no=line.line_no,
+                label=line.label,
+                amount=line.amount,
+            )
+            for line in draft.lines
+        ]
+        self.session.add_all(line_models)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _budget_draft_from_orm(model, line_models)
+
+    async def get_workforce_budget_draft_id(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        source_ref: str,
+    ) -> uuid.UUID | None:
+        """Re-fetch an existing draft's id by its idempotency key (replay path)."""
+        stmt = select(ErpBudgetDraftModel.id).where(
+            ErpBudgetDraftModel.tenant_id == tenant_id,
+            ErpBudgetDraftModel.source == BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
+            ErpBudgetDraftModel.source_ref == source_ref,
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()

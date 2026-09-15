@@ -103,6 +103,24 @@ AI_REPORT_GENERATED = "ai.report.generated"
 AI_REPORT_SAVED = "ai.report.saved"
 """The NL report builder persisted a generated report as a saved definition (SKY-80)."""
 
+AI_L4_SCENARIO_CREATED = "ai.l4.scenario.created"
+"""The L4 what-if planner saved a named scenario with a frozen projection (SKY-93)."""
+
+AI_L4_SCENARIO_VIEWED = "ai.l4.scenario.viewed"
+"""A user opened one frozen L4 what-if scenario (SKY-93, Commit 4).
+
+Read-auditing scenario detail keeps the "who opened which planning scenario"
+trail required to review who saw a forecast before it is exported to Finance.
+"""
+
+AI_L4_SCENARIO_COMPARED = "ai.l4.scenario.compared"
+"""A user compared up to 3 frozen L4 what-if scenarios side-by-side (SKY-93, Commit 4).
+
+Compare is read-only, but it is the highest-value planning read (multiple
+forecasts at once), so it gets its own event rather than being lumped with
+plain views.
+"""
+
 AI_COACHING_SUGGESTION_CREATED = "ai.coaching.suggestion.created"
 """The Sales Coach agent produced a coaching suggestion (SKY-90)."""
 
@@ -152,6 +170,9 @@ ALL_AI_AUDIT_EVENTS = frozenset(
         AI_TRANSCRIPT_ANALYZED,
         AI_CRM_ANOMALY_DETECTED,
         AI_CRM_ANOMALY_RESOLVED,
+        AI_L4_SCENARIO_CREATED,
+        AI_L4_SCENARIO_VIEWED,
+        AI_L4_SCENARIO_COMPARED,
         AI_CRM_ANOMALY_DISMISSED,
         AI_COACHING_SUGGESTION_CREATED,
         AI_COACHING_SUGGESTION_VIEWED,

@@ -102,6 +102,12 @@ ERP_HR_AI_INDIVIDUAL = "erp.hr.ai.individual"
 ERP_HR_AI_ACKNOWLEDGE = "erp.hr.ai.acknowledge"
 ERP_HR_AI_COPILOT = "erp.hr.ai.copilot"
 
+# Workforce cost planning what-if (HR-AI-004, SKY-93): gates the L4 planning
+# surface (payroll-base reads, scenario run/share/compare). Owner-only - owners
+# pass via the "*" wildcard grant and no org role carries the key, so planning
+# stays a platform-level capability until a tenant opts in.
+ERP_HR_AI_PLANNING = "erp.hr.ai.planning"
+
 # Employee self-service portal (own leave balances / requests only)
 ERP_LEAVE_SELF = "erp.leave.self"
 
@@ -163,6 +169,7 @@ CATALOG: tuple[str, ...] = (
     ERP_HR_AI_INDIVIDUAL,
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
+    ERP_HR_AI_PLANNING,
     ERP_PAYROLL_AI_READ,
     ERP_PAYROLL_AI_RUN,
     ERP_PAYROLL_AI_NOTIFY,
@@ -208,7 +215,13 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "erp_hr_ai",
         "ERP HR & Payroll AI",
-        (ERP_HR_AI_READ, ERP_HR_AI_INDIVIDUAL, ERP_HR_AI_ACKNOWLEDGE, ERP_HR_AI_COPILOT),
+        (
+            ERP_HR_AI_READ,
+            ERP_HR_AI_INDIVIDUAL,
+            ERP_HR_AI_ACKNOWLEDGE,
+            ERP_HR_AI_COPILOT,
+            ERP_HR_AI_PLANNING,
+        ),
     ),
     (
         "erp_payroll_ai",
@@ -258,6 +271,7 @@ __all__ = [
     "ERP_HR_AI_ACKNOWLEDGE",
     "ERP_HR_AI_COPILOT",
     "ERP_HR_AI_INDIVIDUAL",
+    "ERP_HR_AI_PLANNING",
     "ERP_HR_AI_READ",
     "ERP_HR_APPROVE",
     "ERP_HR_READ",

@@ -112,6 +112,9 @@ service-account*.json
 .local/
 
 # ---------- Docker ----------
+# Root local-only convenience compose (canonical files live in infra/docker/)
+docker-compose.yml
+docker-compose.yaml
 docker-compose.override.yml
 docker-compose.override.yaml
 # Local convenience wrapper around infra/docker/docker-compose{.dev}.yml

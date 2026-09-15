@@ -1,16 +1,21 @@
-"""Add erp.ai.l3.refresh permission key (HR-AI-003 L3 refresh gate).
+"""Add erp.hr.ai.management permission key (HR-AI-003 L3 analytics).
 
 Ticket HR-AI-003 (docs/modules/skyrict-ai/hr-payroll-ai-features.md §L3):
-``erp.ai.l3.refresh`` gates force-refreshing an L3 HR/Payroll AI narrative on
-POST /api/v1/ai/l3/{kind}/refresh, layered on top of the read gate
-``erp.hr.ai.management`` (0025) - the same two-tier convention as
-``erp.ai.narrator.refresh`` (0022). Granted ONLY to ``tenant_owner`` so the
-owner can always demo a refresh; org_admin/dept_manager hold neither key and
-stay 403 on both read and refresh.
+``erp.hr.ai.management`` gates every L3 HR/Payroll AI narrative feature -
+payroll-cost narratives, leave-pay correlation, and compliance monitoring
+digests. The key is deliberately high-tier: like ``erp.hr.ai.individual``
+(0020), it is granted ONLY to ``tenant_owner`` and stays out of the default
+org_admin/dept_manager grants, so L3 leadership narratives stay owner-scoped
+until a dedicated executive role is provisioned. Aggregates only (no
+employee-level data), as the L3 scope defines.
 
-Revision ID: 0025
-Revises: 0025
-Create Date: 2026-09-09
+Revision ID: 0024
+Revises: 0024
+Create Date: 2026-09-08
+
+Renumbered from ``0025`` to ``0026`` on merge (HR-AI-004) so it chains after
+``0025_erp_hr_ai_planning_permission`` (already on the feature branch) instead
+of colliding with it.
 """
 
 from __future__ import annotations
@@ -24,11 +29,15 @@ depends_on = None
 
 # (key, description) - mirrors identity.core.permissions catalog entries.
 _PERMISSIONS: tuple[tuple[str, str], ...] = (
-    ("erp.ai.l3.refresh", "Force-refresh an L3 HR/Payroll AI narrative"),
+    (
+        "erp.hr.ai.management",
+        "View L3 HR/Payroll AI narratives (cost, correlation, compliance digest)",
+    ),
 )
 
 # Roles granted each key when migrating (owner is covered by its "*" grant).
-_GRANTS: tuple[tuple[str, tuple[str, ...]], ...] = (("erp.ai.l3.refresh", ("tenant_owner",)),)
+# L3 is exec-scoped: tenant_owner ONLY, mirroring the 0020 "individual" tier.
+_GRANTS: tuple[tuple[str, tuple[str, ...]], ...] = (("erp.hr.ai.management", ("tenant_owner",)),)
 
 
 def _append_permissions(role_names: tuple[str, ...], permission_keys: tuple[str, ...]) -> None:

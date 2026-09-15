@@ -32,7 +32,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -53,8 +53,10 @@ from core.domain.entities import (
     AuditReadinessCheck,
     BalanceSheet,
     BalanceSheetLine,
+    Budget,
     BudgetDraft,
     BudgetDraftLine,
+    BudgetLine,
     CashflowPosition,
     CashflowProjection,
     ChartOfAccount,
@@ -62,12 +64,18 @@ from core.domain.entities import (
     CloseChecklistItem,
     ComparativePnl,
     ComparativePnlRow,
+    ComplianceItem,
     CustomerPaymentAnalytics,
     CustomerPaymentAnalyticsEntry,
+    DepreciationEntry,
     DuplicateCandidate,
     DuplicateGroup,
     ExchangeRate,
+    ExpenseClaim,
+    ExpensePolicy,
+    ExpensePolicyViolation,
     FiscalPeriod,
+    FixedAsset,
     HealthComponent,
     HealthScore,
     Invoice,
@@ -93,19 +101,34 @@ from core.domain.entities import (
 )
 from core.domain.value_objects import (
     AccountType,
+    BudgetStatus,
+    ComplianceItemStatus,
+    ComplianceRecurrence,
+    DepreciationMethod,
     EntryStatus,
+    ExpenseClaimStatus,
+    ExpenseViolationReason,
+    FixedAssetStatus,
     InvoiceStatus,
     PaymentIntentStatus,
     PaymentStatus,
+    ViolationOutcome,
 )
 from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyModel
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
+from core.features.finance.models.budget import ErpBudgetLineModel, ErpBudgetModel
 from core.features.finance.models.budget_draft import ErpBudgetDraftModel
 from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+from core.features.finance.models.compliance_item import ErpComplianceItemModel
+from core.features.finance.models.depreciation_entry import ErpDepreciationEntryModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
+from core.features.finance.models.expense_claim import ErpExpenseClaimModel
+from core.features.finance.models.expense_policy import ErpExpensePolicyModel
+from core.features.finance.models.expense_policy_violation import ErpExpensePolicyViolationModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
+from core.features.finance.models.fixed_asset import ErpFixedAssetModel
 from core.features.finance.models.invoice import ErpInvoiceModel
 from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
@@ -132,6 +155,11 @@ _UNIQUE_VIOLATION_MESSAGES: dict[str, str] = {
     "uq_erp_payment_intents_source_ref": "A payment intent for this source document already exists",
     "uq_erp_chart_of_accounts_tenant_code": "An account with this code already exists",
     "uq_erp_fiscal_periods_tenant_name": "A fiscal period with this name already exists",
+    "uq_erp_budget_lines_tenant_budget_code": "A budget line for this account already exists in the budget",
+    "uq_erp_depreciation_entries_tenant_asset_period": "A depreciation entry for this asset and period already exists",
+    "uq_erp_expense_policies_tenant_category": "An expense policy for this category already exists",
+    "uq_erp_expense_claims_source_ref": "An expense claim for this source document already exists",
+    "uq_erp_fixed_assets_tenant_name": "A fixed asset with this name already exists",
 }
 _DEFAULT_CONFLICT_MESSAGE = "The resource conflicts with existing data"
 
@@ -340,6 +368,135 @@ def _payment_intent_from_orm(model: ErpPaymentIntentModel) -> PaymentIntent:
         applied_at=model.applied_at,
         applied_by=model.applied_by,
         dismissed_at=model.dismissed_at,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _budget_from_orm(model: ErpBudgetModel) -> Budget:
+    return Budget(
+        tenant_id=model.tenant_id,
+        name=model.name,
+        fiscal_year=model.fiscal_year,
+        status=BudgetStatus(model.status),
+        description=model.description,
+        currency=model.currency,
+        created_by=model.created_by,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _budget_line_from_orm(model: ErpBudgetLineModel) -> BudgetLine:
+    return BudgetLine(
+        tenant_id=model.tenant_id,
+        budget_id=model.budget_id,
+        account_code=model.account_code,
+        amount=model.amount,
+        id=model.id,
+        created_at=model.created_at,
+    )
+
+
+def _fixed_asset_from_orm(model: ErpFixedAssetModel) -> FixedAsset:
+    return FixedAsset(
+        tenant_id=model.tenant_id,
+        name=model.name,
+        cost=model.cost,
+        acquisition_date=model.acquisition_date,
+        useful_life_years=model.useful_life_years,
+        status=FixedAssetStatus(model.status),
+        category=model.category,
+        depreciation_method=DepreciationMethod(model.depreciation_method),
+        salvage_value=model.salvage_value,
+        accumulated_depreciation=model.accumulated_depreciation,
+        disposed_at=model.disposed_at,
+        created_by=model.created_by,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _depreciation_entry_from_orm(model: ErpDepreciationEntryModel) -> DepreciationEntry:
+    return DepreciationEntry(
+        tenant_id=model.tenant_id,
+        asset_id=model.asset_id,
+        period=model.period,
+        amount=model.amount,
+        journal_entry_id=model.journal_entry_id,
+        status=model.status,
+        id=model.id,
+        created_at=model.created_at,
+    )
+
+
+def _expense_policy_from_orm(model: ErpExpensePolicyModel) -> ExpensePolicy:
+    return ExpensePolicy(
+        tenant_id=model.tenant_id,
+        category=model.category,
+        cap_amount=model.cap_amount,
+        requires_receipt=model.requires_receipt,
+        advance_limit=model.advance_limit,
+        name=model.name,
+        created_by=model.created_by,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _expense_claim_from_orm(model: ErpExpenseClaimModel) -> ExpenseClaim:
+    return ExpenseClaim(
+        tenant_id=model.tenant_id,
+        category=model.category,
+        amount=model.amount,
+        description=model.description,
+        receipt_url=model.receipt_url,
+        advance_amount=model.advance_amount,
+        status=ExpenseClaimStatus(model.status),
+        source_ref=model.source_ref,
+        submitted_by=model.submitted_by,
+        approved_by=model.approved_by,
+        approved_at=model.approved_at,
+        rejection_reason=model.rejection_reason,
+        id=model.id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _expense_violation_from_orm(model: ErpExpensePolicyViolationModel) -> ExpensePolicyViolation:
+    return ExpensePolicyViolation(
+        tenant_id=model.tenant_id,
+        category=model.category,
+        reason_code=ExpenseViolationReason(model.reason_code),
+        outcome=ViolationOutcome(model.outcome),
+        amount=model.amount,
+        claim_id=model.claim_id,
+        submitted_by=model.submitted_by,
+        message=model.message,
+        id=model.id,
+        created_at=model.created_at,
+    )
+
+
+def _compliance_item_from_orm(model: ErpComplianceItemModel) -> ComplianceItem:
+    return ComplianceItem(
+        tenant_id=model.tenant_id,
+        title=model.title,
+        due_on=model.due_on,
+        description=model.description,
+        obligation_type=model.obligation_type,
+        recurrence=(ComplianceRecurrence(model.recurrence) if model.recurrence else None),
+        lead_days=model.lead_days,
+        status=ComplianceItemStatus(model.status),
+        assignee_id=model.assignee_id,
+        completed_at=model.completed_at,
+        completed_by=model.completed_by,
+        created_by=model.created_by,
         id=model.id,
         created_at=model.created_at,
         updated_at=model.updated_at,
@@ -2538,5 +2695,542 @@ class FinanceRepository:
             ErpBudgetDraftModel.tenant_id == tenant_id,
             ErpBudgetDraftModel.source == BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
             ErpBudgetDraftModel.source_ref == source_ref,
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Wave 4 (FIN-AUT-004, SKY-85): budgets
+    # ------------------------------------------------------------------
+
+    async def create_budget(self, budget: Budget) -> Budget:
+        model = ErpBudgetModel(
+            tenant_id=budget.tenant_id,
+            name=budget.name,
+            fiscal_year=budget.fiscal_year,
+            status=budget.status,
+            description=budget.description,
+            currency=budget.currency,
+            created_by=budget.created_by,
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _budget_from_orm(model)
+
+    async def get_budget(self, budget_id: uuid.UUID, tenant_id: uuid.UUID) -> Budget | None:
+        stmt = select(ErpBudgetModel).where(
+            ErpBudgetModel.tenant_id == tenant_id, ErpBudgetModel.id == budget_id
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _budget_from_orm(model) if model is not None else None
+
+    async def list_budgets(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[Budget]:
+        stmt = select(ErpBudgetModel).where(ErpBudgetModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpBudgetModel.status == status)
+        stmt = stmt.order_by(ErpBudgetModel.fiscal_year.desc(), ErpBudgetModel.created_at.desc())
+        result = await self.session.execute(stmt)
+        return [_budget_from_orm(model) for model in result.scalars().all()]
+
+    async def update_budget(self, budget: Budget) -> Budget | None:
+        if budget.id is None:
+            return None
+        model = await self._budget_model(budget.id, budget.tenant_id)
+        if model is None:
+            return None
+        model.name = budget.name
+        model.description = budget.description
+        model.fiscal_year = budget.fiscal_year
+        model.status = budget.status
+        model.currency = budget.currency
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _budget_from_orm(model)
+
+    async def delete_budgetlines(self, tenant_id: uuid.UUID, budget_id: uuid.UUID) -> None:
+        stmt = select(ErpBudgetLineModel).where(
+            ErpBudgetLineModel.tenant_id == tenant_id,
+            ErpBudgetLineModel.budget_id == budget_id,
+        )
+        for model in (await self.session.execute(stmt)).scalars().all():
+            await self.session.delete(model)
+        await self.session.flush()
+
+    async def add_budgetline(self, line: BudgetLine) -> BudgetLine:
+        model = ErpBudgetLineModel(
+            tenant_id=line.tenant_id,
+            budget_id=line.budget_id,
+            account_code=line.account_code,
+            amount=line.amount,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _budget_line_from_orm(model)
+
+    async def add_budgetlines(self, lines: Sequence[BudgetLine]) -> Sequence[BudgetLine]:
+        if not lines:
+            return ()
+        models = [
+            ErpBudgetLineModel(
+                tenant_id=line.tenant_id,
+                budget_id=line.budget_id,
+                account_code=line.account_code,
+                amount=line.amount,
+            )
+            for line in lines
+        ]
+        self.session.add_all(models)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        return [_budget_line_from_orm(model) for model in models]
+
+    async def list_budget_lines(
+        self, tenant_id: uuid.UUID, budget_id: uuid.UUID
+    ) -> Sequence[BudgetLine]:
+        stmt = select(ErpBudgetLineModel).where(
+            ErpBudgetLineModel.tenant_id == tenant_id,
+            ErpBudgetLineModel.budget_id == budget_id,
+        )
+        stmt = stmt.order_by(ErpBudgetLineModel.account_code)
+        result = await self.session.execute(stmt)
+        return [_budget_line_from_orm(model) for model in result.scalars().all()]
+
+    async def posted_totals_by_code(
+        self,
+        tenant_id: uuid.UUID,
+        fiscal_year_start: date,
+        fiscal_year_end: date,
+    ) -> dict[str, Decimal]:
+        """Sum POSTED journal activity per account code for the fiscal year.
+
+        Feeds the budget variance read-side: the service pairs each budget
+        line's ``account_code`` with the net posted amount for that code within
+        the budget's fiscal year. Net = debits - credits.
+        """
+        stmt: Any = (
+            select(
+                ErpChartOfAccountModel.code.label("code"),
+                func.coalesce(func.sum(ErpJournalLineModel.debit), 0).label("debit"),
+                func.coalesce(func.sum(ErpJournalLineModel.credit), 0).label("credit"),
+            )
+            .join(
+                ErpJournalEntryModel,
+                and_(
+                    ErpJournalEntryModel.tenant_id == ErpJournalLineModel.tenant_id,
+                    ErpJournalEntryModel.id == ErpJournalLineModel.entry_id,
+                ),
+            )
+            .join(
+                ErpChartOfAccountModel,
+                and_(
+                    ErpChartOfAccountModel.tenant_id == ErpJournalLineModel.tenant_id,
+                    ErpChartOfAccountModel.id == ErpJournalLineModel.account_id,
+                ),
+            )
+            .where(
+                ErpJournalLineModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.status == EntryStatus.POSTED,
+                ErpJournalEntryModel.entry_date >= fiscal_year_start,
+                ErpJournalEntryModel.entry_date <= fiscal_year_end,
+            )
+            .group_by(ErpChartOfAccountModel.code)
+        )
+        result = await self.session.execute(stmt)
+        totals: dict[str, Decimal] = {}
+        for code, debit, credit in result.all():
+            totals[code] = (debit or Decimal("0")) - (credit or Decimal("0"))
+        return totals
+
+    # ------------------------------------------------------------------
+    # Wave 4 (FIN-AUT-004, SKY-85): fixed assets / depreciation
+    # ------------------------------------------------------------------
+
+    async def create_fixed_asset(self, asset: FixedAsset) -> FixedAsset:
+        model = ErpFixedAssetModel(
+            tenant_id=asset.tenant_id,
+            name=asset.name,
+            category=asset.category,
+            cost=asset.cost,
+            acquisition_date=asset.acquisition_date,
+            useful_life_years=asset.useful_life_years,
+            depreciation_method=asset.depreciation_method,
+            salvage_value=asset.salvage_value,
+            accumulated_depreciation=asset.accumulated_depreciation,
+            status=asset.status,
+            disposed_at=asset.disposed_at,
+            created_by=asset.created_by,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _fixed_asset_from_orm(model)
+
+    async def get_fixed_asset(self, asset_id: uuid.UUID, tenant_id: uuid.UUID) -> FixedAsset | None:
+        stmt = select(ErpFixedAssetModel).where(
+            ErpFixedAssetModel.tenant_id == tenant_id, ErpFixedAssetModel.id == asset_id
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _fixed_asset_from_orm(model) if model is not None else None
+
+    async def list_fixed_assets(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[FixedAsset]:
+        stmt = select(ErpFixedAssetModel).where(ErpFixedAssetModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpFixedAssetModel.status == status)
+        stmt = stmt.order_by(ErpFixedAssetModel.acquisition_date, ErpFixedAssetModel.name)
+        result = await self.session.execute(stmt)
+        return [_fixed_asset_from_orm(model) for model in result.scalars().all()]
+
+    async def update_fixed_asset(self, asset: FixedAsset) -> FixedAsset | None:
+        if asset.id is None:
+            return None
+        model = await self._fixed_asset_model(asset.id, asset.tenant_id)
+        if model is None:
+            return None
+        model.name = asset.name
+        model.category = asset.category
+        model.cost = asset.cost
+        model.acquisition_date = asset.acquisition_date
+        model.useful_life_years = asset.useful_life_years
+        model.depreciation_method = asset.depreciation_method
+        model.salvage_value = asset.salvage_value
+        model.accumulated_depreciation = asset.accumulated_depreciation
+        model.status = asset.status
+        model.disposed_at = asset.disposed_at
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _fixed_asset_from_orm(model)
+
+    async def create_depreciation_entry(self, entry: DepreciationEntry) -> DepreciationEntry:
+        model = ErpDepreciationEntryModel(
+            tenant_id=entry.tenant_id,
+            asset_id=entry.asset_id,
+            period=entry.period,
+            amount=entry.amount,
+            status=entry.status,
+            journal_entry_id=entry.journal_entry_id,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _depreciation_entry_from_orm(model)
+
+    async def get_depreciation_entry(
+        self, asset_id: uuid.UUID, period: str, tenant_id: uuid.UUID
+    ) -> DepreciationEntry | None:
+        stmt = select(ErpDepreciationEntryModel).where(
+            ErpDepreciationEntryModel.tenant_id == tenant_id,
+            ErpDepreciationEntryModel.asset_id == asset_id,
+            ErpDepreciationEntryModel.period == period,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _depreciation_entry_from_orm(model) if model is not None else None
+
+    async def list_depreciation_entries(
+        self, tenant_id: uuid.UUID, *, period: str | None = None
+    ) -> Sequence[DepreciationEntry]:
+        stmt = select(ErpDepreciationEntryModel).where(
+            ErpDepreciationEntryModel.tenant_id == tenant_id
+        )
+        if period is not None:
+            stmt = stmt.where(ErpDepreciationEntryModel.period == period)
+        stmt = stmt.order_by(ErpDepreciationEntryModel.period, ErpDepreciationEntryModel.asset_id)
+        result = await self.session.execute(stmt)
+        return [_depreciation_entry_from_orm(model) for model in result.scalars().all()]
+
+    # ------------------------------------------------------------------
+    # Wave 4 (FIN-AUT-004, SKY-85): expense policy / claims / violations
+    # ------------------------------------------------------------------
+
+    async def create_expense_policy(self, policy: ExpensePolicy) -> ExpensePolicy:
+        model = ErpExpensePolicyModel(
+            tenant_id=policy.tenant_id,
+            category=policy.category,
+            name=policy.name,
+            cap_amount=policy.cap_amount,
+            requires_receipt=policy.requires_receipt,
+            advance_limit=policy.advance_limit,
+            created_by=policy.created_by,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _expense_policy_from_orm(model)
+
+    async def get_expense_policy(self, category: str, tenant_id: uuid.UUID) -> ExpensePolicy | None:
+        stmt = select(ErpExpensePolicyModel).where(
+            ErpExpensePolicyModel.tenant_id == tenant_id,
+            ErpExpensePolicyModel.category == category,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _expense_policy_from_orm(model) if model is not None else None
+
+    async def list_expense_policies(self, tenant_id: uuid.UUID) -> Sequence[ExpensePolicy]:
+        stmt = select(ErpExpensePolicyModel).where(ErpExpensePolicyModel.tenant_id == tenant_id)
+        stmt = stmt.order_by(ErpExpensePolicyModel.category)
+        result = await self.session.execute(stmt)
+        return [_expense_policy_from_orm(model) for model in result.scalars().all()]
+
+    async def update_expense_policy(self, policy: ExpensePolicy) -> ExpensePolicy | None:
+        if policy.id is None:
+            return None
+        model = await self._expense_policy_model(policy.id, policy.tenant_id)
+        if model is None:
+            return None
+        model.category = policy.category
+        model.name = policy.name
+        model.cap_amount = policy.cap_amount
+        model.requires_receipt = policy.requires_receipt
+        model.advance_limit = policy.advance_limit
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _expense_policy_from_orm(model)
+
+    async def create_expense_claim(self, claim: ExpenseClaim) -> ExpenseClaim:
+        model = ErpExpenseClaimModel(
+            tenant_id=claim.tenant_id,
+            category=claim.category,
+            amount=claim.amount,
+            description=claim.description,
+            receipt_url=claim.receipt_url,
+            advance_amount=claim.advance_amount,
+            status=claim.status,
+            source_ref=claim.source_ref,
+            submitted_by=claim.submitted_by,
+        )
+        self.session.add(model)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            _conflict_or_reraise(exc)
+        await self.session.refresh(model)
+        return _expense_claim_from_orm(model)
+
+    async def get_expense_claim(
+        self, claim_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ExpenseClaim | None:
+        stmt = select(ErpExpenseClaimModel).where(
+            ErpExpenseClaimModel.tenant_id == tenant_id,
+            ErpExpenseClaimModel.id == claim_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _expense_claim_from_orm(model) if model is not None else None
+
+    async def list_expense_claims(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[ExpenseClaim]:
+        stmt = select(ErpExpenseClaimModel).where(ErpExpenseClaimModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpExpenseClaimModel.status == status)
+        stmt = stmt.order_by(ErpExpenseClaimModel.created_at.desc())
+        result = await self.session.execute(stmt)
+        return [_expense_claim_from_orm(model) for model in result.scalars().all()]
+
+    async def set_expense_claim_status(
+        self,
+        claim_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        status: str,
+        user_id: uuid.UUID | None = None,
+        rejection_reason: str | None = None,
+    ) -> ExpenseClaim | None:
+        model = await self._expense_claim_model(claim_id, tenant_id)
+        if model is None:
+            return None
+        model.status = status
+        if status == ExpenseClaimStatus.APPROVED:
+            model.approved_by = user_id
+            model.approved_at = datetime.now(UTC)
+            model.rejection_reason = None
+        elif status == ExpenseClaimStatus.REJECTED:
+            model.approved_by = user_id
+            model.approved_at = datetime.now(UTC)
+            model.rejection_reason = rejection_reason
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _expense_claim_from_orm(model)
+
+    async def create_expense_violation(
+        self, violation: ExpensePolicyViolation
+    ) -> ExpensePolicyViolation:
+        model = ErpExpensePolicyViolationModel(
+            tenant_id=violation.tenant_id,
+            category=violation.category,
+            reason_code=violation.reason_code,
+            outcome=violation.outcome,
+            amount=violation.amount,
+            claim_id=violation.claim_id,
+            submitted_by=violation.submitted_by,
+            message=violation.message,
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _expense_violation_from_orm(model)
+
+    async def list_expense_violations(
+        self, tenant_id: uuid.UUID, *, reason_code: str | None = None
+    ) -> Sequence[ExpensePolicyViolation]:
+        stmt = select(ErpExpensePolicyViolationModel).where(
+            ErpExpensePolicyViolationModel.tenant_id == tenant_id
+        )
+        if reason_code is not None:
+            stmt = stmt.where(ErpExpensePolicyViolationModel.reason_code == reason_code)
+        stmt = stmt.order_by(ErpExpensePolicyViolationModel.created_at.desc())
+        result = await self.session.execute(stmt)
+        return [_expense_violation_from_orm(model) for model in result.scalars().all()]
+
+    # ------------------------------------------------------------------
+    # Wave 4 (FIN-AUT-004, SKY-85): compliance calendar
+    # ------------------------------------------------------------------
+
+    async def create_compliance_item(self, item: ComplianceItem) -> ComplianceItem:
+        model = ErpComplianceItemModel(
+            tenant_id=item.tenant_id,
+            title=item.title,
+            description=item.description,
+            obligation_type=item.obligation_type,
+            recurrence=item.recurrence,
+            due_on=item.due_on,
+            lead_days=item.lead_days,
+            status=item.status,
+            assignee_id=item.assignee_id,
+            created_by=item.created_by,
+        )
+        self.session.add(model)
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _compliance_item_from_orm(model)
+
+    async def get_compliance_item(
+        self, item_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ComplianceItem | None:
+        stmt = select(ErpComplianceItemModel).where(
+            ErpComplianceItemModel.tenant_id == tenant_id,
+            ErpComplianceItemModel.id == item_id,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        return _compliance_item_from_orm(model) if model is not None else None
+
+    async def list_compliance_items(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[ComplianceItem]:
+        stmt = select(ErpComplianceItemModel).where(ErpComplianceItemModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpComplianceItemModel.status == status)
+        stmt = stmt.order_by(ErpComplianceItemModel.due_on, ErpComplianceItemModel.title)
+        result = await self.session.execute(stmt)
+        return [_compliance_item_from_orm(model) for model in result.scalars().all()]
+
+    async def list_compliance_due(
+        self, tenant_id: uuid.UUID, due_on_or_before: date
+    ) -> Sequence[ComplianceItem]:
+        stmt = select(ErpComplianceItemModel).where(
+            ErpComplianceItemModel.tenant_id == tenant_id,
+            ErpComplianceItemModel.status == ComplianceItemStatus.OPEN,
+            ErpComplianceItemModel.due_on <= due_on_or_before,
+        )
+        stmt = stmt.order_by(ErpComplianceItemModel.due_on, ErpComplianceItemModel.title)
+        result = await self.session.execute(stmt)
+        return [_compliance_item_from_orm(model) for model in result.scalars().all()]
+
+    async def complete_compliance_item(
+        self,
+        item_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        completed_by: uuid.UUID | None,
+        completed_at: datetime,
+    ) -> ComplianceItem | None:
+        model = await self._compliance_item_model(item_id, tenant_id)
+        if model is None:
+            return None
+        model.status = ComplianceItemStatus.COMPLETED
+        model.completed_at = completed_at
+        model.completed_by = completed_by
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _compliance_item_from_orm(model)
+
+    async def update_compliance_item(self, item: ComplianceItem) -> ComplianceItem | None:
+        if item.id is None:
+            return None
+        model = await self._compliance_item_model(item.id, item.tenant_id)
+        if model is None:
+            return None
+        model.title = item.title
+        model.description = item.description
+        model.obligation_type = item.obligation_type
+        model.recurrence = item.recurrence
+        model.due_on = item.due_on
+        model.lead_days = item.lead_days
+        model.status = item.status
+        model.assignee_id = item.assignee_id
+        model.completed_at = item.completed_at
+        model.completed_by = item.completed_by
+        await self.session.flush()
+        await self.session.refresh(model)
+        return _compliance_item_from_orm(model)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    async def _budget_model(
+        self, budget_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ErpBudgetModel | None:
+        stmt = select(ErpBudgetModel).where(
+            ErpBudgetModel.tenant_id == tenant_id, ErpBudgetModel.id == budget_id
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def _fixed_asset_model(
+        self, asset_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ErpFixedAssetModel | None:
+        stmt = select(ErpFixedAssetModel).where(
+            ErpFixedAssetModel.tenant_id == tenant_id, ErpFixedAssetModel.id == asset_id
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def _expense_policy_model(
+        self, policy_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ErpExpensePolicyModel | None:
+        stmt = select(ErpExpensePolicyModel).where(
+            ErpExpensePolicyModel.tenant_id == tenant_id, ErpExpensePolicyModel.id == policy_id
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def _expense_claim_model(
+        self, claim_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ErpExpenseClaimModel | None:
+        stmt = select(ErpExpenseClaimModel).where(
+            ErpExpenseClaimModel.tenant_id == tenant_id, ErpExpenseClaimModel.id == claim_id
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def _compliance_item_model(
+        self, item_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ErpComplianceItemModel | None:
+        stmt = select(ErpComplianceItemModel).where(
+            ErpComplianceItemModel.tenant_id == tenant_id, ErpComplianceItemModel.id == item_id
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()

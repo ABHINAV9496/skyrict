@@ -39,15 +39,23 @@ if TYPE_CHECKING:
         ArAging,
         AuditReadiness,
         BalanceSheet,
+        Budget,
         BudgetDraft,
+        BudgetLine,
         CashflowProjection,
         ChartOfAccount,
         CloseChecklist,
         ComparativePnl,
+        ComplianceItem,
         CustomerPaymentAnalytics,
+        DepreciationEntry,
         DuplicateGroup,
         ExchangeRate,
+        ExpenseClaim,
+        ExpensePolicy,
+        ExpensePolicyViolation,
         FiscalPeriod,
+        FixedAsset,
         HealthScore,
         Invoice,
         JournalEntry,
@@ -464,6 +472,142 @@ class JournalTemplateRepositoryPort(Protocol):
     async def list_journal_templates_due(
         self, tenant_id: uuid.UUID, at: datetime
     ) -> Sequence[JournalTemplate]: ...
+
+
+# ---------------------------------------------------------------------------
+# Finance repository port (FIN-AUT-004, SKY-85) - budgets, depreciation,
+# expense policy, compliance calendar
+# ---------------------------------------------------------------------------
+
+
+class FinanceWave4RepositoryPort(Protocol):
+    """Persistence contract for the SKY-85 finance-automation wave-4 features.
+
+    Kept as a separate Protocol (like ``JournalTemplateRepositoryPort``) so the
+    four services depend only on the slice they use. All methods are
+    tenant-scoped; money stays ``Decimal``; writes flush but do not commit (the
+    request-scoped ``get_db`` dependency commits at request end).
+    """
+
+    # -- Budgets (B21) -----------------------------------------------------
+
+    async def create_budget(self, budget: Budget) -> Budget: ...
+
+    async def get_budget(self, budget_id: uuid.UUID, tenant_id: uuid.UUID) -> Budget | None: ...
+
+    async def list_budgets(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[Budget]: ...
+
+    async def update_budget(self, budget: Budget) -> Budget | None: ...
+
+    async def delete_budgetlines(self, tenant_id: uuid.UUID, budget_id: uuid.UUID) -> None: ...
+
+    async def add_budgetline(self, line: BudgetLine) -> BudgetLine: ...
+
+    async def add_budgetlines(self, lines: Sequence[BudgetLine]) -> Sequence[BudgetLine]: ...
+
+    async def list_budget_lines(
+        self, tenant_id: uuid.UUID, budget_id: uuid.UUID
+    ) -> Sequence[BudgetLine]: ...
+
+    async def posted_totals_by_code(
+        self,
+        tenant_id: uuid.UUID,
+        fiscal_year_start: date,
+        fiscal_year_end: date,
+    ) -> dict[str, Decimal]: ...
+
+    # -- Fixed assets / depreciation (B13/B28) ------------------------------
+
+    async def create_fixed_asset(self, asset: FixedAsset) -> FixedAsset: ...
+
+    async def get_fixed_asset(
+        self, asset_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> FixedAsset | None: ...
+
+    async def list_fixed_assets(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[FixedAsset]: ...
+
+    async def update_fixed_asset(self, asset: FixedAsset) -> FixedAsset | None: ...
+
+    async def create_depreciation_entry(self, entry: DepreciationEntry) -> DepreciationEntry: ...
+
+    async def get_depreciation_entry(
+        self, asset_id: uuid.UUID, period: str, tenant_id: uuid.UUID
+    ) -> DepreciationEntry | None: ...
+
+    async def list_depreciation_entries(
+        self, tenant_id: uuid.UUID, *, period: str | None = None
+    ) -> Sequence[DepreciationEntry]: ...
+
+    # -- Expense policy / claims / violations (B16) -------------------------
+
+    async def create_expense_policy(self, policy: ExpensePolicy) -> ExpensePolicy: ...
+
+    async def get_expense_policy(
+        self, category: str, tenant_id: uuid.UUID
+    ) -> ExpensePolicy | None: ...
+
+    async def list_expense_policies(self, tenant_id: uuid.UUID) -> Sequence[ExpensePolicy]: ...
+
+    async def update_expense_policy(self, policy: ExpensePolicy) -> ExpensePolicy | None: ...
+
+    async def create_expense_claim(self, claim: ExpenseClaim) -> ExpenseClaim: ...
+
+    async def get_expense_claim(
+        self, claim_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ExpenseClaim | None: ...
+
+    async def list_expense_claims(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[ExpenseClaim]: ...
+
+    async def set_expense_claim_status(
+        self,
+        claim_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        status: str,
+        user_id: uuid.UUID | None = None,
+        rejection_reason: str | None = None,
+    ) -> ExpenseClaim | None: ...
+
+    async def create_expense_violation(
+        self, violation: ExpensePolicyViolation
+    ) -> ExpensePolicyViolation: ...
+
+    async def list_expense_violations(
+        self, tenant_id: uuid.UUID, *, reason_code: str | None = None
+    ) -> Sequence[ExpensePolicyViolation]: ...
+
+    # -- Compliance calendar (B27) -----------------------------------------
+
+    async def create_compliance_item(self, item: ComplianceItem) -> ComplianceItem: ...
+
+    async def get_compliance_item(
+        self, item_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> ComplianceItem | None: ...
+
+    async def list_compliance_items(
+        self, tenant_id: uuid.UUID, *, status: str | None = None
+    ) -> Sequence[ComplianceItem]: ...
+
+    async def list_compliance_due(
+        self, tenant_id: uuid.UUID, due_on_or_before: date
+    ) -> Sequence[ComplianceItem]: ...
+
+    async def complete_compliance_item(
+        self,
+        item_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        completed_by: uuid.UUID | None,
+        completed_at: datetime,
+    ) -> ComplianceItem | None: ...
+
+    async def update_compliance_item(self, item: ComplianceItem) -> ComplianceItem | None: ...
 
 
 # ---------------------------------------------------------------------------

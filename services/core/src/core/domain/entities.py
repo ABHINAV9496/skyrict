@@ -944,6 +944,11 @@ class FixedAsset:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    @property
+    def net_book_value(self) -> Decimal:
+        """Cost minus accumulated depreciation; read by response DTOs."""
+        return self.cost - self.accumulated_depreciation
+
 
 @dataclass(frozen=True)
 class DepreciationEntry:

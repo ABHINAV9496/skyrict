@@ -26,6 +26,14 @@ from core.core.exceptions import (
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    if settings.SENTRY_DSN:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.ENVIRONMENT.value,
+            traces_sample_rate=0.1,
+        )
     docs_enabled = settings.ENVIRONMENT != Environment.PRODUCTION
 
     app = FastAPI(

@@ -108,6 +108,15 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="log level")
     LOG_JSON: bool = Field(default=True, description="JSON log output")
 
+    # --- Error tracking ---
+    SENTRY_DSN: str = Field(
+        default="",
+        description=(
+            "Sentry DSN for error tracking. Empty disables Sentry init "
+            "entirely - dev/test never need it, only staging/production."
+        ),
+    )
+
     # --- Multi-tenancy ---
     DEFAULT_TENANT_ID: str = Field(
         default="00000000-0000-0000-0000-000000000001",

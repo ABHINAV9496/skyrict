@@ -44,13 +44,16 @@ if TYPE_CHECKING:
         ChartOfAccount,
         CloseChecklist,
         ComparativePnl,
+        CustomerPaymentAnalytics,
         DuplicateGroup,
         ExchangeRate,
         FiscalPeriod,
         HealthScore,
         Invoice,
         JournalEntry,
+        JournalTemplate,
         Payment,
+        PaymentIntent,
         PaymentMethodAnalytics,
         ProfitAndLoss,
         RevenueConcentration,
@@ -59,7 +62,11 @@ if TYPE_CHECKING:
         WorkingCapitalAlert,
         WorkingCapitalSeries,
     )
-    from core.domain.value_objects import EntryStatus, InvoiceStatus
+    from core.domain.value_objects import (
+        EntryStatus,
+        InvoiceStatus,
+        PaymentIntentStatus,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +287,10 @@ class FinanceRepositoryPort(Protocol):
         self, tenant_id: uuid.UUID, from_date: date, to_date: date
     ) -> PaymentMethodAnalytics: ...
 
+    async def customer_payment_analytics(
+        self, tenant_id: uuid.UUID, from_date: date, to_date: date
+    ) -> CustomerPaymentAnalytics: ...
+
     async def audit_readiness(self, tenant_id: uuid.UUID) -> AuditReadiness: ...
 
     async def reverse_journal_entry(
@@ -376,6 +387,83 @@ class FinanceRepositoryPort(Protocol):
         tenant_id: uuid.UUID,
         source_ref: str,
     ) -> uuid.UUID | None: ...
+
+
+# ---------------------------------------------------------------------------
+# Payment-matching inbox repository port (FIN-AUT-003 wave 3, B7)
+# ---------------------------------------------------------------------------
+
+
+class PaymentMatchRepositoryPort(Protocol):
+    """Persistence contract for the payment-matching inbox (B7).
+
+    ``outstanding_invoices`` pairs each APPROVED invoice with its remaining
+    balance (total minus APPLIED payments) so the scorer can rank candidates
+    against live data. Undo support deletes the exact ``erp_payments`` row a
+    prior accept created and flips the invoice back to APPROVED.
+    """
+
+    async def create_payment_intent(self, intent: PaymentIntent) -> PaymentIntent: ...
+
+    async def get_payment_intent(
+        self, intent_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> PaymentIntent | None: ...
+
+    async def list_payment_intents(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: PaymentIntentStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[PaymentIntent]: ...
+
+    async def update_payment_intent(self, intent: PaymentIntent) -> PaymentIntent | None: ...
+
+    async def outstanding_invoices(
+        self, tenant_id: uuid.UUID
+    ) -> Sequence[tuple[Invoice, Decimal]]: ...
+
+    async def delete_payment(self, payment_id: uuid.UUID, tenant_id: uuid.UUID) -> bool: ...
+
+    async def settle_invoice_payment_status(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
+
+# ---------------------------------------------------------------------------
+# Finance repository port (FIN-AUT-003 wave 3) - recurring journal templates
+# ---------------------------------------------------------------------------
+
+
+class JournalTemplateRepositoryPort(Protocol):
+    """Persistence contract for recurring journal templates (B5).
+
+    Kept as a separate Protocol (not merged into ``FinanceRepositoryPort``) so
+    the wave-3 service depends only on the slice it uses.
+    """
+
+    async def create_journal_template(self, template: JournalTemplate) -> JournalTemplate: ...
+
+    async def get_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> JournalTemplate | None: ...
+
+    async def list_journal_templates(
+        self, tenant_id: uuid.UUID, *, enabled: bool | None = None
+    ) -> Sequence[JournalTemplate]: ...
+
+    async def update_journal_template(
+        self, template: JournalTemplate
+    ) -> JournalTemplate | None: ...
+
+    async def delete_journal_template(
+        self, template_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> bool: ...
+
+    async def list_journal_templates_due(
+        self, tenant_id: uuid.UUID, at: datetime
+    ) -> Sequence[JournalTemplate]: ...
 
 
 # ---------------------------------------------------------------------------

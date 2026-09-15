@@ -33,6 +33,8 @@ from ai_agent.cache.response_cache import (
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
+from ai_agent.features.conversation_summary import ConversationSummaryStore, is_summary_fresh
+from ai_agent.features.memory_compaction.budget import ContextBudgetManager
 from ai_agent.features.supervisor.delegates import (
     AuditGuardianDelegator,
     CoachSuggestionPort,
@@ -172,6 +174,20 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # so multi-turn context can never grow the prompt without limit, SKY-100).
 _HISTORY_MESSAGE_LIMIT = 20
 
+# Context budgeting for the supervisor prompt. When the recent window alone
+# overflows this budget, the rolling conversation summary (SKY-100) stands in
+# for the older context and the window is trimmed to fit.
+_BUDGET = ContextBudgetManager()
+
+
+def _format_summary_block(summary_text: str) -> str:
+    """Render the stored rolling summary as an explicit prompt block."""
+    return (
+        "--- Earlier conversation summary ---\n"
+        f"{summary_text}\n"
+        "--- End of earlier conversation summary ---"
+    )
+
 
 class ConversationHistoryPort(Protocol):
     async def get_messages(
@@ -200,6 +216,8 @@ class SupervisorService:
         coach_suggestions: CoachSuggestionPort | None = None,
         guardian_reports: GuardianReportPort | None = None,
         conversation_history: ConversationHistoryPort | None = None,
+        conversation_summary: ConversationSummaryStore | None = None,
+        summary_regenerator: Callable[[uuid.UUID, uuid.UUID], None] | None = None,
         provisioned: Mapping[str, bool],
         confidence_threshold: float = 0.75,
         classification_cache: ResponseCache | None = None,
@@ -210,6 +228,8 @@ class SupervisorService:
         tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._conversation_history = conversation_history
+        self._conversation_summary = conversation_summary
+        self._summary_regenerator = summary_regenerator
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
@@ -618,7 +638,18 @@ class SupervisorService:
             for msg in recent:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 lines.append(f"{role}: {msg['content']}")
-            return "\n".join(lines)
+            history_text = "\n".join(lines)
+            # When the recent window alone overflows the supervisor context
+            # budget, fold the rolling summary in and trim to fit (SKY-100).
+            if self._conversation_summary is not None and not _BUDGET.fits(
+                agent="supervisor", text=history_text
+            ):
+                return await self._history_with_summary(
+                    history_text=history_text,
+                    conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                )
+            return history_text
         except Exception:
             logger.warning(
                 "supervisor.history_load_failed",
@@ -626,6 +657,56 @@ class SupervisorService:
                 exc_info=True,
             )
             return ""
+
+    def _schedule_summary_regeneration(
+        self, conversation_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> None:
+        """Fire-and-forget background summary regeneration (best-effort)."""
+        if self._summary_regenerator is None:
+            return
+        try:
+            self._summary_regenerator(conversation_id, tenant_id)
+        except Exception:
+            logger.warning(
+                "supervisor.summary_regeneration_schedule_failed",
+                conversation_id=str(conversation_id),
+                exc_info=True,
+            )
+
+    async def _history_with_summary(
+        self,
+        *,
+        history_text: str,
+        conversation_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> str:
+        """Fold the rolling summary + trimmed window into the supervisor prompt.
+
+        Best-effort: any failure falls back to the untrimmed window (today's
+        behavior) rather than silently dropping context.
+        """
+        summary: dict[str, Any] | None = None
+        fresh = False
+        try:
+            if self._conversation_summary is not None:
+                summary = await self._conversation_summary.get_summary(
+                    tenant_id=tenant_id,
+                    conversation_id=conversation_id,
+                )
+                fresh = is_summary_fresh(summary)
+        except Exception:
+            logger.warning(
+                "supervisor.summary_load_failed",
+                conversation_id=str(conversation_id),
+                exc_info=True,
+            )
+        parts: list[str] = []
+        if summary and summary.get("summary_text"):
+            parts.append(_format_summary_block(str(summary["summary_text"])))
+        if not fresh:
+            self._schedule_summary_regeneration(conversation_id, tenant_id)
+        parts.append(history_text)
+        return _BUDGET.trim_to_budget(agent="supervisor", parts=parts)
 
 
 def _round_ms(value: float | None) -> float | None:

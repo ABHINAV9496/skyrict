@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from core.domain.entities import (
         AccountCodeSuggestion,
         AiFinanceAnomaly,
@@ -37,6 +39,7 @@ if TYPE_CHECKING:
         ArAging,
         AuditReadiness,
         BalanceSheet,
+        BudgetDraft,
         CashflowProjection,
         ChartOfAccount,
         CloseChecklist,
@@ -361,6 +364,18 @@ class FinanceRepositoryPort(Protocol):
     async def list_exchange_rates(
         self, tenant_id: uuid.UUID, *, currency: str | None = None
     ) -> Sequence[ExchangeRate]: ...
+
+    # --- Workforce-plan budget drafts (HR-AI-004, SKY-93) ---
+    session: AsyncSession
+
+    async def create_budget_draft(self, draft: BudgetDraft) -> BudgetDraft: ...
+
+    async def get_workforce_budget_draft_id(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        source_ref: str,
+    ) -> uuid.UUID | None: ...
 
 
 # ---------------------------------------------------------------------------

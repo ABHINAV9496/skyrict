@@ -864,7 +864,7 @@ async def l4_scenario_export(
     client: _ClientDep,
     finance: _FinancePortDep,
     audit: _AuditSvcDep,
-) -> ResponseEnvelope[ExportBudgetDraftOut]:
+) -> ResponseEnvelope[ExportBudgetDraftOut] | Response:
     """Export a frozen L4 what-if scenario to Finance as a PROPOSED budget draft.
 
     SKY-93 (HR-AI-004, Commit 4): bridge the gap where Finance can't see a

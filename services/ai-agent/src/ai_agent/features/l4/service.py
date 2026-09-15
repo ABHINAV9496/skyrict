@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ai_agent.core.audit_events import (
     AI_L4_SCENARIO_COMPARED,
@@ -19,7 +19,6 @@ from ai_agent.core.audit_events import (
     AI_L4_SCENARIO_VIEWED,
 )
 from ai_agent.core.audit_service import AuditService
-from ai_agent.db.l4_scenario_repository import L4ScenarioRepository
 from ai_agent.features.l4.engine import (
     Action,
     BenefitChange,
@@ -31,6 +30,9 @@ from ai_agent.features.l4.engine import (
     project,
 )
 from ai_agent.features.l4.gateway import L4CoreGatewayPort
+
+if TYPE_CHECKING:
+    from ai_agent.db.l4_scenario_repository import L4ScenarioRepository
 
 _CENT = Decimal("0.01")
 

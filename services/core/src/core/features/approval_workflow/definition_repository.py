@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.db.locks import advisory_family_lock
 from core.features.approval_workflow.models.definition import ErpApprovalWorkflowDefinitionModel
 
 
@@ -31,7 +32,13 @@ class ApprovalWorkflowDefinitionRepository:
         self._db = session
 
     async def next_version(self, tenant_id: uuid.UUID, resource_type: str) -> int:
-        """Next version number for a (resource_type) definition family."""
+        """Next version number for a (resource_type) definition family.
+
+        Serializes per family: concurrent ``create_draft`` calls on the same
+        resource_type would otherwise both read the same ``max(version)`` and
+        collide on ``uq_..._tenant_resource_version`` (B10).
+        """
+        await advisory_family_lock(self._db, "approval_definition", tenant_id, resource_type)
         latest = await self._db.execute(
             select(func.max(ErpApprovalWorkflowDefinitionModel.version)).where(
                 ErpApprovalWorkflowDefinitionModel.tenant_id == tenant_id,

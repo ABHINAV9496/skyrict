@@ -18,6 +18,7 @@ from typing import Any, cast
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.db.locks import advisory_family_lock
 from core.domain.value_objects import EntryStatus
 from core.features.ai_docs.models.ai_doc import ErpAiDocModel
 from core.features.ai_docs.models.tax_summary import ErpTaxSummaryModel
@@ -105,7 +106,15 @@ class AiDocRepository:
     async def next_doc_version(
         self, tenant_id: uuid.UUID, doc_type: str, snapshot_id: uuid.UUID
     ) -> int:
-        """Next version number for a (doc_type, snapshot) artifact family."""
+        """Next version number for a (doc_type, snapshot) artifact family.
+
+        Serializes per family so concurrent creates cannot both read the same
+        ``max(version)`` and write the same number (B10; the family has no
+        unique constraint on version, so the duplicate would be silent).
+        """
+        await advisory_family_lock(
+            self._db, "ai_doc", tenant_id, doc_type, snapshot_id
+        )
         latest = await self._db.execute(
             select(func.max(ErpAiDocModel.version)).where(
                 ErpAiDocModel.tenant_id == tenant_id,

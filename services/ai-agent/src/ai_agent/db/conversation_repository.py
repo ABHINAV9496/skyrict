@@ -274,6 +274,61 @@ class ConversationRepository:
         )
         await self._session.execute(stmt)
 
+    # ------------------------------------------------------------------
+    # Rolling summary (SKY-100)
+    # ------------------------------------------------------------------
+
+    async def get_summary(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> dict[str, Any] | None:
+        """Fetch the rolling summary for a conversation, or None.
+
+        The summary is an internal context-compaction detail and is
+        deliberately NOT part of ``_conversation_to_dict`` - callers outside
+        the supervisor prompt path never see it.
+        """
+        stmt = select(AiConversation).where(
+            AiConversation.tenant_id == tenant_id,
+            AiConversation.id == conversation_id,
+        )
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None or row.summary_text is None:
+            return None
+        return {
+            "summary_text": row.summary_text,
+            "summary_updated_at": row.summary_updated_at.isoformat()
+            if row.summary_updated_at
+            else None,
+        }
+
+    async def update_summary(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        summary_text: str,
+    ) -> bool:
+        """Replace the rolling summary and stamp the regeneration time."""
+        from datetime import UTC, datetime
+
+        stmt = (
+            update(AiConversation)
+            .where(
+                AiConversation.tenant_id == tenant_id,
+                AiConversation.id == conversation_id,
+            )
+            .values(
+                summary_text=summary_text,
+                summary_updated_at=datetime.now(UTC),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return bool(result.rowcount)  # type: ignore[attr-defined]
+
     async def mark_title_generated(
         self,
         *,

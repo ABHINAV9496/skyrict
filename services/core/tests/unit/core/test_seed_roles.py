@@ -129,6 +129,20 @@ class TestSeedCoreRolesForTenant:
             "erp.payroll.ai.run",
             "erp.payroll.ai.notify",
             "erp.payroll.ai.approve",
+            "erp.finance.approve",
+            "erp.inventory.adjust",
+            "erp.inventory.adjust.approve",
+            "erp.inventory.cost",
+            "erp.inventory.suppliers.read",
+            "erp.inventory.suppliers.write",
+            "erp.reports.create",
+            "erp.reports.read",
+            "erp.hr.ai.eval",
+            "erp.hr.ai.management",
+            "erp.ai.coaching.read",
+            "erp.ai.coaching.review",
+            "erp.ai.guardian.read",
+            "erp.ai.guardian.review",
         ]
         assert merged.is_system_role is True
         assert len(session.added) == len(CORE_SYSTEM_ROLES) - 1
@@ -150,6 +164,7 @@ class TestSeedCoreRolesForTenant:
             "erp.sales.read",
             "erp.hr.ai.read",
             "erp.payroll.ai.read",
+            "erp.reports.read",
         ]
 
 
@@ -178,6 +193,20 @@ class TestCoreSystemRolesDefinition:
             "erp.payroll.ai.run",
             "erp.payroll.ai.notify",
             "erp.payroll.ai.approve",
+            "erp.finance.approve",
+            "erp.inventory.adjust",
+            "erp.inventory.adjust.approve",
+            "erp.inventory.cost",
+            "erp.inventory.suppliers.read",
+            "erp.inventory.suppliers.write",
+            "erp.reports.create",
+            "erp.reports.read",
+            "erp.hr.ai.eval",
+            "erp.hr.ai.management",
+            "erp.ai.coaching.read",
+            "erp.ai.coaching.review",
+            "erp.ai.guardian.read",
+            "erp.ai.guardian.review",
         }
         assert by_name["department_manager"] == (
             "erp.hr.read",
@@ -190,6 +219,7 @@ class TestCoreSystemRolesDefinition:
             "erp.hr.ai.read",
             "erp.hr.ai.acknowledge",
             "erp.hr.ai.copilot",
+            "erp.reports.read",
         )
         assert by_name["standard_user"] == ("erp.hr.read", "erp.crm.read", "erp.sales.read")
         assert by_name["auditor"] == (
@@ -199,4 +229,5 @@ class TestCoreSystemRolesDefinition:
             "erp.sales.read",
             "erp.hr.ai.read",
             "erp.payroll.ai.read",
+            "erp.reports.read",
         )

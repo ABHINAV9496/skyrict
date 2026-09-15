@@ -362,7 +362,9 @@ class SupervisorService:
 
         When ``conversation_id`` is provided, the prior conversation history is
         loaded from the database and injected into the supervisor system prompt
-        so the LLM has multi-turn context.
+        so the LLM has multi-turn context. The load happens only on the
+        supervisor-answer (abstain) path - routed turns never read history, so
+        it is never on the time-to-first-token critical path (SKY-100).
         """
         # --- Process attachments into LLM-ready format ---
         processed = process_attachments(attachments) if attachments else ProcessedAttachments()
@@ -375,14 +377,6 @@ class SupervisorService:
                 f"--- Attached file content ---\n"
                 f"{processed.extracted_text}\n"
                 f"--- End of attached content ---"
-            )
-
-        # --- Load conversation history for multi-turn context ---
-        conversation_history = ""
-        if conversation_id is not None:
-            conversation_history = await self._load_conversation_history(
-                conversation_id=conversation_id,
-                tenant_id=tenant_id,
             )
 
         # --- Classify intent (uses original query for routing, not file content) ---
@@ -406,6 +400,16 @@ class SupervisorService:
                 # A real question that did not route to a module: answer it as
                 # the supervisor instead of deflecting with canned text, so the
                 # response actually varies with what the user asked.
+                #
+                # History is only loaded on this abstain path (SKY-100): routed
+                # turns never read it, so the DB round-trip must not sit between
+                # the turn start and the classification provider call.
+                conversation_history = ""
+                if conversation_id is not None:
+                    conversation_history = await self._load_conversation_history(
+                        conversation_id=conversation_id,
+                        tenant_id=tenant_id,
+                    )
                 async for sup_event in self._supervisor_answer(
                     query=enhanced_query,
                     image_blocks=processed.image_blocks,

@@ -28,7 +28,11 @@ from ai_agent.features.supervisor.delegates import (
     FinanceDelegator,
 )
 from ai_agent.features.supervisor.prompts import CLASSIFY_SYSTEM_PROMPT
-from ai_agent.features.supervisor.schemas import SupervisorEvent, TokenEvent
+from ai_agent.features.supervisor.schemas import (
+    ClassificationEvent,
+    SupervisorEvent,
+    TokenEvent,
+)
 from ai_agent.features.supervisor.service import SupervisorService
 
 if TYPE_CHECKING:
@@ -123,11 +127,23 @@ class FakeFinanceGateway:
         return self._invoices
 
 
+class FakeConversationHistory:
+    def __init__(self) -> None:
+        self.get_messages_calls = 0
+
+    async def get_messages(
+        self, *, tenant_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> list[dict[str, str]]:
+        self.get_messages_calls += 1
+        return [{"role": "user", "content": "previous question"}]
+
+
 def make_service(
     *,
     router: FakeLlmRouter | None = None,
     classification_cache: MemoryResponseCache | None = None,
     response_cache: MemoryResponseCache | None = None,
+    conversation_history: FakeConversationHistory | None = None,
     provisioned: dict[str, bool] | None = None,
 ) -> SupervisorService:
     gateway = FakeGateway()
@@ -138,6 +154,7 @@ def make_service(
     return SupervisorService(
         llm_router=router or FakeLlmRouter(has_providers=True),
         gateway_factory=gateway_factory,
+        conversation_history=conversation_history,
         provisioned=provisioned or {"inventory_monitor": True},
         classification_cache=classification_cache,
         response_cache=response_cache,
@@ -349,6 +366,48 @@ async def test_response_cache_never_engages_for_images() -> None:
     assert tokens_text(first) == _SUPERVISOR_ANSWER
     assert tokens_text(second) == _SUPERVISOR_ANSWER
     assert router.complete_calls == 2  # both turns reach the provider
+
+
+# --- conversation-history ordering (SKY-100 commit 3) -----------------------
+
+
+async def test_routed_path_never_loads_conversation_history() -> None:
+    """History is not on the routed-turn critical path - skip the DB read."""
+    history = FakeConversationHistory()
+    service = make_service(router=FakeLlmRouter(), conversation_history=history)
+
+    events = [
+        event
+        async for event in service.stream_answer(
+            query="What stock is below reorder point?",
+            conversation_id=uuid.uuid4(),
+            tenant_id=TENANT_A,
+            user_id=USER_ID,
+        )
+    ]
+
+    assert any(isinstance(e, ClassificationEvent) and not e.abstain for e in events)
+    assert history.get_messages_calls == 0
+
+
+async def test_abstain_path_loads_conversation_history() -> None:
+    """The supervisor-answer path still gets multi-turn context."""
+    history = FakeConversationHistory()
+    router = FakeLlmRouter(classify_text=_ABSTAIN_ANSWER)
+    service = make_service(router=router, conversation_history=history)
+
+    events = [
+        event
+        async for event in service.stream_answer(
+            query="tell me about multi-turn accounting",
+            conversation_id=uuid.uuid4(),
+            tenant_id=TENANT_A,
+            user_id=USER_ID,
+        )
+    ]
+
+    assert history.get_messages_calls == 1
+    assert tokens_text(events) == _SUPERVISOR_ANSWER
 
 
 # --- tool cache -------------------------------------------------------------

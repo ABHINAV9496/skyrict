@@ -136,7 +136,9 @@ class MemoryRepository:
                 if cosine_rows:
                     return cosine_rows
             except Exception:
-                pass  # pgvector unavailable - fall through to trigram/recency.
+                logger.warning(
+                    "memory.recall_cosine_unavailable", exc_info=True
+                )  # pgvector down/missing - fall through to trigram/recency.
         # Fallback: trigram then recency when cosine is absent, empty, or failed.
         try:
             result = await self._session.execute(
@@ -167,7 +169,9 @@ class MemoryRepository:
                     for r in rows
                 ]
         except Exception:
-            pass  # pg_trgm not available - fall through to recency.
+            logger.warning(
+                "memory.recall_trigram_unavailable", exc_info=True
+            )  # pg_trgm down/missing - fall through to recency.
 
         # Fallback: most recent not-yet-compacted.
         result = await self._session.execute(
@@ -358,7 +362,9 @@ class MemoryRepository:
                 if cosine_rows:
                     return cosine_rows
             except Exception:
-                pass  # pgvector unavailable - fall through to trigram/recency.
+                logger.warning(
+                    "memory.recall_semantic_cosine_unavailable", exc_info=True
+                )  # pgvector down/missing - fall through to trigram/recency.
         try:
             result = await self._session.execute(
                 select(
@@ -389,7 +395,9 @@ class MemoryRepository:
                     for r in rows
                 ]
         except Exception:
-            pass
+            logger.warning(
+                "memory.recall_semantic_trigram_unavailable", exc_info=True
+            )  # pg_trgm down/missing - fall through to recency.
 
         # Fallback: most recent by category.
         result = await self._session.execute(

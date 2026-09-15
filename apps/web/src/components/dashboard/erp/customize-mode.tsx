@@ -26,7 +26,6 @@ import {
     Minus,
     Plus,
     RotateCcw,
-    Sparkles,
     X,
 } from "lucide-react";
 
@@ -53,10 +52,6 @@ interface CustomizeModeProps {
     onReset: () => Promise<void> | void;
     /** Called to close the customize panel. */
     onClose: () => void;
-    /** Called when the user requests an AI suggestion. */
-    onAiSuggestion?: () => void;
-    /** Whether an AI suggestion is loading. */
-    aiLoading?: boolean;
     /** Error message if save/reset failed. */
     errorNotice?: string | null;
     /** Whether save is in progress. */
@@ -71,15 +66,12 @@ interface CustomizeModeProps {
  * - Show/hide toggle per widget
  * - Size presets (1-col, 2-col, 3-col, full-width)
  * - Reset to default button
- * - AI suggestion button
  */
 export function CustomizeMode({
     layout,
     onSave,
     onReset,
     onClose,
-    onAiSuggestion,
-    aiLoading,
     errorNotice,
     isSaving,
 }: CustomizeModeProps) {
@@ -145,21 +137,6 @@ export function CustomizeMode({
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
-                    {onAiSuggestion && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onAiSuggestion}
-                            disabled={aiLoading}
-                        >
-                            <Sparkles
-                                aria-hidden="true"
-                                className="mr-1.5 size-3.5"
-                            />
-                            {aiLoading ? "Thinking..." : "AI Suggest"}
-                        </Button>
-                    )}
                     <Button
                         type="button"
                         variant="outline"

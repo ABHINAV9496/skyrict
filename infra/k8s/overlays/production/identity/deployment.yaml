@@ -46,7 +46,7 @@ spec:
             - name: DEBUG
               value: "false"
             - name: LOG_LEVEL
-              value: WARNING
+              value: INFO
             - name: LOG_JSON
               value: "true"
             # DB connection pool (SKY-99/ADR-007): production Azure Postgres

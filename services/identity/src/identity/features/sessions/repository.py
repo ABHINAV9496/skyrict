@@ -65,9 +65,19 @@ def _from_orm(model: SessionModel) -> Session:
 class SessionRepository(SqlRepository):
     """Repository for session persistence (implements ``SessionRepositoryPort``)."""
 
-    async def get_by_id(self, session_id: str | uuid.UUID) -> Session | None:
-        """Fetch a session by primary key, or None when absent."""
-        model = await self.session.get(SessionModel, session_id)
+    async def get_by_id(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> Session | None:
+        """Fetch a session by primary key, or None when absent.
+
+        When ``tenant_id`` is given, only a session belonging to that tenant is
+        returned: callers that already resolved an authoritative tenant use it
+        as an application-level boundary on top of RLS.
+        """
+        stmt = select(SessionModel).where(SessionModel.id == session_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SessionModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         return _from_orm(model) if model is not None else None
 
     async def create(self, session: Session) -> Session:
@@ -100,19 +110,26 @@ class SessionRepository(SqlRepository):
         result = await self.session.execute(stmt)
         return [_from_orm(model) for model in result.scalars().all()]
 
-    async def get_active_by_family(self, family_id: str | uuid.UUID) -> list[Session]:
-        """Get all active sessions sharing a token family, newest first."""
+    async def get_active_by_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> list[Session]:
+        """Get all active sessions sharing a token family, newest first.
+
+        When ``tenant_id`` is given only that tenant's sessions are returned.
+        """
         now = datetime.now(UTC)
+        conditions = [
+            SessionModel.token_family_id == family_id,
+            SessionModel.status == SessionStatus.ACTIVE.value,
+            SessionModel.expires_at > now,
+        ]
+        if tenant_id is not None:
+            conditions.append(SessionModel.tenant_id == tenant_id)
         stmt = (
-            select(SessionModel)
-            .where(
-                and_(
-                    SessionModel.token_family_id == family_id,
-                    SessionModel.status == SessionStatus.ACTIVE.value,
-                    SessionModel.expires_at > now,
-                )
-            )
-            .order_by(SessionModel.created_at.desc())
+            select(SessionModel).where(and_(*conditions)).order_by(SessionModel.created_at.desc())
         )
         result = await self.session.execute(stmt)
         return [_from_orm(model) for model in result.scalars().all()]
@@ -135,41 +152,79 @@ class SessionRepository(SqlRepository):
         )
         await self.session.execute(stmt)
 
-    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
-        """Revoke every active session in a token family (reuse chain-kill)."""
+    async def revoke_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
+        """Revoke every active session in a token family (reuse chain-kill).
+
+        When ``tenant_id`` is given only that tenant's sessions are revoked.
+        """
         now = datetime.now(UTC)
+        conditions = [
+            SessionModel.token_family_id == family_id,
+            SessionModel.status == SessionStatus.ACTIVE.value,
+        ]
+        if tenant_id is not None:
+            conditions.append(SessionModel.tenant_id == tenant_id)
         stmt = (
             update(SessionModel)
-            .where(
-                and_(
-                    SessionModel.token_family_id == family_id,
-                    SessionModel.status == SessionStatus.ACTIVE.value,
-                )
-            )
+            .where(and_(*conditions))
             .values(status=SessionStatus.REVOKED.value, revoked_at=now)
         )
         await self.session.execute(stmt)
 
-    async def revoke_session(self, session_id: str | uuid.UUID) -> None:
-        """Revoke a specific session (no-op when it does not exist)."""
-        model = await self.session.get(SessionModel, session_id)
+    async def revoke_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
+        """Revoke a specific session (no-op when it does not exist).
+
+        When ``tenant_id`` is given a session outside that tenant is left
+        untouched - a foreign tenant must never be revoked from this path.
+        """
+        stmt = select(SessionModel).where(SessionModel.id == session_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SessionModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return
         model.status = SessionStatus.REVOKED.value
         model.revoked_at = datetime.now(UTC)
         await self.session.flush()
 
-    async def set_trusted(self, session_id: str | uuid.UUID, is_trusted: bool) -> None:
+    async def set_trusted(
+        self,
+        session_id: str | uuid.UUID,
+        is_trusted: bool,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         """Mark a session trusted (or untrusted) on a recognized device."""
-        model = await self.session.get(SessionModel, session_id)
+        stmt = select(SessionModel).where(SessionModel.id == session_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SessionModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return
         model.is_trusted = is_trusted
         await self.session.flush()
 
-    async def mark_expired(self, session_id: str | uuid.UUID) -> None:
+    async def mark_expired(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         """Materialize the ACTIVE -> EXPIRED transition on a past-expiry session."""
-        model = await self.session.get(SessionModel, session_id)
+        stmt = select(SessionModel).where(SessionModel.id == session_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SessionModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return
         model.status = SessionStatus.EXPIRED.value
@@ -182,8 +237,12 @@ class SessionRepository(SqlRepository):
         *,
         refresh_token_hash: str,
         expires_at: datetime,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> None:
-        model = await self.session.get(SessionModel, session_id)
+        stmt = select(SessionModel).where(SessionModel.id == session_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SessionModel.tenant_id == tenant_id)
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return
         model.refresh_token_hash = refresh_token_hash

@@ -26,6 +26,7 @@ from typing import Literal, Protocol
 import httpx
 import structlog
 
+from ai_agent.core.core_http import CoreHttpTransport
 from ai_agent.core.exceptions import AiUnavailableError
 
 logger = structlog.get_logger("ai_agent.inventory_gateway")
@@ -116,27 +117,8 @@ class InventoryGatewayPort(Protocol):
     ) -> list[MovementRow]: ...
 
 
-class HttpInventoryGateway:
+class HttpInventoryGateway(CoreHttpTransport):
     """One request's gateway: forwards the user's JWT + tenant slug to core."""
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        bearer_token: str,
-        tenant_slug: str,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._bearer_token = bearer_token
-        self._tenant_slug = tenant_slug
-
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._bearer_token}",
-            # Core resolves tenants via subdomain in prod, X-Tenant-Slug in
-            # dev/test; forwarding the slug keeps behavior identical either way.
-            "X-Tenant-Slug": self._tenant_slug,
-        }
 
     async def list_products(self) -> list[ProductRef]:
         items: list[ProductRef] = []
@@ -196,10 +178,6 @@ class HttpInventoryGateway:
             if page >= items_page.total_pages:
                 break
         return items
-
-    def _create_client(self) -> httpx.AsyncClient:
-        """Create the per-call HTTP client (overridable seam for tests)."""
-        return httpx.AsyncClient(timeout=10.0)
 
     async def _get_list(
         self, path: str, *, page: int, extra: dict[str, str] | None = None

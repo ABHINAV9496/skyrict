@@ -47,8 +47,17 @@ class FakeSessionRepo:
         self.expired: list[uuid.UUID] = []
         self.committed = False
 
-    async def get_by_id(self, session_id: str | uuid.UUID) -> Session | None:
-        return self.sessions.get(uuid.UUID(str(session_id)))
+    async def get_by_id(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> Session | None:
+        session = self.sessions.get(uuid.UUID(str(session_id)))
+        if (
+            tenant_id is not None
+            and session is not None
+            and session.tenant_id != uuid.UUID(str(tenant_id))
+        ):
+            return None
+        return session
 
     async def create(self, session: Session) -> Session:
         if session.id is None:
@@ -78,20 +87,33 @@ class FakeSessionRepo:
             reverse=True,
         )
 
-    async def get_active_by_family(self, family_id: str | uuid.UUID) -> list[Session]:
+    async def get_active_by_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> list[Session]:
         now = datetime.now(UTC)
         return [
             session
             for session in self.sessions.values()
             if session.token_family_id == uuid.UUID(str(family_id))
+            and (tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id)))
             and session.status is SessionStatus.ACTIVE
             and session.expires_at > now
         ]
 
-    async def revoke_session(self, session_id: str | uuid.UUID) -> None:
+    async def revoke_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         self.revoked.append(uuid.UUID(str(session_id)))
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             session.status = SessionStatus.REVOKED
             session.revoked_at = datetime.now(UTC)
 
@@ -105,21 +127,43 @@ class FakeSessionRepo:
             ):
                 session.status = SessionStatus.REVOKED
 
-    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
+    async def revoke_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         self.revoked_families.append(uuid.UUID(str(family_id)))
         for session in self.sessions.values():
-            if session.token_family_id == uuid.UUID(str(family_id)):
+            if session.token_family_id == uuid.UUID(str(family_id)) and (
+                tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+            ):
                 session.status = SessionStatus.REVOKED
 
-    async def set_trusted(self, session_id: str | uuid.UUID, is_trusted: bool) -> None:
+    async def set_trusted(
+        self,
+        session_id: str | uuid.UUID,
+        is_trusted: bool,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             session.is_trusted = is_trusted
 
-    async def mark_expired(self, session_id: str | uuid.UUID) -> None:
+    async def mark_expired(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         self.expired.append(uuid.UUID(str(session_id)))
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             session.status = SessionStatus.EXPIRED
             session.expired_at = datetime.now(UTC)
 
@@ -129,9 +173,12 @@ class FakeSessionRepo:
         *,
         refresh_token_hash: str,
         expires_at: datetime,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> None:
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             session.refresh_token_hash = refresh_token_hash
             session.expires_at = expires_at
 

@@ -40,4 +40,17 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Sentry wraps Next's config so the SDK can register route handlers and source
+// maps. The auth token/org/project are only needed for source-map upload at
+// deploy time and may be absent locally - the runtime DSN guard in
+// sentry.client.config.ts / sentry.server.config.ts is what decides whether
+// the SDK actually captures anything. `silent` keeps build logs quiet when
+// the upload credentials are not configured.
+const { withSentryConfig } = require("@sentry/nextjs"); // eslint-disable-line @typescript-eslint/no-require-imports -- CommonJS config file per Next.js convention
+
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG ?? "",
+  project: process.env.SENTRY_PROJECT ?? "",
+  authToken: process.env.SENTRY_AUTH_TOKEN ?? "",
+  silent: true,
+});

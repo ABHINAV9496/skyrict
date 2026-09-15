@@ -132,9 +132,17 @@ class SessionService:
         """
         return await self.session_repo.get_active_by_user(user_id, tenant_id)
 
-    async def get_session(self, session_id: str | uuid.UUID) -> Session | None:
-        """Fetch a session by id (any status), or None when absent."""
-        return await self.session_repo.get_by_id(session_id)
+    async def get_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> Session | None:
+        """Fetch a session by id (any status), or None when absent.
+
+        When ``tenant_id`` is given, only a session in that tenant is returned.
+        """
+        return await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
 
     async def has_prior_device(
         self,
@@ -159,7 +167,7 @@ class SessionService:
         ``tenant_id`` is given, a session outside that tenant is treated as
         foreign as well.
         """
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         if (
             not session
             or session.user_id != uuid.UUID(str(user_id))
@@ -168,7 +176,7 @@ class SessionService:
         ):
             raise SessionNotFoundError()
         SESSION_STATE_MACHINE.transition(session.status.value, SessionStatus.REVOKED.value)
-        await self.session_repo.revoke_session(session_id)
+        await self.session_repo.revoke_session(session_id, tenant_id=tenant_id)
         await self.audit_service.log(
             action=SESSION_REVOKED,
             target=f"session:{session_id}",
@@ -182,9 +190,10 @@ class SessionService:
         *,
         refresh_token_hash: str,
         expires_at: datetime,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> Session | None:
         """Rotate a session's refresh hash in place, preserving its token family."""
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         if session is None:
             return None
         if session.status is SessionStatus.ACTIVE:
@@ -192,13 +201,22 @@ class SessionService:
                 session_id,
                 refresh_token_hash=refresh_token_hash,
                 expires_at=expires_at,
+                tenant_id=tenant_id,
             )
-            return await self.session_repo.get_by_id(session_id)
+            return await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         return session
 
-    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
-        """Revoke every active session sharing a token family (reuse chain-kill)."""
-        await self.session_repo.revoke_family(family_id)
+    async def revoke_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
+        """Revoke every active session sharing a token family (reuse chain-kill).
+
+        When ``tenant_id`` is given only that tenant's sessions are revoked.
+        """
+        await self.session_repo.revoke_family(family_id, tenant_id=tenant_id)
 
     async def mark_trusted(
         self,
@@ -206,20 +224,22 @@ class SessionService:
         session_id: str | uuid.UUID,
         *,
         is_trusted: bool,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> None:
         """Mark a session as a recognized (trusted) device.
 
         Missing, foreign, and already-terminated sessions surface as
         ``SessionNotFoundError`` (404), mirroring revocation semantics.
         """
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         if (
             not session
             or session.user_id != uuid.UUID(str(user_id))
+            or (tenant_id is not None and session.tenant_id != uuid.UUID(str(tenant_id)))
             or session.status is not SessionStatus.ACTIVE
         ):
             raise SessionNotFoundError()
-        await self.session_repo.set_trusted(session_id, is_trusted)
+        await self.session_repo.set_trusted(session_id, is_trusted, tenant_id=tenant_id)
         if is_trusted:
             await self.audit_service.log(
                 action=SESSION_TRUSTED,
@@ -247,15 +267,20 @@ class SessionService:
                 tenant_id=str(active[0].tenant_id),
             )
 
-    async def expire_session(self, session_id: str | uuid.UUID) -> Session | None:
+    async def expire_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> Session | None:
         """Materialize the active -> expired transition for a past-expiry session."""
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         if session is None:
             return None
         if session.status is SessionStatus.ACTIVE:
             SESSION_STATE_MACHINE.transition(session.status.value, SessionStatus.EXPIRED.value)
-            await self.session_repo.mark_expired(session_id)
-            return await self.session_repo.get_by_id(session_id)
+            await self.session_repo.mark_expired(session_id, tenant_id=tenant_id)
+            return await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         return session
 
     async def commit(self) -> None:

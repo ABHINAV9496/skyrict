@@ -50,6 +50,7 @@ dependencies = [
     { name = "python-jose", extra = ["cryptography"] },
     { name = "redis" },
     { name = "scikit-learn" },
+    { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "shap", version = "0.49.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "shap", version = "0.52.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
     { name = "skyrict-common" },
@@ -80,6 +81,7 @@ requires-dist = [
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4" },
     { name = "redis", specifier = ">=5.0,<6" },
     { name = "scikit-learn", specifier = ">=1.4,<2" },
+    { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.14,<3" },
     { name = "shap", specifier = ">=0.45,<1" },
     { name = "skyrict-common", editable = "libs/skyrict-common" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
@@ -662,6 +664,7 @@ dependencies = [
     { name = "python-jose", extra = ["cryptography"] },
     { name = "python-multipart" },
     { name = "reportlab" },
+    { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "skyrict-common" },
     { name = "skyrict-events" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -688,6 +691,7 @@ requires-dist = [
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4" },
     { name = "python-multipart", specifier = ">=0.0.9,<1" },
     { name = "reportlab", specifier = ">=4,<5" },
+    { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.14,<3" },
     { name = "skyrict-common", editable = "libs/skyrict-common" },
     { name = "skyrict-events", editable = "libs/skyrict-events" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
@@ -1291,6 +1295,7 @@ dependencies = [
     { name = "python-jose", extra = ["cryptography"] },
     { name = "python-multipart" },
     { name = "redis" },
+    { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "skyrict-common" },
     { name = "skyrict-events" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -1324,6 +1329,7 @@ requires-dist = [
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "redis", specifier = ">=5.0,<6" },
+    { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.14,<3" },
     { name = "skyrict-common", editable = "libs/skyrict-common" },
     { name = "skyrict-events", editable = "libs/skyrict-events" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
@@ -3238,6 +3244,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/d9/135be205d9de8783193aff9cc3bf483a03a38e4b29432c954e8cb66ac14e/scipy-1.18.1-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:179ce34a8d0fe273d8883ba59e17e052247d08973dfcb743ca52bb1cce2d60b0", size = 37521946, upload-time = "2026-08-21T23:28:35.245Z" },
     { url = "https://files.pythonhosted.org/packages/5c/a2/5b7d5270621ab7cfa3f7766067bf95dc360b5efb6394694e8143b4156e2b/scipy-1.18.1-cp315-cp315t-win_amd64.whl", hash = "sha256:5632e3ae3d09197c446310cd5187de63e28448ce22f0f67b2b93d97503c0c230", size = 37408295, upload-time = "2026-08-21T23:28:40.724Z" },
     { url = "https://files.pythonhosted.org/packages/63/ad/741c19fcb66755ff953daf9243af8480e4bf3d7fbe57583c178c7d2b6b51/scipy-1.18.1-cp315-cp315t-win_arm64.whl", hash = "sha256:eda632a7981f69730d6281f451db9c1c370993a2c0d7ddb43e2a809a2862b83a", size = 25319710, upload-time = "2026-08-21T23:28:45.713Z" },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.69.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/08/1211e4652384195ef754f8ed570566088dc848f8eda7d005abf13f05f17f/sentry_sdk-2.69.2.tar.gz", hash = "sha256:b4d8915a526e626b0b14a2925907554b722d3b8e3e3781570fc35791712af323", size = 1043564, upload-time = "2026-09-15T15:25:09.018Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/78/5d8b79fd60330234317aa827a1f5e445980a6f4e0ea6ed4e1187acb70a0f/sentry_sdk-2.69.2-py3-none-any.whl", hash = "sha256:25bc0a6c55bba0b83398212a7247f4f9f3190f189a1909b68e4807ef4b785895", size = 528765, upload-time = "2026-09-15T15:25:07.362Z" },
+]
+
+[package.optional-dependencies]
+fastapi = [
+    { name = "fastapi" },
 ]
 
 [[package]]

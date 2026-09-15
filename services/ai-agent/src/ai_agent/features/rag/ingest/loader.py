@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import structlog
 
+from ai_agent.core.core_http import CoreHttpTransport
 from ai_agent.core.exceptions import AiUnavailableError
 
 if TYPE_CHECKING:
@@ -70,32 +71,13 @@ class DocsLoader:
         return docs
 
 
-class ModuleLoader:
+class ModuleLoader(CoreHttpTransport):
     """Fetch one module's whitelisted fields from the core monolith.
 
     Forwards the caller's bearer token and tenant slug exactly as the
     NL-query gateway does (X-Tenant-Slug contract), paginating the standard
     envelope until ``meta.total_pages`` is consumed.
     """
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        bearer_token: str,
-        tenant_slug: str,
-        timeout_seconds: float = 10.0,
-    ) -> None:
-        if not base_url.strip().lower().startswith(("http://", "https://")):
-            raise ValueError("base_url must be an http(s) URL")
-        self._base_url = base_url.rstrip("/")
-        self._bearer_token = bearer_token
-        self._tenant_slug = tenant_slug
-        self._timeout_seconds = max(timeout_seconds, 1.0)
-
-    def _create_client(self) -> httpx.AsyncClient:
-        """Create the per-call HTTP client (overridable seam for tests)."""
-        return httpx.AsyncClient(timeout=self._timeout_seconds)
 
     async def load(self, module: str) -> list[SourceDocument]:
         """Fetch all rows of *module* and render them as markdown records."""
@@ -124,16 +106,12 @@ class ModuleLoader:
             page += 1
 
     async def _fetch_page(self, path: str, page: int) -> tuple[list[dict[str, Any]], int]:
-        headers = {
-            "Authorization": f"Bearer {self._bearer_token}",
-            "X-Tenant-Slug": self._tenant_slug,
-        }
         try:
             async with self._create_client() as client:
                 response = await client.get(
                     f"{self._base_url}{path}",
                     params={"page": page, "page_size": 100},
-                    headers=headers,
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
         except httpx.HTTPStatusError as exc:

@@ -9,7 +9,7 @@ time with zero microseconds so boundary calculations are crisp.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from ai_agent.features.anomalies.crm_rules import (
     RULE_ACTIVITY_BULK,
@@ -37,7 +37,7 @@ def _opp(**kwargs: object) -> OpportunityRef:
         "created_at": now - timedelta(days=60),
         "owner_id": uuid.uuid4(),
         "last_stage_change_at": now - timedelta(days=50),
-        "expected_close_date": date.today() + timedelta(days=30),
+        "expected_close_date": now.date() + timedelta(days=30),
     }
     defaults.update(kwargs)  # type: ignore[arg-type]
     return OpportunityRef(**defaults)  # type: ignore[arg-type]

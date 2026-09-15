@@ -42,8 +42,17 @@ class FakeSessionService:
         self.rotations: list[tuple[uuid.UUID, str]] = []
         self.committed = False
 
-    async def get_session(self, session_id: str | uuid.UUID) -> Session | None:
-        return self.sessions.get(uuid.UUID(str(session_id)))
+    async def get_session(
+        self, session_id: str | uuid.UUID, *, tenant_id: str | uuid.UUID | None = None
+    ) -> Session | None:
+        session = self.sessions.get(uuid.UUID(str(session_id)))
+        if (
+            tenant_id is not None
+            and session is not None
+            and session.tenant_id != uuid.UUID(str(tenant_id))
+        ):
+            return None
+        return session
 
     async def rotate_session(
         self,
@@ -51,27 +60,44 @@ class FakeSessionService:
         *,
         refresh_token_hash: str,
         expires_at: datetime,
+        tenant_id: str | uuid.UUID | None = None,
     ) -> Session | None:
         self.rotations.append((uuid.UUID(str(session_id)), refresh_token_hash))
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             session.refresh_token_hash = refresh_token_hash
             session.expires_at = expires_at
         return session
 
-    async def expire_session(self, session_id: str | uuid.UUID) -> Session | None:
+    async def expire_session(
+        self,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> Session | None:
         session = self.sessions.get(uuid.UUID(str(session_id)))
-        if session is not None:
+        if session is not None and (
+            tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+        ):
             self.expired.append(uuid.UUID(str(session_id)))
             session.status = SessionStatus.EXPIRED
             session.expired_at = datetime.now(UTC)
         return session
 
-    async def revoke_session(self, user_id: str | uuid.UUID, session_id: str | uuid.UUID) -> None:
+    async def revoke_session(
+        self,
+        user_id: str | uuid.UUID,
+        session_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         session = self.sessions.get(uuid.UUID(str(session_id)))
         if (
             session is None
             or session.user_id != uuid.UUID(str(user_id))
+            or (tenant_id is not None and session.tenant_id != uuid.UUID(str(tenant_id)))
             or session.status is not SessionStatus.ACTIVE
         ):
             raise SessionNotFoundError()
@@ -85,10 +111,17 @@ class FakeSessionService:
             if session.user_id == uuid.UUID(str(user_id)):
                 session.status = SessionStatus.REVOKED
 
-    async def revoke_family(self, family_id: str | uuid.UUID) -> None:
+    async def revoke_family(
+        self,
+        family_id: str | uuid.UUID,
+        *,
+        tenant_id: str | uuid.UUID | None = None,
+    ) -> None:
         self.revoked_families.append(uuid.UUID(str(family_id)))
         for session in self.sessions.values():
-            if session.token_family_id == uuid.UUID(str(family_id)):
+            if session.token_family_id == uuid.UUID(str(family_id)) and (
+                tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
+            ):
                 session.status = SessionStatus.REVOKED
 
     async def commit(self) -> None:
@@ -186,6 +219,22 @@ class TestRefreshTokens:
 
         session_id = uuid.UUID(verify_jwt(token)["session_id"])
         assert service.session_service.sessions[session_id].token_family_id == family_id
+
+    async def test_rejects_session_from_another_tenant(self) -> None:
+        token, _ = uuid_token_and_session()
+        session = _bound_session(token)
+        session.tenant_id = uuid.uuid4()  # tenant different from the token claim
+        session_service = FakeSessionService([session])
+        audit = FakeAuditService()
+        service = TokenService(session_service, audit)
+
+        with pytest.raises(TokenInvalidError):
+            await service.refresh_tokens(token)
+
+        assert session_service.rotations == []
+        assert session_service.revoked_families == []
+        assert session_service.committed is False
+        assert audit.events == []
 
     async def test_old_token_after_rotation_triggers_family_chain_kill(self) -> None:
         token, _ = uuid_token_and_session()

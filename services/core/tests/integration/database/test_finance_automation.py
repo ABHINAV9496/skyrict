@@ -7,7 +7,7 @@ Covers the SKY-56/SKY-64 wave-1 read-models that live in
 - duplicates (B10) - grouped by memo + entry date;
 - tenant settings KV round-trip;
 - ai anomaly/suggestion upsert dedupe;
-- journal entry reversal (B8) - flips debit/credit and stamps reversal_entry_id.
+- journal entry reversal (B8) - marks a posted entry REVERSED; concurrent reversals can only flip it once.
 """
 
 from __future__ import annotations
@@ -238,7 +238,7 @@ async def test_ai_anomaly_upsert_dedupes(automation_world: dict[str, str]) -> No
         await session.rollback()
 
 
-async def test_reverse_flips_lines_and_stamps(automation_world: dict[str, str]) -> None:
+async def test_reverse_marks_posted_entry_reversed(automation_world: dict[str, str]) -> None:
     tenant_id = uuid.UUID(automation_world["tenant_id"])
     async with async_session_factory() as session:
         repo = FinanceRepository(session)
@@ -254,6 +254,197 @@ async def test_reverse_flips_lines_and_stamps(automation_world: dict[str, str]) 
 
     assert reversed_entry is not None
     assert reversed_entry.status == EntryStatus.REVERSED
+
+
+async def test_concurrent_reversals_only_one_wins(migrated_schema: None) -> None:
+    """Two sessions racing to reverse the same posted entry - exactly one wins.
+
+    Regression for the non-atomic select-then-mutate reversal: both racers used
+    to read POSTED in their own transaction and both flipped the status, doubling
+    the reversal and its audit event. The guarded UPDATE now serialises them and
+    the loser matches zero rows.
+    """
+    tenant_id = uuid.uuid4()
+    entry_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            TenantModel(
+                id=tenant_id,
+                name="Race Tenant",
+                slug=f"race-{tenant_id.hex[:8]}",
+                plan_tier="free",
+                is_active=True,
+            )
+        )
+        await session.flush()
+        account = ErpChartOfAccountModel(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            code="1100",
+            name="Cash",
+            account_type=AccountType.ASSET,
+        )
+        session.add(account)
+        await session.flush()
+        entry = ErpJournalEntryModel(
+            tenant_id=tenant_id,
+            id=entry_id,
+            entry_date=date(2026, 6, 1),
+            memo="race reversal",
+            status=EntryStatus.POSTED,
+            source="manual",
+            source_ref=None,
+            posted_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        session.add(entry)
+        await session.flush()
+        session.add(
+            ErpJournalLineModel(
+                tenant_id=tenant_id,
+                entry_id=entry.id,
+                account_id=account.id,
+                debit=Decimal("100"),
+                credit=None,
+                currency="USD",
+            )
+        )
+        await session.commit()
+
+    async def _reverse() -> bool:
+        async with async_session_factory() as session:
+            repo = FinanceRepository(session)
+            got = await repo.reverse_journal_entry(
+                entry_id,
+                tenant_id,
+                reversed_by_user_id=uuid.uuid4(),
+                reversed_at=PIVOT,
+            )
+            await session.commit()
+            return got is not None
+
+    async with asyncio.TaskGroup() as tg:
+        racer_a = tg.create_task(_reverse())
+        racer_b = tg.create_task(_reverse())
+
+    wins = sum([await racer_a, await racer_b])
+    assert wins == 1
+
+
+async def test_concurrent_posts_only_one_wins(migrated_schema: None) -> None:
+    """Two sessions posting the same DRAFT entry - exactly one wins.
+
+    Regression for the unguarded select-then-mutate post: both racers used to
+    read DRAFT and both flushed POSTED, so two callers got success, two audit
+    ``FINANCE_JOURNAL_ENTRY_POSTED`` events fired, and the money event was
+    emitted twice. The guarded UPDATE now serialises them and the loser matches
+    zero rows.
+    """
+    tenant_id = uuid.uuid4()
+    entry_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            TenantModel(
+                id=tenant_id,
+                name="Post Race Tenant",
+                slug=f"postrace-{tenant_id.hex[:8]}",
+                plan_tier="free",
+                is_active=True,
+            )
+        )
+        await session.flush()
+        account = ErpChartOfAccountModel(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            code="1100",
+            name="Cash",
+            account_type=AccountType.ASSET,
+        )
+        session.add(account)
+        await session.flush()
+        session.add(
+            ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                id=entry_id,
+                entry_date=date(2026, 6, 1),
+                memo="race post",
+                status=EntryStatus.DRAFT,
+                source="manual",
+                source_ref=None,
+            )
+        )
+        await session.commit()
+
+    async def _post() -> bool:
+        async with async_session_factory() as session:
+            repo = FinanceRepository(session)
+            got = await repo.post_journal_entry(
+                entry_id,
+                tenant_id,
+                posted_by_user_id=uuid.uuid4(),
+                posted_at=datetime(2026, 6, 1, tzinfo=UTC),
+            )
+            await session.commit()
+            return got is not None
+
+    async with asyncio.TaskGroup() as tg:
+        racer_a = tg.create_task(_post())
+        racer_b = tg.create_task(_post())
+
+    wins = sum([await racer_a, await racer_b])
+    assert wins == 1
+
+
+async def test_concurrent_issues_only_one_wins(migrated_schema: None) -> None:
+    """Two sessions issuing the same DRAFT invoice - exactly one wins.
+
+    Regression for the unguarded select-then-mutate issue/approve/void/mark-paid
+    family: both racers used to read DRAFT and both flip ISSUED, emitting two
+    ``FINANCE_INVOICE_ISSUED`` audits. The guarded UPDATE now serialises them
+    and the loser matches zero rows.
+    """
+    tenant_id = uuid.uuid4()
+    invoice_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            TenantModel(
+                id=tenant_id,
+                name="Issue Race Tenant",
+                slug=f"issuerace-{tenant_id.hex[:8]}",
+                plan_tier="free",
+                is_active=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            ErpInvoiceModel(
+                id=invoice_id,
+                tenant_id=tenant_id,
+                invoice_number="RACE-0001",
+                customer_id=uuid.uuid4(),
+                invoice_date=date(2026, 6, 1),
+                due_date=date(2026, 7, 1),
+                total=Decimal("200"),
+                status=InvoiceStatus.DRAFT,
+                currency="USD",
+            )
+        )
+        await session.commit()
+
+    async def _issue() -> bool:
+        async with async_session_factory() as session:
+            repo = FinanceRepository(session)
+            got = await repo.issue_invoice(
+                invoice_id, tenant_id, issued_at=datetime(2026, 6, 1, tzinfo=UTC)
+            )
+            await session.commit()
+            return got is not None
+
+    async with asyncio.TaskGroup() as tg:
+        racer_a = tg.create_task(_issue())
+        racer_b = tg.create_task(_issue())
+
+    wins = sum([await racer_a, await racer_b])
+    assert wins == 1
 
 
 class _NoopAuditSink:

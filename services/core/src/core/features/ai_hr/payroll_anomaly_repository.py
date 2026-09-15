@@ -20,6 +20,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import and_, delete, func, select, update
@@ -37,6 +38,19 @@ from skyrict_common.ai_hr_rules import (
     PayrollEntrySignal,
     detect_payroll_anomalies,
 )
+
+_CENTS = Decimal("0.01")
+
+
+def _money_float(value: Decimal | None) -> float:
+    """Decimal money -> float with an explicit cents step.
+
+    The shared rules engine types its signals as float, so the float boundary
+    exists - but converting a NUMERIC(18,4) straight to binary float can carry
+    sub-cent digit noise.  Quantize to the currency's cent before converting so
+    the signal holds exactly the stored amount.
+    """
+    return float(Decimal(value or 0).quantize(_CENTS, rounding=ROUND_HALF_UP))
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +147,7 @@ class AiHrPayrollAnomalyRepository:
                 pay_days=int(e.pay_days or 0),
                 gross=0.0,
                 deductions=0.0,
-                net=float(e.net),
+                net=_money_float(e.net),
             )
             for e in latest_rows
         ]
@@ -159,7 +173,7 @@ class AiHrPayrollAnomalyRepository:
                         pay_days=int(e.pay_days or 0),
                         gross=0.0,
                         deductions=0.0,
-                        net=float(e.net),
+                        net=_money_float(e.net),
                     )
                 )
 

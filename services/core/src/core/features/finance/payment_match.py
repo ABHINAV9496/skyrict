@@ -55,7 +55,7 @@ from core.features.finance.schemas_wave4 import (
     PaymentMatchBulkResult,
 )
 from core.features.finance.service import FinanceService
-from skyrict_common.exceptions import ConflictError, NotFoundError, ValidationError
+from skyrict_common.exceptions import ConflictError, NotFoundError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/finance/payment-intents", tags=["finance-payment-intents"])
@@ -412,24 +412,42 @@ class PaymentMatchService:
         )
         return updated
 
+    async def _prevalidate_batch(
+        self,
+        tenant_id: uuid.UUID,
+        items: Sequence[tuple[uuid.UUID, uuid.UUID]],
+    ) -> None:
+        """Raise on the first invalid item, applying nothing.
+
+        Mirrors the exact guards ``finance.apply_payment`` enforces for a single
+        match, so the whole batch is committed to before any money moves.
+        """
+        for intent_id, invoice_id in items:
+            intent = await self.get(tenant_id, intent_id)
+            if intent.status in (PaymentIntentStatus.APPLIED, PaymentIntentStatus.DISMISSED):
+                raise ConflictError(f"Payment intent {intent_id} is already resolved")
+            await self.finance.preflight_payment(
+                tenant_id=tenant_id, invoice_id=invoice_id, amount=intent.amount
+            )
+
     async def bulk_accept(
         self,
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
         items: Sequence[tuple[uuid.UUID, uuid.UUID]],
     ) -> list[PaymentMatchBulkResult]:
-        """Apply many intent->invoice matches, reporting per-item outcomes."""
+        """Apply many intent->invoice matches as one all-or-nothing batch.
+
+        Every item is validated up front (intent unresolved + payment applyable)
+        before any money moves; a single invalid item rejects the whole batch.
+        """
+        await self._prevalidate_batch(tenant_id, items)
         results: list[PaymentMatchBulkResult] = []
         for intent_id, invoice_id in items:
-            try:
-                await self.accept(tenant_id, user_id, intent_id, invoice_id=invoice_id)
-                results.append(
-                    PaymentMatchBulkResult(intent_id=intent_id, ok=True, payment_number=None)
-                )
-            except (ConflictError, NotFoundError, ValidationError) as exc:
-                results.append(
-                    PaymentMatchBulkResult(intent_id=intent_id, ok=False, error=str(exc))
-                )
+            await self.accept(tenant_id, user_id, intent_id, invoice_id=invoice_id)
+            results.append(
+                PaymentMatchBulkResult(intent_id=intent_id, ok=True, payment_number=None)
+            )
         return results
 
 

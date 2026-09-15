@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.db.locks import advisory_family_lock
 from core.features.approval_workflow.models.definition import ErpApprovalWorkflowDefinitionModel
 
 
@@ -31,7 +32,13 @@ class ApprovalWorkflowDefinitionRepository:
         self._db = session
 
     async def next_version(self, tenant_id: uuid.UUID, resource_type: str) -> int:
-        """Next version number for a (resource_type) definition family."""
+        """Next version number for a (resource_type) definition family.
+
+        Serializes per family: concurrent ``create_draft`` calls on the same
+        resource_type would otherwise both read the same ``max(version)`` and
+        collide on ``uq_..._tenant_resource_version`` (B10).
+        """
+        await advisory_family_lock(self._db, "approval_definition", tenant_id, resource_type)
         latest = await self._db.execute(
             select(func.max(ErpApprovalWorkflowDefinitionModel.version)).where(
                 ErpApprovalWorkflowDefinitionModel.tenant_id == tenant_id,
@@ -154,10 +161,18 @@ class ApprovalWorkflowDefinitionRepository:
         existing active version is retired first (soft removal); the seal is
         the point of no return - the JSONB body of an active definition is
         never edited in place.
+
+        Serialized per family via ``advisory_family_lock`` (same key as
+        ``next_version``): two concurrent activations of different drafts for
+        one resource_type must not both seal - that would leave two active
+        versions and violate the "single active" invariant the engine routes on.
+        The lock is held until commit, so the second caller retires the first's
+        newly active version instead of racing it.
         """
         model = await self.get(tenant_id, definition_id)
         if model is None or model.status != "draft":
             return None
+        await advisory_family_lock(self._db, "approval_definition", tenant_id, model.resource_type)
         active_rows = await self._db.execute(
             select(ErpApprovalWorkflowDefinitionModel).where(
                 ErpApprovalWorkflowDefinitionModel.tenant_id == tenant_id,

@@ -69,6 +69,16 @@ class TestArithmetic:
     def test_div_scalar(self) -> None:
         assert Money(Decimal("10.00"), "USD") / 2 == Money(Decimal("5.00"), "USD")
 
+    def test_div_repeating_quantized_to_operand_exponent(self) -> None:
+        # 1.00 / 3 repeats forever; the quotient must stop at the operand's
+        # own quantum (2dp for USD) instead of carrying 28-digit Decimal noise.
+        assert Money(Decimal("1.00"), "USD") / 3 == Money(Decimal("0.33"), "USD")
+
+    def test_div_respects_currency_exponent(self) -> None:
+        # A zero-decimal currency (JPY) divides in whole units - the rounding
+        # quantum follows the amount's exponent, not a hardcoded cent.
+        assert Money(Decimal("100"), "JPY") / 6 == Money(Decimal("17"), "JPY")
+
     def test_div_zero_rejected(self) -> None:
         with pytest.raises(ValidationError):
             Money(Decimal("10.00"), "USD") / 0

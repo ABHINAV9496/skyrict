@@ -401,6 +401,8 @@ class FakeRepo:
         ref_id: str,
         warehouse_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID,
     ) -> StockMovement | None:
         for movement in self.movements:
             if (
@@ -408,16 +410,21 @@ class FakeRepo:
                 and movement.ref_type == ref_type
                 and movement.ref_id == ref_id
                 and movement.warehouse_id == warehouse_id
+                and movement.product_id == product_id
             ):
                 return movement
         return None
 
     async def add_movement(self, movement: StockMovement) -> StockMovement:
         existing = await self.get_movement_by_ref(
-            movement.ref_type, movement.ref_id, movement.warehouse_id, movement.tenant_id
+            movement.ref_type,
+            movement.ref_id,
+            movement.warehouse_id,
+            movement.tenant_id,
+            product_id=movement.product_id,
         )
         if existing is not None:
-            return existing
+            raise MovementImmutableError()
         created = StockMovement(
             id=uuid.uuid4(),
             tenant_id=movement.tenant_id,
@@ -1095,7 +1102,12 @@ class TestAdjustStock:
                 ref_id="ADJ-3",
             )
         assert repo.committed == 0
-        assert await repo.get_movement_by_ref("adjustment", "ADJ-3", warehouse.id, TENANT) is None
+        assert (
+            await repo.get_movement_by_ref(
+                "adjustment", "ADJ-3", warehouse.id, TENANT, product_id=product.id
+            )
+            is None
+        )
 
     async def test_replay_rejected(self, service: InventoryService, repo: FakeRepo) -> None:
         product = await _seed_product(repo)

@@ -271,7 +271,7 @@ async def generate_reminder_with_ai(
     tenant_slug: str | None,
     customer_name: str | None,
     invoice_number: str,
-    amount: float,
+    amount: Decimal,
     days_overdue: int,
     tone: str,
 ) -> ReminderDraft | None:
@@ -279,7 +279,7 @@ async def generate_reminder_with_ai(
     payload = {
         "customer_name": customer_name,
         "invoice_number": invoice_number,
-        "amount": float(amount),
+        "amount": str(amount),
         "days_overdue": days_overdue,
         "tone": tone,
     }

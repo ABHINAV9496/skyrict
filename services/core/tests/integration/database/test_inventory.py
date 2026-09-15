@@ -20,6 +20,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from core.core.exceptions import MovementImmutableError
 from core.db.session import async_session_factory, engine
 from core.domain.entities import Product, StockMovement
 from core.domain.value_objects import StockMovementType
@@ -550,7 +551,7 @@ class TestMovementLedger:
             movements = await repo.list_movements(tenant, product_id=product, warehouse_id=wh1)
             assert [m.ref_id for m in movements].count("TR-LEDGER-1") == 1
 
-    async def test_idempotency_returns_existing_movement(
+    async def test_duplicate_ref_raises_movement_immutable(
         self, inventory_world: dict[str, str]
     ) -> None:
         tenant = _u(inventory_world["tenant_a"])
@@ -559,18 +560,7 @@ class TestMovementLedger:
 
         async with async_session_factory() as session:
             repo = InventoryRepository(session)
-            first = await repo.add_movement(
-                StockMovement(
-                    tenant,
-                    product,
-                    wh1,
-                    StockMovementType.RECEIPT,
-                    Decimal("2"),
-                    "po",
-                    "PO-IDEMPOTENT",
-                )
-            )
-            second = await repo.add_movement(
+            await repo.add_movement(
                 StockMovement(
                     tenant,
                     product,
@@ -583,7 +573,24 @@ class TestMovementLedger:
             )
             await session.commit()
 
-            assert second.id == first.id
+        async with async_session_factory() as session:
+            repo = InventoryRepository(session)
+            with pytest.raises(MovementImmutableError):
+                await repo.add_movement(
+                    StockMovement(
+                        tenant,
+                        product,
+                        wh1,
+                        StockMovementType.RECEIPT,
+                        Decimal("2"),
+                        "po",
+                        "PO-IDEMPOTENT",
+                    )
+                )
+            await session.rollback()
+
+        async with async_session_factory() as session:
+            repo = InventoryRepository(session)
             movements = await repo.list_movements(tenant, product_id=product, warehouse_id=wh1)
             assert [m.ref_id for m in movements].count("PO-IDEMPOTENT") == 1
 
@@ -613,7 +620,12 @@ class TestMovementLedger:
             assert "ck_erp_stock_levels_reserved_range" in str(excinfo.value)
 
             await session.rollback()
-            assert await repo.get_movement_by_ref("so", "SO-OVERRESERVE", wh2, tenant) is None
+            assert (
+                await repo.get_movement_by_ref(
+                    "so", "SO-OVERRESERVE", wh2, tenant, product_id=product
+                )
+                is None
+            )
             assert await repo.get_stock_level(product, wh2, tenant) is None
 
 

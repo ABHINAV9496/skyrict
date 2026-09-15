@@ -34,7 +34,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from sqlalchemy import Date, and_, case, cast, func, select, text
+from sqlalchemy import Date, and_, case, cast, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import (
@@ -645,13 +645,30 @@ class FinanceRepository:
         posted_by_user_id: uuid.UUID | None,
         posted_at: datetime,
     ) -> JournalEntry | None:
-        model = await self._journal_entry_model(entry_id, tenant_id)
+        """Post a DRAFT entry (atomic guarded transition).
+
+        Only a ``draft`` entry can transition to ``posted``: the UPDATE is
+        conditional on the current status so concurrent posts (or a post racing
+        a void) cannot both win - the loser matches zero rows and returns
+        ``None`` instead of double-posting and firing the money event twice.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.DRAFT,
+            )
+            .values(
+                status=EntryStatus.POSTED,
+                posted_at=posted_at,
+                posted_by_user_id=posted_by_user_id,
+            )
+            .returning(ErpJournalEntryModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
-        model.status = EntryStatus.POSTED
-        model.posted_at = posted_at
-        model.posted_by_user_id = posted_by_user_id
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)
@@ -659,12 +676,28 @@ class FinanceRepository:
     async def void_journal_entry(
         self, entry_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
     ) -> JournalEntry | None:
-        model = await self._journal_entry_model(entry_id, tenant_id)
+        """Void a DRAFT entry (atomic guarded transition).
+
+        Mirrors ``post_journal_entry``: only a ``draft`` can be voided, so a
+        void racing a post cannot both win - the loser returns ``None`` instead
+        of leaving the row in whichever status landed last.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.DRAFT,
+            )
+            .values(
+                status=EntryStatus.VOIDED,
+                voided_at=voided_at,
+            )
+            .returning(ErpJournalEntryModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
-        model.status = EntryStatus.VOIDED
-        model.voided_at = voided_at
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)
@@ -855,10 +888,12 @@ class FinanceRepository:
     async def issue_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, issued_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Issue a DRAFT invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.DRAFT, InvoiceStatus.ISSUED
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.ISSUED
         model.issued_at = issued_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -868,10 +903,12 @@ class FinanceRepository:
     async def approve_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, approved_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Approve an ISSUED invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.ISSUED, InvoiceStatus.APPROVED
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.APPROVED
         model.approved_at = approved_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -881,10 +918,15 @@ class FinanceRepository:
     async def void_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Void a DRAFT or ISSUED invoice (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id,
+            tenant_id,
+            (InvoiceStatus.DRAFT, InvoiceStatus.ISSUED),
+            InvoiceStatus.VOIDED,
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.VOIDED
         model.voided_at = voided_at
         await self.session.flush()
         await self.session.refresh(model)
@@ -894,14 +936,39 @@ class FinanceRepository:
     async def mark_invoice_paid(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> Invoice | None:
-        model = await self._invoice_model(invoice_id, tenant_id)
+        """Mark an APPROVED invoice PAID (atomic guarded transition)."""
+        model = await self._flip_invoice_status(
+            invoice_id, tenant_id, InvoiceStatus.APPROVED, InvoiceStatus.PAID
+        )
         if model is None:
             return None
-        model.status = InvoiceStatus.PAID
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._invoice_lines(invoice_id, tenant_id)
         return _invoice_from_orm(model, lines)
+
+    async def _flip_invoice_status(
+        self,
+        invoice_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        expected: InvoiceStatus | tuple[InvoiceStatus, ...],
+        new_status: InvoiceStatus,
+    ) -> ErpInvoiceModel | None:
+        guard = (
+            ErpInvoiceModel.status.in_(expected)
+            if isinstance(expected, tuple)
+            else ErpInvoiceModel.status == expected
+        )
+        stmt = (
+            update(ErpInvoiceModel)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.id == invoice_id,
+                guard,
+            )
+            .values(status=new_status)
+            .returning(ErpInvoiceModel)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def _invoice_model(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
@@ -2275,16 +2342,26 @@ class FinanceRepository:
         reversed_by_user_id: uuid.UUID,
         reversed_at: datetime,
     ) -> JournalEntry | None:
-        stmt = select(ErpJournalEntryModel).where(
-            ErpJournalEntryModel.tenant_id == tenant_id,
-            ErpJournalEntryModel.id == entry_id,
+        """Mark a posted entry ``reversed`` (atomic guarded transition).
+
+        The UPDATE is conditional on the entry still being ``posted``, so two
+        concurrent reversals can never both succeed - the loser matches zero
+        rows and returns ``None`` instead of double-reversing and emitting two
+        reversal audit events.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.POSTED,
+            )
+            .values(status=EntryStatus.REVERSED)
+            .returning(ErpJournalEntryModel)
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
-        if model is None or model.status != EntryStatus.POSTED:
+        if model is None:
             return None
-
-        model.status = EntryStatus.REVERSED
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)

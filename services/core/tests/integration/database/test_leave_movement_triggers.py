@@ -6,9 +6,9 @@ REAL Postgres - not through the service:
   - a positive accrual INSERT succeeds;
   - an INSERT that would push the per-(tenant, employee, leave_type) SUM
     negative is rejected and fully rolled back - for ACCRUAL leave types;
-  - non-accrual (ledger-only) types such as sick are NOT guarded: their first
-    approval may take the ledger negative (migration 0014), matching the
-    service, which only pre-checks balances for accrual types;
+  - non-accrual (ledger-only) types such as unpaid are NOT guarded: their
+    first approval may take the ledger negative (migration 0014), matching
+    the service, which only pre-checks balances for accrual types;
   - landing exactly on zero is allowed;
   - direct UPDATE / DELETE of a ledger row is rejected (append-only).
 
@@ -37,7 +37,12 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def leave_ledger_world(migrated_schema: None) -> dict[str, str]:
-    """Seed one tenant + one accrual and one non-accrual leave type.
+    """Seed one tenant + policy accrual types (casual, sick) and one
+    ledger-only type (unpaid).
+
+    Mirrors the post-rework (ff822f8) catalog: casual and sick both accrue,
+    and "annual" no longer exists. ``unpaid`` stays ledger-only so the
+    non-accrual guard path keeps real coverage.
 
     Plain (sync) fixture: all DB work runs inside one ``asyncio.run()`` and the
     engine pool is disposed before that run's loop closes, so the function-
@@ -59,8 +64,9 @@ def leave_ledger_world(migrated_schema: None) -> dict[str, str]:
             )
             await session.flush()
             for code, is_accrual, days in (
-                ("annual", True, 20),
-                ("sick", False, None),
+                ("casual", True, 12),
+                ("sick", True, 8),
+                ("unpaid", False, None),
             ):
                 session.add(
                     LeaveTypeModel(
@@ -99,7 +105,7 @@ async def _new_employee(session, tenant_id: str) -> str:
 
 
 async def _insert(
-    session, tenant_id: str, employee_id: str, *, qty: int, leave_type: str = "annual"
+    session, tenant_id: str, employee_id: str, *, qty: int, leave_type: str = "casual"
 ) -> str:
     movement_id = str(uuid.uuid4())
     await session.execute(
@@ -114,7 +120,7 @@ async def _insert(
             "employee_id": employee_id,
             "leave_type": leave_type,
             "qty": qty,
-            "ref_type": "annual_accrual",
+            "ref_type": "casual_accrual",
             "ref_id": "2026",
         },
     )
@@ -122,7 +128,7 @@ async def _insert(
     return movement_id
 
 
-async def _sum(session, tenant_id: str, employee_id: str, leave_type: str = "annual") -> int:
+async def _sum(session, tenant_id: str, employee_id: str, leave_type: str = "casual") -> int:
     result = await session.execute(
         text(
             "SELECT COALESCE(SUM(qty), 0) FROM public.erp_leave_movements "
@@ -164,10 +170,12 @@ class TestLeaveLedgerTriggers:
         tenant_id = leave_ledger_world["tenant_id"]
         async with async_session_factory() as session:
             employee_id = await _new_employee(session, tenant_id)
-            # sick is ledger-only (is_accrual=False): the guard must NOT fire,
+            # unpaid is ledger-only (is_accrual=False): the guard must NOT fire,
             # even on the first row taking the ledger negative (migration 0014).
-            movement_id = await _insert(session, tenant_id, employee_id, qty=-5, leave_type="sick")
-            assert await _sum(session, tenant_id, employee_id, leave_type="sick") == -5
+            movement_id = await _insert(
+                session, tenant_id, employee_id, qty=-5, leave_type="unpaid"
+            )
+            assert await _sum(session, tenant_id, employee_id, leave_type="unpaid") == -5
             assert (
                 await session.execute(
                     text("SELECT 1 FROM public.erp_leave_movements WHERE id = :id"),

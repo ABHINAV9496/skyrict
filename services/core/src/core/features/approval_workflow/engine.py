@@ -220,7 +220,7 @@ class ApprovalEngine:
                     actor_type=ACTOR_SYSTEM,
                 )
                 if decided_step is None:
-                    raise NotFoundError(f"Step {step_row.id} not found")
+                    raise ConflictError(f"Step {step_row.id} is no longer pending")
                 await self._repo.record_transition(
                     tenant_id=tenant_id,
                     workflow_instance_id=instance.id,
@@ -362,8 +362,8 @@ class ApprovalEngine:
         if decision == "request_changes":
             step_status = "rejected"
 
-        # Audit the REAL previous state: ``update_step_decision`` mutates the
-        # identity-mapped step row, so read it before the decision write.
+        # Audit the REAL previous state: ``target`` was read this request
+        # (the guarded UPDATE below is atomic, so read it before that write).
         previous_state = target.status
 
         step = await self._repo.update_step_decision(
@@ -376,7 +376,9 @@ class ApprovalEngine:
             delegated_from=delegated_actor,
         )
         if step is None:
-            raise NotFoundError(f"Step {target.id} not found")
+            # Guarded UPDATE matched no pending/escalated row - a concurrent
+            # decision landed first. Fail the loser cleanly (no double-approve).
+            raise ConflictError(f"Step '{target.step_key}' is already decided")
 
         await self._repo.record_transition(
             tenant_id=tenant_id,

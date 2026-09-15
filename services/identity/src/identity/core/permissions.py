@@ -63,6 +63,20 @@ ERP_HR_APPROVE = "erp.hr.approve"
 ERP_PAYROLL_READ = "erp.payroll.read"
 ERP_PAYROLL_WRITE = "erp.payroll.write"
 ERP_PAYROLL_APPROVE = "erp.payroll.approve"
+ERP_FINANCE_APPROVE = "erp.finance.approve"
+ERP_INVENTORY_ADJUST = "erp.inventory.adjust"
+ERP_INVENTORY_ADJUST_APPROVE = "erp.inventory.adjust.approve"
+ERP_INVENTORY_COST = "erp.inventory.cost"
+ERP_INVENTORY_SUPPLIERS_READ = "erp.inventory.suppliers.read"
+ERP_INVENTORY_SUPPLIERS_WRITE = "erp.inventory.suppliers.write"
+ERP_REPORTS_CREATE = "erp.reports.create"
+ERP_REPORTS_READ = "erp.reports.read"
+ERP_HR_AI_EVAL = "erp.hr.ai.eval"
+ERP_HR_AI_MANAGEMENT = "erp.hr.ai.management"
+ERP_AI_COACHING_READ = "erp.ai.coaching.read"
+ERP_AI_COACHING_REVIEW = "erp.ai.coaching.review"
+ERP_AI_GUARDIAN_READ = "erp.ai.guardian.read"
+ERP_AI_GUARDIAN_REVIEW = "erp.ai.guardian.review"
 
 # ERP Documents (SKY-87, docs/modules/documents.md). Read/upload gates for the
 # document management platform; delete gates hard deletes. Entity-linked
@@ -151,11 +165,19 @@ CATALOG: tuple[str, ...] = (
     ERP_INVENTORY_WRITE,
     ERP_INVENTORY_APPROVE,
     ERP_INVENTORY_AI_APPROVE,
+    ERP_INVENTORY_ADJUST,
+    ERP_INVENTORY_ADJUST_APPROVE,
+    ERP_INVENTORY_COST,
+    ERP_INVENTORY_SUPPLIERS_READ,
+    ERP_INVENTORY_SUPPLIERS_WRITE,
     ERP_FINANCE_READ,
     ERP_FINANCE_WRITE,
+    ERP_FINANCE_APPROVE,
     ERP_HR_READ,
     ERP_HR_WRITE,
     ERP_HR_APPROVE,
+    ERP_HR_AI_EVAL,
+    ERP_HR_AI_MANAGEMENT,
     ERP_PAYROLL_READ,
     ERP_PAYROLL_WRITE,
     ERP_PAYROLL_APPROVE,
@@ -174,6 +196,12 @@ CATALOG: tuple[str, ...] = (
     ERP_PAYROLL_AI_RUN,
     ERP_PAYROLL_AI_NOTIFY,
     ERP_PAYROLL_AI_APPROVE,
+    ERP_REPORTS_CREATE,
+    ERP_REPORTS_READ,
+    ERP_AI_COACHING_READ,
+    ERP_AI_COACHING_REVIEW,
+    ERP_AI_GUARDIAN_READ,
+    ERP_AI_GUARDIAN_REVIEW,
     ERP_LEAVE_SELF,
     AGENTS_READ,
     INTELLIGENCE_READ,
@@ -197,10 +225,39 @@ PERMISSION_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "erp_inventory",
         "ERP Inventory",
-        (ERP_INVENTORY_READ, ERP_INVENTORY_WRITE, ERP_INVENTORY_APPROVE, ERP_INVENTORY_AI_APPROVE),
+        (
+            ERP_INVENTORY_READ,
+            ERP_INVENTORY_WRITE,
+            ERP_INVENTORY_APPROVE,
+            ERP_INVENTORY_AI_APPROVE,
+            ERP_INVENTORY_ADJUST,
+            ERP_INVENTORY_ADJUST_APPROVE,
+            ERP_INVENTORY_COST,
+            ERP_INVENTORY_SUPPLIERS_READ,
+            ERP_INVENTORY_SUPPLIERS_WRITE,
+        ),
     ),
-    ("erp_finance", "ERP Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE)),
-    ("erp_hr", "ERP HR", (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE)),
+    ("erp_finance", "ERP Finance", (ERP_FINANCE_READ, ERP_FINANCE_WRITE, ERP_FINANCE_APPROVE)),
+    (
+        "erp_hr",
+        "ERP HR",
+        (ERP_HR_READ, ERP_HR_WRITE, ERP_HR_APPROVE, ERP_HR_AI_EVAL, ERP_HR_AI_MANAGEMENT),
+    ),
+    (
+        "erp_reports",
+        "ERP Reports",
+        (ERP_REPORTS_CREATE, ERP_REPORTS_READ),
+    ),
+    (
+        "erp_ai_agents",
+        "ERP AI agents",
+        (
+            ERP_AI_COACHING_READ,
+            ERP_AI_COACHING_REVIEW,
+            ERP_AI_GUARDIAN_READ,
+            ERP_AI_GUARDIAN_REVIEW,
+        ),
+    ),
     (
         "erp_payroll",
         "ERP Payroll",
@@ -258,6 +315,10 @@ __all__ = [
     "AUDIT_READ",
     "BILLING_MANAGE",
     "CATALOG",
+    "ERP_AI_COACHING_READ",
+    "ERP_AI_COACHING_REVIEW",
+    "ERP_AI_GUARDIAN_READ",
+    "ERP_AI_GUARDIAN_REVIEW",
     "ERP_AI_INVOKE",
     "ERP_AI_L3_REFRESH",
     "ERP_AI_NARRATOR_REFRESH",
@@ -266,19 +327,27 @@ __all__ = [
     "ERP_DOCUMENTS_DELETE",
     "ERP_DOCUMENTS_READ",
     "ERP_DOCUMENTS_WRITE",
+    "ERP_FINANCE_APPROVE",
     "ERP_FINANCE_READ",
     "ERP_FINANCE_WRITE",
     "ERP_HR_AI_ACKNOWLEDGE",
     "ERP_HR_AI_COPILOT",
+    "ERP_HR_AI_EVAL",
     "ERP_HR_AI_INDIVIDUAL",
+    "ERP_HR_AI_MANAGEMENT",
     "ERP_HR_AI_PLANNING",
     "ERP_HR_AI_READ",
     "ERP_HR_APPROVE",
     "ERP_HR_READ",
     "ERP_HR_WRITE",
+    "ERP_INVENTORY_ADJUST",
+    "ERP_INVENTORY_ADJUST_APPROVE",
     "ERP_INVENTORY_AI_APPROVE",
     "ERP_INVENTORY_APPROVE",
+    "ERP_INVENTORY_COST",
     "ERP_INVENTORY_READ",
+    "ERP_INVENTORY_SUPPLIERS_READ",
+    "ERP_INVENTORY_SUPPLIERS_WRITE",
     "ERP_INVENTORY_WRITE",
     "ERP_INVOICE_APPROVE",
     "ERP_INVOICE_READ",
@@ -291,6 +360,8 @@ __all__ = [
     "ERP_PAYROLL_READ",
     "ERP_PAYROLL_WRITE",
     "ERP_PURCHASE_APPROVE",
+    "ERP_REPORTS_CREATE",
+    "ERP_REPORTS_READ",
     "ERP_SALES_APPROVE",
     "ERP_SALES_READ",
     "ERP_SALES_WRITE",

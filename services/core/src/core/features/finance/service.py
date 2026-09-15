@@ -357,7 +357,11 @@ class FinanceService:
             posted_by_user_id=user_id,
             posted_at=posted_at,
         )
-        assert posted is not None
+        if posted is None:
+            raise ConflictError(
+                "Journal entry could not be posted; it is no longer draft "
+                "(another request posted or voided it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -391,7 +395,11 @@ class FinanceService:
         voided = await self._repo.void_journal_entry(
             entry_id, tenant_id, voided_at=datetime.now(UTC)
         )
-        assert voided is not None
+        if voided is None:
+            raise ConflictError(
+                "Journal entry could not be voided; it is no longer draft "
+                "(another request posted or voided it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -643,7 +651,11 @@ class FinanceService:
             raise ConflictError("Only draft invoices can be issued")
 
         issued = await self._repo.issue_invoice(invoice_id, tenant_id, issued_at=datetime.now(UTC))
-        assert issued is not None
+        if issued is None:
+            raise ConflictError(
+                "Invoice could not be issued; it is no longer draft "
+                "(another request issued or voided it concurrently)"
+            )
         await self._audit.log(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -711,7 +723,11 @@ class FinanceService:
         approved = await self._repo.approve_invoice(
             invoice_id, tenant_id, approved_at=datetime.now(UTC)
         )
-        assert approved is not None
+        if approved is None:
+            raise ConflictError(
+                "Invoice could not be approved; it is no longer issued "
+                "(another request approved, voided, or paid it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -757,7 +773,11 @@ class FinanceService:
             raise ConflictError("Only draft or issued invoices can be voided")
 
         voided = await self._repo.void_invoice(invoice_id, tenant_id, voided_at=datetime.now(UTC))
-        assert voided is not None
+        if voided is None:
+            raise ConflictError(
+                "Invoice could not be voided; it is not draft or issued "
+                "(another request transitioned it concurrently)"
+            )
         await self._audit.log(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -770,6 +790,35 @@ class FinanceService:
     # ------------------------------------------------------------------
     # Payments
     # ------------------------------------------------------------------
+
+    async def preflight_payment(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        amount: Decimal,
+    ) -> tuple[Invoice, Decimal]:
+        """Raise unless this payment could be applied; returns ``(invoice, outstanding)``.
+
+        The enforcement of ``apply_payment`` - the invoice must be approved,
+        the amount positive, and it must not exceed the outstanding balance -
+        lives here so callers that must commit to a whole batch up front
+        (payment-match bulk accept) can validate every item before any money
+        moves.
+        """
+        invoice = await self.get_invoice(tenant_id, invoice_id)
+        if invoice.status != InvoiceStatus.APPROVED:
+            raise ConflictError("Only approved invoices can receive payments")
+        if amount <= 0:
+            raise ValidationError("Payment amount must be positive")
+
+        already_paid = await self._repo.sum_payments_for_invoice(invoice_id, tenant_id)
+        outstanding = invoice.total - already_paid
+        if amount > outstanding:
+            raise ValidationError(
+                f"Payment {amount} exceeds the outstanding balance of {outstanding}"
+            )
+        return invoice, outstanding
 
     async def apply_payment(
         self,
@@ -788,18 +837,9 @@ class FinanceService:
         zero the invoice is marked paid in the same transaction. Idempotent per
         ``(source, source_ref)`` - a replayed request can never double-book.
         """
-        invoice = await self.get_invoice(tenant_id, invoice_id)
-        if invoice.status != InvoiceStatus.APPROVED:
-            raise ConflictError("Only approved invoices can receive payments")
-        if amount <= 0:
-            raise ValidationError("Payment amount must be positive")
-
-        already_paid = await self._repo.sum_payments_for_invoice(invoice_id, tenant_id)
-        outstanding = invoice.total - already_paid
-        if amount > outstanding:
-            raise ValidationError(
-                f"Payment {amount} exceeds the outstanding balance of {outstanding}"
-            )
+        invoice, outstanding = await self.preflight_payment(
+            tenant_id=tenant_id, invoice_id=invoice_id, amount=amount
+        )
 
         payment = Payment(
             tenant_id=tenant_id,

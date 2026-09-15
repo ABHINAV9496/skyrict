@@ -221,7 +221,7 @@ class TestPermissionsCatalog:
         assert "modules" in data
 
         modules = data["modules"]
-        assert len(modules) == 23
+        assert len(modules) == 25
 
         # Collect all keys from modules
         all_keys = []
@@ -236,11 +236,13 @@ class TestPermissionsCatalog:
                 all_keys.append(perm["key"])
                 module_keys_set.add(perm["key"])
 
-        # 54 unique keys (erp.ai.invoke + erp.ai.narrator.refresh + erp.ai.l3.refresh
-        # + erp.leave.self + erp.hr.ai.* + erp.hr.ai.planning
-        # + erp.payroll.ai.* + erp.inventory.ai.approve + erp.documents.*)
-        assert len(all_keys) == 54
-        assert len(module_keys_set) == 54
+        # 68 unique keys (erp.ai.invoke + erp.ai.narrator.refresh + erp.ai.l3.refresh
+        # + erp.leave.self + erp.hr.ai.* + erp.hr.ai.planning + erp.payroll.ai.*
+        # + erp.inventory.ai.approve + erp.documents.* + erp.finance.approve
+        # + erp.inventory.adjust* + erp.inventory.cost + erp.inventory.suppliers.*
+        # + erp.reports.* + erp.hr.ai.eval/management + erp.ai.coaching/guardian.*)
+        assert len(all_keys) == 68
+        assert len(module_keys_set) == 68
 
         # Union equals CATALOG
         catalog_set = set(CATALOG)
@@ -267,6 +269,8 @@ class TestPermissionsCatalog:
             "erp_hr_ai",
             "erp_payroll_ai",
             "erp_leave_self",
+            "erp_reports",
+            "erp_ai_agents",
             "agents",
             "intelligence",
             "billing",

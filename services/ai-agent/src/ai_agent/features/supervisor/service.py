@@ -20,6 +20,7 @@ Routing contract:
 from __future__ import annotations
 
 import json
+import time
 from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
@@ -354,6 +355,51 @@ class SupervisorService:
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[SupervisorEvent]:
+        """Stream one full supervisor turn as ordered events, then emit
+        per-turn latency telemetry (SKY-100).
+
+        Delegates to :meth:`_stream_turn` for the event stream; this wrapper
+        times the turn (time to first ``TokenEvent`` plus total), records the
+        cache-hit markers, and always logs a ``supervisor.turn_completed``
+        event - even when the consumer closes the stream early.
+        """
+        self._classification_cache_hit = False
+        self._response_cache_hit = False
+        turn_started = time.perf_counter()
+        first_token_ms: float | None = None
+        try:
+            async for event in self._stream_turn(
+                query=query,
+                attachments=attachments,
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+            ):
+                if isinstance(event, TokenEvent) and first_token_ms is None:
+                    first_token_ms = (time.perf_counter() - turn_started) * 1000
+                yield event
+        finally:
+            total_ms = (time.perf_counter() - turn_started) * 1000
+            logger.info(
+                "supervisor.turn_completed",
+                tenant_id=str(tenant_id),
+                conversation_id=str(conversation_id) if conversation_id is not None else None,
+                first_token_ms=_round_ms(first_token_ms),
+                total_ms=_round_ms(total_ms),
+                classification_cache_hit=self._classification_cache_hit,
+                response_cache_hit=self._response_cache_hit,
+                cache_hit=self._classification_cache_hit or self._response_cache_hit,
+            )
+
+    async def _stream_turn(
+        self,
+        *,
+        query: str,
+        attachments: list[AttachmentData] | None = None,
+        conversation_id: uuid.UUID | None = None,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> AsyncIterator[SupervisorEvent]:
         """Stream one full supervisor turn as ordered events.
 
         When attachments are present, their text content is extracted and
@@ -572,6 +618,11 @@ class SupervisorService:
                 exc_info=True,
             )
             return ""
+
+
+def _round_ms(value: float | None) -> float | None:
+    """Round a millisecond figure for telemetry; None stays None."""
+    return round(value, 1) if value is not None else None
 
 
 def _parse_classification(text: str) -> tuple[tuple[str, ...], float]:

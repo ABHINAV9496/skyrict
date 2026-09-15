@@ -1,4 +1,4 @@
-"""``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
+﻿"""``/api/v1/ai/hr/*`` routes (HR-AI-001, Commits 2 + 3).
 
 L1 aggregates (``/overview``, ``/tenure``) are computed in-core and never
 proxied - no employee row leaves the service. The attrition endpoints
@@ -34,8 +34,8 @@ from core.api.deps import (
     get_eval_repository,
     get_finance_service,
     get_hr_ai_individual,
-get_l4_payroll_repository,
     get_l3_repository,
+    get_l4_payroll_repository,
     get_pattern_data_repository,
     get_payroll_anomaly_service,
     get_quality_service,
@@ -50,8 +50,8 @@ from core.core.permissions import (
     ERP_HR_AI_ACKNOWLEDGE,
     ERP_HR_AI_COPILOT,
     ERP_HR_AI_EVAL,
-ERP_HR_AI_PLANNING,
     ERP_HR_AI_MANAGEMENT,
+    ERP_HR_AI_PLANNING,
     ERP_HR_AI_READ,
     ERP_HR_READ,
     ERP_HR_WRITE,
@@ -64,8 +64,6 @@ from core.features.ai_hr.attrition_client import score_features
 from core.features.ai_hr.attrition_repository import FeatureVector, ScoredRisk
 from core.features.ai_hr.compliance_service import ComplianceService
 from core.features.ai_hr.eval_repository import EvalRunRepository
-from core.features.ai_hr.l4_repository import PayrollBaseRepository
-from core.features.ai_hr.l4_schemas import ExportBudgetDraftOut, PayrollBaseOut, payroll_base_to_out
 from core.features.ai_hr.l3_repository import L3Repository
 from core.features.ai_hr.l3_schemas import (
     LeavePayCorrelationOut,
@@ -73,6 +71,8 @@ from core.features.ai_hr.l3_schemas import (
     leave_pay_to_out,
     movement_to_out,
 )
+from core.features.ai_hr.l4_repository import PayrollBaseRepository
+from core.features.ai_hr.l4_schemas import ExportBudgetDraftOut, PayrollBaseOut, payroll_base_to_out
 from core.features.ai_hr.pattern_data_repository import AiHrPatternDataRepository
 from core.features.ai_hr.payroll_anomaly_service import PayrollAnomalyService
 from core.features.ai_hr.quality_service import QualityService
@@ -643,7 +643,7 @@ async def copilot_chat(
     current_user: _HrAiCopilotDep,
     client: _ClientDep,
 ) -> Response:
-    """Forward one HR Copilot message to ai-agent (spec Ã‚Â§9 feature 5).
+    """Forward one HR Copilot message to ai-agent (spec §9 feature 5).
 
     Gated by ``erp.ai.invoke`` + ``erp.hr.ai.copilot``. The caller's JWT and
     tenant slug are relayed so ai-agent makes its aggregate reads (and any PII
@@ -870,10 +870,10 @@ async def l4_scenario_export(
     ``/api/v1/ai/l4/scenarios/{id}``), and its stored projection totals are
     materialized into an ``erp_budget_drafts`` row (source='workforce_plan',
     source_ref=scenario_id) - a *planning* artifact with its own
-    draftÃ¢â€ â€™pendingÃ¢â€ â€™approved flow, deliberately separate from the DRAFT JE
+    draft → pending → approved flow, deliberately separate from the DRAFT JE
     inbox (a what-if projection must not be confused with a booked
     transaction). The ``UNIQUE (tenant_id, source, source_ref)`` lock makes a
-    replayed export idempotent Ã¢â‚¬â€ a retry returns ``already_booked`` instead of
+    replayed export idempotent — a retry returns ``already_booked`` instead of
     creating a second draft.
     """
     tenant_id = _tenant_id(current_user)

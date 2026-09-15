@@ -40,8 +40,8 @@ if TYPE_CHECKING:
     from core.features.ai_hr.anomaly_service import AnomalyService
     from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
-    from core.features.ai_hr.l4_repository import PayrollBaseRepository
     from core.features.ai_hr.l3_repository import L3Repository
+    from core.features.ai_hr.l4_repository import PayrollBaseRepository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )

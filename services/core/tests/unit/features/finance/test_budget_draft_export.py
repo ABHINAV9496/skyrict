@@ -7,7 +7,7 @@ exercised by raising ConflictError on a duplicate, mirroring the repository.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -21,16 +21,17 @@ SCENARIO = uuid.uuid4()
 ACTOR = uuid.uuid4()
 
 
+class _Session:
+    async def rollback(self) -> None:
+        pass
+
+
 class _FakeRepo:
     def __init__(self) -> None:
         self.saved: list[BudgetDraft] = []
 
     @property
-    def session(self) -> "_Session":
-        class _Session:
-            async def rollback(self) -> None:
-                pass
-
+    def session(self) -> _Session:
         return _Session()
 
     async def create_budget_draft(self, draft: BudgetDraft) -> BudgetDraft:
@@ -55,8 +56,8 @@ class _FakeRepo:
             created_by=draft.created_by,
             lines=draft.lines,
             id=uuid.uuid4(),
-            created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 2, tzinfo=UTC),
+            updated_at=datetime(2026, 1, 2, tzinfo=UTC),
         )
         self.saved.append(created)
         return created

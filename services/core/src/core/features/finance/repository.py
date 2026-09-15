@@ -620,13 +620,30 @@ class FinanceRepository:
         posted_by_user_id: uuid.UUID | None,
         posted_at: datetime,
     ) -> JournalEntry | None:
-        model = await self._journal_entry_model(entry_id, tenant_id)
+        """Post a DRAFT entry (atomic guarded transition).
+
+        Only a ``draft`` entry can transition to ``posted``: the UPDATE is
+        conditional on the current status so concurrent posts (or a post racing
+        a void) cannot both win - the loser matches zero rows and returns
+        ``None`` instead of double-posting and firing the money event twice.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.DRAFT,
+            )
+            .values(
+                status=EntryStatus.POSTED,
+                posted_at=posted_at,
+                posted_by_user_id=posted_by_user_id,
+            )
+            .returning(ErpJournalEntryModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
-        model.status = EntryStatus.POSTED
-        model.posted_at = posted_at
-        model.posted_by_user_id = posted_by_user_id
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)
@@ -634,12 +651,28 @@ class FinanceRepository:
     async def void_journal_entry(
         self, entry_id: uuid.UUID, tenant_id: uuid.UUID, *, voided_at: datetime
     ) -> JournalEntry | None:
-        model = await self._journal_entry_model(entry_id, tenant_id)
+        """Void a DRAFT entry (atomic guarded transition).
+
+        Mirrors ``post_journal_entry``: only a ``draft`` can be voided, so a
+        void racing a post cannot both win - the loser returns ``None`` instead
+        of leaving the row in whichever status landed last.
+        """
+        stmt = (
+            update(ErpJournalEntryModel)
+            .where(
+                ErpJournalEntryModel.tenant_id == tenant_id,
+                ErpJournalEntryModel.id == entry_id,
+                ErpJournalEntryModel.status == EntryStatus.DRAFT,
+            )
+            .values(
+                status=EntryStatus.VOIDED,
+                voided_at=voided_at,
+            )
+            .returning(ErpJournalEntryModel)
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
-        model.status = EntryStatus.VOIDED
-        model.voided_at = voided_at
-        await self.session.flush()
         await self.session.refresh(model)
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)

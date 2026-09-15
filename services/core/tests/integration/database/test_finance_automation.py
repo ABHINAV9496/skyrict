@@ -330,6 +330,70 @@ async def test_concurrent_reversals_only_one_wins(migrated_schema: None) -> None
     assert wins == 1
 
 
+async def test_concurrent_posts_only_one_wins(migrated_schema: None) -> None:
+    """Two sessions posting the same DRAFT entry - exactly one wins.
+
+    Regression for the unguarded select-then-mutate post: both racers used to
+    read DRAFT and both flushed POSTED, so two callers got success, two audit
+    ``FINANCE_JOURNAL_ENTRY_POSTED`` events fired, and the money event was
+    emitted twice. The guarded UPDATE now serialises them and the loser matches
+    zero rows.
+    """
+    tenant_id = uuid.uuid4()
+    entry_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            TenantModel(
+                id=tenant_id,
+                name="Post Race Tenant",
+                slug=f"postrace-{tenant_id.hex[:8]}",
+                plan_tier="free",
+                is_active=True,
+            )
+        )
+        await session.flush()
+        account = ErpChartOfAccountModel(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            code="1100",
+            name="Cash",
+            account_type=AccountType.ASSET,
+        )
+        session.add(account)
+        await session.flush()
+        session.add(
+            ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                id=entry_id,
+                entry_date=date(2026, 6, 1),
+                memo="race post",
+                status=EntryStatus.DRAFT,
+                source="manual",
+                source_ref=None,
+            )
+        )
+        await session.commit()
+
+    async def _post() -> bool:
+        async with async_session_factory() as session:
+            repo = FinanceRepository(session)
+            got = await repo.post_journal_entry(
+                entry_id,
+                tenant_id,
+                posted_by_user_id=uuid.uuid4(),
+                posted_at=datetime(2026, 6, 1, tzinfo=UTC),
+            )
+            await session.commit()
+            return got is not None
+
+    async with asyncio.TaskGroup() as tg:
+        racer_a = tg.create_task(_post())
+        racer_b = tg.create_task(_post())
+
+    wins = sum([await racer_a, await racer_b])
+    assert wins == 1
+
+
 class _NoopAuditSink:
     async def log(self, **kwargs: object) -> None:
         pass

@@ -357,7 +357,11 @@ class FinanceService:
             posted_by_user_id=user_id,
             posted_at=posted_at,
         )
-        assert posted is not None
+        if posted is None:
+            raise ConflictError(
+                "Journal entry could not be posted; it is no longer draft "
+                "(another request posted or voided it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -391,7 +395,11 @@ class FinanceService:
         voided = await self._repo.void_journal_entry(
             entry_id, tenant_id, voided_at=datetime.now(UTC)
         )
-        assert voided is not None
+        if voided is None:
+            raise ConflictError(
+                "Journal entry could not be voided; it is no longer draft "
+                "(another request posted or voided it concurrently)"
+            )
 
         await self._audit.log(
             tenant_id=tenant_id,

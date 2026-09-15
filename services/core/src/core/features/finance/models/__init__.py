@@ -9,6 +9,7 @@ from core.features.finance.models.ai_finance_anomaly import AiFinanceAnomalyMode
 from core.features.finance.models.ai_finance_quality_score import AiFinanceQualityScoreModel
 from core.features.finance.models.ai_finance_suggestion import AiFinanceSuggestionModel
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+from core.features.finance.models.erp_report_cache import ErpReportCacheModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
 from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
 from core.features.finance.models.invoice import ErpInvoiceModel
@@ -30,5 +31,6 @@ __all__ = [
     "ErpJournalEntryModel",
     "ErpJournalLineModel",
     "ErpPaymentModel",
+    "ErpReportCacheModel",
     "ErpTenantSettingModel",
 ]

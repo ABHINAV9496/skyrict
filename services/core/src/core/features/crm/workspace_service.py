@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -39,13 +39,14 @@ from core.audit_events import (
 )
 from core.core.exceptions import IllegalStateTransitionError
 from core.core.tenant_context import TenantContext
-from core.domain.entities import Activity, Contact, CrmSearchHit, Note, TimelineItem
+from core.domain.entities import Activity, Contact, CrmSearchHit, Note, Opportunity, TimelineItem
 from core.domain.value_objects import (
     ActivityKind,
     CrmEntityType,
     CrmTimelineEventType,
     DataScope,
     LeadStatus,
+    Money,
     OpportunityStage,
 )
 from core.events.producers.crm_events import (
@@ -54,10 +55,15 @@ from core.events.producers.crm_events import (
     emit_contact_created,
     emit_note_created,
 )
+from core.features.finance.report_cache import (
+    ReportCacheRepository,
+    hash_report_key,
+    serialize_entity,
+)
 from skyrict_common.exceptions import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
-    from core.domain.entities import Customer, Opportunity
+    from core.domain.entities import Customer
     from core.features.audit.service import AuditService
     from core.features.crm.ports import CrmWorkspaceRepositoryPort
 
@@ -142,6 +148,128 @@ class CrmOverview:
     top_opportunities: tuple[Opportunity, ...]
 
 
+def _uuid_or_none(value: object) -> uuid.UUID | None:
+    return uuid.UUID(str(value)) if value is not None else None
+
+
+def _date_or_none(value: object) -> date | None:
+    return date.fromisoformat(str(value)) if value is not None else None
+
+
+def _dt_or_none(value: object) -> datetime | None:
+    return datetime.fromisoformat(str(value)) if value is not None else None
+
+
+def _money_bucket_from_dict(data: dict[str, object]) -> MoneyBucket:
+    return MoneyBucket(currency=str(data["currency"]), amount=Decimal(str(data["amount"])))
+
+
+def _money_from_dict(data: dict[str, object]) -> Money:
+    return Money(amount=Decimal(str(data["amount"])), currency=str(data["currency"]))
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    """Narrow an arbitrary JSON value to a dict (raises on mismatch)."""
+    if not isinstance(value, dict):
+        raise TypeError(f"expected dict, got {type(value).__name__}")
+    return {str(k): v for k, v in value.items()}
+
+
+def _as_str(value: object) -> str:
+    return str(value)
+
+
+def _as_int(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    return int(str(value))
+
+
+def _rows(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise TypeError(f"expected list, got {type(value).__name__}")
+    return [_as_dict(row) for row in value]
+
+
+def _opportunity_from_dict(data: dict[str, object]) -> Opportunity:
+    amount = data.get("amount")
+    return Opportunity(
+        tenant_id=uuid.UUID(_as_str(data["tenant_id"])),
+        name=_as_str(data["name"]),
+        lead_id=_uuid_or_none(data.get("lead_id")),
+        stage=OpportunityStage(_as_str(data["stage"])),
+        amount=_money_from_dict(_as_dict(amount)) if amount is not None else None,
+        probability=_as_int(data.get("probability", 0)),
+        expected_close_date=_date_or_none(data.get("expected_close_date")),
+        owner_id=_uuid_or_none(data.get("owner_id")),
+        team_id=_uuid_or_none(data.get("team_id")),
+        won_at=_dt_or_none(data.get("won_at")),
+        lost_at=_dt_or_none(data.get("lost_at")),
+        lost_reason=_as_str(data["lost_reason"]) if data.get("lost_reason") is not None else None,
+        id=_uuid_or_none(data.get("id")),
+        created_at=_dt_or_none(data.get("created_at")),
+        updated_at=_dt_or_none(data.get("updated_at")),
+    )
+
+
+def _crm_overview_from_dict(data: dict[str, object]) -> CrmOverview:
+    """Rebuild a frozen CrmOverview from a serialized (JSON-safe) dict."""
+    leads_raw = _as_dict(data["leads"])
+    opps_raw = _as_dict(data["opportunities"])
+    cust_raw = _as_dict(data["customers"])
+    act_raw = _as_dict(data["activities"])
+    return CrmOverview(
+        leads=LeadsOverview(
+            total=_as_int(leads_raw["total"]),
+            by_status=tuple(
+                LeadStatusCount(status=LeadStatus(_as_str(x["status"])), count=_as_int(x["count"]))
+                for x in _rows(leads_raw["by_status"])
+            ),
+            by_source=tuple(
+                LeadSourceCount(
+                    source=_as_str(x["source"]) if x.get("source") is not None else None,
+                    count=_as_int(x["count"]),
+                )
+                for x in _rows(leads_raw["by_source"])
+            ),
+        ),
+        opportunities=OpportunitiesOverview(
+            open_count=_as_int(opps_raw["open_count"]),
+            open_value=tuple(_money_bucket_from_dict(x) for x in _rows(opps_raw["open_value"])),
+            by_stage=tuple(
+                StageBucket(
+                    stage=OpportunityStage(_as_str(x["stage"])),
+                    count=_as_int(x["count"]),
+                    value=tuple(_money_bucket_from_dict(v) for v in _rows(x["value"])),
+                )
+                for x in _rows(opps_raw["by_stage"])
+            ),
+            won_count=_as_int(opps_raw["won_count"]),
+            won_value=tuple(_money_bucket_from_dict(x) for x in _rows(opps_raw["won_value"])),
+            lost_count=_as_int(opps_raw["lost_count"]),
+            win_rate=(
+                Decimal(_as_str(opps_raw["win_rate"]))
+                if opps_raw.get("win_rate") is not None
+                else None
+            ),
+        ),
+        customers=CustomersOverview(
+            total=_as_int(cust_raw["total"]),
+            active=_as_int(cust_raw["active"]),
+        ),
+        activities=ActivitiesOverview(
+            today=_as_int(act_raw["today"]),
+            overdue=_as_int(act_raw["overdue"]),
+            upcoming=_as_int(act_raw["upcoming"]),
+            completed_30d=_as_int(act_raw["completed_30d"]),
+        ),
+        recent_won=tuple(_opportunity_from_dict(x) for x in _rows(data["recent_won"])),
+        top_opportunities=tuple(
+            _opportunity_from_dict(x) for x in _rows(data["top_opportunities"])
+        ),
+    )
+
+
 class CrmWorkspaceService:
     """Business rules for the CRM workspace surface."""
 
@@ -149,9 +277,11 @@ class CrmWorkspaceService:
         self,
         repository: CrmWorkspaceRepositoryPort,
         audit: AuditService,
+        cache: ReportCacheRepository | None = None,
     ) -> None:
         self._repo = repository
         self._audit_service = audit
+        self._report_cache = cache
 
     # ------------------------------------------------------------------
     # Contacts
@@ -674,6 +804,17 @@ class CrmWorkspaceService:
         team_id: uuid.UUID | None,
     ) -> CrmOverview:
         """CRM overview dashboard - every number from real DB aggregates."""
+        cache = self._report_cache
+        if cache is not None:
+            cache_key = hash_report_key(
+                "crm_overview",
+                scope.value,
+                user_id or "",
+                team_id or "",
+            )
+            cached = await cache.get(tenant_id=tenant_id, cache_key=cache_key)
+            if cached is not None:
+                return _crm_overview_from_dict(cached)
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
@@ -796,7 +937,7 @@ class CrmWorkspaceService:
         if won_count + lost_count > 0:
             win_rate = Decimal(won_count) / Decimal(won_count + lost_count)
 
-        return CrmOverview(
+        overview = CrmOverview(
             leads=LeadsOverview(total=lead_total, by_status=by_status, by_source=by_source),
             opportunities=OpportunitiesOverview(
                 open_count=open_count,
@@ -817,6 +958,13 @@ class CrmWorkspaceService:
             recent_won=tuple(recent_won),
             top_opportunities=tuple(top),
         )
+        if cache is not None:
+            await cache.put(
+                tenant_id=tenant_id,
+                cache_key=cache_key,
+                payload=serialize_entity(overview),
+            )
+        return overview
 
     async def search(
         self,

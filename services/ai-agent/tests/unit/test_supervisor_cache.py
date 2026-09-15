@@ -36,7 +36,7 @@ from ai_agent.features.supervisor.schemas import (
 from ai_agent.features.supervisor.service import SupervisorService
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Callable
 
 TENANT_A = uuid.uuid4()
 TENANT_B = uuid.uuid4()
@@ -171,7 +171,9 @@ def make_service(
     router: FakeLlmRouter | None = None,
     classification_cache: MemoryResponseCache | None = None,
     response_cache: MemoryResponseCache | None = None,
-    conversation_history: FakeConversationHistory | None = None,
+    conversation_history: object | None = None,
+    conversation_summary: object | None = None,
+    summary_regenerator: Callable[[uuid.UUID, uuid.UUID], None] | None = None,
     provisioned: dict[str, bool] | None = None,
 ) -> SupervisorService:
     gateway = FakeGateway()
@@ -183,6 +185,8 @@ def make_service(
         llm_router=router or FakeLlmRouter(),
         gateway_factory=gateway_factory,
         conversation_history=conversation_history,
+        conversation_summary=conversation_summary,
+        summary_regenerator=summary_regenerator,
         provisioned=provisioned or {"inventory_monitor": True},
         classification_cache=classification_cache,
         response_cache=response_cache,

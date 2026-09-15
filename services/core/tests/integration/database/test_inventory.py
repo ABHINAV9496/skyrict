@@ -620,7 +620,12 @@ class TestMovementLedger:
             assert "ck_erp_stock_levels_reserved_range" in str(excinfo.value)
 
             await session.rollback()
-            assert await repo.get_movement_by_ref("so", "SO-OVERRESERVE", wh2, tenant, product_id=product) is None
+            assert (
+                await repo.get_movement_by_ref(
+                    "so", "SO-OVERRESERVE", wh2, tenant, product_id=product
+                )
+                is None
+            )
             assert await repo.get_stock_level(product, wh2, tenant) is None
 
 

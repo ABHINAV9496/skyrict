@@ -417,7 +417,10 @@ class FakeRepo:
 
     async def add_movement(self, movement: StockMovement) -> StockMovement:
         existing = await self.get_movement_by_ref(
-            movement.ref_type, movement.ref_id, movement.warehouse_id, movement.tenant_id,
+            movement.ref_type,
+            movement.ref_id,
+            movement.warehouse_id,
+            movement.tenant_id,
             product_id=movement.product_id,
         )
         if existing is not None:
@@ -1099,7 +1102,12 @@ class TestAdjustStock:
                 ref_id="ADJ-3",
             )
         assert repo.committed == 0
-        assert await repo.get_movement_by_ref("adjustment", "ADJ-3", warehouse.id, TENANT, product_id=product.id) is None
+        assert (
+            await repo.get_movement_by_ref(
+                "adjustment", "ADJ-3", warehouse.id, TENANT, product_id=product.id
+            )
+            is None
+        )
 
     async def test_replay_rejected(self, service: InventoryService, repo: FakeRepo) -> None:
         product = await _seed_product(repo)

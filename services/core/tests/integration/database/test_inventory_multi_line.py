@@ -118,9 +118,7 @@ async def multi_world(migrated_schema: None) -> dict[str, object]:
         await engine.dispose()
 
 
-def _make_line(
-    tenant_id: uuid.UUID, product_id: uuid.UUID, qty: Decimal
-) -> SalesOrderLine:
+def _make_line(tenant_id: uuid.UUID, product_id: uuid.UUID, qty: Decimal) -> SalesOrderLine:
     return SalesOrderLine(
         tenant_id=tenant_id,
         product_id=product_id,

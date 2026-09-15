@@ -1074,7 +1074,9 @@ class InventoryService:
             if line.quantity <= 0:
                 raise ValidationError("Reservation quantity must be positive")
             ledger_ref = _step_ref(ref_id, _STEP_RESERVE)
-            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid, product_id=line.product_id)
+            await self._reject_replay(
+                ref_type, ledger_ref, warehouse_id, tid, product_id=line.product_id
+            )
             await self._require_active_product(line.product_id, tid)
             await self._require_active_warehouse(warehouse_id, tid)
             if not await self.inventory_repo.apply_reservation_qty(
@@ -1110,7 +1112,9 @@ class InventoryService:
             if line.quantity <= 0:
                 raise ValidationError("Release quantity must be positive")
             ledger_ref = _step_ref(ref_id, _STEP_RELEASE)
-            await self._reject_replay(ref_type, ledger_ref, warehouse_id, tid, product_id=line.product_id)
+            await self._reject_replay(
+                ref_type, ledger_ref, warehouse_id, tid, product_id=line.product_id
+            )
             await self._require_active_product(line.product_id, tid)
             await self._require_active_warehouse(warehouse_id, tid)
             if not await self.inventory_repo.apply_release_qty(

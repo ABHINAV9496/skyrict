@@ -233,9 +233,9 @@ class PayrollCompute:
         # rounding mode, so the gross proration rounds the raw amount with the
         # chosen mode BEFORE it touches Money.
         gross = Money(
-            amount=(
-                base_salary.amount * Decimal(pay_days) / Decimal(days_in_period)
-            ).quantize(Decimal("0.01"), rounding=cls._round_mode(rounding)),
+            amount=(base_salary.amount * Decimal(pay_days) / Decimal(days_in_period)).quantize(
+                Decimal("0.01"), rounding=cls._round_mode(rounding)
+            ),
             currency=base_salary.currency,
         )
         pf = cls._round(gross * pf_rate, rounding)

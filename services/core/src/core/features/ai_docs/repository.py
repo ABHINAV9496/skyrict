@@ -112,9 +112,7 @@ class AiDocRepository:
         ``max(version)`` and write the same number (B10; the family has no
         unique constraint on version, so the duplicate would be silent).
         """
-        await advisory_family_lock(
-            self._db, "ai_doc", tenant_id, doc_type, snapshot_id
-        )
+        await advisory_family_lock(self._db, "ai_doc", tenant_id, doc_type, snapshot_id)
         latest = await self._db.execute(
             select(func.max(ErpAiDocModel.version)).where(
                 ErpAiDocModel.tenant_id == tenant_id,

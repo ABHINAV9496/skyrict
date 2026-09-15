@@ -163,24 +163,27 @@ class ApprovalWorkflowInstanceRepository:
     ) -> ErpApprovalWorkflowStepModel | None:
         """Mark a pending step ``escalated`` (SLA breach).
 
-        Idempotent: only a ``pending`` step escalates; the same step can never
-        be escalated twice. ``decided_by``/``decided_at`` stay unset - escalation
-        is a supervisory signal, not a decision by an actor.
+        Atomic AND idempotent: the ``UPDATE`` is conditional on the step still
+        being ``pending``, so two concurrent escalation passes for the same
+        step cannot both succeed -- the loser matches zero rows and returns
+        ``None`` (the caller skips the transition log instead of double-logging
+        a ``pending -> escalated`` transition).
+
+        ``decided_by``/``decided_at`` stay unset: escalation is a supervisory
+        signal, never a decision by an actor.
         """
         result = await self._db.execute(
-            select(ErpApprovalWorkflowStepModel).where(
+            update(ErpApprovalWorkflowStepModel)
+            .where(
                 ErpApprovalWorkflowStepModel.tenant_id == tenant_id,
                 ErpApprovalWorkflowStepModel.id == step_id,
                 ErpApprovalWorkflowStepModel.status == "pending",
             )
+            .values(status="escalated")
+            .returning(ErpApprovalWorkflowStepModel)
+            .execution_options(synchronize_session="fetch")
         )
-        step = result.scalar_one_or_none()
-        if step is None:
-            return None
-        step.status = "escalated"
-        await self._db.flush()
-        await self._db.refresh(step)
-        return step
+        return result.scalars().one_or_none()
 
     async def list_pending_tenant_ids(self) -> list[uuid.UUID]:
         """Distinct tenant ids that have at least one ``pending`` instance.

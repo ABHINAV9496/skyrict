@@ -60,11 +60,16 @@ class ApprovalEscalationService:
             now=now,
             limit=limit,
         )
+        escalated = 0
         for step in steps:
-            await self._repo.mark_step_escalated(
+            updated = await self._repo.mark_step_escalated(
                 tenant_id=tenant_id,
                 step_id=step.id,
             )
+            if updated is None:
+                # A concurrent escalation or decision already handled this
+                # step. Skip the transition to avoid double-logging.
+                continue
             await self._repo.record_transition(
                 tenant_id=tenant_id,
                 workflow_instance_id=step.instance_id,
@@ -76,7 +81,8 @@ class ApprovalEscalationService:
                 context={"sla_due_at": str(step.sla_due_at)},
                 occurred_at=now,
             )
-        return len(steps)
+            escalated += 1
+        return escalated
 
 
 __all__ = ["ApprovalEscalationService"]

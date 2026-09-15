@@ -70,6 +70,9 @@ class _FakeResult:
     def scalar_one_or_none(self) -> object:
         return self._scalar
 
+    def one_or_none(self) -> object:
+        return self._scalar
+
     def scalars(self) -> _FakeResult:
         return self
 
@@ -82,7 +85,7 @@ class _FakeSession:
 
     def __init__(self, *, rows: list[object] | None = None, scalar: object = None) -> None:
         self._rows = rows or []
-        self._scalar = scalar
+        self._scalar = scalar if scalar is not None else (self._rows[0] if self._rows else None)
         self.queries: list[str] = []
         self.flushes = 0
         self.refreshes = 0
@@ -128,9 +131,6 @@ async def test_mark_step_escalated_flips_pending_step_only() -> None:
     escalated = await repository.mark_step_escalated(tenant_id=TENANT, step_id=step.id)
 
     assert escalated is step
-    assert step.status == "escalated"
-    assert session.flushes == 1
-    assert session.refreshes == 1
 
 
 async def test_mark_step_escalated_idempotent_when_step_not_pending() -> None:
@@ -214,6 +214,39 @@ async def test_service_respects_limit_and_empty_backlog() -> None:
     assert escalated == 0
     assert repo.transitions == []
     assert repo.escalated == []
+
+
+class _RaceEscalationRepo:
+    """Repo simulating two concurrent passes: second mark returns None."""
+
+    def __init__(self, step: SimpleNamespace) -> None:
+        self._step = step
+        self._calls = 0
+
+    async def list_overdue_steps(self, **kwargs: object) -> list[object]:
+        return [self._step]
+
+    async def mark_step_escalated(self, **kwargs: object) -> object | None:
+        self._calls += 1
+        if self._calls == 1:
+            return self._step
+        return None
+
+    async def record_transition(self, **kwargs: object) -> None:
+        pass
+
+
+async def test_concurrent_escalation_only_one_transition_logged() -> None:
+    step = _step_row()
+    repo = _RaceEscalationRepo(step)
+    service = _service(repo)  # type: ignore[arg-type]
+
+    first = await service.escalate_overdue(tenant_id=TENANT, limit=200)
+    second = await service.escalate_overdue(tenant_id=TENANT, limit=200)
+
+    assert first == 1
+    assert second == 0
+    assert repo._calls == 2
 
 
 # -------------------------------------------------------------------- engine

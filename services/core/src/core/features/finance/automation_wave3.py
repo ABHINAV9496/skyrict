@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -80,8 +81,8 @@ class FinanceWave3Service:
 
     def _validated_lines(self, raw_lines: list[Any]) -> tuple[JournalTemplateLine, ...]:
         lines: list[JournalTemplateLine] = []
-        debit_total = 0.0
-        credit_total = 0.0
+        debit_total = Decimal("0")
+        credit_total = Decimal("0")
         for raw in raw_lines:
             debit = getattr(raw, "debit", None)
             credit = getattr(raw, "credit", None)
@@ -99,11 +100,14 @@ class FinanceWave3Service:
                 currency=getattr(raw, "currency", "USD"),
             )
             lines.append(line)
-            debit_total += float(debit or 0)
-            credit_total += float(credit or 0)
+            # str() round-trips a float the client may have sent (0.1 -> "0.1")
+            # while int/Decimal passthrough exactly; accumulate in Decimal so a
+            # long line set can never drift like float 0.1+0.2.
+            debit_total += Decimal(str(debit or 0))
+            credit_total += Decimal(str(credit or 0))
         if not lines:
             raise ValidationError("Template must have at least two lines")
-        if abs(debit_total - credit_total) > 1e-6:
+        if debit_total != credit_total:
             raise ValidationError(
                 f"Template does not balance: debits {debit_total} != credits {credit_total}"
             )

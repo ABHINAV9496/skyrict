@@ -195,13 +195,16 @@ class PayrollCompute:
         return max(days_in_period - reduction, 0)
 
     @staticmethod
-    def _round(money: Money, rounding: PayrollRounding) -> Money:
-        mode = {
+    def _round_mode(rounding: PayrollRounding) -> str:
+        return {
             PayrollRounding.NEAREST: ROUND_HALF_UP,
             PayrollRounding.UP: ROUND_CEILING,
             PayrollRounding.DOWN: ROUND_FLOOR,
         }[rounding]
-        return money.rounded(rounding=mode)
+
+    @staticmethod
+    def _round(money: Money, rounding: PayrollRounding) -> Money:
+        return money.rounded(rounding=PayrollCompute._round_mode(rounding))
 
     @classmethod
     def compute_entry(
@@ -225,7 +228,16 @@ class PayrollCompute:
             raise ValueError("days_in_period must be positive")
         if pay_days < 0:
             raise ValueError("pay_days cannot be negative")
-        gross = cls._round(base_salary * Decimal(pay_days) / Decimal(days_in_period), rounding)
+        # Money.__truediv__ rounds to the currency quantum by default (a stored
+        # money must never carry repeating-digit noise). Payroll owns its own
+        # rounding mode, so the gross proration rounds the raw amount with the
+        # chosen mode BEFORE it touches Money.
+        gross = Money(
+            amount=(
+                base_salary.amount * Decimal(pay_days) / Decimal(days_in_period)
+            ).quantize(Decimal("0.01"), rounding=cls._round_mode(rounding)),
+            currency=base_salary.currency,
+        )
         pf = cls._round(gross * pf_rate, rounding)
         tax = cls._round(gross * tax_rate, rounding)
         adj_raw = Decimal(str((adjustments or {}).get("amount", 0)))

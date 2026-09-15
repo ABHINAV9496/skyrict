@@ -17,6 +17,7 @@ from core.features.finance.models.invoice import ErpInvoiceModel
 from core.features.finance.models.invoice_line import ErpInvoiceLineModel
 from core.features.finance.models.journal_entry import ErpJournalEntryModel
 from core.features.finance.models.journal_line import ErpJournalLineModel
+from core.features.finance.models.journal_template import ErpJournalTemplateModel
 from core.features.finance.models.payment import ErpPaymentModel
 from core.features.finance.models.tenant_setting import ErpTenantSettingModel
 
@@ -33,6 +34,7 @@ __all__ = [
     "ErpInvoiceModel",
     "ErpJournalEntryModel",
     "ErpJournalLineModel",
+    "ErpJournalTemplateModel",
     "ErpPaymentModel",
     "ErpTenantSettingModel",
 ]

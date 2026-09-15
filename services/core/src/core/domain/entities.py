@@ -29,6 +29,7 @@ from core.domain.value_objects import (
     Money,
     OpportunityStage,
     OrderStatus,
+    PaymentIntentStatus,
 )
 
 if TYPE_CHECKING:
@@ -767,6 +768,52 @@ class Payment:
 
 
 @dataclass(frozen=True)
+class PaymentIntent:
+    """An unmatched cash receipt waiting to be matched to an invoice (B7).
+
+    Lives in the payment-matching inbox until a human applies or dismisses it.
+    ``score`` / ``suggested_invoice_id`` record the best deterministic match at
+    create time (so the inbox can sort by confidence); the live candidate list
+    is recomputed per read so outstanding amounts stay fresh. ``applied_*``
+    fields are stamped on accept so the 15-minute undo can find - and delete -
+    the exact payment row it created.
+    """
+
+    tenant_id: uuid.UUID
+    amount: Decimal
+    paid_at: datetime
+    method: str
+    source: str
+    created_by: uuid.UUID
+    status: PaymentIntentStatus = PaymentIntentStatus.OPEN
+    reference: str | None = None
+    source_ref: str | None = None
+    customer_id: uuid.UUID | None = None
+    score: Decimal | None = None
+    suggested_invoice_id: uuid.UUID | None = None
+    applied_invoice_id: uuid.UUID | None = None
+    applied_payment_id: uuid.UUID | None = None
+    applied_at: datetime | None = None
+    applied_by: uuid.UUID | None = None
+    dismissed_at: datetime | None = None
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PaymentMatchCandidate:
+    """One scored invoice suggestion for a payment intent (live, read-side)."""
+
+    invoice_id: uuid.UUID
+    invoice_number: str
+    customer_id: uuid.UUID | None
+    customer_name: str | None
+    outstanding: Decimal
+    score: Decimal
+
+
+@dataclass(frozen=True)
 class FiscalPeriod:
     """An accounting period that can be closed to freeze history.
 
@@ -779,6 +826,47 @@ class FiscalPeriod:
     start_date: date
     end_date: date
     is_closed: bool = False
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class JournalTemplateLine:
+    """One line of a recurring journal template (FIN-AUT-003 B5).
+
+    ``account_code`` is resolved to an account id at generate time, so a
+    template stays readable even as a tenant renames individual accounts.
+    """
+
+    account_code: str
+    debit: Decimal | None = None
+    credit: Decimal | None = None
+    currency: str = "USD"
+
+
+@dataclass(frozen=True)
+class JournalTemplate:
+    """A recurring journal template (FIN-AUT-003 B5).
+
+    ``cron_expression`` is a 5-field cron string used to compute ``next_run_at``.
+    On each fire the service creates a DRAFT journal entry stamped
+    ``source='journal_template'`` / ``source_ref=f"{id}:{entry_date}"``, so the
+    ``UNIQUE (tenant_id, source, source_ref)`` lock makes every scheduled
+    occurrence generate exactly once. Generated drafts enter the existing
+    approval path (SKY-92) when posted.
+    """
+
+    tenant_id: uuid.UUID
+    name: str
+    cron_expression: str
+    entry_date_offset_days: int
+    lines: tuple[JournalTemplateLine, ...]
+    description: str | None = None
+    memo: str | None = None
+    enabled: bool = True
+    last_fired_at: datetime | None = None
+    next_run_at: datetime | None = None
     id: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -1498,6 +1586,27 @@ class PaymentMethodAnalytics:
     to_date: date
     total_amount: Decimal
     entries: tuple[PaymentMethodAnalyticsEntry, ...]
+
+
+@dataclass(frozen=True)
+class CustomerPaymentAnalyticsEntry:
+    """Per-customer payment timing and consistency (B14)."""
+
+    customer_id: uuid.UUID
+    customer_name: str | None
+    payment_count: int
+    total_paid: Decimal
+    avg_days_to_pay: Decimal | None
+    consistency_score: Decimal | None  # 0..1, None if < 2 payments
+
+
+@dataclass(frozen=True)
+class CustomerPaymentAnalytics:
+    """How promptly customers pay — avg days to pay and consistency (B14)."""
+
+    from_date: date
+    to_date: date
+    entries: tuple[CustomerPaymentAnalyticsEntry, ...]
 
 
 @dataclass(frozen=True)

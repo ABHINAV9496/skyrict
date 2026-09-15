@@ -116,6 +116,21 @@ class PaymentStatus(StrEnum):
     APPLIED = "applied"
 
 
+class PaymentIntentStatus(StrEnum):
+    """Lifecycle of an unmatched receipt in the payment-matching inbox (B7).
+
+    ``open`` has no suggestion above the candidate bar; ``candidate`` carries a
+    scored invoice suggestion (score >= 0.7). ``applied`` moved money onto an
+    invoice (within the 15-min undo window); ``dismissed`` was closed by a
+    human and is hidden from the inbox.
+    """
+
+    OPEN = "open"
+    CANDIDATE = "candidate"
+    APPLIED = "applied"
+    DISMISSED = "dismissed"
+
+
 class LeadStatus(StrEnum):
     """Native PostgreSQL enum backing ``erp_crm_leads.status``.
 

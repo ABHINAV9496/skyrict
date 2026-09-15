@@ -596,6 +596,25 @@ class PaymentMethodAnalyticsResponse(BaseModel):
     entries: list[PaymentMethodAnalyticsEntryResponse]
 
 
+class CustomerPaymentAnalyticsEntryResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    customer_id: uuid.UUID
+    customer_name: str | None
+    payment_count: int
+    total_paid: Decimal
+    avg_days_to_pay: Decimal | None
+    consistency_score: Decimal | None
+
+
+class CustomerPaymentAnalyticsResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    from_date: date
+    to_date: date
+    entries: list[CustomerPaymentAnalyticsEntryResponse]
+
+
 class AuditReadinessCheckResponse(BaseModel):
     model_config = _RESPONSE_CONFIG
 
@@ -632,3 +651,11 @@ class AuditLogSearchResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class VendorRefExtractionRequest(BaseModel):
+    reference: str
+
+
+class VendorRefExtractionResponse(BaseModel):
+    extracted: str | None = None

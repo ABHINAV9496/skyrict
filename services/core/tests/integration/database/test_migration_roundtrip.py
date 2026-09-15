@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 57 revisions, 0001..0057) -> core ``downgrade base`` (all the way back to
+(all 59 revisions, 0001..0059) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -21,10 +21,14 @@ Sentinel assertions probe one representative artefact of each migration:
 the native enums (0002/0004/0005), RLS policies (0001..0006), the seeded ERP
 permission keys (0006), ``erp_sequences`` (0006), the audit hash trigger (0006),
 ``current_tenant_id()`` (0001, shared with identity), the five
-approval-workflow tables with their RLS policies (0052, SKY-92), the finance
-budget-draft bridge tables + idempotency lock (0057, SKY-93), and the three
+approval-workflow tables with their RLS policies (0052, SKY-92), the three
 notification-center tables with their RLS policies and dedupe constraints
-(0055, SKY-93).
+(0055, SKY-93, renumbered from 0053 when dev's HR-AI-003 chain took 0053/0054),
+the HR-AI-004 planning permission and finance budget-draft bridge tables with
+their idempotency lock (0056/0057, SKY-93), ``erp_journal_templates`` with its
+RLS policy (0058, FIN-AUT-003 B5, renumbered from 0056 when dev's HR-AI-004
+chain took 0056/0057), and ``erp_payment_intents`` with its RLS policy and
+dedupe stamp (0059, FIN-AUT-003 B7).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -245,7 +249,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0057", f"head is {version}, expected 0057"
+            assert version == "0059", f"head is {version}, expected 0059"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1290,6 +1294,92 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 )
             ).scalar_one()
             assert line_fk == 1, "0057 must FK budget lines to their draft"
+
+            # 0058: recurring journal templates (FIN-AUT-003 B5) - the table,
+            # its RLS policy, the run-due scan index, and the offset check.
+            # (Renumbered from 0056 when dev's HR-AI-004 chain took 0056/0057.)
+            template_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_journal_templates')"))
+            ).scalar_one()
+            assert template_table is not None, "0058 must create erp_journal_templates"
+
+            template_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_journal_templates'"
+                    )
+                )
+            ).scalar_one()
+            assert template_policy == 1, "0058 must enable RLS on erp_journal_templates"
+
+            template_due_index = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_journal_templates' "
+                        "AND indexname = 'ix_erp_journal_templates_tenant_due'"
+                    )
+                )
+            ).scalar_one()
+            assert template_due_index == 1, "0058 must create the run-due scan index"
+
+            template_offset_check = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conrelid = 'public.erp_journal_templates'::regclass "
+                        "AND conname = 'ck_erp_journal_templates_entry_date_offset_days'"
+                    )
+                )
+            ).scalar_one()
+            assert template_offset_check == 1, "0058 must add the entry_date_offset_days check"
+
+            # 0059: payment-matching inbox (FIN-AUT-003 B7) - the table, RLS
+            # policy, dedupe partial-unique stamp, and the amount/status checks.
+            # (Renumbered from 0057 when dev's HR-AI-004 chain took 0056/0057.)
+            intent_table = (
+                await conn.execute(text("SELECT to_regclass('public.erp_payment_intents')"))
+            ).scalar_one()
+            assert intent_table is not None, "0059 must create erp_payment_intents"
+
+            intent_policy = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_policies "
+                        "WHERE schemaname = 'public' "
+                        "AND policyname = 'tenant_isolation_erp_payment_intents'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_policy == 1, "0059 must enable RLS on erp_payment_intents"
+
+            intent_dedupe = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'erp_payment_intents' "
+                        "AND indexname = 'uq_erp_payment_intents_source_ref' "
+                        "AND indexdef LIKE '%UNIQUE%'"
+                    )
+                )
+            ).scalar_one()
+            assert intent_dedupe == 1, "0059 must add the (tenant, source, source_ref) stamp"
+
+            for constraint in (
+                "ck_erp_payment_intents_amount",
+                "ck_erp_payment_intents_status",
+            ):
+                snip_intent_constraint = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM pg_constraint WHERE conname = :name"),
+                        {"name": constraint},
+                    )
+                ).scalar_one()
+                assert snip_intent_constraint == 1, f"0059 must add {constraint}"
     finally:
         await engine.dispose()
 
@@ -1317,6 +1407,8 @@ async def _assert_downgraded_to_base(url: str) -> None:
                 "public.erp_revenue_forecast",
                 "public.erp_documents",
                 "public.erp_document_versions",
+                "public.erp_journal_templates",
+                "public.erp_payment_intents",
                 "public.erp_ai_documents",
                 "public.erp_tax_summaries",
             ):

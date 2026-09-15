@@ -18,6 +18,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.api.deps import (
     get_finance_compliance_service,
@@ -28,6 +29,9 @@ from core.core.audit_events import (
     FINANCE_COMPLIANCE_ITEM_CREATED,
     FINANCE_COMPLIANCE_ITEM_UPDATED,
 )
+from core.core.logging import get_logger
+from core.core.permissions import ERP_COMPLIANCE_READ
+from core.db.session import get_db
 from core.domain.entities import ComplianceItem
 from core.domain.value_objects import ComplianceItemStatus, ComplianceRecurrence
 from core.features.finance.ports import AuditSink, FinanceWave4RepositoryPort
@@ -39,10 +43,83 @@ from core.features.finance.schemas_wave5 import (
 from skyrict_common.exceptions import NotFoundError, ValidationError
 from skyrict_common.schemas import ResponseEnvelope
 
+logger = get_logger("core.finance.compliance")
+
 router = APIRouter(prefix="/finance/compliance", tags=["finance-compliance"])
 
 require_compliance_read = require_permission("erp.compliance.read")
 require_compliance_write = require_permission("erp.compliance.write")
+
+
+async def emit_compliance_reminders(
+    db: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    items: list[ComplianceItem],
+) -> None:
+    """Emit compliance-due reminders via the notification center (SKY-93).
+
+    One best-effort notification per open obligation due within its lead
+    horizon, routed to holders of ``erp.compliance.read`` through the
+    mandatory ``compliance`` category.  The dedupe key
+    ``compliance:{obligation_id}:{due_on}`` delivers exactly once per
+    occurrence regardless of how often the ``/upcoming`` read is polled.
+
+    Severity is ``HIGH`` for overdue items and ``MEDIUM`` for upcoming ones.
+    The mandatory category forces in-app delivery; severity only drives
+    ranking and whether the row may later be collapsed into a digest (the
+    compliance category is never collapsed regardless of severity).
+
+    A producer failure must never break the read response (B34 precedent).
+    """
+    if not items:
+        return
+
+    from core.features.notifications.domain import (
+        NotificationDraft,
+        NotificationSeverity,
+        RecipientSpec,
+    )
+    from core.features.notifications.producer import NotificationProducer
+
+    today = date.today()
+    producer = NotificationProducer(db)
+    for item in items:
+        if item.status is not ComplianceItemStatus.OPEN:
+            continue
+        is_overdue = item.due_on < today
+        severity = NotificationSeverity.HIGH if is_overdue else NotificationSeverity.MEDIUM
+        status_label = "overdue" if is_overdue else "due"
+        title = f"{item.title} is {status_label}"
+        body = f"Compliance obligation '{item.title}' is {status_label} on {item.due_on.isoformat()}."
+        if item.description:
+            body += f" {item.description}"
+
+        draft = NotificationDraft(
+            dedupe_key=f"compliance:{item.id}:{item.due_on.isoformat()}",
+            event_type="finance.compliance_reminder",
+            category="compliance",
+            module="compliance",
+            severity=severity,
+            title=title,
+            body=body,
+            recipients=RecipientSpec.from_permissions(ERP_COMPLIANCE_READ),
+            relevance_key=ERP_COMPLIANCE_READ,
+            payload={
+                "item_id": str(item.id),
+                "due_on": item.due_on.isoformat(),
+                "obligation_type": item.obligation_type,
+            },
+        )
+        try:
+            await producer.emit(draft)
+        except Exception:
+            logger.exception(
+                "compliance.notification.emit_failed",
+                tenant_id=str(tenant_id),
+                item_id=str(item.id),
+                message="compliance reminder emission failed; response unaffected",
+            )
 
 
 def _tenant_id(current_user: dict[str, Any]) -> uuid.UUID:
@@ -235,8 +312,14 @@ async def list_upcoming_compliance(
     lead_days: int = Query(default=7, ge=0, le=365),
     current_user: dict[str, Any] = Depends(require_compliance_read),
     svc: FinanceComplianceService = Depends(get_finance_compliance_service),
+    db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[list[ComplianceItemResponse]]:
     items = await svc.list_upcoming(_tenant_id(current_user), lead_days)
+    await emit_compliance_reminders(
+        db,
+        tenant_id=_tenant_id(current_user),
+        items=items,
+    )
     return ResponseEnvelope(data=[ComplianceItemResponse.model_validate(item) for item in items])
 
 

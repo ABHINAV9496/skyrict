@@ -29,8 +29,10 @@ from sqlalchemy import func, select
 from core.core.permissions import ERP_FINANCE_READ, ERP_INVENTORY_READ, WILDCARD
 from core.core.tenant_context import TenantContext
 from core.db.session import async_session_factory
-from core.domain.entities import WorkingCapitalAlert
+from core.domain.entities import ComplianceItem, WorkingCapitalAlert
+from core.domain.value_objects import ComplianceItemStatus
 from core.features.finance.automation import emit_working_capital_notification
+from core.features.finance.compliance_calendar import emit_compliance_reminders
 from core.features.notifications.batching import NotificationBatcher
 from core.features.notifications.domain import (
     NotificationDraft,
@@ -708,5 +710,214 @@ class TestB34Hook:
                 )
             )
             # A healthy ratio never emits - even on repeat reads.
+            assert count == 0
+            TenantContext.reset()
+
+
+async def seed_compliance_world(session: object) -> dict[str, str]:
+    """Seed one tenant with a compliance-read holder + a user with no compliance access.
+
+    Returns tenant/compliance_user/no_access_user ids for the test.
+    """
+    tenant = uuid.uuid4()
+    compliance_user = uuid.uuid4()  # holds erp.compliance.read
+    no_access_user = uuid.uuid4()  # holds erp.inventory.read only
+    compliance_role = uuid.uuid4()
+    inventory_role = uuid.uuid4()
+
+    s = session  # type: ignore[assignment]
+
+    s.add(
+        TenantModel(
+            id=tenant,
+            name="Compliance Test Tenant",
+            slug=f"compliance-{tenant.hex[:8]}",
+            plan_tier="free",
+            is_active=True,
+        )
+    )
+    await s.flush()  # type: ignore[attr-defined]
+    s.add_all(
+        [
+            CoreRoleModel(
+                tenant_id=tenant,
+                id=compliance_role,
+                name="Compliance Manager",
+                permissions=["erp.compliance.read"],
+            ),
+            CoreRoleModel(
+                tenant_id=tenant,
+                id=inventory_role,
+                name="Inventory Viewer",
+                permissions=["erp.inventory.read"],
+            ),
+        ]
+    )
+    await s.flush()  # type: ignore[attr-defined]
+    s.add_all(
+        [
+            CoreUserRoleModel(
+                tenant_id=tenant,
+                id=uuid.uuid4(),
+                user_id=compliance_user,
+                role_id=compliance_role,
+            ),
+            CoreUserRoleModel(
+                tenant_id=tenant,
+                id=uuid.uuid4(),
+                user_id=no_access_user,
+                role_id=inventory_role,
+            ),
+        ]
+    )
+    await s.commit()  # type: ignore[attr-defined]
+    return {
+        "tenant": str(tenant),
+        "compliance_user": str(compliance_user),
+        "no_access_user": str(no_access_user),
+    }
+
+
+class TestComplianceReminderHook:
+    @pytest.mark.asyncio
+    async def test_open_item_emits_for_compliance_readers_once(
+        self, migrated_schema: None
+    ) -> None:
+        async with async_session_factory() as session:
+            world = await seed_compliance_world(session)
+            tenant_id = uuid.UUID(world["tenant"])
+            TenantContext.set(world["tenant"])
+
+            item = ComplianceItem(
+                tenant_id=tenant_id,
+                title="VAT return",
+                due_on=date(2026, 1, 15),
+                obligation_type="tax",
+                lead_days=14,
+                created_by=uuid.UUID(world["compliance_user"]),
+                id=uuid.uuid4(),
+                status=ComplianceItemStatus.OPEN,
+            )
+
+            await emit_compliance_reminders(
+                session,
+                tenant_id=tenant_id,
+                items=[item],
+            )
+            await session.commit()
+
+            compliance_rows = await session.scalars(
+                select(ErpNotificationModel).where(
+                    ErpNotificationModel.tenant_id == tenant_id,
+                    ErpNotificationModel.recipient_user_id
+                    == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key
+                    == f"compliance:{item.id}:2026-01-15",
+                )
+            )
+            rows = list(compliance_rows)
+            assert len(rows) == 1
+            assert rows[0].category == "compliance"
+            assert rows[0].severity == NotificationSeverity.MEDIUM.value
+            assert rows[0].title == "VAT return is due"
+
+            # Re-emit dedupes: no second row.
+            await emit_compliance_reminders(
+                session,
+                tenant_id=tenant_id,
+                items=[item],
+            )
+            await session.commit()
+            count = await session.scalar(
+                select(func.count())
+                .select_from(ErpNotificationModel)
+                .where(
+                    ErpNotificationModel.tenant_id == tenant_id,
+                    ErpNotificationModel.recipient_user_id
+                    == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key
+                    == f"compliance:{item.id}:2026-01-15",
+                )
+            )
+            assert count == 1
+
+            # No-access user gets nothing (no erp.compliance.read).
+            count_b = await session.scalar(
+                select(func.count())
+                .select_from(ErpNotificationModel)
+                .where(
+                    ErpNotificationModel.tenant_id == tenant_id,
+                    ErpNotificationModel.recipient_user_id
+                    == uuid.UUID(world["no_access_user"]),
+                    ErpNotificationModel.dedupe_key
+                    == f"compliance:{item.id}:2026-01-15",
+                )
+            )
+            assert count_b == 0
+            TenantContext.reset()
+
+    @pytest.mark.asyncio
+    async def test_overdue_item_emits_high_severity(
+        self, migrated_schema: None
+    ) -> None:
+        async with async_session_factory() as session:
+            world = await seed_compliance_world(session)
+            tenant_id = uuid.UUID(world["tenant"])
+            TenantContext.set(world["tenant"])
+
+            item = ComplianceItem(
+                tenant_id=tenant_id,
+                title="Annual return",
+                due_on=date(2025, 12, 31),
+                obligation_type="regulatory",
+                lead_days=30,
+                created_by=uuid.UUID(world["compliance_user"]),
+                id=uuid.uuid4(),
+                status=ComplianceItemStatus.OPEN,
+            )
+
+            await emit_compliance_reminders(
+                session,
+                tenant_id=tenant_id,
+                items=[item],
+            )
+            await session.commit()
+
+            row = await session.scalar(
+                select(ErpNotificationModel).where(
+                    ErpNotificationModel.tenant_id == tenant_id,
+                    ErpNotificationModel.recipient_user_id
+                    == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key
+                    == f"compliance:{item.id}:2025-12-31",
+                )
+            )
+            assert row is not None
+            assert row.severity == NotificationSeverity.HIGH.value
+            assert row.title == "Annual return is overdue"
+            assert "2025-12-31" in row.body
+            TenantContext.reset()
+
+    @pytest.mark.asyncio
+    async def test_empty_items_emits_nothing(
+        self, migrated_schema: None
+    ) -> None:
+        async with async_session_factory() as session:
+            world = await seed_compliance_world(session)
+            tenant_id = uuid.UUID(world["tenant"])
+            TenantContext.set(world["tenant"])
+
+            await emit_compliance_reminders(
+                session,
+                tenant_id=tenant_id,
+                items=[],
+            )
+            await session.commit()
+
+            count = await session.scalar(
+                select(func.count())
+                .select_from(ErpNotificationModel)
+                .where(ErpNotificationModel.tenant_id == tenant_id)
+            )
             assert count == 0
             TenantContext.reset()

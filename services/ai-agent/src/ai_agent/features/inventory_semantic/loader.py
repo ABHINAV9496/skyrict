@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 import structlog
 
+from ai_agent.core.core_http import CoreHttpTransport
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.features.inventory_semantic.snapshot import ProductSnapshot
 
@@ -39,27 +40,8 @@ class _Page:
         self.total_pages = total_pages
 
 
-class ProductSnapshotLoader:
+class ProductSnapshotLoader(CoreHttpTransport):
     """Paginate core's product catalog into snapshot rows for one tenant."""
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        bearer_token: str,
-        tenant_slug: str,
-        timeout_seconds: float = 10.0,
-    ) -> None:
-        if not base_url.strip().lower().startswith(("http://", "https://")):
-            raise ValueError("base_url must be an http(s) URL")
-        self._base_url = base_url.rstrip("/")
-        self._bearer_token = bearer_token
-        self._tenant_slug = tenant_slug
-        self._timeout_seconds = max(timeout_seconds, 1.0)
-
-    def _create_client(self) -> httpx.AsyncClient:
-        """Create the per-call HTTP client (overridable seam for tests)."""
-        return httpx.AsyncClient(timeout=self._timeout_seconds)
 
     async def load_all(self) -> list[ProductSnapshot]:
         """Fetch every product row; transport failures are typed 503s."""
@@ -77,16 +59,12 @@ class ProductSnapshotLoader:
         return products
 
     async def _fetch_page(self, page: int) -> _Page:
-        headers = {
-            "Authorization": f"Bearer {self._bearer_token}",
-            "X-Tenant-Slug": self._tenant_slug,
-        }
         try:
             async with self._create_client() as client:
                 response = await client.get(
                     f"{self._base_url}{_CATALOG_PATH}",
                     params={"page": page, "page_size": _PAGE_SIZE},
-                    headers=headers,
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
         except httpx.HTTPStatusError as exc:

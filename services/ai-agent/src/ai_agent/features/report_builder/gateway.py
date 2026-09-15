@@ -34,6 +34,7 @@ from typing import Any, Protocol
 import httpx
 import structlog
 
+from ai_agent.core.core_http import CoreHttpTransport
 from ai_agent.core.exceptions import (
     AiUnavailableError,
     AuthorizationError,
@@ -95,33 +96,8 @@ class ReportGatewayPort(Protocol):
     ) -> CreatedReport: ...
 
 
-class HttpReportGateway:
+class HttpReportGateway(CoreHttpTransport):
     """One request's gateway: forwards the user's JWT + tenant slug to Core."""
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        bearer_token: str,
-        tenant_slug: str,
-        timeout_seconds: float = 10.0,
-    ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._bearer_token = bearer_token
-        self._tenant_slug = tenant_slug
-        self._timeout_seconds = timeout_seconds
-
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._bearer_token}",
-            # Core resolves tenants via subdomain in prod, X-Tenant-Slug in
-            # dev/test; forwarding the slug keeps behavior identical either way.
-            "X-Tenant-Slug": self._tenant_slug,
-        }
-
-    def _create_client(self) -> httpx.AsyncClient:
-        """Create the per-call HTTP client (overridable seam for tests)."""
-        return httpx.AsyncClient(timeout=self._timeout_seconds)
 
     async def list_definitions(self) -> list[ReportDefinition]:
         try:

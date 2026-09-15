@@ -36,6 +36,9 @@ HR_AI_ANOMALY_DISMISSED = "hr.ai.anomaly.dismissed"
 HR_AI_ANOMALY_RESOLVED = "hr.ai.anomaly.resolved"
 HR_AI_COMPLIANCE_ACKNOWLEDGED = "hr.ai.compliance.acknowledged"
 HR_AI_COMPLIANCE_RESOLVED = "hr.ai.compliance.resolved"
+# SKY-93 (HR-AI-004, Commit 4): an L4 what-if scenario was exported to Finance
+# as a proposed budget draft.
+HR_AI_L4_BUDGET_DRAFT_CREATED = "hr.ai.l4.budget_draft.created"
 # HR-AI-003: L3 analytics narrative generation (every access audited, aggregates only).
 HR_AI_L3_PAYROLL_COST_NARRATED = "hr.ai.l3.payroll_cost.narrated"
 HR_AI_L3_LEAVE_PAY_CORRELATED = "hr.ai.l3.leave_pay.correlated"
@@ -130,6 +133,7 @@ CATALOG: tuple[str, ...] = (
     HR_AI_ANOMALY_RESOLVED,
     HR_AI_COMPLIANCE_ACKNOWLEDGED,
     HR_AI_COMPLIANCE_RESOLVED,
+    HR_AI_L4_BUDGET_DRAFT_CREATED,
     HR_AI_L3_PAYROLL_COST_NARRATED,
     HR_AI_L3_LEAVE_PAY_CORRELATED,
     HR_AI_L3_COMPLIANCE_DIGESTED,
@@ -213,6 +217,7 @@ AUDIT_EVENT_MODULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             HR_AI_ANOMALY_RESOLVED,
             HR_AI_COMPLIANCE_ACKNOWLEDGED,
             HR_AI_COMPLIANCE_RESOLVED,
+            HR_AI_L4_BUDGET_DRAFT_CREATED,
             HR_AI_L3_PAYROLL_COST_NARRATED,
             HR_AI_L3_LEAVE_PAY_CORRELATED,
             HR_AI_L3_COMPLIANCE_DIGESTED,

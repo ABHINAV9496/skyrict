@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from core.features.ai_hr.compliance_service import ComplianceService
     from core.features.ai_hr.eval_repository import EvalRunRepository
     from core.features.ai_hr.l3_repository import L3Repository
+    from core.features.ai_hr.l4_repository import PayrollBaseRepository
     from core.features.ai_hr.pattern_data_repository import (
         AiHrPatternDataRepository as PatternDataRepository,
     )
@@ -159,7 +160,7 @@ def require_any_permission(*permissions: str) -> Callable[[], Awaitable[dict[str
     """Dependency factory - grants access when ANY of ``permissions`` is held.
 
     Used for actions the spec allows under either of two keys (e.g. cancelling
-    a leave request under ``erp.hr.write`` OR ``erp.hr.approve``, §7). Each
+    a leave request under ``erp.hr.write`` OR ``erp.hr.approve``, Â§7). Each
     alternative resolves through the same DB-backed grant path as
     :func:`require_permission` and fails closed with ``PermissionDeniedError``
     when none is held.
@@ -210,7 +211,7 @@ def require_all_permissions(*permissions: str) -> Callable[[], Awaitable[dict[st
 
 
 def resolve_permission(permission: str) -> Callable[[], Awaitable[bool]]:
-    """Dependency factory — returns whether the caller holds a permission.
+    """Dependency factory â€” returns whether the caller holds a permission.
 
     Unlike :func:`require_permission`, this NEVER raises: it resolves the user's
     grants and returns a boolean so a route can gate optional data (e.g.
@@ -294,7 +295,7 @@ class _NoopIdentityUserPort:
     a hire may reference a nonexistent or cross-tenant user id.
 
     This is a recorded deviation, not an oversight - see the callout in
-    ``docs/modules/hr-payroll.md`` §2.4. The security matrix's "validated"
+    ``docs/modules/hr-payroll.md`` Â§2.4. The security matrix's "validated"
     row for ``user_id`` is green ONLY under this deviation; no test asserts
     the no-op, and the swap must land with the identity-integration ticket.
     """
@@ -316,7 +317,7 @@ def get_hr_repo(db: AsyncSession = Depends(get_db)) -> HrRepository:
 
 
 def make_core_audit_service(db: AsyncSession) -> CoreAuditService:
-    """Plain factory — build :class:`AuditService` without FastAPI resolution.
+    """Plain factory â€” build :class:`AuditService` without FastAPI resolution.
 
     Shared by the FastAPI dependency below and the background payroll
     automation worker, which constructs its own services on a per-tick session
@@ -406,7 +407,7 @@ def make_payroll_service(
     finance: PayrollAccrualPort | None = None,
     payslip_notifier: PayslipApprovedNotifierPort | None = None,
 ) -> PayrollService:
-    """Plain factory — build :class:`PayrollService` without FastAPI resolution.
+    """Plain factory â€” build :class:`PayrollService` without FastAPI resolution.
 
     Used by the FastAPI dependency below and by the payroll automation worker
     (which constructs services on its own per-tick session). When ``audit`` is
@@ -491,7 +492,7 @@ def get_payroll_scheduler_service(
     db: AsyncSession = Depends(get_db),
     audit: CoreAuditService = Depends(get_core_audit_service),
 ) -> object:
-    """Composition root for payroll schedules (HR-AUT-001 §5.8)."""
+    """Composition root for payroll schedules (HR-AUT-001 Â§5.8)."""
     from core.features.payroll_automation.schedules import PayrollSchedulerService
     from core.features.payroll_automation.schedules_repository import (
         PostgresPayrollScheduleRepository,
@@ -630,6 +631,13 @@ def get_pattern_data_repository(db: AsyncSession = Depends(get_db)) -> PatternDa
     return AiHrPatternDataRepository(db)
 
 
+def get_l4_payroll_repository(db: AsyncSession = Depends(get_db)) -> PayrollBaseRepository:
+    """Composition root for the HR-AI-004 payroll-base snapshot (SKY-93)."""
+    from core.features.ai_hr.l4_repository import PayrollBaseRepository
+
+    return PayrollBaseRepository(db)
+
+
 def get_l3_repository(db: AsyncSession = Depends(get_db)) -> L3Repository:
     """Composition root for the L3 payroll-cost source data repository (HR-AI-003)."""
     from core.features.ai_hr.l3_repository import L3Repository
@@ -644,7 +652,7 @@ async def get_hr_ai_individual(
     """True when the caller may view individual (L2) attrition scores.
 
     ``erp.hr.ai.individual`` is granted only to the owner and a dedicated exec
-    role (spec §3) - NOT org_admin/dept_manager. The attrition endpoint uses
+    role (spec Â§3) - NOT org_admin/dept_manager. The attrition endpoint uses
     this to downgrade to an aggregates-only (L1) 403 body when absent.
     """
     from core.core.permissions import ERP_HR_AI_INDIVIDUAL
@@ -672,7 +680,7 @@ class _PayrollDefaultCurrencyPort:
         try:
             settings = await self._repo.get_settings(tenant_id)
         except (OperationalError, ProgrammingError):
-            # Tenant predates payroll table/migration — degrade gracefully
+            # Tenant predates payroll table/migration â€” degrade gracefully
             return None
         code = getattr(settings, "default_currency", None)
         return code or None
@@ -768,7 +776,7 @@ def get_payroll_service(
     """Payroll service with ``LeaveService`` injected as the leave ledger.
 
     ``LeaveService`` implements the whole ``LeaveLedgerPort`` (approved unpaid
-    leave days, accrual-type catalogue, idempotent annual accrual — Rule 4), so
+    leave days, accrual-type catalogue, idempotent annual accrual â€” Rule 4), so
     the payroll feature never imports the HR feature directly. The HR repository
     is shared (same ``db`` session), keeping payroll-driven accrual in the same
     transaction as the compute. The request-scoped ``FinanceService`` is passed
@@ -1258,7 +1266,7 @@ async def require_entity_linked_read(
     current_user: dict[str, Any],
     db: AsyncSession,
 ) -> None:
-    """Entity-link rule (SKY-87 §7.3): a linked document additionally needs the
+    """Entity-link rule (SKY-87 Â§7.3): a linked document additionally needs the
     owning module's read key.
 
     ``module_ref`` is read AFTER ``erp.documents.read`` resolves (the route

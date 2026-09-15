@@ -38,6 +38,7 @@ from core.core.config import settings
 from core.core.constants import (
     ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE,
     AR_ACCOUNT_CODE,
+    BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
     COGS_ACCOUNT_CODE,
     DEDUCTIONS_PAYABLE_ACCOUNT_CODE,
     INVENTORY_ASSET_ACCOUNT_CODE,
@@ -54,6 +55,8 @@ from core.core.constants import (
 from core.domain.entities import (
     ArAging,
     BalanceSheet,
+    BudgetDraft,
+    BudgetDraftLine,
     ChartOfAccount,
     ExchangeRate,
     FiscalPeriod,
@@ -93,7 +96,7 @@ if TYPE_CHECKING:
         TenantDefaultCurrencyPort,
     )
 
-from core.features.finance.ports import PayrollAccrualOutcome
+from core.features.finance.ports import BudgetDraftOutcome, PayrollAccrualOutcome
 
 # Maximum scale for line amounts, kept in sync with the Numeric(18, 4) columns.
 _MONEY_QUANTUM = Decimal("0.0001")
@@ -1001,6 +1004,67 @@ class FinanceService:
             return PayrollAccrualOutcome(already_booked=True)
         assert created.id is not None
         return PayrollAccrualOutcome(entry_id=created.id)
+
+    # ------------------------------------------------------------------
+    # Workforce-plan budget bridge (what-if scenario -> proposed budget draft)
+    # (HR-AI-004, SKY-93, Commit 4)
+    # ------------------------------------------------------------------
+
+    async def create_workforce_budget_draft(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        scenario_name: str,
+        base_as_of: date,
+        horizon: int,
+        currency: str,
+        salary_total: Decimal,
+        benefit_total: Decimal,
+        grand_total: Decimal,
+        created_by: uuid.UUID,
+    ) -> BudgetDraftOutcome:
+        """Materialize a frozen L4 what-if scenario as a proposed budget draft.
+
+        This creates a *planning artifact* in ``erp_budget_drafts``
+        (source='workforce_plan', source_ref=scenario_id), not a journal
+        entry: a what-if projection must not enter the JE inbox, which is
+        reserved for booked transactions (a strict line between planned
+        figures and actuals). The draft carries two lines — salary and
+        benefits (line 2 = grand_total - salary, i.e. the benefits leg), the
+        natural mirror of the scenario's summary. The ``UNIQUE (tenant_id,
+        source, source_ref)`` lock makes a replayed export idempotent: a
+        retry reports ``already_booked`` instead of duplicating the draft.
+        """
+        draft = BudgetDraft(
+            tenant_id=tenant_id,
+            scenario_id=scenario_id,
+            scenario_name=scenario_name,
+            status="draft",
+            source=BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
+            source_ref=str(scenario_id),
+            currency=currency,
+            horizon=horizon,
+            base_as_of=base_as_of,
+            salary_total=salary_total,
+            benefit_total=benefit_total,
+            grand_total=grand_total,
+            created_by=created_by,
+            lines=(
+                BudgetDraftLine(line_no=1, label="Salary", amount=salary_total),
+                BudgetDraftLine(line_no=2, label="Benefits", amount=benefit_total),
+            ),
+        )
+        try:
+            created = await self._repo.create_budget_draft(draft)
+        except ConflictError:
+            await self._repo.session.rollback()
+            existing = await self._repo.get_workforce_budget_draft_id(
+                tenant_id=tenant_id, source_ref=str(scenario_id)
+            )
+            return BudgetDraftOutcome(draft_id=existing, already_booked=True)
+        assert created.id is not None
+        return BudgetDraftOutcome(draft_id=created.id)
 
     # ------------------------------------------------------------------
     # Reports (derived from posted lines — never stored)

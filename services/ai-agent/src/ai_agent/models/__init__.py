@@ -36,6 +36,7 @@ from ai_agent.models.ai_follow_up_suggestion import AiFollowUpSuggestionModel
 from ai_agent.models.ai_guardian_event import AiGuardianEventModel
 from ai_agent.models.ai_guardian_report import AiGuardianReportModel
 from ai_agent.models.ai_inv_item_embedding import AiInvItemEmbeddingModel
+from ai_agent.models.ai_l4_scenario import AiL4ScenarioModel
 from ai_agent.models.ai_lead_score import AiLeadScoreModel
 from ai_agent.models.ai_query_cache import AiQueryCacheModel
 from ai_agent.models.ai_query_log import AiQueryLogModel
@@ -53,6 +54,7 @@ from ai_agent.models.graph_checkpoint import (
     GraphCheckpointModel,
     GraphCheckpointWriteModel,
 )
+from ai_agent.models.l3_narrative import AiL3NarrativeModel
 from ai_agent.models.tenant import TenantModel
 
 __all__ = [
@@ -76,6 +78,8 @@ __all__ = [
     "AiGuardianEventModel",
     "AiGuardianReportModel",
     "AiInvItemEmbeddingModel",
+    "AiL3NarrativeModel",
+    "AiL4ScenarioModel",
     "AiLeadScoreModel",
     "AiQueryCacheModel",
     "AiQueryLogModel",

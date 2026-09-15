@@ -164,6 +164,9 @@ JOURNAL_SOURCE_PAYROLL = "payroll"
 # UNIQUE (tenant, source, source_ref) lock makes every scheduled occurrence
 # generate exactly once.
 JOURNAL_SOURCE_TEMPLATE = "journal_template"
+# HR-AI-004 (SKY-93, Commit 4): idempotency source key for proposed budget
+# drafts exported from the L4 what-if planner (erp_budget_drafts).
+BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN = "workforce_plan"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

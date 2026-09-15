@@ -84,6 +84,7 @@ const PERMISSION_LABEL: Record<string, string> = {
     "erp.payroll.read": "Payroll",
     "erp.payroll.approve": "Payroll Approvals",
     "erp.payroll.ai.read": "Payroll Automation",
+    "erp.hr.ai.planning": "HR Planning",
 };
 
 /** Blocked state for a user who can reach a module but not a specific area. */

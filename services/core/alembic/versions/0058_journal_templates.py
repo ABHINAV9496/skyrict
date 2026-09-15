@@ -16,10 +16,11 @@ Follows core's tenancy convention: composite ``(tenant_id, id)`` PK,
 ``created_at``/``updated_at``, RLS via ``public.current_tenant_id()``.
 
 Renumbered from ``0053`` when dev's HR-AI-003 L3 migrations occupied 0053/0054,
-then to ``0056`` when dev's SKY-93 notification-center chain took 0055.
+then to ``0056`` when dev's SKY-93 notification-center chain took 0055, then to
+``0058`` when dev's HR-AI-004 chain took 0056/0057.
 
-Revision ID: 0056
-Revises: 0055
+Revision ID: 0058
+Revises: 0057
 Create Date: 2026-09-14
 """
 
@@ -28,8 +29,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0056"
-down_revision = "0055"
+revision = "0058"
+down_revision = "0057"
 branch_labels = None
 depends_on = None
 

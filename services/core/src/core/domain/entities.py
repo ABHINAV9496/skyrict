@@ -1625,3 +1625,46 @@ class AuditReadiness:
 
     ready: bool
     checks: tuple[AuditReadinessCheck, ...]
+
+
+# ---------------------------------------------------------------------------
+# HR-AI-004 L4 budget draft (SKY-93, Commit 4) — proposed budget from what-if
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BudgetDraftLine:
+    """One cost-component line of a proposed budget draft."""
+
+    line_no: int
+    label: str
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class BudgetDraft:
+    """A proposed budget draft linked to a L4 what-if scenario.
+
+    This is a *planning artifact*, not a ledger transaction.  Status
+    lifecycle: ``draft`` → ``pending`` → ``approved``.  ``(source,
+    source_ref)`` is the idempotency stamp — one draft per scenario per
+    tenant.
+    """
+
+    tenant_id: uuid.UUID
+    scenario_id: uuid.UUID
+    scenario_name: str
+    status: str  # draft | pending | approved
+    source: str
+    source_ref: str
+    currency: str
+    horizon: int
+    base_as_of: date
+    salary_total: Decimal
+    benefit_total: Decimal
+    grand_total: Decimal
+    created_by: uuid.UUID
+    lines: tuple[BudgetDraftLine, ...] = ()
+    id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

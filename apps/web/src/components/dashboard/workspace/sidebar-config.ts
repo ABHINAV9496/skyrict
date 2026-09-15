@@ -340,6 +340,12 @@ export const erpNavGroups: NavGroup[] = [
                         permission: "erp.hr.ai.read",
                     },
                     {
+                        href: "/dashboard/erp/hr/planning",
+                        label: "Planning",
+                        icon: TrendingUp,
+                        permission: "erp.hr.ai.planning",
+                    },
+                    {
                         href: "/dashboard/erp/hr/compliance",
                         label: "Compliance",
                         icon: ShieldCheck,

@@ -242,6 +242,8 @@ class InventoryRepositoryPort(Protocol):
         ref_id: str,
         warehouse_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID,
     ) -> StockMovement | None: ...
 
     async def list_movements(

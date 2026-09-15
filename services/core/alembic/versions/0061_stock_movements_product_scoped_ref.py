@@ -19,8 +19,8 @@ The fix adds ``product_id`` to the constraint, making the key per-line as the
 model docstring already intended.  The downgrade reverts to the original
 four-column key.
 
-Revision ID: 0060
-Revises: 0059
+Revision ID: 0061
+Revises: 0060
 Create Date: 2026-09-15
 """
 
@@ -28,8 +28,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0060"
-down_revision = "0059"
+revision = "0061"
+down_revision = "0060"
 branch_labels = None
 depends_on = None
 

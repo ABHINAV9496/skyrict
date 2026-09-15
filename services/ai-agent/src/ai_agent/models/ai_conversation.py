@@ -45,6 +45,13 @@ class AiConversation(Base):
     title_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    # Rolling summary of pre-window conversation messages (SKY-100). Kept out
+    # of _conversation_to_dict - internal context-compaction state, never
+    # surfaced to the conversation UI/API.
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    summary_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

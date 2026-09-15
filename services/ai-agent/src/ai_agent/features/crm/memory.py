@@ -7,6 +7,12 @@ Orchestrates the LLM-based memory pipeline:
 
 The service uses the same ``LlmRouter`` as the rest of the AI agent - no new
 LLM dependency. Fact extraction uses a cheap model call (temperature=0.0).
+
+SKY-100: when an optional ``EmbeddingProvider`` is wired, the service embeds
+each query and fact at store time and passes the query embedding at recall
+time so the repository can rank by cosine similarity. When no provider is
+wired, the store rows and recall path stay byte-identical to pre-embedding
+behavior (trigram/recency fallback).
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from ai_agent.core.providers.base import LlmRequest
 if TYPE_CHECKING:
     import uuid
 
+    from ai_agent.core.embedding import EmbeddingProvider
     from ai_agent.core.llm_router import LlmRouter
     from ai_agent.db.memory_repository import MemoryRepository
 
@@ -50,9 +57,11 @@ class MemoryService:
         *,
         llm_router: LlmRouter,
         repo: MemoryRepository,
+        embedding_provider: EmbeddingProvider | None = None,
     ) -> None:
         self._llm = llm_router
         self._repo = repo
+        self._embedding_provider = embedding_provider
 
     async def recall_context(
         self,
@@ -65,15 +74,19 @@ class MemoryService:
 
         Returns an empty string if no memories are relevant.
         """
+        vectors, _ = await self._embed_texts([query])
+        query_embedding = vectors[0] if vectors else None
         episodic = await self._repo.recall_episodic(
             tenant_id=tenant_id,
             user_id=user_id,
             query=query,
+            query_embedding=query_embedding,
         )
         semantic = await self._repo.recall_semantic(
             tenant_id=tenant_id,
             user_id=user_id,
             query=query,
+            query_embedding=query_embedding,
         )
 
         if not episodic and not semantic:
@@ -107,8 +120,12 @@ class MemoryService:
         """Store the conversation turn and extract facts.
 
         This is fire-and-forget - failures are logged but never propagate.
+        Embedding failures degrade to unembedded rows, never lost data.
         """
         try:
+            # 0. Best-effort embedding of the query (SKY-100).
+            query_embedding, embedding_model = await self._embed_texts([query])
+
             # 1. Store episodic memory.
             await self._repo.store_episodic(
                 tenant_id=tenant_id,
@@ -116,15 +133,22 @@ class MemoryService:
                 query_text=query,
                 response_summary=response[:500],
                 module=module,
+                embedding=query_embedding[0] if query_embedding else None,
+                embedding_model=embedding_model,
             )
 
             # 2. Extract and store semantic facts.
             facts = await self._extract_facts(query, response)
             if facts:
+                fact_embeddings, _ = await self._embed_texts(
+                    [str(f.get("fact", "")) for f in facts]
+                )
                 await self._repo.store_semantic_facts(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     facts=facts,
+                    embeddings=fact_embeddings,
+                    embedding_model=embedding_model,
                 )
         except Exception:
             logger.warning(
@@ -133,6 +157,25 @@ class MemoryService:
                 user_id=str(user_id),
                 exc_info=True,
             )
+
+    async def _embed_texts(self, texts: list[str]) -> tuple[list[list[float]], str | None]:
+        """Embed a batch, returning (vectors, model). Best-effort: a failure
+        returns empty vectors so callers keep their unembedded fallback."""
+        provider = self._embedding_provider
+        if provider is None or not texts:
+            return [], None
+        try:
+            result = await provider.embed(texts)
+            if not result.vectors:
+                return [], None
+            return result.vectors, result.model_used
+        except Exception:
+            logger.warning(
+                "memory.embed_failed",
+                provider=provider.name,
+                exc_info=True,
+            )
+            return [], None
 
     async def _extract_facts(
         self,

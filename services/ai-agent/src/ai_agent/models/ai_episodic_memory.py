@@ -1,8 +1,9 @@
 """ai_episodic_memory - query-response pairs with 90-day TTL.
 
-Stores every query-response interaction for contextual recall. Embeddings and
-vector search are deferred to SKY-60 (chat citations) - this table only
-persists the text and metadata for now.
+Stores every query-response interaction for contextual recall. Rows carry an
+optional 768-dim pgvector embedding (written when an embedding provider is
+configured) so recall can rank by semantic similarity; rows without an
+embedding still participate through trigram/recency recall.
 
 Rows expire after 90 days and are cleaned up by the hourly sweep job. The
 ``expires_at`` column is set at insert time and indexed for efficient cleanup
@@ -14,6 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -42,6 +44,12 @@ class AiEpisodicMemoryModel(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     response_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    # Optional embedding (SKY-100): NULL until an embedding provider is
+    # configured and the row is stored; partial ivfflat index in migration
+    # 0027 covers only non-NULL rows.
+    embedding = mapped_column(Vector(768), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_dims: Mapped[int | None] = mapped_column(Integer, nullable=True)
     module: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tokens_input: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tokens_output: Mapped[int | None] = mapped_column(Integer, nullable=True)

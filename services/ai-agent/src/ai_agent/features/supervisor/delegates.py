@@ -31,10 +31,13 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import structlog
 
+from ai_agent.cache.response_cache import ResponseCache, tool_cache_key
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
 from ai_agent.features.finance_intents.schemas import INTENT_META
+from ai_agent.features.memory_compaction.budget import ContextBudgetManager
+from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
     CRM_SYSTEM_PROMPT,
@@ -80,6 +83,26 @@ logger = structlog.get_logger("ai_agent.supervisor.delegates")
 # Catalogue reads are capped the same way the nl_query gateway caps them.
 _FORECAST_CATALOG_LIMIT = 200
 _FORECAST_ROWS_SHOWN = 3
+
+# Per-agent context budgeting for every delegate prompt builder (SKY-100).
+# Each delegator trims the live context it assembles to its token budget
+# instead of relying on ad-hoc character caps, so a bounded context is the
+# rule across all module agents - not just the supervisor history path.
+_BUDGET = ContextBudgetManager()
+
+# Stable-prefix prompt builders for the two delegates whose module prompt has
+# a dynamic live-data tail (SKY-100). CRM and Finance keep the module persona
+# as a byte-stable leading system-prompt prefix and append only the live
+# context after it, so provider KV caches can reuse the leading tokens across
+# turns. Reuse telemetry is emitted per route.
+_CRM_PROMPT_BUILDER = StablePromptBuilder(
+    prefix=CRM_SYSTEM_PROMPT,
+    route="crm_assistant",
+)
+_FINANCE_PROMPT_BUILDER = StablePromptBuilder(
+    prefix=FINANCE_SYSTEM_PROMPT,
+    route="finance_assistant",
+)
 
 
 class RagSearchPort(Protocol):
@@ -172,7 +195,6 @@ class InventoryMonitorDelegator:
         "replenish",
         "next month",
     )
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -203,9 +225,7 @@ class InventoryMonitorDelegator:
                 yield delta
             return
 
-        context_text = "\n".join(context_parts)
-        if len(context_text) > self._MAX_CONTEXT_CHARS:
-            context_text = context_text[: self._MAX_CONTEXT_CHARS] + "…"
+        context_text = _BUDGET.trim_to_budget(agent=AGENT_INVENTORY, parts=context_parts)
         request = LlmRequest(
             system_prompt=INVENTORY_SYSTEM_PROMPT,
             user_prompt=(
@@ -402,10 +422,14 @@ class CrmAssistantDelegator:
         llm_router: LlmRouter,
         crm_gateway_factory: Callable[[], Awaitable[CrmGatewayPort]],
         memory_service: MemoryService | None = None,
+        tool_cache: ResponseCache | None = None,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._llm_router = llm_router
         self._crm_gateway_factory = crm_gateway_factory
         self._memory = memory_service
+        self._tool_cache = tool_cache
+        self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
 
     async def stream(
         self,
@@ -416,7 +440,7 @@ class CrmAssistantDelegator:
         citations: list[Citation],
     ) -> AsyncIterator[str]:
         # Try deterministic NL actions first.
-        action_result = await self._try_nl_action(query)
+        action_result = await self._try_nl_action(query, tenant_id=tenant_id)
         if action_result is not None:
             for delta in _iter_text_deltas(action_result):
                 yield delta
@@ -424,14 +448,16 @@ class CrmAssistantDelegator:
 
         # Fallback: LLM with live CRM context + memory.
         try:
-            system_prompt = CRM_SYSTEM_PROMPT
-
             # Gather live CRM data from the database so the LLM can see it.
             crm_context = await self._gather_crm_context(query)
-            if crm_context:
-                system_prompt = f"{system_prompt}\n\nLive CRM data:\n{crm_context}"
 
-            # Inject relevant memories into context.
+            # Inject relevant memories into context, bounded to the per-agent
+            # budget together with the live CRM block (SKY-100). The module
+            # persona (CRM_SYSTEM_PROMPT) stays a stable leading prefix; only
+            # the live tail is budgeted, and it is appended after the prefix.
+            tail_parts: list[str] = []
+            if crm_context:
+                tail_parts.append(f"Live CRM data:\n{crm_context}")
             if self._memory is not None:
                 memory_ctx = await self._memory.recall_context(
                     tenant_id=tenant_id,
@@ -439,12 +465,13 @@ class CrmAssistantDelegator:
                     query=query,
                 )
                 if memory_ctx:
-                    system_prompt = f"{system_prompt}\n\n{memory_ctx}"
+                    tail_parts.append(f"\n{memory_ctx}" if tail_parts else memory_ctx)
+            system_tail = _BUDGET.trim_to_budget(agent=AGENT_CRM, parts=tail_parts)
 
             completion = await self._llm_router.complete(
-                LlmRequest(
-                    system_prompt=system_prompt,
+                _CRM_PROMPT_BUILDER.build(
                     user_prompt=query.strip(),
+                    system_tail=system_tail,
                     max_tokens=512,
                     temperature=0.0,
                 )
@@ -575,15 +602,44 @@ class CrmAssistantDelegator:
 
         return "\n".join(parts)
 
-    async def _try_nl_action(self, query: str) -> str | None:
+    async def _try_nl_action(self, query: str, *, tenant_id: uuid.UUID) -> str | None:
         """Match query keywords to a deterministic CRM NL action."""
         lower = query.lower()
         for keyword, (action, entity_type) in self._ACTION_KEYWORDS.items():
             if keyword in lower:
-                return await self._execute_nl_action(action, entity_type, lower)
+                return await self._execute_nl_action(
+                    action,
+                    entity_type,
+                    lower,
+                    tenant_id=tenant_id,
+                )
         return None
 
-    async def _execute_nl_action(self, action: str, entity_type: str | None, query: str) -> str:
+    async def _execute_nl_action(
+        self,
+        action: str,
+        entity_type: str | None,
+        query: str,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> str:
+        """Run one deterministic CRM NL action, cached per tenant (SKY-100).
+
+        NL actions are read-only aggregations over the same gateway data core
+        returns to the acting user, so their result is stable for the cache
+        TTL and safe to reuse across identical questions.
+        """
+        cache_key: str | None = None
+        if self._tool_cache is not None:
+            cache_key = tool_cache_key(
+                tenant_id=tenant_id,
+                agent=self.key,
+                parts=(action, entity_type or "", query),
+            )
+            cached = await self._tool_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         from ai_agent.features.crm import nl_actions
 
         gateway = await self._crm_gateway_factory()
@@ -605,6 +661,12 @@ class CrmAssistantDelegator:
             )
         else:
             return "This CRM action is not yet implemented."
+        if cache_key is not None and self._tool_cache is not None:
+            await self._tool_cache.set(
+                cache_key,
+                result.answer,
+                ttl_seconds=self._tool_cache_ttl_seconds,
+            )
         return result.answer
 
     @staticmethod
@@ -647,9 +709,13 @@ class FinanceDelegator:
         *,
         llm_router: LlmRouter,
         finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]],
+        tool_cache: ResponseCache | None = None,
+        tool_cache_ttl_seconds: int = 60,
     ) -> None:
         self._llm_router = llm_router
         self._finance_gateway_factory = finance_gateway_factory
+        self._tool_cache = tool_cache
+        self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
 
     async def stream(
         self,
@@ -659,7 +725,7 @@ class FinanceDelegator:
         user_id: uuid.UUID,
         citations: list[Citation],
     ) -> AsyncIterator[str]:
-        del tenant_id, user_id
+        del user_id
         # A finance-only delegate must never invent figures: if finance is
         # unreachable at ANY point we stream the clean unavailable message, we
         # do not fall back to an ungrounded LLM answer.
@@ -702,7 +768,7 @@ class FinanceDelegator:
 
         # Deterministic finance summary first (no LLM cost).
         try:
-            deterministic = await self._try_deterministic(query)
+            deterministic = await self._try_deterministic(query, tenant_id=tenant_id)
         except AiUnavailableError:
             logger.warning("supervisor.finance_unavailable")
             for delta in _iter_text_deltas(FINANCE_UNAVAILABLE):
@@ -716,15 +782,13 @@ class FinanceDelegator:
         # Fallback: LLM with live finance context.
         try:
             context = await self._gather_finance_context(query)
-            system_prompt = (
-                f"{FINANCE_SYSTEM_PROMPT}\n\nLive finance data:\n{context}"
-                if context
-                else FINANCE_SYSTEM_PROMPT
-            )
+            if context:
+                context = _BUDGET.trim_to_budget(agent=AGENT_FINANCE, parts=[context])
+            system_tail = f"Live finance data:\n{context}" if context else ""
             completion = await self._llm_router.complete(
-                LlmRequest(
-                    system_prompt=system_prompt,
+                _FINANCE_PROMPT_BUILDER.build(
                     user_prompt=query.strip(),
+                    system_tail=system_tail,
                     max_tokens=512,
                     temperature=0.0,
                 )
@@ -785,8 +849,25 @@ class FinanceDelegator:
 
         return "\n".join(parts)
 
-    async def _try_deterministic(self, query: str) -> str | None:
-        """Return a deterministic answer for a few well-scoped finance questions."""
+    async def _try_deterministic(self, query: str, *, tenant_id: uuid.UUID) -> str | None:
+        """Return a deterministic answer for a few well-scoped finance questions.
+
+        Results are read-only aggregations over the acting user's own finance
+        reads (core enforces ``erp.finance.read`` + tenant isolation), so the
+        answer is cached per tenant for the short tool TTL (SKY-100) - a
+        repeated "how many invoices" question skips the gateway fetch.
+        """
+        cache_key: str | None = None
+        if self._tool_cache is not None:
+            cache_key = tool_cache_key(
+                tenant_id=tenant_id,
+                agent=self.key,
+                parts=(query,),
+            )
+            cached = await self._tool_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         lowered = query.casefold()
         try:
             gateway = await self._finance_gateway_factory()
@@ -797,26 +878,35 @@ class FinanceDelegator:
             pnl = await gateway.get_pnl()
             if pnl is None:
                 return None
-            return (
+            answer = (
                 f"P&L for {pnl.from_date} to {pnl.to_date}: revenue {pnl.total_revenue}, "
                 f"expenses {pnl.total_expenses}, net income {pnl.net_income}."
             )
-
-        if "receivable" in lowered or "ar aging" in lowered or "owed" in lowered:
+        elif "receivable" in lowered or "ar aging" in lowered or "owed" in lowered:
             ar = await gateway.get_ar_aging()
             if ar is None:
                 return None
             buckets = "; ".join(f"{bucket.bucket} {bucket.amount}" for bucket in ar.buckets)
-            return f"Accounts receivable total {ar.total_ar} as of {ar.as_of}. Buckets: {buckets}."
-
-        if "invoice" in lowered:
+            answer = (
+                f"Accounts receivable total {ar.total_ar} as of {ar.as_of}. Buckets: {buckets}."
+            )
+        elif "invoice" in lowered:
             invoices = await gateway.list_invoices()
             if not invoices:
                 return "No invoices found in the finance service."
             counts = _count_by_status(invoices)
             summary = ", ".join(f"{status} {count}" for status, count in counts.items())
-            return f"There are {len(invoices)} invoices: {summary}."
-        return None
+            answer = f"There are {len(invoices)} invoices: {summary}."
+        else:
+            return None
+
+        if cache_key is not None and self._tool_cache is not None:
+            await self._tool_cache.set(
+                cache_key,
+                answer,
+                ttl_seconds=self._tool_cache_ttl_seconds,
+            )
+        return answer
 
     async def _has_sufficient_history(self, gateway: FinanceGatewayPort) -> bool:
         """A3 guardrail: abstain from report figures under 3 months of history.
@@ -849,7 +939,6 @@ class SalesCoachDelegator:
     display_name = "Sales Coach"
 
     _MAX_SUGGESTIONS = 5
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -898,7 +987,8 @@ class SalesCoachDelegator:
                     system_prompt=SALES_COACH_SYSTEM_PROMPT,
                     user_prompt=(
                         f"Question: {query.strip()}\n\n"
-                        f"Pending coaching suggestions:\n{context[: self._MAX_CONTEXT_CHARS]}"
+                        "Pending coaching suggestions:\n"
+                        f"{_BUDGET.trim_to_budget(agent=AGENT_SALES_COACH, parts=[context])}"
                     ),
                     max_tokens=300,
                     temperature=0.2,
@@ -936,7 +1026,6 @@ class AuditGuardianDelegator:
     display_name = "Audit Guardian"
 
     _MAX_FLAGGED = 6
-    _MAX_CONTEXT_CHARS = 4000
 
     def __init__(
         self,
@@ -1003,7 +1092,8 @@ class AuditGuardianDelegator:
                     system_prompt=GUARDIAN_SYSTEM_PROMPT,
                     user_prompt=(
                         f"Question: {query.strip()}\n\n"
-                        f"Latest report context:\n{context[: self._MAX_CONTEXT_CHARS]}"
+                        "Latest report context:\n"
+                        f"{_BUDGET.trim_to_budget(agent=AGENT_AUDIT_GUARDIAN, parts=[context])}"
                     ),
                     max_tokens=300,
                     temperature=0.2,

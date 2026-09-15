@@ -226,8 +226,17 @@ class ConversationRepository:
         *,
         tenant_id: uuid.UUID,
         conversation_id: uuid.UUID,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Fetch all messages for a conversation, ordered by created_at ASC."""
+        """Fetch messages for a conversation, ordered by created_at ASC.
+
+        When ``limit`` is given, only the most recent ``limit`` messages are
+        returned (ordered ASC for callers that render oldest-first). Without
+        a limit the full history is returned - the conversations list endpoint
+        and the title feature need the complete (or earliest) exchange, so the
+        bounded default is only applied by callers that explicitly ask for it
+        (the supervisor history window, SKY-100).
+        """
         stmt = (
             select(AiConversationMessage)
             .where(
@@ -236,6 +245,13 @@ class ConversationRepository:
             )
             .order_by(AiConversationMessage.created_at)
         )
+        if limit is not None:
+            # Most-recent N: order DESC + LIMIT in SQL, then reverse in memory
+            # so the returned list stays ASC (oldest-first) - the supervisor
+            # renders history oldest-first for the prompt.
+            stmt = stmt.order_by(desc(AiConversationMessage.created_at)).limit(limit)
+            result = await self._session.execute(stmt)
+            return [_message_to_dict(row) for row in reversed(result.scalars().all())]
         result = await self._session.execute(stmt)
         return [_message_to_dict(row) for row in result.scalars().all()]
 
@@ -257,6 +273,61 @@ class ConversationRepository:
             .values(title=title)
         )
         await self._session.execute(stmt)
+
+    # ------------------------------------------------------------------
+    # Rolling summary (SKY-100)
+    # ------------------------------------------------------------------
+
+    async def get_summary(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> dict[str, Any] | None:
+        """Fetch the rolling summary for a conversation, or None.
+
+        The summary is an internal context-compaction detail and is
+        deliberately NOT part of ``_conversation_to_dict`` - callers outside
+        the supervisor prompt path never see it.
+        """
+        stmt = select(AiConversation).where(
+            AiConversation.tenant_id == tenant_id,
+            AiConversation.id == conversation_id,
+        )
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None or row.summary_text is None:
+            return None
+        return {
+            "summary_text": row.summary_text,
+            "summary_updated_at": row.summary_updated_at.isoformat()
+            if row.summary_updated_at
+            else None,
+        }
+
+    async def update_summary(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        summary_text: str,
+    ) -> bool:
+        """Replace the rolling summary and stamp the regeneration time."""
+        from datetime import UTC, datetime
+
+        stmt = (
+            update(AiConversation)
+            .where(
+                AiConversation.tenant_id == tenant_id,
+                AiConversation.id == conversation_id,
+            )
+            .values(
+                summary_text=summary_text,
+                summary_updated_at=datetime.now(UTC),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return bool(result.rowcount)  # type: ignore[attr-defined]
 
     async def mark_title_generated(
         self,

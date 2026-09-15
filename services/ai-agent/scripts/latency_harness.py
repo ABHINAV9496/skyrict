@@ -43,9 +43,16 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from ai_agent.cache.response_cache import MemoryResponseCache
+from ai_agent.core.llm_router import LlmRouter
 from ai_agent.core.providers import LlmCompletion, LlmRequest
 from ai_agent.core.providers.base import LlmStreamChunk
-from ai_agent.features.nl_query.gateway import ProductRef, StockLevelRow
+from ai_agent.features.nl_query.gateway import (
+    MovementRow,
+    MovementType,
+    ProductRef,
+    StockLevelRow,
+    WarehouseRef,
+)
 from ai_agent.features.supervisor.prompts import CLASSIFY_SYSTEM_PROMPT
 from ai_agent.features.supervisor.schemas import SupervisorEvent, TokenEvent
 from ai_agent.features.supervisor.service import SupervisorService
@@ -89,7 +96,10 @@ class StubRouter:
     """Scripted router: sleeps ``delay_ms`` then answers deterministically.
 
     Identical to the unit-test fake except for the configurable first-token
-    delay, which simulates real provider round-trip latency.
+    delay, which simulates real provider round-trip latency. It satisfies the
+    ``LlmProvider`` protocol so ``build_service`` can route it through a real
+    ``LlmRouter`` - the measured path includes the failover/redaction gate the
+    production supervisor runs.
     """
 
     def __init__(
@@ -102,6 +112,9 @@ class StubRouter:
         self.has_providers = has_providers
         self._delay_ms = delay_ms
         self._classify_text = classify_text
+        self.name = "stub"
+        self.model = "stub-model"
+        self.local_only = False
         self.complete_calls = 0
         self.stream_calls = 0
 
@@ -145,7 +158,7 @@ class StubGateway:
             )
         ]
 
-    async def list_warehouses(self) -> list[object]:
+    async def list_warehouses(self) -> list[WarehouseRef]:
         return []
 
     async def get_stock_levels(
@@ -168,8 +181,8 @@ class StubGateway:
         *,
         product_id: uuid.UUID | None = None,
         warehouse_id: uuid.UUID | None = None,
-        movement_type: str | None = None,
-    ) -> list[object]:
+        movement_type: MovementType | None = None,
+    ) -> list[MovementRow]:
         return []
 
 
@@ -187,7 +200,7 @@ def build_service(*, router: StubRouter, caches: bool = False) -> SupervisorServ
         return gateway
 
     return SupervisorService(
-        llm_router=router,
+        llm_router=LlmRouter([router]),
         gateway_factory=gateway_factory,
         provisioned={"inventory_monitor": True},
         classification_cache=MemoryResponseCache() if caches else None,

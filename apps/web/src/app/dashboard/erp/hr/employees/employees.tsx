@@ -28,6 +28,7 @@ import {
 import { createInvitation } from "@/lib/api/identity-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney } from "@/lib/format";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { cn } from "@/lib/utils";
 
 export type EmployeeListView = "active" | "terminated";
@@ -105,7 +106,10 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
     return () => clearTimeout(timer);
   }, [query]);
 
+  const requestGuard = useLatestRequest();
+
   const load = useCallback(async () => {
+    const requestId = requestGuard.next();
     setStatus({ state: "loading" });
     try {
       const [employeesResult, departmentList] = await Promise.all([
@@ -126,6 +130,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
         }),
         listDepartments(),
       ]);
+      if (!requestGuard.isCurrent(requestId)) return;
       setDepartments(departmentList);
       setStatus({
         state: "ready",
@@ -133,13 +138,14 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
         totalPages: employeesResult.meta.total_pages,
       });
     } catch (error) {
+      if (!requestGuard.isCurrent(requestId)) return;
       const message =
         error instanceof ApiError
           ? error.message
           : "Could not load employees.";
       setStatus({ state: "error", message });
     }
-  }, [page, debouncedQuery, view, statusFilter, departmentFilter]);
+  }, [page, debouncedQuery, view, statusFilter, departmentFilter, requestGuard]);
 
   useEffect(() => {
     void load();

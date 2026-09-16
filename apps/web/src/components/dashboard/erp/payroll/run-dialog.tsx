@@ -16,6 +16,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { createPayrollRun, type PayrollRun } from "@/lib/api/payroll-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 interface RunFormState {
     periodStart: string;
@@ -70,6 +71,7 @@ export function NewRunDialog({
                     ? error.message
                     : "Could not create the run.",
             );
+            onApiError(error);
         } finally {
             setSaving(false);
         }

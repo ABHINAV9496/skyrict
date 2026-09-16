@@ -24,6 +24,7 @@ import {
     type Employee,
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
     { value: "on_time", label: "On time" },
@@ -145,6 +146,7 @@ export function LogAttendanceDialog({
                     ? err.message
                     : "Could not record attendance.",
             );
+            onApiError(err);
         } finally {
             setSaving(false);
         }

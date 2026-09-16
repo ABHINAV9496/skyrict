@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { draftJournalEntry, type DraftEntry } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { toMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +51,7 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
                     ? err.message
                     : "Could not generate draft.",
             );
+            onApiError(err);
         } finally {
             setLoading(false);
         }

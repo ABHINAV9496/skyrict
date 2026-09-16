@@ -14,6 +14,7 @@ import {
     type FinanceColumn,
 } from "@/features/finance/components/finance-table";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 
 const PAGE_SIZE = 50;
 
@@ -130,7 +131,10 @@ export function FinanceAuditLog() {
     const [debouncedQuery, setDebouncedQuery] = useState("");
     const [offset, setOffset] = useState(0);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const result = await searchAuditLog({
@@ -138,6 +142,7 @@ export function FinanceAuditLog() {
                 offset,
                 limit: PAGE_SIZE,
             });
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 page: {
@@ -147,6 +152,7 @@ export function FinanceAuditLog() {
                 },
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "error",
                 message:
@@ -155,7 +161,7 @@ export function FinanceAuditLog() {
                         : "Could not load the audit log.",
             });
         }
-    }, [debouncedQuery, offset]);
+    }, [debouncedQuery, offset, requestGuard]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => setDebouncedQuery(query), 350);

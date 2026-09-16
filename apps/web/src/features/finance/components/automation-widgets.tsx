@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import {
     ACCOUNT_TYPE_LABELS,
     extractAmountFromText,
@@ -1721,7 +1722,10 @@ export function JournalTemplatesWidget({ canWrite }: { canWrite: boolean }) {
     const [runSummary, setRunSummary] = useState<string | null>(null);
     const [accounts, setAccounts] = useState<Account[]>([]);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setLoading(true);
         setError(null);
         try {
@@ -1729,14 +1733,16 @@ export function JournalTemplatesWidget({ canWrite }: { canWrite: boolean }) {
                 listJournalTemplates(),
                 canWrite ? listAccounts(true) : Promise.resolve([]),
             ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setTemplates(rows);
             setAccounts(fetchedAccounts);
         } catch (err) {
+            if (!requestGuard.isCurrent(requestId)) return;
             setError(message(err, "Could not load journal templates."));
         } finally {
-            setLoading(false);
+            if (requestGuard.isCurrent(requestId)) setLoading(false);
         }
-    }, [canWrite]);
+    }, [canWrite, requestGuard]);
 
     useEffect(() => {
         void load();

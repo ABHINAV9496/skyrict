@@ -58,6 +58,7 @@ import {
     type ReminderDraft,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate, formatMoney } from "@/lib/finance/format";
 import {
     FinanceTable,
@@ -619,6 +620,7 @@ function CreateInvoiceDialog() {
                     ? error.message
                     : "The FX rate could not be saved.",
             );
+            onApiError(error);
         } finally {
             setSettingRate(false);
         }
@@ -654,6 +656,7 @@ function CreateInvoiceDialog() {
                     ? error.message
                     : "The invoice could not be created.",
             );
+            onApiError(error);
         }
     }
 

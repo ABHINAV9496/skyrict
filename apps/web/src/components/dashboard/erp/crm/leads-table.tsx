@@ -39,6 +39,7 @@ import {
     type LeadStatus,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { leadActions } from "@/lib/erp/actions";
 import { formatDate } from "@/lib/erp/money";
 import { leadStatusBadgeClass, LEAD_STATUS_LABELS } from "@/lib/erp/labels";
@@ -78,7 +79,10 @@ export function LeadsTable() {
     const [disqualifying, setDisqualifying] = useState<Lead | null>(null);
     const [pendingId, setPendingId] = useState<string | null>(null);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const result = await listLeads({
@@ -86,19 +90,21 @@ export function LeadsTable() {
                 offset,
                 limit: PAGE_SIZE,
             });
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 leads: result.data,
                 total: result.meta.total,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load leads.";
             setStatus({ state: "error", message });
         }
-    }, [statusFilter, offset]);
+    }, [statusFilter, offset, requestGuard]);
 
     useEffect(() => {
         void load();

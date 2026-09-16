@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate } from "@/lib/format";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 
 type PageStatus =
     | { state: "loading" }
@@ -76,7 +77,10 @@ export function AttendanceClient({
         [employees],
     );
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const [attendanceResult, employeeList] = await Promise.all([
@@ -96,6 +100,7 @@ export function AttendanceClient({
                 }),
                 listEmployees({ pageSize: 100 }),
             ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setEmployees(employeeList.items);
             setStatus({
                 state: "ready",
@@ -103,13 +108,14 @@ export function AttendanceClient({
                 totalPages: attendanceResult.meta.total_pages,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load attendance.";
             setStatus({ state: "error", message });
         }
-    }, [page, statusFilter, employeeFilter, dateFrom, dateTo]);
+    }, [page, statusFilter, employeeFilter, dateFrom, dateTo, requestGuard]);
 
     useEffect(() => {
         void load();

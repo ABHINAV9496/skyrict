@@ -20,6 +20,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 
 const PAGE_SIZE = 20;
 
@@ -108,7 +109,10 @@ export function DataQualityClient() {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | QualityGrade>("all");
 
+  const requestGuard = useLatestRequest();
+
   const load = useCallback(async () => {
+    const requestId = requestGuard.next();
     setStatus({ state: "loading" });
     const [kpiResult, listResult] = await Promise.allSettled([
       getQualityOrgKpi(),
@@ -117,6 +121,7 @@ export function DataQualityClient() {
 
     if (kpiResult.status === "rejected") {
       const error = kpiResult.reason;
+      if (!requestGuard.isCurrent(requestId)) return;
       setStatus({
         state: "error",
         message: error instanceof ApiError ? error.message : "Could not load data quality.",
@@ -142,6 +147,7 @@ export function DataQualityClient() {
       totalPages = listResult.value.meta.total_pages;
     }
 
+    if (!requestGuard.isCurrent(requestId)) return;
     setStatus({
       state: "ready",
       kpi: kpiResult.value,
@@ -150,7 +156,7 @@ export function DataQualityClient() {
       individualBlocked,
       listError,
     });
-  }, [page]);
+  }, [page, requestGuard]);
 
   useEffect(() => {
     void load();

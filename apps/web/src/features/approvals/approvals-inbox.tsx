@@ -37,6 +37,7 @@ import {
     type ApprovalSuggestion,
 } from "@/lib/api/approval-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 type InboxState =
     | { state: "loading" }
@@ -153,6 +154,7 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
             onDecided(result);
         } catch (error: unknown) {
             setSubmitError(errorMessage(error));
+            onApiError(error);
         } finally {
             setSubmitting(null);
         }

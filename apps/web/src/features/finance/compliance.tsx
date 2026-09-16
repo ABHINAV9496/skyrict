@@ -34,6 +34,7 @@ import {
     type ComplianceRecurrence,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate } from "@/lib/finance/format";
 import {
     FinanceTable,
@@ -108,6 +109,7 @@ function CreateComplianceDialog({
                     ? error.message
                     : "The compliance item could not be created.",
             );
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }

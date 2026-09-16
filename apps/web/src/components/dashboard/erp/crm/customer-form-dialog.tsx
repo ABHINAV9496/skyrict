@@ -27,6 +27,7 @@ import {
     type Customer,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { cn } from "@/lib/utils";
 
 interface CustomerFormDialogProps {
@@ -115,6 +116,7 @@ export function CustomerFormDialog({
                           ? "Could not update the customer."
                           : "Could not create the customer.",
             });
+            onApiError(error);
         } finally {
             setSaving(false);
         }

@@ -39,6 +39,7 @@ import {
     type BudgetStatus,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatMoney, sumMoney } from "@/lib/finance/format";
 import {
     FinanceTable,
@@ -122,6 +123,7 @@ function CreateBudgetDialog({
                     ? error.message
                     : "The budget could not be created.",
             );
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }
@@ -625,6 +627,7 @@ function BudgetLinesDialog({
                     ? error.message
                     : "The lines could not be added.",
             );
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }

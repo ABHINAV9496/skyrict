@@ -24,6 +24,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     ADJUST_APPROVE_THRESHOLD,
     adjustStock,
@@ -113,6 +114,7 @@ export function AdjustStockDialog({
                     ? submitError.message
                     : "Could not adjust stock.";
             setError(message);
+            onApiError(submitError);
         } finally {
             setSubmitting(false);
         }

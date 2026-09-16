@@ -44,6 +44,7 @@ import {
     type ReminderDraft,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 import {
@@ -115,6 +116,7 @@ function ApplyPaymentDialog({
                     ? error.message
                     : "The payment could not be applied.",
             );
+            onApiError(error);
         }
     }
 

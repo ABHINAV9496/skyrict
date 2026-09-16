@@ -29,6 +29,7 @@ dependencies = [
     "skyrict-events",
     "structlog>=24.0,<25",
     "typer>=0.12,<1",
+    "sentry-sdk[fastapi]>=2.14,<3",
 ]
 
 [project.optional-dependencies]

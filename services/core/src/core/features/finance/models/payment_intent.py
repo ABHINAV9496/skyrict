@@ -28,7 +28,17 @@ from core.models.base import Base
 
 class ErpPaymentIntentModel(Base):
     __tablename__ = "erp_payment_intents"
-    __table_args__ = (Index("ix_erp_payment_intents_tenant_status", "tenant_id", "status"),)
+    __table_args__ = (
+        Index("ix_erp_payment_intents_tenant_status", "tenant_id", "status"),
+        Index(
+            "uq_erp_payment_intents_source_ref",
+            "tenant_id",
+            "source",
+            "source_ref",
+            unique=True,
+            postgresql_where=text("source_ref IS NOT NULL"),
+        ),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, nullable=False

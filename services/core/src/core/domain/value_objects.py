@@ -41,8 +41,20 @@ SUPPORTED_CURRENCIES: frozenset[str] = frozenset(
     }
 )
 
-# Decimal precision/rounding applied by rounded() and arithmetic results.
-_MONEY_QUANTUM = Decimal("0.01")
+_ZERO_MINOR_UNITS: frozenset[str] = frozenset({"JPY"})
+
+
+def _quantum_of(currency: str) -> Decimal:
+    """Smallest monetary unit for a currency.
+
+    Most supported currencies have 2 minor-unit places; ``_ZERO_MINOR_UNITS``
+    covers those that don't (JPY = 0).  This avoids the dead fixed
+    ``_MONEY_QUANTUM = Decimal("0.01")`` which ignored the currency's own
+    exponent (F3).
+    """
+    if currency in _ZERO_MINOR_UNITS:
+        return Decimal(1)
+    return Decimal("0.01")
 
 
 class StockMovementType(StrEnum):
@@ -437,7 +449,12 @@ class Money:
             raise ValidationError(f"Invalid divisor: {divisor}") from exc
         if factor == 0:
             raise ValidationError("Cannot divide Money by zero")
-        return Money(amount=(self.amount / factor), currency=self.currency)
+        return Money(
+            # Division can repeat forever (1.00 / 3); round to the currency's
+            # own quantum so a stored money never carries 28-digit noise.
+            amount=(self.amount / factor).quantize(_quantum_of(self.currency)),
+            currency=self.currency,
+        )
 
     def __neg__(self) -> Money:
         return Money(amount=-self.amount, currency=self.currency)

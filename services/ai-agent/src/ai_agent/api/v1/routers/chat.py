@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
 from ai_agent.api.v1.schemas.chat import AttachmentData, ChatStreamRequest
+from ai_agent.cache.response_cache import RedisResponseCache
 from ai_agent.core.audit_service import AuditService
 from ai_agent.core.config import settings
 from ai_agent.core.embedding import build_embedding_provider
@@ -233,6 +234,7 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
     memory_service = MemoryService(
         llm_router=request.app.state.llm_router,
         repo=MemoryRepository(session),
+        embedding_provider=embedding_provider,
     )
 
     return SupervisorRuntime(
@@ -248,6 +250,12 @@ def _build_runtime(request: Request, session: AsyncSession) -> SupervisorRuntime
         coach_suggestions=_CoachSuggestionAdapter(session),
         guardian_reports=_GuardianReportAdapter(session),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,
+        classification_cache=RedisResponseCache(),
+        response_cache=RedisResponseCache(),
+        tool_cache=RedisResponseCache(),
+        classification_cache_ttl_seconds=settings.CLASSIFICATION_CACHE_TTL_SECONDS,
+        response_cache_ttl_seconds=settings.RESPONSE_CACHE_TTL_SECONDS,
+        tool_cache_ttl_seconds=settings.TOOL_CACHE_TTL_SECONDS,
     )
 
 

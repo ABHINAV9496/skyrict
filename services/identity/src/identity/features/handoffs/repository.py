@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Handoff
@@ -60,10 +60,22 @@ class HandoffRepository(SqlRepository):
         return _from_orm(model) if model is not None else None
 
     async def mark_consumed(self, handoff_id: str | uuid.UUID) -> Handoff | None:
-        model = await self.session.get(HandoffModel, handoff_id)
-        if model is None:
-            return None
-        model.consumed_at = datetime.now(UTC)
-        await self.session.flush()
-        await self.session.refresh(model)
-        return _from_orm(model)
+        """Redeem a single-use token exactly once.
+
+        Atomic: the ``UPDATE`` is conditional on ``consumed_at IS NULL`` and
+        returns the row, so two concurrent redeems of the same token cannot
+        both succeed - the loser matches zero rows and returns ``None`` (the
+        caller raises already-used instead of redeeming twice).
+        """
+        result = await self.session.execute(
+            update(HandoffModel)
+            .where(
+                HandoffModel.id == handoff_id,
+                HandoffModel.consumed_at.is_(None),
+            )
+            .values(consumed_at=datetime.now(UTC))
+            .returning(HandoffModel)
+            .execution_options(synchronize_session="fetch")
+        )
+        model = result.scalar_one_or_none()
+        return _from_orm(model) if model is not None else None

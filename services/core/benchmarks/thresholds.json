@@ -1,0 +1,35 @@
+{
+  "duplicates": {
+    "p95_ms": 1000,
+    "max_queries": 3
+  },
+  "cashflow_projection": {
+    "p95_ms": 1000,
+    "max_queries": 3,
+    "reference_ratio": 0.9
+  },
+  "cashflow_naive_loop": {
+    "p95_ms": 4000,
+    "max_queries": 12
+  },
+  "working_capital_series": {
+    "p95_ms": 3000,
+    "max_queries": 8
+  },
+  "working_capital_serial": {
+    "p95_ms": 4000,
+    "max_queries": 12
+  },
+  "report_cache_hit": {
+    "p95_ms": 500,
+    "max_queries": 3
+  },
+  "report_aggregate_recompute": {
+    "p95_ms": 2000,
+    "max_queries": 3
+  },
+  "report_cache_miss": {
+    "p95_ms": 3000,
+    "max_queries": 6
+  }
+}

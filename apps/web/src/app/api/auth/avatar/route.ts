@@ -9,6 +9,7 @@ import {
     mapUser,
     resolveTenantSlug,
 } from "@/lib/server/auth";
+import { captureBffException } from "@/lib/server/sentry";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,8 @@ export async function PUT(request: NextRequest) {
             body: form,
             cache: "no-store",
         });
-    } catch {
+    } catch (error) {
+        captureBffException(error, "/avatars/me", "identity");
         return NextResponse.json(
             { error: "Identity service is unavailable. Please try again." },
             { status: 502 },

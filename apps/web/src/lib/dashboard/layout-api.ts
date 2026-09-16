@@ -91,24 +91,3 @@ export async function recordEvents(events: EventPayload[]): Promise<void> {
         console.warn("Failed to record widget events:", response.status);
     }
 }
-
-/**
- * Request an AI-powered layout suggestion from the ai-agent service.
- */
-export async function fetchAiSuggestion(): Promise<{
-    suggested_layout: LayoutItem[];
-    reasoning: string;
-    confidence: number;
-}> {
-    const response = await fetchWithSession("/api/v1/ai/dashboards/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-        throw new ApiError(
-            response.status,
-            `Failed to fetch AI suggestion: ${response.status}`,
-        );
-    }
-    return response.json();
-}

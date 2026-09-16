@@ -46,9 +46,19 @@ spec:
             - name: DEBUG
               value: "false"
             - name: LOG_LEVEL
-              value: WARNING
+              value: INFO
             - name: LOG_JSON
               value: "true"
+            # DB connection pool (SKY-99/ADR-007): production Azure Postgres
+            # flex max_connections for this tier ~ 100; 3 replicas * (15+5) = 60
+            # still leaves headroom for the deployment tooling + connection
+            # admin. Recycle stays below the 4-8 min idle drop.
+            - name: IDENTITY_DB_POOL_SIZE
+              value: "15"
+            - name: IDENTITY_DB_MAX_OVERFLOW
+              value: "5"
+            - name: IDENTITY_DB_POOL_RECYCLE
+              value: "1800"
           envFrom:
             - secretRef:
                 name: identity-secrets-production

@@ -1,4 +1,4 @@
-.PHONY: help setup dev test lint migrate seed clean benchmark format check \
+.PHONY: help setup dev test lint migrate seed clean benchmark bench-core format check \
 	core-dev test-core test-unit-core test-integration-core test-cov-core \
 	migrate-core migrate-create-core seed-core build-core lint-core \
 	ai-agent-dev test-ai-agent test-unit-ai-agent lint-ai-agent \
@@ -158,6 +158,9 @@ clean: ## Remove build artifacts, caches, venvs
 
 benchmark: ## Run performance benchmarks
 	uv run pytest services/identity/tests/ -v -m slow --benchmark-only
+
+bench-core: ## Run core performance gates (SKY-99) against the configured Postgres
+	uv run --directory services/core python -m benchmarks.run --samples 3 --warmup 1
 
 # ---------- Hooks ----------
 

@@ -14,6 +14,7 @@ from core.features.finance.models.budget_draft_line import ErpBudgetDraftLineMod
 from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.finance.models.compliance_item import ErpComplianceItemModel
 from core.features.finance.models.depreciation_entry import ErpDepreciationEntryModel
+from core.features.finance.models.erp_report_cache import ErpReportCacheModel
 from core.features.finance.models.exchange_rate import ErpExchangeRateModel
 from core.features.finance.models.expense_claim import ErpExpenseClaimModel
 from core.features.finance.models.expense_policy import ErpExpensePolicyModel
@@ -51,5 +52,6 @@ __all__ = [
     "ErpJournalLineModel",
     "ErpJournalTemplateModel",
     "ErpPaymentModel",
+    "ErpReportCacheModel",
     "ErpTenantSettingModel",
 ]

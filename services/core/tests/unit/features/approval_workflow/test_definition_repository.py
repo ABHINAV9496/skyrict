@@ -79,11 +79,13 @@ class _FakeSession:
         self.flushed = 0
         self.executed: list[object] = []
 
-    async def execute(self, stmt: object) -> _FakeResult:
+    async def execute(self, stmt: object, params: object | None = None) -> _FakeResult:
         self.executed.append(stmt)
         sql = str(stmt)
         if "max(" in sql:
             return _FakeResult(scalar_value=self._max_version)
+        if "advisory_xact_lock" in sql:
+            return _FakeResult(scalar_value=None)
         # Queries with a single id/version filter return scalar_one_or_none.
         if "definition_id" not in sql and "version" not in sql and "status" not in sql:
             return _FakeResult(scalar_value=None)
@@ -106,11 +108,13 @@ class _VersionedSession(_FakeSession):
         super().__init__(max_version=versions[-1].version if versions else None)
         self._versions = versions
 
-    async def execute(self, stmt: object) -> _FakeResult:
+    async def execute(self, stmt: object, params: object | None = None) -> _FakeResult:
         self.executed.append(stmt)
         sql = str(stmt)
         if "max(" in sql:
             return _FakeResult(scalar_value=self._versions[-1].version if self._versions else None)
+        if "advisory_xact_lock" in sql:
+            return _FakeResult(scalar_value=None)
         if "status =" in sql:
             return _FakeResult(rows=self._versions)
         if "order_by" in sql:

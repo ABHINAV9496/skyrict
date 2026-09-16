@@ -48,7 +48,7 @@ class FakeHandoffRepo:
 
     async def mark_consumed(self, handoff_id: str | uuid.UUID) -> Handoff | None:
         handoff = self.handoffs.get(uuid.UUID(str(handoff_id)))
-        if handoff is None:
+        if handoff is None or handoff.consumed_at is not None:
             return None
         self.consumed.append(uuid.UUID(str(handoff_id)))
         handoff.consumed_at = datetime.now(UTC)
@@ -135,6 +135,43 @@ class TestRedeem:
 
         with pytest.raises(HandoffTokenAlreadyUsedError):
             await service.redeem(token=token)
+
+    async def test_repo_guard_refuses_second_redeem_of_same_token(self) -> None:
+        """The repo's atomic guard (consumed_at IS NULL on the UPDATE) makes
+        mark_consumed idempotent: a second call on a consumed token returns
+        None instead of stamping consumed_at again."""
+        repo = FakeHandoffRepo()
+        service = _service(repo)
+        handoff, _ = await service.issue(purpose="wizard")
+
+        first = await repo.mark_consumed(handoff.id)
+        second = await repo.mark_consumed(handoff.id)
+
+        assert first is not None
+        assert first.consumed_at is not None
+        assert second is None
+        assert repo.consumed == [handoff.id]
+
+    async def test_mark_consumed_none_is_mapped_to_already_used(self) -> None:
+        """Concurrent redeems both pass the in-memory pre-check, but the loser's
+        atomic UPDATE matches zero rows; the service maps the None to
+        already-used instead of crashing on an assert."""
+        repo = FakeHandoffRepo()
+        service = _service(repo)
+        handoff, token = await service.issue(purpose="wizard")
+
+        class _GuardLostRepo(FakeHandoffRepo):
+            def __init__(self) -> None:
+                super().__init__()
+                assert handoff.id is not None
+                self.handoffs[handoff.id] = handoff
+
+            async def mark_consumed(self, handoff_id: str | uuid.UUID) -> Handoff | None:
+                return None  # the winner already consumed the token
+
+        raced = _service(repo=_GuardLostRepo())
+        with pytest.raises(HandoffTokenAlreadyUsedError):
+            await raced.redeem(token=token)
 
     async def test_rejects_unknown_token(self) -> None:
         service = _service()

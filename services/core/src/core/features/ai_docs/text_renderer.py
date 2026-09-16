@@ -7,11 +7,15 @@ PDF says - the tenant's own figures, useful for citation evidence in A12.
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
 def _fmt(value: Any) -> str:
-    return f"{float(value or 0):,.2f}"
+    try:
+        return f"{Decimal(str(value or 0)):,.2f}"
+    except InvalidOperation:
+        return "0.00"
 
 
 def _section_lines(header: str, rows: list[dict[str, Any]], amount_key: str) -> list[str]:

@@ -282,6 +282,44 @@ class TestAuditHashChain:
 
         await engine.dispose()
 
+    async def test_list_with_total_is_one_round_trip(
+        self, migrated_schema: None, audit_world: dict[str, str]
+    ) -> None:
+        """Pagination returns (page, total) from a single COUNT(*) OVER() query.
+
+        Regression against the old list+count pattern (two queries per search
+        page): the windowed total must match ``count`` under the SAME filters.
+        """
+        # Count our pre-existing rows so we can assert the delta below.
+        async with async_session_factory() as session:
+            repo = AuditLogRepository(session)
+            before = await repo.count(uuid.UUID(audit_world["tenant_a"]))
+
+            for i in range(3):
+                await repo.add(
+                    AuditLogEntry(
+                        tenant_id=uuid.UUID(audit_world["tenant_a"]),
+                        action=PAYROLL_RUN_APPROVED,
+                        target=f"payroll_run:{i}",
+                    )
+                )
+                await session.commit()
+
+            page, total = await repo.list_with_total(uuid.UUID(audit_world["tenant_a"]), limit=2)
+            assert len(page) == 2
+            assert total == before + 3
+
+            full, full_total = await repo.list_with_total(
+                uuid.UUID(audit_world["tenant_a"]), action=PAYROLL_RUN_APPROVED
+            )
+            assert len(full) == full_total == 3
+
+            empty, empty_total = await repo.list_with_total(uuid.UUID(audit_world["tenant_b"]))
+            assert empty == []
+            assert empty_total == 0
+
+        await engine.dispose()
+
     async def test_per_tenant_chain_genesis_under_rls(
         self, migrated_schema: None, audit_world: dict[str, str]
     ) -> None:

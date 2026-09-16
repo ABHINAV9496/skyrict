@@ -27,8 +27,9 @@ notification-center tables with their RLS policies and dedupe constraints
 the HR-AI-004 planning permission and finance budget-draft bridge tables with
 their idempotency lock (0056/0057, SKY-93), ``erp_journal_templates`` with its
 RLS policy (0058, FIN-AUT-003 B5, renumbered from 0056 when dev's HR-AI-004
-chain took 0056/0057), and ``erp_payment_intents`` with its RLS policy and
-dedupe stamp (0059, FIN-AUT-003 B7).
+chain took 0056/0057), ``erp_payment_intents`` with its RLS policy and
+dedupe stamp (0059, FIN-AUT-003 B7), and the ``erp_report_cache``
+aggregate-cache table (0060, SKY-99).
 
 The test owns a scratch database and never touches the shared test database
 (``migrated_schema``): it destroys the schema it builds. ``asyncio.run()`` wraps
@@ -275,7 +276,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0060", f"head is {version}, expected 0060"
+            assert version == "0062", f"head is {version}, expected 0062"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1407,7 +1408,51 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 ).scalar_one()
                 assert snip_intent_constraint == 1, f"0059 must add {constraint}"
 
-            # 0060: finance automation wave 4 (FIN-AUT-004, SKY-85) - budgets,
+            # 0060: erp_report_cache (SKY-99, renumbered from 0056 after dev's
+            # HR-AI-004 / FIN-AUT-003 chain took 0056-0059) - the aggregate-cache
+            # table exists, is RLS-covered with the tenant_isolation policy, and
+            # carries the unique (tenant_id, cache_key) index plus the expires_at
+            # sweep index.
+            cache_regclass = (
+                await conn.execute(text("SELECT to_regclass('public.erp_report_cache')"))
+            ).scalar_one()
+            assert cache_regclass is not None, "0060 must create erp_report_cache table"
+
+            cache_rls = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tablename FROM pg_tables "
+                            "WHERE schemaname = 'public' AND rowsecurity = true "
+                            "AND tablename = 'erp_report_cache'"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert cache_rls == ["erp_report_cache"], "0060 must enable RLS on erp_report_cache"
+
+            cache_indexes = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT indexname FROM pg_indexes "
+                            "WHERE schemaname = 'public' AND tablename = 'erp_report_cache' "
+                            "AND indexname IN "
+                            "('uq_erp_report_cache_tenant_key', 'ix_erp_report_cache_expires')"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert set(cache_indexes) == {
+                "uq_erp_report_cache_tenant_key",
+                "ix_erp_report_cache_expires",
+            }, "0060 must add both erp_report_cache indexes"
+
+            # 0062: finance automation wave 4 (FIN-AUT-004, SKY-85) - budgets,
             # depreciation, expense policy, compliance calendar. All eight
             # tables exist with tenant RLS; budget-line dedupe, depreciation
             # exactly-once, claim source-ref, and policy category stamps are in
@@ -1417,7 +1462,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                 regclass = (
                     await conn.execute(text(f"SELECT to_regclass('public.{table}')"))
                 ).scalar_one()
-                assert regclass is not None, f"0060 must create {table} table"
+                assert regclass is not None, f"0062 must create {table} table"
 
                 policy_count = (
                     await conn.execute(
@@ -1428,7 +1473,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                         )
                     )
                 ).scalar_one()
-                assert policy_count == 1, f"0060 must enable RLS on {table}"
+                assert policy_count == 1, f"0062 must enable RLS on {table}"
 
             for key in _WAVE4_PERMISSIONS:
                 perm_row = (
@@ -1437,7 +1482,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                         {"key": key},
                     )
                 ).scalar_one_or_none()
-                assert perm_row is not None, f"0060 must seed permission {key}"
+                assert perm_row is not None, f"0062 must seed permission {key}"
 
             for constraint in (
                 "uq_erp_budget_lines_tenant_budget_code",
@@ -1451,7 +1496,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                         {"name": constraint},
                     )
                 ).scalar_one()
-                assert count == 1, f"0060 must add {constraint}"
+                assert count == 1, f"0062 must add {constraint}"
     finally:
         await engine.dispose()
 

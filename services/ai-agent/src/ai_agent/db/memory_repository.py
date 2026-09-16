@@ -53,8 +53,15 @@ class MemoryRepository:
         module: str | None = None,
         tokens_input: int | None = None,
         tokens_output: int | None = None,
+        embedding: list[float] | None = None,
+        embedding_model: str | None = None,
     ) -> AiEpisodicMemoryModel:
-        """Persist one query-response pair."""
+        """Persist one query-response pair.
+
+        ``embedding``/``embedding_model`` are written only when the caller has
+        an embedding provider (SKY-100); NULL keeps the row on the
+        trigram/recency recall path.
+        """
         now = datetime.now(UTC)
         row = AiEpisodicMemoryModel(
             tenant_id=tenant_id,
@@ -68,6 +75,9 @@ class MemoryRepository:
             created_at=now,
             expires_at=now + timedelta(days=90),
             compacted_at=None,
+            embedding=embedding,
+            embedding_model=embedding_model,
+            embedding_dims=len(embedding) if embedding else None,
         )
         self._session.add(row)
         await self._session.flush()
@@ -86,16 +96,50 @@ class MemoryRepository:
         user_id: uuid.UUID,
         query: str,
         limit: int = _EPISODIC_LIMIT,
+        query_embedding: list[float] | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve the most recent, not-yet-compacted episodic memories.
+        """Retrieve the most relevant, not-yet-compacted episodic memories.
 
-        Uses trigram similarity on query_text to find memories relevant to the
-        current query, falling back to most-recent if trigram extension is
-        unavailable. Compacted rows are excluded (SKY-90) - their essence
-        lives in semantic memory.
+        Ranked by cosine similarity over embedded rows when the caller
+        supplies ``query_embedding`` (SKY-100); falls back to trigram
+        similarity on query_text, then to most-recent, when embeddings are
+        absent or unavailable. Compacted rows are excluded (SKY-90) - their
+        essence lives in semantic memory.
         """
         now = datetime.now(UTC)
-        # Try trigram similarity search first (if pg_trgm is available).
+        if query_embedding is not None:
+            try:
+                result = await self._session.execute(
+                    select(
+                        AiEpisodicMemoryModel.query_text,
+                        AiEpisodicMemoryModel.response_summary,
+                        AiEpisodicMemoryModel.created_at,
+                    )
+                    .where(
+                        AiEpisodicMemoryModel.tenant_id == tenant_id,
+                        AiEpisodicMemoryModel.user_id == user_id,
+                        AiEpisodicMemoryModel.expires_at > now,
+                        AiEpisodicMemoryModel.compacted_at.is_(None),
+                        AiEpisodicMemoryModel.embedding.is_not(None),
+                    )
+                    .order_by(AiEpisodicMemoryModel.embedding.cosine_distance(query_embedding))
+                    .limit(limit)
+                )
+                cosine_rows = [
+                    {
+                        "query": r.query_text,
+                        "summary": r.response_summary,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in result.all()
+                ]
+                if cosine_rows:
+                    return cosine_rows
+            except Exception:
+                logger.warning(
+                    "memory.recall_cosine_unavailable", exc_info=True
+                )  # pgvector down/missing - fall through to trigram/recency.
+        # Fallback: trigram then recency when cosine is absent, empty, or failed.
         try:
             result = await self._session.execute(
                 select(
@@ -125,7 +169,9 @@ class MemoryRepository:
                     for r in rows
                 ]
         except Exception:
-            pass  # pg_trgm not available - fall through to recency.
+            logger.warning(
+                "memory.recall_trigram_unavailable", exc_info=True
+            )  # pg_trgm down/missing - fall through to recency.
 
         # Fallback: most recent not-yet-compacted.
         result = await self._session.execute(
@@ -231,11 +277,18 @@ class MemoryRepository:
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
         facts: list[dict[str, Any]],
+        embeddings: list[list[float]] | None = None,
+        embedding_model: str | None = None,
     ) -> list[AiSemanticMemoryModel]:
-        """Persist extracted facts. Each dict must have 'fact' and 'category'."""
+        """Persist extracted facts. Each dict must have 'fact' and 'category'.
+
+        ``embeddings`` are written when the caller has an embedding provider
+        (SKY-100); NULL keeps the fact on the trigram/recency recall path.
+        """
         now = datetime.now(UTC)
         rows = []
-        for fact_data in facts:
+        for idx, fact_data in enumerate(facts):
+            embedding = embeddings[idx] if embeddings and idx < len(embeddings) else None
             row = AiSemanticMemoryModel(
                 tenant_id=tenant_id,
                 id=uuid.uuid4(),
@@ -248,6 +301,9 @@ class MemoryRepository:
                 source=str(fact_data.get("source", "conversation")),
                 created_at=now,
                 expires_at=now + timedelta(days=90),
+                embedding=embedding,
+                embedding_model=embedding_model if embedding else None,
+                embedding_dims=len(embedding) if embedding else None,
             )
             self._session.add(row)
             rows.append(row)
@@ -267,12 +323,48 @@ class MemoryRepository:
         user_id: uuid.UUID,
         query: str,
         limit: int = _SEMANTIC_LIMIT,
+        query_embedding: list[float] | None = None,
     ) -> list[dict[str, Any]]:
         """Retrieve semantic facts relevant to the current query.
 
-        Uses trigram similarity when available, falling back to recency.
+        Ranked by cosine similarity when the caller supplies
+        ``query_embedding`` (SKY-100); falls back to trigram then to
+        recency when embeddings are absent or unavailable.
         """
         now = datetime.now(UTC)
+        if query_embedding is not None:
+            try:
+                result = await self._session.execute(
+                    select(
+                        AiSemanticMemoryModel.fact,
+                        AiSemanticMemoryModel.category,
+                        AiSemanticMemoryModel.confidence,
+                        AiSemanticMemoryModel.entity_type,
+                    )
+                    .where(
+                        AiSemanticMemoryModel.tenant_id == tenant_id,
+                        AiSemanticMemoryModel.user_id == user_id,
+                        AiSemanticMemoryModel.expires_at > now,
+                        AiSemanticMemoryModel.embedding.is_not(None),
+                    )
+                    .order_by(AiSemanticMemoryModel.embedding.cosine_distance(query_embedding))
+                    .limit(limit)
+                )
+                cosine_rows = [
+                    {
+                        "fact": r.fact,
+                        "category": r.category,
+                        "confidence": r.confidence,
+                        "entity_type": r.entity_type,
+                    }
+                    for r in result.all()
+                ]
+                if cosine_rows:
+                    return cosine_rows
+            except Exception:
+                logger.warning(
+                    "memory.recall_semantic_cosine_unavailable", exc_info=True
+                )  # pgvector down/missing - fall through to trigram/recency.
         try:
             result = await self._session.execute(
                 select(
@@ -303,7 +395,9 @@ class MemoryRepository:
                     for r in rows
                 ]
         except Exception:
-            pass
+            logger.warning(
+                "memory.recall_semantic_trigram_unavailable", exc_info=True
+            )  # pg_trgm down/missing - fall through to recency.
 
         # Fallback: most recent by category.
         result = await self._session.execute(

@@ -4,8 +4,9 @@ Stores structured facts extracted by the LLM after each CRM chat turn.
 Facts are categorized (preference, entity, context, instruction) and used
 to provide context in future exchanges. Rows expire after 90 days.
 
-Embeddings and vector search are deferred - this table stores text and
-metadata for keyword/FTS retrieval only.
+Facts carry an optional 768-dim pgvector embedding (written when an embedding
+provider is configured) so recall can rank by semantic similarity; rows
+without an embedding still participate through trigram/recency recall.
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text, func, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +50,12 @@ class AiSemanticMemoryModel(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     fact: Mapped[str] = mapped_column(Text, nullable=False)
+    # Optional embedding (SKY-100): NULL until an embedding provider is
+    # configured and the fact is stored; partial ivfflat index in migration
+    # 0027 covers only non-NULL rows.
+    embedding = mapped_column(Vector(768), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_dims: Mapped[int | None] = mapped_column(Integer, nullable=True)
     category: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="preference | entity | context | instruction"
     )

@@ -2,9 +2,10 @@
 
 Every row is an insert-only fact: there is no ``updated_at`` column and the
 repository exposes no update/delete path, so the ledger can never be silently
-rewritten. ``(ref_type, ref_id, warehouse_id)`` is unique per tenant so an
-idempotency probe can prove a source document line was applied to a warehouse
-exactly once (a transfer pair shares one ref across two warehouses).
+rewritten.  ``(ref_type, ref_id, warehouse_id, product_id)`` is unique per
+tenant so an idempotency probe can prove a source document line was applied
+to a warehouse exactly once (a transfer pair shares one ref across two
+warehouses).
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ class ErpStockMovementModel(Base):
             "ref_type",
             "ref_id",
             "warehouse_id",
+            "product_id",
             name="uq_erp_stock_movements_ref",
         ),
         # Composite-FK convention: a movement can only reference a product and

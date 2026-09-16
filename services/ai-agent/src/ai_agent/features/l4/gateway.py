@@ -18,6 +18,7 @@ import httpx
 import structlog
 
 from ai_agent.core.config import settings
+from ai_agent.core.core_http import CoreHttpTransport
 from ai_agent.core.exceptions import AiUnavailableError
 
 logger = structlog.get_logger("ai_agent.l4_gateway")
@@ -29,7 +30,7 @@ class L4CoreGatewayPort(Protocol):
     async def get_payroll_base(self, as_of: str) -> dict[str, object]: ...
 
 
-class HttpL4CoreGateway:
+class HttpL4CoreGateway(CoreHttpTransport):
     """Per-request gateway: forwards the user's JWT + tenant slug to core."""
 
     def __init__(
@@ -38,19 +39,12 @@ class HttpL4CoreGateway:
         bearer_token: str,
         tenant_slug: str,
     ) -> None:
-        self._base_url = str(settings.INVENTORY_SERVICE_URL).rstrip("/")
-        self._bearer_token = bearer_token
-        self._tenant_slug = tenant_slug
-
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._bearer_token}",
-            "X-Tenant-Slug": self._tenant_slug,
-        }
-
-    def _create_client(self) -> httpx.AsyncClient:
-        """Create the per-call HTTP client (overridable seam for tests)."""
-        return httpx.AsyncClient(timeout=settings.INVENTORY_SERVICE_TIMEOUT_SECONDS)
+        super().__init__(
+            base_url=str(settings.INVENTORY_SERVICE_URL),
+            bearer_token=bearer_token,
+            tenant_slug=tenant_slug,
+            timeout_seconds=settings.INVENTORY_SERVICE_TIMEOUT_SECONDS,
+        )
 
     async def get_payroll_base(self, as_of: str) -> dict[str, object]:
         """Fetch the payroll-base envelope and return the unwrapped ``data`` dict.

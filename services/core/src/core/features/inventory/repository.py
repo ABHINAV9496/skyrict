@@ -22,8 +22,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import Select, and_, case, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 
+from core.core.exceptions import MovementImmutableError
 from core.domain.entities import (
     DeadStockItem,
     MovementTrendPoint,
@@ -856,38 +858,37 @@ class InventoryRepository:
     async def add_movement(self, movement: StockMovement) -> StockMovement:
         """Insert an immutable ledger row and recompute the level atomically.
 
-        Idempotent per ``(tenant_id, ref_type, ref_id, warehouse_id)``: if the
-        ref was already applied to this warehouse, the existing movement is
-        returned instead of a duplicate insert.
+        ``ON CONFLICT`` on the product-scoped idempotency key
+        ``(tenant_id, ref_type, ref_id, warehouse_id, product_id)``: a
+        duplicate ref means the line was already materialised, so we raise
+        instead of silently returning the existing row (a silent return
+        lets a guarded level UPDATE commit without a ledger row).
         """
-        existing = await self.get_movement_by_ref(
-            movement.ref_type,
-            movement.ref_id,
-            movement.warehouse_id,
-            movement.tenant_id,
-        )
-        if existing is not None:
-            return existing
-
-        model = ErpStockMovementModel(
-            tenant_id=movement.tenant_id,
-            product_id=movement.product_id,
-            warehouse_id=movement.warehouse_id,
-            movement_type=movement.movement_type,
-            qty=movement.qty,
-            ref_type=movement.ref_type,
-            ref_id=movement.ref_id,
-        )
+        values: dict[str, Any] = {
+            "tenant_id": movement.tenant_id,
+            "product_id": movement.product_id,
+            "warehouse_id": movement.warehouse_id,
+            "movement_type": movement.movement_type,
+            "qty": movement.qty,
+            "ref_type": movement.ref_type,
+            "ref_id": movement.ref_id,
+        }
         if movement.id is not None:
-            model.id = movement.id
-        self.session.add(model)
-        await self.session.flush()
-        await self.session.refresh(model)
-
+            values["id"] = movement.id
+        stmt = (
+            pg_insert(ErpStockMovementModel)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_erp_stock_movements_ref")
+            .returning(ErpStockMovementModel)
+        )
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise MovementImmutableError()
         await self.recompute_stock_level(
             movement.product_id, movement.warehouse_id, movement.tenant_id
         )
-        return _stock_movement_from_orm(model)
+        return _stock_movement_from_orm(row)
 
     async def get_movement_by_ref(
         self,
@@ -895,12 +896,15 @@ class InventoryRepository:
         ref_id: str,
         warehouse_id: uuid.UUID,
         tenant_id: uuid.UUID,
+        *,
+        product_id: uuid.UUID,
     ) -> StockMovement | None:
         stmt = select(ErpStockMovementModel).where(
             ErpStockMovementModel.tenant_id == tenant_id,
             ErpStockMovementModel.ref_type == ref_type,
             ErpStockMovementModel.ref_id == ref_id,
             ErpStockMovementModel.warehouse_id == warehouse_id,
+            ErpStockMovementModel.product_id == product_id,
         )
         result = await self.session.execute(stmt)
         model = result.scalar_one_or_none()

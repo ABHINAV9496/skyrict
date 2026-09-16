@@ -24,8 +24,8 @@ Follows core's tenancy convention: composite ``(tenant_id, id)`` PKs,
 ``created_at``/``updated_at``, RLS on every table via
 ``public.current_tenant_id()``.
 
-Revision ID: 0060
-Revises: 0059
+Revision ID: 0062
+Revises: 0061
 Create Date: 2026-09-15
 """
 
@@ -34,8 +34,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0060"
-down_revision = "0059"
+revision = "0062"
+down_revision = "0061"
 branch_labels = None
 depends_on = None
 

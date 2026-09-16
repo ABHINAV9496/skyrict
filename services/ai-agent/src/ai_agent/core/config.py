@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="log level")
     LOG_JSON: bool = Field(default=True, description="JSON log output")
 
+    # --- Error tracking ---
+    SENTRY_DSN: str = Field(
+        default="",
+        description=(
+            "Sentry DSN for error tracking. Empty disables Sentry init "
+            "entirely - dev/test never need it, only staging/production."
+        ),
+    )
+
     # --- Multi-tenancy ---
     BASE_DOMAIN: str = Field(
         default="",
@@ -335,6 +344,31 @@ class Settings(BaseSettings):
         default=300,
         gt=0,
         description="hot-cache TTL for inventory search results (5 minutes)",
+    )
+
+    # --- Prompt/response caching (SKY-100) ---
+    RESPONSE_CACHE_TTL_SECONDS: int = Field(
+        default=300,
+        gt=0,
+        description="TTL for cached supervisor answers (5 minutes)",
+    )
+    CLASSIFICATION_CACHE_TTL_SECONDS: int = Field(
+        default=300,
+        gt=0,
+        description="TTL for cached routing decisions (5 minutes)",
+    )
+    TOOL_CACHE_TTL_SECONDS: int = Field(
+        default=60,
+        gt=0,
+        description=(
+            "TTL for deterministic tool results - short, because gateway data "
+            "can change between calls (1 minute)"
+        ),
+    )
+    FIRST_TOKEN_P95_TARGET_MS: int = Field(
+        default=1000,
+        gt=0,
+        description="committed p95 first-token budget enforced by the latency gate (ms)",
     )
 
     # --- AI behaviour thresholds ---

@@ -108,6 +108,92 @@ jobs:
       - name: Run database integration tests
         run: uv run pytest services/core/tests/integration/database/ -v --tb=short
 
+  benchmark:
+    name: Performance Gates (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: skyrict
+          POSTGRES_PASSWORD: skyrict
+          POSTGRES_DB: skyrict_identity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skyrict -d skyrict_identity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity
+      CORE_JWKS_ISSUER: https://auth.test.skyrict.io
+      CORE_JWKS_AUDIENCE: api.test.skyrict.io
+      CORE_ENVIRONMENT: test
+      CORE_DEBUG: "false"
+      CORE_LOG_JSON: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Generate ephemeral JWT key pair
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric import rsa
+
+          key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+          keys = Path(".dev/keys")
+          keys.mkdir(parents=True, exist_ok=True)
+          (keys / "private.pem").write_bytes(
+              key.private_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PrivateFormat.PKCS8,
+                  encryption_algorithm=serialization.NoEncryption(),
+              )
+          )
+          (keys / "public.pem").write_bytes(
+              key.public_key().public_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PublicFormat.SubjectPublicKeyInfo,
+              )
+          )
+          PY
+
+      - name: Apply database migrations
+        env:
+          IDENTITY_DATABASE_URL: ${{ env.CORE_DATABASE_URL }}
+          IDENTITY_REDIS_URL: redis://localhost:6379/0
+          IDENTITY_ENVIRONMENT: test
+          IDENTITY_JWT_PRIVATE_KEY_PATH: ${{ github.workspace }}/.dev/keys/private.pem
+          IDENTITY_JWT_PUBLIC_KEY_PATH: ${{ github.workspace }}/.dev/keys/public.pem
+          IDENTITY_JWKS_ISSUER: ${{ env.CORE_JWKS_ISSUER }}
+          IDENTITY_JWKS_AUDIENCE: ${{ env.CORE_JWKS_AUDIENCE }}
+          CORE_JWT_PUBLIC_KEY_PATH: ${{ github.workspace }}/.dev/keys/public.pem
+        run: |
+          export IDENTITY_MFA_ENCRYPTION_KEY="$(
+            uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+          )"
+          uv run --directory services/identity alembic upgrade head
+          uv run --directory services/core alembic upgrade head
+
+      - name: Run benchmarks
+        working-directory: services/core
+        run: |
+          CORE_JWT_PUBLIC_KEY_PATH="$GITHUB_WORKSPACE/.dev/keys/public.pem" \
+            uv run python -m benchmarks.run --samples 3 --warmup 1
+
   build:
     name: Build Check
     runs-on: ubuntu-latest

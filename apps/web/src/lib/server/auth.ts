@@ -14,6 +14,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { RESERVED_SLUGS } from "@/lib/auth/reserved-slugs";
+import { captureBffException } from "@/lib/server/sentry";
 
 export const SESSION_COOKIE = "skyrict_session";
 
@@ -183,7 +184,11 @@ export async function callBackend(
         cache: "no-store",
       });
     }
-  } catch {
+  } catch (error) {
+    // Network failure reaching the backend. The route answers a generic
+    // status-0 result; report the underlying reason to Sentry so a backend
+    // outage is visible instead of surfacing only as a bare 502.
+    captureBffException(error, path, options.target ?? "identity");
     return { ok: false, status: 0, data: null, payload: {} };
   }
 
@@ -218,7 +223,8 @@ export async function callBackendStream(
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    captureBffException(error, path, options.target ?? "identity");
     return null;
   }
 }
@@ -242,7 +248,8 @@ export async function callBackendRaw(
       headers,
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    captureBffException(error, path, options.target);
     return null;
   }
 }

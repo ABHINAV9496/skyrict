@@ -148,6 +148,10 @@ class FinanceRepositoryPort(Protocol):
         self, entry_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> JournalEntry | None: ...
 
+    async def get_journal_entry_by_source_ref(
+        self, source: str, source_ref: str, tenant_id: uuid.UUID
+    ) -> JournalEntry | None: ...
+
     async def list_journal_entries(
         self,
         tenant_id: uuid.UUID,
@@ -158,6 +162,15 @@ class FinanceRepositoryPort(Protocol):
         offset: int = 0,
         limit: int = 50,
     ) -> Sequence[JournalEntry]: ...
+
+    async def count_journal_entries(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: EntryStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> int: ...
 
     async def post_journal_entry(
         self,
@@ -192,6 +205,10 @@ class FinanceRepositoryPort(Protocol):
 
     async def get_invoice(self, invoice_id: uuid.UUID, tenant_id: uuid.UUID) -> Invoice | None: ...
 
+    async def get_invoice_for_update(
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None: ...
+
     async def get_invoice_by_source_ref(
         self, source: str, source_ref: str, tenant_id: uuid.UUID
     ) -> Invoice | None: ...
@@ -204,6 +221,13 @@ class FinanceRepositoryPort(Protocol):
         offset: int = 0,
         limit: int = 50,
     ) -> Sequence[Invoice]: ...
+
+    async def count_invoices(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+    ) -> int: ...
 
     async def issue_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, issued_at: datetime

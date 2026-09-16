@@ -1,8 +1,8 @@
 """AI document & tax suite routes (FIN-AI-004, SKY-81/SKY-83).
 
 Permission gates mirror finance automation:
-- ``erp.finance.ai.read``  - generate/list tax summaries, audit narration, Q&A
-- ``erp.finance.ai.write`` - generate document packs
+- ``erp.finance.ai.read``  - list tax summaries, audit narration, Q&A
+- ``erp.finance.ai.write`` - generate document packs / tax summaries (they persist)
 - ``erp.finance.approve``  - approve tax summaries / document packs
 
 Generation is a DRAFT until an approver confirms; every mutation is
@@ -61,7 +61,7 @@ def _auth(request: Request) -> tuple[str | None, str | None]:
 async def generate_tax_summary(
     body: schemas.TaxSummaryGenerateRequest,
     request: Request,
-    current_user: _AiReadUser,
+    current_user: _AiWriteUser,
     client: _ClientDep,
     svc: _SvcDep,
 ) -> ResponseEnvelope[schemas.TaxSummaryResponse]:

@@ -814,7 +814,7 @@ async def get_duplicates(
 )
 async def suggest_account_code(
     body: SuggestAccountCodeRequest,
-    current_user: dict[str, Any] = Depends(require_finance_ai_read),
+    current_user: dict[str, Any] = Depends(require_finance_ai_write),
     svc: FinanceAutomationService = Depends(get_finance_automation_service_with_ai),
 ) -> ResponseEnvelope[AccountCodeSuggestionResponse]:
     suggestion = await svc.suggest_account_code(_tenant_id(current_user), body.description)

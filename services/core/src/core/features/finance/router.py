@@ -155,10 +155,16 @@ async def list_journal_entries(
         offset=offset,
         limit=limit,
     )
+    total = await svc.count_journal_entries(
+        _tenant_id(current_user),
+        status=_parse_entry_status(status),
+        from_date=from_date,
+        to_date=to_date,
+    )
     return ListResponse(
         data=[JournalEntryResponse.model_validate(e) for e in entries],
         meta=PaginationMeta.create(
-            total=len(entries), page=(offset // limit) + 1 if limit else 1, page_size=limit
+            total=total, page=(offset // limit) + 1 if limit else 1, page_size=limit
         ),
     )
 
@@ -304,10 +310,11 @@ async def list_invoices(
         resp.customer_name = customer_names.get(inv.customer_id)
         resp.source_order_number = order_numbers.get(inv.source_ref) if inv.source_ref else None
         data.append(resp)
+    total = await svc.count_invoices(tenant_id, status=_parse_invoice_status(status))
     return ListResponse(
         data=data,
         meta=PaginationMeta.create(
-            total=len(invoices), page=(offset // limit) + 1 if limit else 1, page_size=limit
+            total=total, page=(offset // limit) + 1 if limit else 1, page_size=limit
         ),
     )
 

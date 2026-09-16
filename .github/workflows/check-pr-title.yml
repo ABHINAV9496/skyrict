@@ -17,10 +17,11 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           # Jira-tracked PRs must carry the internal ID AND the Jira ticket key:
-          #   [RPT-DATA-001]: feat(core)/SKY-77 reporting data layer - ...
+          #   [E2E-INFRA-001]: test(e2e)/SKY-103 multi-tenant Playwright harness - ...
+          # (internal-ID segments may mix letters and digits: E2E, Data2, A1B)
           # Non-Jira work must still be a Conventional Commit (no ID, no key):
           #   fix(ci): validate root CI - ...
-          pattern='^(\[[A-Z]{2,6}-[A-Z]{2,6}-[0-9]{3}\]: (feat|fix|chore|docs|test|refactor|perf|ci|build)(\([a-z0-9_-]+\))?/[A-Z]+-[0-9]+ .+|(feat|fix|chore|docs|test|refactor|perf|ci|build)(\([a-z0-9_-]+\))?!?: .+)$'
+          pattern='^(\[[A-Z0-9]{2,6}-[A-Z0-9]{2,6}-[0-9]{3}\]: (feat|fix|chore|docs|test|refactor|perf|ci|build)(\([a-z0-9_-]+\))?/[A-Z]+-[0-9]+ .+|(feat|fix|chore|docs|test|refactor|perf|ci|build)(\([a-z0-9_-]+\))?!?: .+)$'
           if ! printf '%s' "$TITLE" | grep -Eq "$pattern"; then
             echo "::error::PR title must match one of:"
             echo "::error::  1. Jira work:    [INTERNAL-ID]: type(scope)/TICKET-KEY summary"

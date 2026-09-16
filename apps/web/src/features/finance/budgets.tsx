@@ -32,12 +32,14 @@ import {
     closeBudget,
     createBudget,
     getBudgetVariance,
+    listAccounts,
     listBudgets,
+    type Account,
     type Budget,
     type BudgetStatus,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
-import { formatMoney } from "@/lib/finance/format";
+import { formatMoney, sumMoney } from "@/lib/finance/format";
 import {
     FinanceTable,
     type FinanceColumn,
@@ -48,18 +50,15 @@ import {
     FinanceErrorState,
 } from "@/features/finance/components/state-cards";
 import { TableToolbar } from "@/features/finance/components/table-toolbar";
+import { AccountCombobox } from "@/features/finance/components/account-combobox";
 
 type Status =
     | { state: "loading" }
     | { state: "error"; message: string }
-    | { state: "ready"; budgets: Budget[] };
+    | { state: "ready"; budgets: Budget[]; accounts: Account[] };
 
 const budgetTone = (status: BudgetStatus) =>
-    status === "draft"
-        ? "muted"
-        : status === "active"
-          ? "success"
-          : "warning";
+    status === "draft" ? "muted" : status === "active" ? "success" : "warning";
 
 const budgetLabel = (status: BudgetStatus) =>
     status.charAt(0).toUpperCase() + status.slice(1);
@@ -68,10 +67,12 @@ function CreateBudgetDialog({
     open,
     onOpenChange,
     onCreated,
+    accounts,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onCreated: () => void;
+    accounts: Account[];
 }) {
     const setOpen = onOpenChange;
     const [name, setName] = useState("");
@@ -79,20 +80,27 @@ function CreateBudgetDialog({
         String(new Date().getFullYear()),
     );
     const [description, setDescription] = useState("");
-    const [lines, setLines] = useState<{ account_code: string; amount: string }[]>(
-        [{ account_code: "", amount: "" }],
-    );
+    const [lines, setLines] = useState<
+        { account_code: string; amount: string }[]
+    >([{ account_code: "", amount: "" }]);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     async function submit() {
         const year = Number(fiscalYear);
-        if (!name.trim() || !Number.isInteger(year) || year < 2000 || year > 2200) {
+        if (
+            !name.trim() ||
+            !Number.isInteger(year) ||
+            year < 2000 ||
+            year > 2200
+        ) {
             setSubmitError("Enter a name and a valid fiscal year.");
             return;
         }
         const payload = lines
-            .filter((line) => line.account_code.trim() && Number(line.amount) > 0)
+            .filter(
+                (line) => line.account_code.trim() && Number(line.amount) > 0,
+            )
             .map((line) => ({
                 account_code: line.account_code.trim(),
                 amount: Number(line.amount),
@@ -153,7 +161,9 @@ function CreateBudgetDialog({
                             <Input
                                 id="budget-name"
                                 value={name}
-                                onChange={(event) => setName(event.target.value)}
+                                onChange={(event) =>
+                                    setName(event.target.value)
+                                }
                                 placeholder="e.g. FY 2026 Operating Budget"
                             />
                         </div>
@@ -175,7 +185,9 @@ function CreateBudgetDialog({
                         <Input
                             id="budget-description"
                             value={description}
-                            onChange={(event) => setDescription(event.target.value)}
+                            onChange={(event) =>
+                                setDescription(event.target.value)
+                            }
                             placeholder="Optional"
                         />
                     </div>
@@ -186,25 +198,23 @@ function CreateBudgetDialog({
                                 key={index}
                                 className="flex items-center gap-2"
                             >
-                                <Input
-                                    aria-label={`Account code ${index + 1}`}
-                                    placeholder="e.g. 5100"
-                                    className="flex-1 font-mono"
+                                <AccountCombobox
+                                    accounts={accounts}
                                     value={line.account_code}
-                                    onChange={(event) =>
+                                    onChange={(code) =>
                                         setLines((prev) =>
                                             prev.map((l, i) =>
                                                 i === index
                                                     ? {
                                                           ...l,
-                                                          account_code:
-                                                              event.target
-                                                                  .value,
+                                                          account_code: code,
                                                       }
                                                     : l,
                                             ),
                                         )
                                     }
+                                    id={`budget-account-${index}`}
+                                    placeholder="Search account…"
                                 />
                                 <Input
                                     aria-label={`Amount ${index + 1}`}
@@ -221,9 +231,8 @@ function CreateBudgetDialog({
                                                 i === index
                                                     ? {
                                                           ...l,
-                                                          amount:
-                                                              event.target
-                                                                  .value,
+                                                          amount: event.target
+                                                              .value,
                                                       }
                                                     : l,
                                             ),
@@ -298,7 +307,15 @@ function CreateBudgetDialog({
     );
 }
 
-function BudgetRowActions({ budget }: { budget: Budget }) {
+function BudgetRowActions({
+    budget,
+    accounts,
+    onChanged,
+}: {
+    budget: Budget;
+    accounts: Account[];
+    onChanged: () => void;
+}) {
     const [varianceOpen, setVarianceOpen] = useState(false);
     const [linesOpen, setLinesOpen] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -309,6 +326,7 @@ function BudgetRowActions({ budget }: { budget: Budget }) {
         setError(null);
         try {
             await action();
+            onChanged();
         } catch (err) {
             setError(
                 err instanceof ApiError
@@ -352,7 +370,11 @@ function BudgetRowActions({ budget }: { budget: Budget }) {
                 <Plus aria-hidden="true" className="size-3.5" />
                 Add lines
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setVarianceOpen(true)}>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVarianceOpen(true)}
+            >
                 Variance
             </Button>
             {error ? (
@@ -370,8 +392,10 @@ function BudgetRowActions({ budget }: { budget: Budget }) {
             />
             <BudgetLinesDialog
                 budget={budget}
+                accounts={accounts}
                 open={linesOpen}
                 onOpenChange={setLinesOpen}
+                onChanged={onChanged}
             />
         </span>
     );
@@ -389,7 +413,10 @@ function BudgetVarianceDialog({
     const [state, setState] = useState<
         | { state: "loading" }
         | { state: "error"; message: string }
-        | { state: "ready"; variance: Awaited<ReturnType<typeof getBudgetVariance>> }
+        | {
+              state: "ready";
+              variance: Awaited<ReturnType<typeof getBudgetVariance>>;
+          }
     >({ state: "loading" });
 
     useEffect(() => {
@@ -551,14 +578,18 @@ function BudgetLinesDialog({
     budget,
     open,
     onOpenChange,
+    onChanged,
+    accounts,
 }: {
     budget: Budget;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onChanged: () => void;
+    accounts: Account[];
 }) {
-    const [lines, setLines] = useState<{ account_code: string; amount: string }[]>(
-        [{ account_code: "", amount: "" }],
-    );
+    const [lines, setLines] = useState<
+        { account_code: string; amount: string }[]
+    >([{ account_code: "", amount: "" }]);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -571,7 +602,9 @@ function BudgetLinesDialog({
 
     async function submit() {
         const payload = lines
-            .filter((line) => line.account_code.trim() && Number(line.amount) > 0)
+            .filter(
+                (line) => line.account_code.trim() && Number(line.amount) > 0,
+            )
             .map((line) => ({
                 account_code: line.account_code.trim(),
                 amount: Number(line.amount),
@@ -585,6 +618,7 @@ function BudgetLinesDialog({
         try {
             await addBudgetLines(budget.id, payload);
             onOpenChange(false);
+            onChanged();
         } catch (error) {
             setSubmitError(
                 error instanceof ApiError
@@ -614,25 +648,27 @@ function BudgetLinesDialog({
                 >
                     <div className="space-y-2">
                         {lines.map((line, index) => (
-                            <div key={index} className="flex items-center gap-2">
-                                <Input
-                                    aria-label={`Account code ${index + 1}`}
-                                    placeholder="e.g. 5100"
-                                    className="flex-1 font-mono"
+                            <div
+                                key={index}
+                                className="flex items-center gap-2"
+                            >
+                                <AccountCombobox
+                                    accounts={accounts}
                                     value={line.account_code}
-                                    onChange={(event) =>
+                                    onChange={(code) =>
                                         setLines((prev) =>
                                             prev.map((l, i) =>
                                                 i === index
                                                     ? {
                                                           ...l,
-                                                          account_code:
-                                                              event.target.value,
+                                                          account_code: code,
                                                       }
                                                     : l,
                                             ),
                                         )
                                     }
+                                    id={`budget-line-account-${index}`}
+                                    placeholder="Search account…"
                                 />
                                 <Input
                                     aria-label={`Amount ${index + 1}`}
@@ -649,8 +685,8 @@ function BudgetLinesDialog({
                                                 i === index
                                                     ? {
                                                           ...l,
-                                                          amount:
-                                                              event.target.value,
+                                                          amount: event.target
+                                                              .value,
                                                       }
                                                     : l,
                                             ),
@@ -723,7 +759,10 @@ function BudgetLinesDialog({
     );
 }
 
-const columns: FinanceColumn<Budget>[] = [
+const columns: (
+    accounts: Account[],
+    onChanged: () => void,
+) => FinanceColumn<Budget>[] = (accounts, onChanged) => [
     { label: "Budget", render: (budget) => budget.name },
     {
         label: "Fiscal year",
@@ -751,16 +790,20 @@ const columns: FinanceColumn<Budget>[] = [
         align: "right",
         render: (budget) => (
             <span className="tabular-nums">
-                {formatMoney(
-                    budget.lines.reduce((sum, line) => sum + line.amount, 0),
-                )}
+                {formatMoney(sumMoney(budget.lines.map((line) => line.amount)))}
             </span>
         ),
     },
     {
         label: "",
         align: "right",
-        render: (budget) => <BudgetRowActions budget={budget} />,
+        render: (budget) => (
+            <BudgetRowActions
+                budget={budget}
+                accounts={accounts}
+                onChanged={onChanged}
+            />
+        ),
     },
 ];
 
@@ -775,8 +818,11 @@ export function FinanceBudgets() {
     const load = useCallback(async () => {
         setStatus({ state: "loading" });
         try {
-            const budgets = await listBudgets();
-            setStatus({ state: "ready", budgets });
+            const [budgets, accounts] = await Promise.all([
+                listBudgets(),
+                listAccounts(),
+            ]);
+            setStatus({ state: "ready", budgets, accounts });
         } catch (error) {
             setStatus({
                 state: "error",
@@ -835,8 +881,7 @@ export function FinanceBudgets() {
         .filter((b) => b.status === "active")
         .reduce(
             (sum, budget) =>
-                sum +
-                budget.lines.reduce((lineSum, line) => lineSum + line.amount, 0),
+                sum + sumMoney(budget.lines.map((line) => line.amount)),
             0,
         );
 
@@ -856,20 +901,23 @@ export function FinanceBudgets() {
                     {
                         key: "draft",
                         label: "Draft",
-                        count: status.budgets.filter((b) => b.status === "draft")
-                            .length,
+                        count: status.budgets.filter(
+                            (b) => b.status === "draft",
+                        ).length,
                     },
                     {
                         key: "active",
                         label: "Active",
-                        count: status.budgets.filter((b) => b.status === "active")
-                            .length,
+                        count: status.budgets.filter(
+                            (b) => b.status === "active",
+                        ).length,
                     },
                     {
                         key: "closed",
                         label: "Closed",
-                        count: status.budgets.filter((b) => b.status === "closed")
-                            .length,
+                        count: status.budgets.filter(
+                            (b) => b.status === "closed",
+                        ).length,
                     },
                 ]}
                 activeTab={statusTab}
@@ -880,6 +928,7 @@ export function FinanceBudgets() {
                             open={createOpen}
                             onOpenChange={setCreateOpen}
                             onCreated={() => void load()}
+                            accounts={status.accounts}
                         />
                     ) : null
                 }
@@ -892,7 +941,7 @@ export function FinanceBudgets() {
                 />
             ) : (
                 <FinanceTable
-                    columns={columns}
+                    columns={columns(status.accounts, () => void load())}
                     rows={visibleBudgets}
                     getKey={(budget) => budget.id}
                     footer={
@@ -902,8 +951,7 @@ export function FinanceBudgets() {
                                 {status.budgets.length} budgets
                             </span>
                             <span className="tabular-nums">
-                                Active planned total{" "}
-                                {formatMoney(totalPlanned)}
+                                Active planned total {formatMoney(totalPlanned)}
                             </span>
                         </span>
                     }

@@ -91,7 +91,9 @@ async def emit_compliance_reminders(
         severity = NotificationSeverity.HIGH if is_overdue else NotificationSeverity.MEDIUM
         status_label = "overdue" if is_overdue else "due"
         title = f"{item.title} is {status_label}"
-        body = f"Compliance obligation '{item.title}' is {status_label} on {item.due_on.isoformat()}."
+        body = (
+            f"Compliance obligation '{item.title}' is {status_label} on {item.due_on.isoformat()}."
+        )
         if item.description:
             body += f" {item.description}"
 

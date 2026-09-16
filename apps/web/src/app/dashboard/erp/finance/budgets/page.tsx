@@ -1,5 +1,5 @@
-import { FinanceBudgets } from "@/features/finance/budgets";
+import { redirect } from "next/navigation";
 
 export default function FinanceBudgetsPage() {
-    return <FinanceBudgets />;
+    redirect("/dashboard/erp/finance/controls#budgets");
 }

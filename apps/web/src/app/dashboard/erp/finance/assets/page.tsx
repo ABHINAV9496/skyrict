@@ -1,5 +1,5 @@
-import { FinanceAssets } from "@/features/finance/assets";
+import { redirect } from "next/navigation";
 
 export default function FinanceAssetsPage() {
-    return <FinanceAssets />;
+    redirect("/dashboard/erp/finance/accounts#assets");
 }

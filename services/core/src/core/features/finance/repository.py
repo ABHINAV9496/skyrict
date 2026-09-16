@@ -374,7 +374,7 @@ def _payment_intent_from_orm(model: ErpPaymentIntentModel) -> PaymentIntent:
     )
 
 
-def _budget_from_orm(model: ErpBudgetModel) -> Budget:
+def _budget_from_orm(model: ErpBudgetModel, lines: Sequence[BudgetLine] | None = None) -> Budget:
     return Budget(
         tenant_id=model.tenant_id,
         name=model.name,
@@ -382,6 +382,7 @@ def _budget_from_orm(model: ErpBudgetModel) -> Budget:
         status=BudgetStatus(model.status),
         description=model.description,
         currency=model.currency,
+        lines=tuple(lines) if lines else (),
         created_by=model.created_by,
         id=model.id,
         created_at=model.created_at,
@@ -2717,12 +2718,23 @@ class FinanceRepository:
         await self.session.refresh(model)
         return _budget_from_orm(model)
 
+    async def list_active_budget_tenant_ids(self) -> list[uuid.UUID]:
+        """Distinct tenants with at least one ACTIVE budget (overrun scan target)."""
+        stmt = select(ErpBudgetModel.tenant_id.distinct()).where(
+            ErpBudgetModel.status == BudgetStatus.ACTIVE.value
+        )
+        result = await self.session.execute(stmt)
+        return [row[0] for row in result.all()]
+
     async def get_budget(self, budget_id: uuid.UUID, tenant_id: uuid.UUID) -> Budget | None:
         stmt = select(ErpBudgetModel).where(
             ErpBudgetModel.tenant_id == tenant_id, ErpBudgetModel.id == budget_id
         )
         model = (await self.session.execute(stmt)).scalar_one_or_none()
-        return _budget_from_orm(model) if model is not None else None
+        if model is None:
+            return None
+        lines = await self._budget_lines(tenant_id, (budget_id,))
+        return _budget_from_orm(model, lines.get(budget_id, ()))
 
     async def list_budgets(
         self, tenant_id: uuid.UUID, *, status: str | None = None
@@ -2732,7 +2744,30 @@ class FinanceRepository:
             stmt = stmt.where(ErpBudgetModel.status == status)
         stmt = stmt.order_by(ErpBudgetModel.fiscal_year.desc(), ErpBudgetModel.created_at.desc())
         result = await self.session.execute(stmt)
-        return [_budget_from_orm(model) for model in result.scalars().all()]
+        models = list(result.scalars().all())
+        if not models:
+            return []
+        lines = await self._budget_lines(
+            tenant_id,
+            tuple(m.id for m in models),
+        )
+        return [_budget_from_orm(model, lines.get(model.id, ())) for model in models]
+
+    async def _budget_lines(
+        self, tenant_id: uuid.UUID, budget_ids: tuple[uuid.UUID, ...]
+    ) -> dict[uuid.UUID, tuple[BudgetLine, ...]]:
+        if not budget_ids:
+            return {}
+        stmt = select(ErpBudgetLineModel).where(
+            ErpBudgetLineModel.tenant_id == tenant_id,
+            ErpBudgetLineModel.budget_id.in_(budget_ids),
+        )
+        stmt = stmt.order_by(ErpBudgetLineModel.account_code)
+        result = await self.session.execute(stmt)
+        grouped: dict[uuid.UUID, list[BudgetLine]] = {}
+        for line_model in result.scalars().all():
+            grouped.setdefault(line_model.budget_id, []).append(_budget_line_from_orm(line_model))
+        return {bid: tuple(lines) for bid, lines in grouped.items()}
 
     async def update_budget(self, budget: Budget) -> Budget | None:
         if budget.id is None:

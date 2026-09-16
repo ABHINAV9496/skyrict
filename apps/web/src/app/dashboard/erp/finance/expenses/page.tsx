@@ -1,5 +1,5 @@
-import { FinanceExpenses } from "@/features/finance/expenses";
+import { redirect } from "next/navigation";
 
 export default function FinanceExpensesPage() {
-    return <FinanceExpenses />;
+    redirect("/dashboard/erp/finance/controls#expenses");
 }

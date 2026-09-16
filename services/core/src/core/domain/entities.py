@@ -899,6 +899,7 @@ class Budget:
     status: BudgetStatus = BudgetStatus.DRAFT
     description: str | None = None
     currency: str = "USD"
+    lines: tuple[BudgetLine, ...] = ()
     created_by: uuid.UUID | None = None
     id: uuid.UUID | None = None
     created_at: datetime | None = None

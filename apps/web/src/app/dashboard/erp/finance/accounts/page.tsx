@@ -1,5 +1,5 @@
-import { FinanceAccounts } from "@/features/finance/accounts";
+import { FinanceLedger } from "@/features/finance/ledger";
 
 export default function FinanceAccountsPage() {
-    return <FinanceAccounts />;
+    return <FinanceLedger />;
 }

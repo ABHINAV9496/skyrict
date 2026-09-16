@@ -780,9 +780,7 @@ async def seed_compliance_world(session: object) -> dict[str, str]:
 
 class TestComplianceReminderHook:
     @pytest.mark.asyncio
-    async def test_open_item_emits_for_compliance_readers_once(
-        self, migrated_schema: None
-    ) -> None:
+    async def test_open_item_emits_for_compliance_readers_once(self, migrated_schema: None) -> None:
         async with async_session_factory() as session:
             world = await seed_compliance_world(session)
             tenant_id = uuid.UUID(world["tenant"])
@@ -809,10 +807,8 @@ class TestComplianceReminderHook:
             compliance_rows = await session.scalars(
                 select(ErpNotificationModel).where(
                     ErpNotificationModel.tenant_id == tenant_id,
-                    ErpNotificationModel.recipient_user_id
-                    == uuid.UUID(world["compliance_user"]),
-                    ErpNotificationModel.dedupe_key
-                    == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.recipient_user_id == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
                 )
             )
             rows = list(compliance_rows)
@@ -833,10 +829,8 @@ class TestComplianceReminderHook:
                 .select_from(ErpNotificationModel)
                 .where(
                     ErpNotificationModel.tenant_id == tenant_id,
-                    ErpNotificationModel.recipient_user_id
-                    == uuid.UUID(world["compliance_user"]),
-                    ErpNotificationModel.dedupe_key
-                    == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.recipient_user_id == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
                 )
             )
             assert count == 1
@@ -847,19 +841,15 @@ class TestComplianceReminderHook:
                 .select_from(ErpNotificationModel)
                 .where(
                     ErpNotificationModel.tenant_id == tenant_id,
-                    ErpNotificationModel.recipient_user_id
-                    == uuid.UUID(world["no_access_user"]),
-                    ErpNotificationModel.dedupe_key
-                    == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.recipient_user_id == uuid.UUID(world["no_access_user"]),
+                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
                 )
             )
             assert count_b == 0
             TenantContext.reset()
 
     @pytest.mark.asyncio
-    async def test_overdue_item_emits_high_severity(
-        self, migrated_schema: None
-    ) -> None:
+    async def test_overdue_item_emits_high_severity(self, migrated_schema: None) -> None:
         async with async_session_factory() as session:
             world = await seed_compliance_world(session)
             tenant_id = uuid.UUID(world["tenant"])
@@ -886,10 +876,8 @@ class TestComplianceReminderHook:
             row = await session.scalar(
                 select(ErpNotificationModel).where(
                     ErpNotificationModel.tenant_id == tenant_id,
-                    ErpNotificationModel.recipient_user_id
-                    == uuid.UUID(world["compliance_user"]),
-                    ErpNotificationModel.dedupe_key
-                    == f"compliance:{item.id}:2025-12-31",
+                    ErpNotificationModel.recipient_user_id == uuid.UUID(world["compliance_user"]),
+                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2025-12-31",
                 )
             )
             assert row is not None
@@ -899,9 +887,7 @@ class TestComplianceReminderHook:
             TenantContext.reset()
 
     @pytest.mark.asyncio
-    async def test_empty_items_emits_nothing(
-        self, migrated_schema: None
-    ) -> None:
+    async def test_empty_items_emits_nothing(self, migrated_schema: None) -> None:
         async with async_session_factory() as session:
             world = await seed_compliance_world(session)
             tenant_id = uuid.UUID(world["tenant"])

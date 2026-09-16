@@ -36,7 +36,7 @@ import {
     type FixedAsset,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
-import { formatDate, formatMoney } from "@/lib/finance/format";
+import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
 import {
     FinanceTable,
     type FinanceColumn,
@@ -165,7 +165,9 @@ function CreateAssetDialog({
                             <Input
                                 id="asset-name"
                                 value={name}
-                                onChange={(event) => setName(event.target.value)}
+                                onChange={(event) =>
+                                    setName(event.target.value)
+                                }
                                 placeholder="e.g. Delivery truck"
                             />
                         </div>
@@ -189,7 +191,9 @@ function CreateAssetDialog({
                                 min="0"
                                 step="0.01"
                                 value={cost}
-                                onChange={(event) => setCost(event.target.value)}
+                                onChange={(event) =>
+                                    setCost(event.target.value)
+                                }
                             />
                         </div>
                         <div className="space-y-1.5">
@@ -204,7 +208,9 @@ function CreateAssetDialog({
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="asset-life">Useful life (years)</Label>
+                            <Label htmlFor="asset-life">
+                                Useful life (years)
+                            </Label>
                             <Input
                                 id="asset-life"
                                 type="number"
@@ -407,7 +413,7 @@ const columns: (onDisposed: () => void) => FinanceColumn<FixedAsset>[] = (
     {
         label: "",
         align: "right",
-                        render: (asset) =>
+        render: (asset) =>
             asset.status === "disposed" ? null : (
                 <DisposeAssetDialog
                     asset={asset}
@@ -530,9 +536,11 @@ export function FinanceAssets() {
         );
     });
 
-    const totalNbv = status.assets
-        .filter((asset) => asset.status === "active")
-        .reduce((sum, asset) => sum + asset.net_book_value, 0);
+    const totalNbv = sumMoney(
+        status.assets
+            .filter((asset) => asset.status === "active")
+            .map((asset) => asset.net_book_value),
+    );
 
     const entryColumns: FinanceColumn<NonNullable<typeof entries>[number]>[] = [
         { label: "Period", render: (entry) => entry.period },
@@ -540,13 +548,17 @@ export function FinanceAssets() {
             label: "Amount",
             align: "right",
             render: (entry) => (
-                <span className="tabular-nums">{formatMoney(entry.amount)}</span>
+                <span className="tabular-nums">
+                    {formatMoney(entry.amount)}
+                </span>
             ),
         },
         {
             label: "Status",
             render: (entry) => (
-                <StatusBadge tone={entry.journal_entry_id ? "success" : "muted"}>
+                <StatusBadge
+                    tone={entry.journal_entry_id ? "success" : "muted"}
+                >
                     {entry.journal_entry_id ? "JE created" : "SKIPPED"}
                 </StatusBadge>
             ),
@@ -684,8 +696,8 @@ export function FinanceAssets() {
                     footer={
                         <span className="flex justify-between gap-4">
                             <span>
-                                {visibleAssets.length} of{" "}
-                                {status.assets.length} assets
+                                {visibleAssets.length} of {status.assets.length}{" "}
+                                assets
                             </span>
                             <span className="tabular-nums">
                                 Active net book value {formatMoney(totalNbv)}

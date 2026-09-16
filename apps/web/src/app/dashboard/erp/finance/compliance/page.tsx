@@ -1,5 +1,5 @@
-import { FinanceCompliance } from "@/features/finance/compliance";
+import { redirect } from "next/navigation";
 
 export default function FinanceCompliancePage() {
-    return <FinanceCompliance />;
+    redirect("/dashboard/erp/finance/controls#compliance");
 }

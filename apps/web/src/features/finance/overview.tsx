@@ -430,6 +430,59 @@ export function FinanceOverview() {
                 <RevenueForecastCard canRefresh={canWrite} />
             </section>
 
+            <section className="space-y-3">
+                <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+                    Controls &amp; planning
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {[
+                        {
+                            href: "/dashboard/erp/finance/controls#budgets",
+                            label: "Budgets",
+                            description: "Plan spending and track variance",
+                            icon: NotebookPen,
+                        },
+                        {
+                            href: "/dashboard/erp/finance/accounts#assets",
+                            label: "Fixed assets",
+                            description: "Register assets and run depreciation",
+                            icon: Package,
+                        },
+                        {
+                            href: "/dashboard/erp/finance/controls#expenses",
+                            label: "Expense control",
+                            description: "Policies, claims, violations",
+                            icon: ReceiptText,
+                        },
+                        {
+                            href: "/dashboard/erp/finance/controls#compliance",
+                            label: "Compliance",
+                            description: "Obligation due dates and reminders",
+                            icon: ShieldCheck,
+                        },
+                    ].map((item) => (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className="group rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/40"
+                        >
+                            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <item.icon
+                                    aria-hidden="true"
+                                    className="size-4"
+                                />
+                            </div>
+                            <h3 className="mt-3 font-medium text-foreground">
+                                {item.label}
+                            </h3>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                {item.description}
+                            </p>
+                        </Link>
+                    ))}
+                </div>
+            </section>
+
             <section className="grid gap-4 lg:grid-cols-3">
                 <WorkingCapitalCard alert={status.workingCapital} />
                 <HealthScoreCard score={status.health} />
@@ -548,56 +601,6 @@ export function FinanceOverview() {
                     getKey={(invoice) => invoice.id}
                     emptyMessage="No invoices yet."
                 />
-            </section>
-
-            <section className="space-y-3">
-                <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
-                    Controls &amp; planning
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {[
-                        {
-                            href: "/dashboard/erp/finance/budgets",
-                            label: "Budgets",
-                            description: "Plan spending and track variance",
-                            icon: NotebookPen,
-                        },
-                        {
-                            href: "/dashboard/erp/finance/assets",
-                            label: "Fixed assets",
-                            description: "Register assets and run depreciation",
-                            icon: Package,
-                        },
-                        {
-                            href: "/dashboard/erp/finance/expenses",
-                            label: "Expense control",
-                            description: "Policies, claims, violations",
-                            icon: ReceiptText,
-                        },
-                        {
-                            href: "/dashboard/erp/finance/compliance",
-                            label: "Compliance",
-                            description: "Obligation due dates and reminders",
-                            icon: ShieldCheck,
-                        },
-                    ].map((item) => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className="group rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/40"
-                        >
-                            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                <item.icon aria-hidden="true" className="size-4" />
-                            </div>
-                            <h3 className="mt-3 font-medium text-foreground">
-                                {item.label}
-                            </h3>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                {item.description}
-                            </p>
-                        </Link>
-                    ))}
-                </div>
             </section>
 
             <p className="text-sm text-muted-foreground">

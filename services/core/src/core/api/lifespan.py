@@ -136,6 +136,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         app.state.notification_batching_worker = None
 
+    # Budget overrun notification worker (SKY-85): a background asyncio loop
+    # that emits a notification per active-budget line whose posted activity
+    # exceeds its plan. Disabled under the test environment so integration
+    # tests drive process_all() directly (and via `core budget-overrun run`).
+    if settings.FINANCE_BUDGET_OVERRUN_WORKER_ENABLED and settings.ENVIRONMENT != Environment.TEST:
+        from core.db.session import async_session_factory
+        from core.features.finance.budget_overrun_worker import BudgetOverrunWorker
+
+        app.state.budget_overrun_worker = BudgetOverrunWorker(
+            async_session_factory,
+            poll_seconds=settings.FINANCE_BUDGET_OVERRUN_POLL_SECONDS,
+        )
+        app.state.budget_overrun_worker.start()
+    else:
+        app.state.budget_overrun_worker = None
+
     # Graceful shutdown: uvicorn owns SIGTERM/SIGINT handling; on signal it
     # runs this context manager's exit, closing the readiness gate, the AI
     # client and the DB engine so in-flight work can drain cleanly.
@@ -158,5 +174,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     batch_worker = getattr(app.state, "notification_batching_worker", None)
     if batch_worker is not None:
         await batch_worker.stop()
+    budget_overrun_worker = getattr(app.state, "budget_overrun_worker", None)
+    if budget_overrun_worker is not None:
+        await budget_overrun_worker.stop()
     await app.state.ai_client.aclose()
     await engine.dispose()

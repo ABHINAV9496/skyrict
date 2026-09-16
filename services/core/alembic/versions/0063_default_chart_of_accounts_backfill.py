@@ -24,16 +24,16 @@ Downgrade is a deliberate no-op: accounts backfilled by this migration are
 real tenant data by the time it could roll back, and deleting rows here could
 strand journal/invoice history that references them.
 
-Revision ID: 0062
-Revises: 0061
+Revision ID: 0063
+Revises: 0062
 Create Date: 2026-09-16
 """
 
 from alembic import op
 from sqlalchemy import text
 
-revision = "0062"
-down_revision = "0061"
+revision = "0063"
+down_revision = "0062"
 branch_labels = None
 depends_on = None
 

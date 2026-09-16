@@ -389,6 +389,29 @@ def approval_escalation(
 
 
 @app.command()
+def budget_overrun() -> None:
+    """Run one budget overrun scan pass (manual/CI equivalent of the worker).
+
+    Walks every tenant with an active budget and emits a notification for each
+    budget line whose net POSTED fiscal-year activity exceeds the planned
+    amount (dedupe key budget_overrun:{budget_id}:{account_code}).
+    """
+    import asyncio
+
+    from core.db.session import async_session_factory
+    from core.features.finance.budget_overrun_worker import BudgetOverrunWorker
+
+    async def _run() -> None:
+        outcome = await BudgetOverrunWorker(async_session_factory).process_all()
+        typer.echo(
+            f"budget overrun pass complete: {outcome.tenants_processed} tenants, "
+            f"{outcome.budgets_checked} budgets checked, {outcome.overruns_notified} overruns notified"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command()
 def notification_batch(
     window: int = typer.Option(
         None,

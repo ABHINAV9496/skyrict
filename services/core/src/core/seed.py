@@ -22,7 +22,7 @@ decisions) live here and are applied at tenant provisioning time:
     covering sales, COGS, and the payroll-accrual bridge) seeded on
     every new tenant so sales order fulfilment and payroll accrual work
     out-of-the-box.  Defined in ``DEFAULT_CHART_ACCOUNTS`` below; backfilled
-    for pre-existing tenants by migration 0062.
+    for pre-existing tenants by migration 0063.
 
 EMP-/PR- record-numbering seeds are deliberately NOT here: ``erp_sequences``
 now exists (migration 0006) but the per-tenant counter seed rows land with the

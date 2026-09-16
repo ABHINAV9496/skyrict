@@ -206,13 +206,22 @@ export async function refreshSession(page: Page): Promise<void> {
 /**
  * Wait for the workspace shell to finish its initial session hydration.
  *
- * The dashboard layout renders its sidebar (logo link "Skyrict dashboard")
- * only after the BFF session restore (which rotates the refresh token exactly
- * once, single-flight) and the roles/me permissions call have both succeeded -
- * at that point the cookie jar holds the post-rotation token. Yielding the
- * page any earlier lets the test's first goto abort an in-flight hydration,
- * which can leave a consumed token behind and trip the backend's reuse
- * detector.
+ * The logo link ("Skyrict dashboard") is part of the SERVER-rendered shell and
+ * appears as soon as a session cookie exists - long before the client's
+ * SessionProvider.restore() finishes rotating the refresh token on mount.
+ * Resolving on the link alone lets the test's first goto abort that in-flight
+ * hydration: the backend completes the rotation (advancing the session's token
+ * hash) while the browser, whose fetch the navigation killed, never stores the
+ * new Set-Cookie. The next page then presents a stale token, the backend's
+ * reuse detector revokes the whole session family, and the user is bounced to
+ * /signin (see reports-workspace.spec.ts; proven via the identity audit log:
+ * auth.refresh.success immediately followed by auth.refresh.reuse_detected).
+ *
+ * The real readiness signal is the sidebar user menu: it renders the signed-in
+ * user's email only after restore() resolves - i.e. the BFF session restore
+ * completed AND its Set-Cookie was applied to the cookie jar. Waiting on that
+ * after the shell link means the test's first navigation always starts from a
+ * settled, current session.
  *
  * Do NOT attach a 401 auto-refresh here: the app's own single-flight recovery
  * (lib/api/http.ts ensureSession) is the only sanctioned rotation source - a
@@ -222,5 +231,10 @@ export async function refreshSession(page: Page): Promise<void> {
 export async function waitForWorkspaceSettled(page: Page): Promise<void> {
   await expect(
     page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  const email = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
+  await expect(
+    page.getByText(email, { exact: true }).first(),
+    "sidebar user menu must render the signed-in user's email after session hydration",
   ).toBeVisible({ timeout: 20_000 });
 }

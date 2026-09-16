@@ -98,6 +98,14 @@ services:
       IDENTITY_MFA_ENCRYPTION_KEY: b5NfYZ9zPGOH1WnvKja_ceryP61ejCjNyx5HGMJQlKk=
       IDENTITY_BASE_DOMAIN: localhost
       IDENTITY_APP_URL: http://default.localhost:3000
+      # E2E-stack accommodation: every worker/repeat signs in FRESH through the
+      # real login endpoint (that isolation is the whole point of the harness),
+      # so the production-login limit of 5 per 300s window would trip during
+      # repeat/parallel runs. The sign-in still requires valid credentials +
+      # MFA; only the anti-brute-force window is widened for the disposable
+      # test stack (production default in config.py stays 5). Note the IDENTITY_
+      # env prefix (config.py env_prefix="IDENTITY_").
+      IDENTITY_RATE_LIMIT_LOGIN: "1000"
       IDENTITY_EMAIL_SMTP_HOST: skyrict-e2e-mailpit
       IDENTITY_EMAIL_SMTP_PORT: "1025"
       IDENTITY_HOST: 0.0.0.0

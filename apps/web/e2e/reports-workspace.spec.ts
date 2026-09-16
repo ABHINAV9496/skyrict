@@ -77,9 +77,14 @@ test("reports workspace smoke: auth, live catalog, and report run", async ({
       .click();
 
     // Report detail heading (the client-side router has already landed on the
-    // detail route at this point).
+    // detail route at this point). The topbar h1 also carries the dynamic
+    // "· Pipeline value by stage" title, so the match must be exact.
     await expect(
-      page.getByRole("heading", { level: 1, name: "Pipeline value by stage" }),
+      page.getByRole("heading", {
+        level: 1,
+        name: "Pipeline value by stage",
+        exact: true,
+      }),
     ).toBeVisible({ timeout: 15_000 });
 
     // Pipeline value by stage only declares tenant_id (a server param), which

@@ -283,12 +283,28 @@ export function backendError(result: BackendCallResult) {
   return NextResponse.json({ error: String(detail) }, { status: result.status || 400 });
 }
 
+/**
+ * Secure-flag for the session cookie. Defaults to the production posture
+ * (Secure only when NODE_ENV=production). The E2E stack serves plain HTTP on
+ * loopback-only origins (*.localhost), where Chromium drops Secure cookies, so
+ * the CI workflow sets SESSION_COOKIE_SECURE=false for exactly that stack - the
+ * loopback transport is explicitly not the boundary under test. Forcing true
+ * on a public HTTP origin (or false on a public HTTPS origin) is a
+ * misconfiguration and is left to deployment review.
+ */
+function resolveSessionCookieSecure(): boolean {
+  const override = process.env.SESSION_COOKIE_SECURE;
+  if (override === "false") return false;
+  if (override === "true") return true;
+  return process.env.NODE_ENV === "production";
+}
+
 /** Set (or clear, when value is null) the httpOnly refresh-token cookie. */
 export function applySessionCookie(response: NextResponse, value: string | null): void {
   response.cookies.set(SESSION_COOKIE, value ?? "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: resolveSessionCookieSecure(),
     path: "/",
     maxAge: value ? SESSION_MAX_AGE_SECONDS : 0,
   });

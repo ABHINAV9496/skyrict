@@ -1,0 +1,177 @@
+# =============================================================================
+# CI - End-to-End Tests (SKY-103)
+#
+# Boots the full compose cluster (Postgres, Redis, Mailpit, Identity, Core,
+# AI-Agent, Nginx), seeds the databases, builds the web app, starts Next.js
+# on the host at :3100, and runs Playwright against the nginx origin
+# (http://default.localhost:3000 -> Next.js).
+#
+# Next.js runs on the host (not inside a container) so Playwright can reach
+# it via host.docker.internal and so `next start` binds 127.0.0.1:3100.
+# =============================================================================
+
+name: E2E Tests
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - "apps/web/**"
+      - "services/**"
+      - "infra/**"
+      - "scripts/e2e/**"
+      - ".github/workflows/e2e.yml"
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - "apps/web/**"
+      - "services/**"
+      - "infra/**"
+      - "scripts/e2e/**"
+      - ".github/workflows/e2e.yml"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.7"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---- JWT RSA keys ----------------------------------------------------
+      - name: Generate JWT RSA keys
+        run: |
+          mkdir -p .dev/keys
+          openssl genrsa -out .dev/keys/private.pem 2048 2>/dev/null
+          openssl rsa -in .dev/keys/private.pem -pubout -out .dev/keys/public.pem 2>/dev/null
+          echo "Generated .dev/keys/private.pem + public.pem"
+
+      # ---- Compose up ------------------------------------------------------
+      - name: Start compose stack
+        run: docker compose -f infra/docker/docker-compose.e2e.yml up -d --build
+        timeout-minutes: 15
+
+      # ---- Seeds -----------------------------------------------------------
+      - name: Wait for identity and seed database
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.e2e.yml exec -T identity \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" \
+              2>/dev/null; then
+              break
+            fi
+            echo "Waiting for identity... ($i/60)"
+            sleep 2
+          done
+
+          # Identity seed is idempotent: creates the default tenant + admin
+          # user on first run and no-ops on re-runs.  --workdir is REQUIRED:
+          # the image WORKDIR is /app, and Settings resolves the relative
+          # .dev/keys/*.pem paths against the process CWD — the seed must
+          # run from /app/services/identity exactly like the container boot
+          # command does (uv run --directory services/identity ...). PYTHONPATH
+          # is set in the container env and /app/.venv/bin is on PATH, so
+          # plain `python` resolves both the src-layout packages and deps.
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/identity identity \
+            python -m identity.seed
+          echo "Seeded identity (default tenant + admin@skyrict.io)"
+
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.e2e.yml exec -T core \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')" \
+              2>/dev/null; then
+              break
+            fi
+            echo "Waiting for core... ($i/60)"
+            sleep 2
+          done
+
+          # Core seed populates the report catalog for the default tenant.
+          # The tenant UUID is the identity service's DEFAULT_TENANT_ID.
+          # --workdir: same CWD rationale as the identity seed above.
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/core core \
+            python -m core.seed \
+            --tenant-id 00000000-0000-0000-0000-000000000001
+          echo "Seeded core report catalog"
+        timeout-minutes: 10
+
+      # ---- Build + start Next.js -------------------------------------------
+      - name: Build web app
+        run: pnpm --filter @skyrict/web build
+        env:
+          SESSION_COOKIE_SECURE: "false"
+
+      - name: Start Next.js (production mode)
+        # `next start` honors $PORT (set below), so we must NOT pass a
+        # `-- -p 3100` arg through pnpm: pnpm appends the literal `--` to the
+        # script argv, `next start` then treats `-p` as a positional project
+        # directory and exits with "Invalid project directory provided".
+        run: |
+          pnpm --filter @skyrict/web start &
+          bash scripts/e2e/wait-for-health.sh http://localhost:3100/api/v1/health 90
+          echo "Next.js listening on :3100"
+        env:
+          SESSION_COOKIE_SECURE: "false"
+          PORT: "3100"
+
+      # ---- Playwright ------------------------------------------------------
+      - name: Install Playwright browser
+        run: pnpm --filter @skyrict/web exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --filter @skyrict/web exec playwright test
+        env:
+          CI: "true"
+          E2E_BASE_URL: "http://default.localhost:3000"
+          E2E_SKIP_WEBSERVER: "1"
+          SESSION_COOKIE_SECURE: "false"
+          E2E_TENANT_SLUG: "default"
+          E2E_ADMIN_EMAIL: "admin@skyrict.io"
+          E2E_ADMIN_PASSWORD: "Admin123!"
+
+      # ---- Artifacts -------------------------------------------------------
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: apps/web/test-results/
+          retention-days: 14
+
+      # ---- Teardown --------------------------------------------------------
+      - name: Teardown compose stack
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.e2e.yml down -v --remove-orphans

@@ -13,9 +13,15 @@ import {
 export const dynamic = "force-dynamic";
 
 function workspaceUrl(request: NextRequest, slug: string): string {
-    const { protocol, hostname, port } = request.nextUrl;
+    // Derive the port from the Host header (client-facing edge port), not
+    // request.nextUrl which reports the server's own socket port (3100) and
+    // would mint a workspaceUrl on the internal port the browser cannot
+    // reach through the CSP form-action allowlist.
+    const host = request.headers.get("host") ?? "";
+    const port = host.includes(":") ? host.slice(host.indexOf(":")) : "";
+    const hostname = host.replace(/:\d+$/, "").toLowerCase();
     const apex = hostname.split(".").slice(1).join(".") || hostname;
-    return `${protocol}//${slug}.${apex}${port ? `:${port}` : ""}`;
+    return `${request.nextUrl.protocol}//${slug}.${apex}${port}`;
 }
 
 /**

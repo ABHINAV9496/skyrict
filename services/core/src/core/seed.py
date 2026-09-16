@@ -35,12 +35,13 @@ newer; system-role permits are appended, never removed).
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.core.config import settings
 from core.core.permissions import (
@@ -95,6 +96,7 @@ from core.features.approval_workflow.dsl import (
     WorkflowDefinition,
     WorkflowStep,
 )
+from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
 from core.features.hr.models.leave_type import LeaveTypeModel
 from core.features.payroll.models.payroll_run import PayrollRounding
 from core.features.payroll.models.payroll_settings import PayrollSettingsModel
@@ -102,9 +104,6 @@ from core.features.reporting.models.report_definition import ErpReportDefinition
 from core.features.reporting.seeds import PHASE_1_REPORT_SEEDS, is_seed_stale
 from core.features.reporting.validation import require_tenant_filter, validate_read_only_sql
 from core.models.core_role import CoreRoleModel
-
-if TYPE_CHECKING:
-    import uuid
 
 logger = structlog.get_logger("core.seed")
 
@@ -236,25 +235,28 @@ async def seed_tenant_finance_defaults(tenant_id: uuid.UUID) -> None:
     ``(tenant_id, code)`` unique constraint plus ``ON CONFLICT ... DO NOTHING``
     absorbs a provisioning race with the first concurrent write.
 
-    Uses literal VALUES (of the constant catalog) rather than ``unnest`` array
-    binding: asyncpg cannot resolve ``unnest(unknown)`` from a Python list of
-    tuples, while a VALUES list compiles to plan-cacheable explicit column
-    types. The values are module constants, never user input.
+    Uses a parameterized Core insert (no string-built SQL) so the statement is
+    safe under both asyncpg and Bandit's hardcoded-SQL scan.
     """
-    _values = ", ".join(
-        f"('{a.code}', '{a.name}', '{a.account_type.value}')" for a in DEFAULT_CHART_ACCOUNTS
-    )
     async with async_session_factory() as session:
         await session.execute(
-            text(
-                "INSERT INTO erp_chart_of_accounts "
-                "(tenant_id, id, code, name, account_type, is_active) "
-                f"SELECT :tenant_id, gen_random_uuid(), v.code, v.name, "
-                f"v.account_type::erp_account_type, TRUE "
-                f"FROM (VALUES {_values}) AS v(code, name, account_type) "
-                "ON CONFLICT (tenant_id, code) DO NOTHING"
-            ),
-            {"tenant_id": tenant_id},
+            pg_insert(ErpChartOfAccountModel)
+            .values(
+                [
+                    {
+                        "tenant_id": tenant_id,
+                        "id": uuid.uuid4(),
+                        "code": account.code,
+                        "name": account.name,
+                        "account_type": account.account_type,
+                        "is_active": True,
+                    }
+                    for account in DEFAULT_CHART_ACCOUNTS
+                ]
+            )
+            .on_conflict_do_nothing(
+                index_elements=[ErpChartOfAccountModel.tenant_id, ErpChartOfAccountModel.code]
+            )
         )
         await session.commit()
         logger.info(

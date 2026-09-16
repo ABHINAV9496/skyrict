@@ -13,7 +13,7 @@
  * (see e2e/helpers/auth-flow.ts).
  */
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 import { expect, test as setup, type Page } from "@playwright/test";
 
@@ -61,6 +61,10 @@ async function saveAuthState(page: Page) {
 }
 
 setup("authenticate as the seeded admin", async ({ page }) => {
+  // e2e/.auth is gitignored (holds the TOTP secret + storage state), so it
+  // does not exist on a fresh CI checkout - create it before the first write.
+  mkdirSync("e2e/.auth", { recursive: true });
+
   // Capture the MFA setup response before sign-in: the setup-MFA page calls
   // the API on mount, so the enrollment arm needs the listener attached
   // before the handoff happens. Harmless on the challenge path.

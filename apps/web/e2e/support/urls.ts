@@ -20,7 +20,10 @@ const DEFAULT_E2E_BASE_URL = "http://default.localhost:3000";
 function surfaceBase(surface: Surface, slug = ""): string {
   const url = new URL(process.env.E2E_BASE_URL ?? DEFAULT_E2E_BASE_URL);
   const parts = url.hostname.split(".").filter(Boolean);
-  const apex = parts.length >= 2 ? parts.slice(-2).join(".") : url.hostname;
+  // E2E_BASE_URL is a tenanted origin ({slug}.{apex}, e.g. default.localhost),
+  // so drop exactly the leading tenant label to recover the apex. Works for
+  // bare localhost too (parts.length < 2).
+  const apex = parts.length >= 2 ? parts.slice(1).join(".") : url.hostname;
   const port = url.port ? `:${url.port}` : "";
   const host =
     surface === "workspace"

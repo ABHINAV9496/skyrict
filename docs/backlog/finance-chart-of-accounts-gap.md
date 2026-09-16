@@ -1,6 +1,12 @@
 # FIN — Chart of accounts gap: sales fulfilment silently breaks for real tenants
 
-**Status:** OPEN — flagged from `feat/HR-AUT-001/Payroll-Batch-Runs-and-Notification-Orchestrator`. Not fixed in that branch (out of scope); fix belongs to the Finance owner.
+**Status:** CLOSED — fixed on `feat/SKY-96-Finance-chart-of-accounts-gap-default-COGS-or-Revenue-provisioning-and-backfill` (merged into `dev` via the SKY-96 PR). Closes both symptoms: sales COGS 404 and payroll `je_bridge_status = 'pending'`.
+
+**Fixed by:**
+- `core.seed.DEFAULT_CHART_ACCOUNTS` + `seed_tenant_finance_defaults()` — every newly provisioned tenant now gets all 9 mandatory accounts (1100/1200/1300/2010/2020/2110/4000/5000/5010), wired into `cli.py::_seed_tenant` and the demo seed path.
+- Migration `0063_default_chart_of_accounts_backfill` — idempotent cross-join backfill (`ON CONFLICT (tenant_id, code) DO NOTHING`) reconciling tenants that existed before the fix; never overwrites custom accounts.
+- Test guards — `tests/integration/database/test_finance_chart_defaults.py` proves fresh-tenant provisioning, idempotence, and custom-account preservation; `test_migration_roundtrip.py` asserts the 9-code backfill for pre-existing tenants; `test_sales_api.py` now exercises the real seeder instead of ad-hoc SQL (the missing guard this ticket asked for).
+- Operation note: `erp_chart_of_accounts.(tenant_id, code)` UNIQUE stays the DB-level idempotency guard; sales fulfilment and payroll mark-paid book against the same chart.
 
 **Severity:** High for any production/staging tenant. Sales order fulfilment fails with a 404-style `NotFoundError` on the COGS account for every tenant that was not provisioned by the demo seeder.
 

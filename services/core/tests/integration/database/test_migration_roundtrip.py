@@ -2,7 +2,7 @@
 
 Closes the DoD's "migration applies up and down" checkbox for the WHOLE chain,
 not the newest link in isolation: identity base schema -> core ``upgrade head``
-(all 60 revisions, 0001..0060) -> core ``downgrade base`` (all the way back to
+(all 63 revisions, 0001..0063) -> core ``downgrade base`` (all the way back to
 nothing) -> core ``upgrade head`` again - on a disposable scratch database
 created by the test and dropped afterwards.
 
@@ -276,7 +276,7 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version_core"))
             ).scalar_one()
-            assert version == "0062", f"head is {version}, expected 0062"
+            assert version == "0063", f"head is {version}, expected 0063"
 
             # 0018: erp.leave.self is a first-class catalog permission.
             perm_row = (
@@ -1497,6 +1497,36 @@ async def _assert_upgraded_schema(url: str, tenant_ids: list[str] | None = None)
                     )
                 ).scalar_one()
                 assert count == 1, f"0062 must add {constraint}"
+
+            # 0063: default chart-of-accounts backfill (SKY-94/SKY-96) - every
+            # tenant that existed at migration time gets the 9 mandatory
+            # accounts, and the (tenant_id, code) unique constraint keeps a
+            # re-run idempotent.
+            if tenant_ids is not None:
+                for tenant in tenant_ids:
+                    account_rows = (
+                        await conn.execute(
+                            text(
+                                "SELECT count(*), count(DISTINCT code) "
+                                "FROM erp_chart_of_accounts WHERE tenant_id = :tenant"
+                            ),
+                            {"tenant": uuid.UUID(tenant)},
+                        )
+                    ).one()
+                    assert account_rows[0] == 9, (
+                        f"tenant {tenant} has {account_rows[0]} chart rows, expected 9"
+                    )
+                    assert account_rows[1] == 9, f"tenant {tenant} chart rows are not code-distinct"
+
+            coa_backfill_uniq = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_constraint "
+                        "WHERE conname = 'uq_erp_chart_of_accounts_tenant_code'"
+                    )
+                )
+            ).scalar_one()
+            assert coa_backfill_uniq == 1, "0004 must keep the (tenant_id, code) uniqueness"
     finally:
         await engine.dispose()
 

@@ -127,8 +127,12 @@ jobs:
           SESSION_COOKIE_SECURE: "false"
 
       - name: Start Next.js (production mode)
+        # `next start` honors $PORT (set below), so we must NOT pass a
+        # `-- -p 3100` arg through pnpm: pnpm appends the literal `--` to the
+        # script argv, `next start` then treats `-p` as a positional project
+        # directory and exits with "Invalid project directory provided".
         run: |
-          pnpm --filter @skyrict/web start -- -p 3100 &
+          pnpm --filter @skyrict/web start &
           bash scripts/e2e/wait-for-health.sh http://localhost:3100/api/v1/health 90
           echo "Next.js listening on :3100"
         env:

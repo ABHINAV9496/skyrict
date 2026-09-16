@@ -6,6 +6,7 @@ import {
     getWidget,
     type WidgetDefinition,
 } from "@/lib/dashboard/widget-registry";
+import { ErrorBoundary } from "@/components/dashboard/shared/error-boundary";
 import { cn } from "@/lib/utils";
 
 export interface LayoutItem {
@@ -104,7 +105,9 @@ function WidgetCell({ widget, cols, onShow }: WidgetCellProps) {
 
     return (
         <div className={cn("min-w-0", spanClass)}>
-            <Component />
+            <ErrorBoundary>
+                <Component />
+            </ErrorBoundary>
         </div>
     );
 }

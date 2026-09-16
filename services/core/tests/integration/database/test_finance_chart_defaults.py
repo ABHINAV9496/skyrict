@@ -11,7 +11,7 @@ Proves the finance chart gap fix end-to-end over REAL Postgres:
   - the ``(tenant_id, code)`` unique constraint is the DB-level guard behind
     ON CONFLICT, so a provisioning race cannot double-insert.
 
-The migration-0062 backfill itself is covered by the full chain round-trip
+The migration-0063 backfill itself is covered by the full chain round-trip
 test (test_migration_roundtrip.py), which inserts two tenants before the
 chain runs and asserts each gets exactly 9 code-distinct rows.
 """
@@ -72,7 +72,7 @@ def chart_world(migrated_schema: None) -> dict[str, str]:
 
 @pytest.fixture(autouse=True)
 async def clean_chart(chart_world: dict[str, str]) -> None:
-    """Each test owns a clean chart for the tenant."""
+    """Each test owns a clean chart for the tenant (runs on the test loop)."""
     async with async_session_factory() as session:
         await session.execute(
             text("DELETE FROM erp_chart_of_accounts WHERE tenant_id = :tid"),
@@ -80,6 +80,68 @@ async def clean_chart(chart_world: dict[str, str]) -> None:
         )
         await session.commit()
     yield
+
+
+async def test_seed_creates_all_default_codes(chart_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(chart_world["tenant_id"])
+    await seed_tenant_finance_defaults(tenant_id)
+    codes = await _chart_codes(tenant_id)
+    assert codes == DEFAULT_CODES
+
+
+async def test_seed_is_idempotent(chart_world: dict[str, str]) -> None:
+    tenant_id = uuid.UUID(chart_world["tenant_id"])
+    for _ in range(3):
+        await seed_tenant_finance_defaults(tenant_id)
+    codes = await _chart_codes(tenant_id)
+    assert codes == DEFAULT_CODES
+
+    async with async_session_factory() as session:
+        count = await session.scalar(
+            select(func.count())
+            .select_from(ErpChartOfAccountModel)
+            .where(ErpChartOfAccountModel.tenant_id == tenant_id)
+        )
+    assert count == len(DEFAULT_CODES)
+
+
+async def test_seed_preserves_existing_custom_account(
+    chart_world: dict[str, str],
+) -> None:
+    """A pre-existing account with a non-default code is preserved by seeding."""
+    tenant_id = uuid.UUID(chart_world["tenant_id"])
+
+    custom_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        session.add(
+            ErpChartOfAccountModel(
+                tenant_id=tenant_id,
+                id=custom_id,
+                code="9999",
+                name="Custom Other Income",
+                account_type="revenue",
+            )
+        )
+        await session.commit()
+
+    await seed_tenant_finance_defaults(tenant_id)
+
+    # Custom row must survive; default count must still be 9.
+    async with async_session_factory() as session:
+        row = await session.scalar(
+            select(ErpChartOfAccountModel).where(
+                ErpChartOfAccountModel.tenant_id == tenant_id,
+                ErpChartOfAccountModel.id == custom_id,
+            )
+        )
+        count = await session.scalar(
+            select(func.count())
+            .select_from(ErpChartOfAccountModel)
+            .where(ErpChartOfAccountModel.tenant_id == tenant_id)
+        )
+    assert row is not None
+    assert row.name == "Custom Other Income"
+    assert count == len(DEFAULT_CODES) + 1
 
 
 async def _chart_codes(tenant_id: uuid.UUID) -> set[str]:
@@ -92,58 +154,3 @@ async def _chart_codes(tenant_id: uuid.UUID) -> set[str]:
             )
         ).scalars()
         return set(rows)
-
-
-def test_seed_creates_all_default_codes(chart_world: dict[str, str]) -> None:
-    tenant_id = uuid.UUID(chart_world["tenant_id"])
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-    codes = asyncio.run(_chart_codes(tenant_id))
-    assert codes == DEFAULT_CODES
-
-
-def test_seed_is_idempotent(chart_world: dict[str, str]) -> None:
-    tenant_id = uuid.UUID(chart_world["tenant_id"])
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-    codes = asyncio.run(_chart_codes(tenant_id))
-    assert codes == DEFAULT_CODES
-    async with async_session_factory() as session:
-        count = await session.scalar(
-            select(func.count())
-            .select_from(ErpChartOfAccountModel)
-            .where(ErpChartOfAccountModel.tenant_id == tenant_id)
-        )
-    assert count == len(DEFAULT_CODES)
-
-
-def test_seed_preserves_existing_custom_account(chart_world: dict[str, str]) -> None:
-    """A pre-existing account with a default code is never overwritten."""
-    tenant_id = uuid.UUID(chart_world["tenant_id"])
-
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-
-    custom_id = uuid.uuid4()
-    async with async_session_factory() as session:
-        session.add(
-            ErpChartOfAccountModel(
-                tenant_id=tenant_id,
-                id=custom_id,
-                code="5000",
-                name="Custom COGS override",
-                account_type="expense",
-            )
-        )
-        await session.commit()
-
-    # Re-seed: the custom row must survive untouched.
-    asyncio.run(seed_tenant_finance_defaults(tenant_id))
-    async with async_session_factory() as session:
-        row = await session.scalar(
-            select(ErpChartOfAccountModel).where(
-                ErpChartOfAccountModel.tenant_id == tenant_id,
-                ErpChartOfAccountModel.id == custom_id,
-            )
-        )
-    assert row is not None
-    assert row.name == "Custom COGS override"

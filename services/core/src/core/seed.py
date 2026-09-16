@@ -227,7 +227,7 @@ async def seed_tenant_finance_defaults(tenant_id: uuid.UUID) -> None:
     ``features/finance/service.py`` raises ``NotFoundError`` for the COGS
     account code during ``post_cogs_for_order``.
 
-    The migration 0062 backfills pre-existing tenants; {cli,_seed_tenant}
+    The migration 0063 backfills pre-existing tenants; {cli,_seed_tenant}
     calls this at provisioning time for every new tenant.  Both paths use the
     same ``DEFAULT_CHART_ACCOUNTS`` catalog above, keeping demo seeding
     (``seed_demo.ACCOUNT_ROWS``), provisioning, and backfill consistent.
@@ -235,22 +235,26 @@ async def seed_tenant_finance_defaults(tenant_id: uuid.UUID) -> None:
     Idempotent and concurrency-safe: existing codes are left untouched and a
     ``(tenant_id, code)`` unique constraint plus ``ON CONFLICT ... DO NOTHING``
     absorbs a provisioning race with the first concurrent write.
+
+    Uses literal VALUES (of the constant catalog) rather than ``unnest`` array
+    binding: asyncpg cannot resolve ``unnest(unknown)`` from a Python list of
+    tuples, while a VALUES list compiles to plan-cacheable explicit column
+    types. The values are module constants, never user input.
     """
-    rows = [
-        (account.code, account.name, account.account_type.value)
-        for account in DEFAULT_CHART_ACCOUNTS
-    ]
+    _values = ", ".join(
+        f"('{a.code}', '{a.name}', '{a.account_type.value}')" for a in DEFAULT_CHART_ACCOUNTS
+    )
     async with async_session_factory() as session:
         await session.execute(
             text(
                 "INSERT INTO erp_chart_of_accounts "
                 "(tenant_id, id, code, name, account_type, is_active) "
-                "SELECT :tenant_id, gen_random_uuid(), v.code, v.name, "
-                "v.account_type::erp_account_type, TRUE "
-                "FROM unnest(:rows) AS v(code text, name text, account_type text) "
+                f"SELECT :tenant_id, gen_random_uuid(), v.code, v.name, "
+                f"v.account_type::erp_account_type, TRUE "
+                f"FROM (VALUES {_values}) AS v(code, name, account_type) "
                 "ON CONFLICT (tenant_id, code) DO NOTHING"
             ),
-            {"tenant_id": tenant_id, "rows": rows},
+            {"tenant_id": tenant_id},
         )
         await session.commit()
         logger.info(

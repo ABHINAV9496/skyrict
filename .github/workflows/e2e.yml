@@ -88,10 +88,15 @@ jobs:
           done
 
           # Identity seed is idempotent: creates the default tenant + admin
-          # user on first run and no-ops on re-runs.  PYTHONPATH is set in
-          # the container env (inherited by exec) so plain `python` resolves
-          # the src-layout packages.
-          docker compose -f infra/docker/docker-compose.e2e.yml exec -T identity \
+          # user on first run and no-ops on re-runs.  --workdir is REQUIRED:
+          # the image WORKDIR is /app, and Settings resolves the relative
+          # .dev/keys/*.pem paths against the process CWD — the seed must
+          # run from /app/services/identity exactly like the container boot
+          # command does (uv run --directory services/identity ...). PYTHONPATH
+          # is set in the container env and /app/.venv/bin is on PATH, so
+          # plain `python` resolves both the src-layout packages and deps.
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/identity identity \
             python -m identity.seed
           echo "Seeded identity (default tenant + admin@skyrict.io)"
 
@@ -107,7 +112,9 @@ jobs:
 
           # Core seed populates the report catalog for the default tenant.
           # The tenant UUID is the identity service's DEFAULT_TENANT_ID.
-          docker compose -f infra/docker/docker-compose.e2e.yml exec -T core \
+          # --workdir: same CWD rationale as the identity seed above.
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/core core \
             python -m core.seed \
             --tenant-id 00000000-0000-0000-0000-000000000001
           echo "Seeded core report catalog"

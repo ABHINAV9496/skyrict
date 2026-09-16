@@ -87,6 +87,17 @@ export const test = base.extend<{}, { workspace: AuthSession }>({
       // current from here on.
       installSessionRefresh(page);
 
+      // Let the workspace shell finish its own session hydration before the
+      // test's first navigation. The shell rotates the refresh token once on
+      // mount; if the test's goto races that rotation, two requests present
+      // the same token, identity flags it as reuse, and the whole family is
+      // revoked - the test then bounces back to the signin page (401 on
+      // /api/v1/roles/me). networkidle caps at 10s in case the shell holds a
+      // long-lived stream (SSE) that would otherwise never go idle.
+      await page
+        .waitForLoadState("networkidle", { timeout: 10_000 })
+        .catch(() => {});
+
       const session: AuthSession = {
         slug,
         context,

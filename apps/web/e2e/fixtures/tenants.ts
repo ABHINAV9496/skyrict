@@ -18,9 +18,9 @@ import { expect, test as base, type BrowserContext, type Page } from "@playwrigh
 import {
   enrollMfaAndFinish,
   installMfaSecretCapture,
-  installSessionRefresh,
   refreshSession,
   signInWithPassword,
+  waitForWorkspaceSettled,
   whichMfaPath,
 } from "../helpers/auth-flow";
 import { registerTenant, type RegisteredTenant } from "../helpers/onboarding";
@@ -64,8 +64,9 @@ export const test = base.extend<{}, { tenant: TenantSession }>({
       );
       await enrollMfaAndFinish(page, { secretGetter: getMfaSecret });
 
-      // 3. Workspace landed; keep the jar's token current from here on.
-      installSessionRefresh(page);
+      // 3. Workspace landed; let the shell finish its session hydration
+      //    before the test's first navigation.
+      await waitForWorkspaceSettled(page);
 
       const session: TenantSession = {
         slug,

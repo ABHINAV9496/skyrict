@@ -204,15 +204,22 @@ export async function refreshSession(page: Page): Promise<void> {
 }
 
 /**
- * Auto-refresh the session through the BFF whenever a backend API answers 401,
- * so the next navigation always presents the current (un-rotated) token.
- * Attach AFTER the workspace has landed - the sign-in handshake itself can
- * legitimately produce 401-like flows that must not rotate the session.
+ * Wait for the workspace shell to finish its initial session hydration.
+ *
+ * The dashboard shell renders the sidebar only after the BFF session restore
+ * (which rotates the refresh token exactly once, single-flight) and the
+ * roles/me permissions call have both succeeded - at that point the cookie jar
+ * holds the post-rotation token. Yielding the page any earlier lets the test's
+ * first goto abort an in-flight hydration, which can leave a consumed token
+ * behind and trip the backend's reuse detector.
+ *
+ * Do NOT attach a 401 auto-refresh here: the app's own single-flight recovery
+ * (lib/api/http.ts ensureSession) is the only sanctioned rotation source - a
+ * parallel /api/auth/session from the harness would race it and revoke the
+ * whole token family.
  */
-export function installSessionRefresh(page: Page): void {
-  page.on("response", (response) => {
-    if (response.status() === 401 && response.url().includes("/api/v1/")) {
-      void refreshSession(page).catch(() => {});
-    }
-  });
+export async function waitForWorkspaceSettled(page: Page): Promise<void> {
+  await expect(
+    page.getByRole("link", { name: "Dashboard", exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
 }

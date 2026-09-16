@@ -12,8 +12,10 @@
  * two contexts (see playwright.config.ts).
  *
  * Tests receive the live `page` plus a `refreshSession()` handle that
- * re-hydrates through the BFF; a 401 interceptor keeps the jar's token
- * current across tests.
+ * re-hydrates through the BFF for deliberate single rotations. The suite runs
+ * as ONE sequential test, so each navigation's own single-flight session
+ * restore is the only rotation source - the harness never auto-refreshes
+ * alongside the app's 401 recovery (that race revokes the token family).
  */
 
 import {
@@ -27,10 +29,10 @@ import {
   completeMfaChallenge,
   enrollMfaAndFinish,
   installMfaSecretCapture,
-  installSessionRefresh,
   readEnrolledSecret,
   refreshSession,
   signInWithPassword,
+  waitForWorkspaceSettled,
   whichMfaPath,
 } from "../helpers/auth-flow";
 import { signinUrl, workspaceUrl } from "../support/urls";
@@ -83,20 +85,11 @@ export const test = base.extend<{}, { workspace: AuthSession }>({
         });
       }
 
-      // The page has landed on the workspace host; keep the jar's token
-      // current from here on.
-      installSessionRefresh(page);
-
       // Let the workspace shell finish its own session hydration before the
-      // test's first navigation. The shell rotates the refresh token once on
-      // mount; if the test's goto races that rotation, two requests present
-      // the same token, identity flags it as reuse, and the whole family is
-      // revoked - the test then bounces back to the signin page (401 on
-      // /api/v1/roles/me). networkidle caps at 10s in case the shell holds a
-      // long-lived stream (SSE) that would otherwise never go idle.
-      await page
-        .waitForLoadState("networkidle", { timeout: 10_000 })
-        .catch(() => {});
+      // test's first navigation: the shell rotates the refresh token once on
+      // mount, and a goto that races that rotation would present a consumed
+      // token and trip the backend's reuse detector.
+      await waitForWorkspaceSettled(page);
 
       const session: AuthSession = {
         slug,

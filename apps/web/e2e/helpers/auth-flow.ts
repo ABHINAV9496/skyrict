@@ -206,12 +206,13 @@ export async function refreshSession(page: Page): Promise<void> {
 /**
  * Wait for the workspace shell to finish its initial session hydration.
  *
- * The dashboard shell renders the sidebar only after the BFF session restore
- * (which rotates the refresh token exactly once, single-flight) and the
- * roles/me permissions call have both succeeded - at that point the cookie jar
- * holds the post-rotation token. Yielding the page any earlier lets the test's
- * first goto abort an in-flight hydration, which can leave a consumed token
- * behind and trip the backend's reuse detector.
+ * The dashboard layout renders its sidebar (logo link "Skyrict dashboard")
+ * only after the BFF session restore (which rotates the refresh token exactly
+ * once, single-flight) and the roles/me permissions call have both succeeded -
+ * at that point the cookie jar holds the post-rotation token. Yielding the
+ * page any earlier lets the test's first goto abort an in-flight hydration,
+ * which can leave a consumed token behind and trip the backend's reuse
+ * detector.
  *
  * Do NOT attach a 401 auto-refresh here: the app's own single-flight recovery
  * (lib/api/http.ts ensureSession) is the only sanctioned rotation source - a
@@ -220,6 +221,6 @@ export async function refreshSession(page: Page): Promise<void> {
  */
 export async function waitForWorkspaceSettled(page: Page): Promise<void> {
   await expect(
-    page.getByRole("link", { name: "Dashboard", exact: true }),
+    page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
   ).toBeVisible({ timeout: 20_000 });
 }

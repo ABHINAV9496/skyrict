@@ -90,3 +90,29 @@ must **log out/in** to pick up the restored membership.
 
 If a future re-seed drops RBAC again, re-run the equivalent restore (roles +
 membership + grant) rather than assuming the account is broken.
+
+---
+
+## Entry D — bridgeon-solutions demo data is now Indian-realistic (INR)
+
+**Status: fixed in seed source + live DB.**
+
+`seed_demo.py` now seeds the `bridgeon-solutions` demo roster as an Indian
+IT-services company instead of generic US names. When re-seeded with
+`--force --employees 30` this produces:
+
+- 30 employees (Indian names, `@bridgeonsolutions.com` emails, `+91` phones,
+  SBI bank accounts), 1 terminated; index 13 is the terminated +
+  uncompensated HR-AI ghost fixature target.
+- Compensation in **INR** ₹55K–₹195K monthly (29 active rows; index 13
+  intentionally uncompensated to exercise the seed's skip path).
+- Payroll runs through PR-2026-09 (paid/approved/computed).
+- Indian statutory benefits (EPF, ESI, GTL) and Indian public holidays.
+
+The per-tenant `erp_payroll_settings.default_currency` for this tenant was
+flipped **USD → INR** via manual DB update. It is **not** encoded in the seed —
+any full re-seed that recreates that row (e.g. a wiped `skyrict_identity`) will
+default it back to `settings.DEFAULT_CURRENCY` (USD). Re-flip after reseeding.
+Note the finance/CIM seeders (`seed_crm`, `seed_revenue_history`,
+`seed_overdue_invoices`, sales orders) still use USD — that is a deliberate,
+detached seam: only HR/payroll is INR.

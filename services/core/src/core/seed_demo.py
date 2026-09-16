@@ -3147,7 +3147,7 @@ async def seed_demo_data(
                     tenant_id=tenant_id,
                     entry_id=acq_je.id,
                     account_id=fa_cost_acct,
-                    debit=row["cost"],
+                    debit=asset_row["cost"],
                     credit=None,
                     currency="USD",
                 )
@@ -3158,7 +3158,7 @@ async def seed_demo_data(
                     entry_id=acq_je.id,
                     account_id=cash_acct,
                     debit=None,
-                    credit=row["cost"],
+                    credit=asset_row["cost"],
                     currency="USD",
                 )
             )
@@ -3185,7 +3185,7 @@ async def seed_demo_data(
                 dep_je = ErpJournalEntryModel(
                     tenant_id=tenant_id,
                     entry_date=date(cursor.year, cursor.month, 28),
-                    memo=f"Depreciation {period} - {row['name']}",
+                    memo=f"Depreciation {period} - {asset_row['name']}",
                     status=EntryStatus.DRAFT,
                     source="depreciation",
                     source_ref=f"{asset.id}:{period}",

@@ -90,6 +90,7 @@ def seed(
             seed_approval_workflow_defaults,
             seed_core_roles_for_tenant,
             seed_reporting_defaults,
+            seed_tenant_finance_defaults,
             seed_tenant_hr_defaults,
         )
 
@@ -97,9 +98,10 @@ def seed(
         await seed_reporting_defaults(uuid.UUID(tenant_id))
         await seed_core_roles_for_tenant(uuid.UUID(tenant_id))
         await seed_approval_workflow_defaults(uuid.UUID(tenant_id))
+        await seed_tenant_finance_defaults(uuid.UUID(tenant_id))
         typer.echo(
             f"seeded HR/Payroll defaults + reporting pack + core RBAC roles + "
-            f"approval definitions for tenant {tenant_id}"
+            f"approval definitions + finance chart for tenant {tenant_id}"
         )
 
     async def _run() -> None:

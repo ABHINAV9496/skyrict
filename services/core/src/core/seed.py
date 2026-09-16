@@ -1,9 +1,10 @@
-"""Database seeding - per-tenant HR/Payroll defaults (HR-DATA-001) and core RBAC roles.
+"""Database seeding - per-tenant defaults (HR/Payroll + Finance) and core RBAC roles.
 
 Global reference data (currencies, permissions) is seeded by migration 0001;
 the per-tenant defaults that CANNOT live in a migration (they are tenant-scoped
 decisions) live here and are applied at tenant provisioning time:
 
+  **HR / Payroll:**
   - the leave-type catalogue defaults: casual (accrual, 12 days/yr), sick
     (accrual, 8 days/yr), and unpaid (non-accrual ledger-only type);
   - the single ``erp_payroll_settings`` row per tenant (default currency from
@@ -15,6 +16,13 @@ decisions) live here and are applied at tenant provisioning time:
   - the five system roles in ``core_roles`` (ERP grants per the HR & Payroll
     design doc section 2.4) - the role catalog ``require_permission`` resolves
     through ``core_user_roles``.
+
+  **Finance (SKY-94 / SKY-96):**
+  - the default chart of accounts in ``erp_chart_of_accounts`` (9 accounts
+    covering sales, COGS, and the payroll-accrual bridge) seeded on
+    every new tenant so sales order fulfilment and payroll accrual work
+    out-of-the-box.  Defined in ``DEFAULT_CHART_ACCOUNTS`` below; backfilled
+    for pre-existing tenants by migration 0062.
 
 EMP-/PR- record-numbering seeds are deliberately NOT here: ``erp_sequences``
 now exists (migration 0006) but the per-tenant counter seed rows land with the
@@ -73,6 +81,7 @@ from core.core.permissions import (
     WILDCARD,
 )
 from core.db.session import async_session_factory
+from core.domain.value_objects import AccountType
 from core.features.approval_workflow.definition_repository import (
     ApprovalWorkflowDefinitionRepository,
 )
@@ -128,6 +137,40 @@ class PayrollDefaults:
     rounding: PayrollRounding
 
 
+@dataclass(frozen=True)
+class DefaultChartAccount:
+    """One account in a tenant's default chart of accounts.
+
+    This is the tenant-scoped source of truth for the finance module's
+    mandatory accounts (SKY-94/SKY-96).  It mirrors the demo chart entries in
+    ``seed_demo.ACCOUNT_ROWS`` but is the *minimum* set the runtime
+    (``core.core.constants``) resolves by code - sales revenue ``4000``,
+    COGS ``5000``, the inventory/payables/receivables balance-sheet accounts,
+    and the payroll-accrual bridge.
+    """
+
+    code: str
+    name: str
+    account_type: AccountType
+
+
+DEFAULT_CHART_ACCOUNTS: tuple[DefaultChartAccount, ...] = (
+    # --- Asset accounts (always debited when an asset grows) ---
+    DefaultChartAccount("1100", "Accounts Receivable", AccountType.ASSET),
+    DefaultChartAccount("1200", "Cash", AccountType.ASSET),
+    DefaultChartAccount("1300", "Inventory Asset", AccountType.ASSET),
+    # --- Liability accounts (always credited when a liability grows) ---
+    DefaultChartAccount("2010", "Accrued Salaries", AccountType.LIABILITY),
+    DefaultChartAccount("2020", "Tax Payable", AccountType.LIABILITY),
+    DefaultChartAccount("2110", "Accounts Payable", AccountType.LIABILITY),
+    # --- Revenue accounts ---
+    DefaultChartAccount("4000", "Sales Revenue", AccountType.REVENUE),
+    # --- Expense accounts ---
+    DefaultChartAccount("5000", "Cost of Goods Sold", AccountType.EXPENSE),
+    DefaultChartAccount("5010", "Salaries Expense", AccountType.EXPENSE),
+)
+
+
 async def seed_tenant_hr_defaults(tenant_id: uuid.UUID) -> None:
     """Idempotently seed the HR/Payroll defaults for one tenant."""
     async with async_session_factory() as session:
@@ -173,6 +216,48 @@ async def seed_tenant_hr_defaults(tenant_id: uuid.UUID) -> None:
             logger.info("seed.payroll_settings.created", tenant_id=str(tenant_id))
 
         await session.commit()
+
+
+async def seed_tenant_finance_defaults(tenant_id: uuid.UUID) -> None:
+    """Idempotently seed the default chart of accounts for one tenant.
+
+    SKY-94/SKY-96: every tenant gets the mandatory finance accounts so sales
+    order fulfilment (which resolves ``4000`` revenue and ``5000`` COGS) and
+    payroll accrual work out-of-the-box.  Without these rows,
+    ``features/finance/service.py`` raises ``NotFoundError`` for the COGS
+    account code during ``post_cogs_for_order``.
+
+    The migration 0062 backfills pre-existing tenants; {cli,_seed_tenant}
+    calls this at provisioning time for every new tenant.  Both paths use the
+    same ``DEFAULT_CHART_ACCOUNTS`` catalog above, keeping demo seeding
+    (``seed_demo.ACCOUNT_ROWS``), provisioning, and backfill consistent.
+
+    Idempotent and concurrency-safe: existing codes are left untouched and a
+    ``(tenant_id, code)`` unique constraint plus ``ON CONFLICT ... DO NOTHING``
+    absorbs a provisioning race with the first concurrent write.
+    """
+    rows = [
+        (account.code, account.name, account.account_type.value)
+        for account in DEFAULT_CHART_ACCOUNTS
+    ]
+    async with async_session_factory() as session:
+        await session.execute(
+            text(
+                "INSERT INTO erp_chart_of_accounts "
+                "(tenant_id, id, code, name, account_type, is_active) "
+                "SELECT :tenant_id, gen_random_uuid(), v.code, v.name, "
+                "v.account_type::erp_account_type, TRUE "
+                "FROM unnest(:rows) AS v(code text, name text, account_type text) "
+                "ON CONFLICT (tenant_id, code) DO NOTHING"
+            ),
+            {"tenant_id": tenant_id, "rows": rows},
+        )
+        await session.commit()
+        logger.info(
+            "seed.finance.chart.seeded",
+            tenant_id=str(tenant_id),
+            expected=len(DEFAULT_CHART_ACCOUNTS),
+        )
 
 
 # System roles mirrored into ``core_roles`` per tenant (design doc section 2.4).

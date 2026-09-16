@@ -36,6 +36,7 @@ from core.db.session import async_session_factory
 from core.features.audit.models.audit_log import AuditLogModel
 from core.models.core_role import CoreRoleModel
 from core.models.core_user_role import CoreUserRoleModel
+from core.seed import seed_tenant_finance_defaults
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -161,30 +162,14 @@ async def rbac_world(integration_db: dict[str, str]) -> AsyncGenerator[dict[str,
                 ),
             ]
         )
-        # The fulfilment invoice posts against the tenant's standard Revenue
-        # and COGS accounts (finance resolves codes "4000"/"5000"); seed them
-        # like finance's own seeders do so the cross-module port works in
-        # isolation.
+        # The fulfilment invoice posts against the tenant's standard Revenue,
+        # COGS, and Inventory accounts.  Provision the real default chart via
+        # the finance seeder (SKY-94/SKY-96) instead of hand-inserting the
+        # three codes here: with the chart-of-accounts backfill these are the
+        # codes a provisioned tenant is guaranteed to have, and this exercises
+        # the exact provisioning path sales fulfilment depends on.
         for tid in (acme, globex):
-            for code, name, account_type in (
-                ("4000", "Revenue", "revenue"),
-                ("5000", "Cost of Goods Sold", "expense"),
-                ("1300", "Inventory Asset", "asset"),
-            ):
-                await session.execute(
-                    text(
-                        "INSERT INTO erp_chart_of_accounts (tenant_id, id, code, name, account_type) "
-                        "VALUES (:tid, :id, :code, :name, :account_type) "
-                        "ON CONFLICT (tenant_id, code) DO NOTHING"
-                    ),
-                    {
-                        "tid": tid,
-                        "id": uuid.uuid4(),
-                        "code": code,
-                        "name": name,
-                        "account_type": account_type,
-                    },
-                )
+            await seed_tenant_finance_defaults(tid)
         await session.commit()
 
     yield {"acme_id": integration_db["acme_id"], "globex_id": integration_db["globex_id"]}

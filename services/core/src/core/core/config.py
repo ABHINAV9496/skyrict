@@ -380,6 +380,22 @@ class Settings(BaseSettings):
         description="max overdue steps one escalation pass marks escalated per tenant",
     )
 
+    # --- Budget overrun notification worker (SKY-85) ---
+    FINANCE_BUDGET_OVERRUN_WORKER_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "run the in-process budget overrun worker (a background asyncio "
+            "loop that emits a notification per active-budget line whose posted "
+            "activity exceeds the planned amount). Disabled under the test "
+            "environment so integration tests drive process_all() directly."
+        ),
+    )
+    FINANCE_BUDGET_OVERRUN_POLL_SECONDS: float = Field(
+        default=3600.0,
+        gt=0,
+        description="interval between budget overrun scan passes while idle",
+    )
+
     # --- Notification batching worker (SKY-93, notification center commit) ---
     NOTIF_BATCH_WORKER_ENABLED: bool = Field(
         default=True,

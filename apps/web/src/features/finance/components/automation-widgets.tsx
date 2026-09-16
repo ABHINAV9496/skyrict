@@ -1345,8 +1345,8 @@ export function AuditReadinessCard({
 // ---------------------------------------------------------------------------
 
 function TemplateBalanceTag({ lines }: { lines: JournalTemplateLine[] }) {
-    const debit = lines.reduce((sum, line) => sum + (line.debit ?? 0), 0);
-    const credit = lines.reduce((sum, line) => sum + (line.credit ?? 0), 0);
+    const debit = lines.reduce((sum, line) => sum + toMoney(line.debit), 0);
+    const credit = lines.reduce((sum, line) => sum + toMoney(line.credit), 0);
     const balanced = Math.abs(debit - credit) < 0.005;
     return (
         <span

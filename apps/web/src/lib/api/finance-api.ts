@@ -1477,3 +1477,410 @@ export function bulkAcceptPaymentIntents(
         { items },
     );
 }
+
+// --- Budgets (FIN-AUT-004 / SKY-85 B21) ---
+
+export type BudgetStatus = "draft" | "active" | "closed";
+
+export interface BudgetLine {
+    id: string;
+    account_code: string;
+    amount: number;
+}
+
+export interface BudgetLineInput {
+    account_code: string;
+    amount: number;
+}
+
+export interface Budget {
+    id: string;
+    name: string;
+    fiscal_year: number;
+    status: BudgetStatus;
+    description: string | null;
+    currency: string;
+    lines: BudgetLine[];
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface BudgetCreateInput {
+    name: string;
+    fiscal_year: number;
+    description?: string | null;
+    currency?: string;
+    lines?: BudgetLineInput[];
+}
+
+export interface BudgetUpdateInput {
+    name?: string | null;
+    description?: string | null;
+    currency?: string | null;
+}
+
+export interface BudgetVarianceLine {
+    account_code: string;
+    planned: number;
+    actual: number;
+    variance: number;
+    variance_pct: number;
+    flag: "ok" | "amber" | "red";
+}
+
+export interface BudgetVariance {
+    budget_id: string;
+    name: string;
+    fiscal_year: number;
+    status: BudgetStatus;
+    currency: string;
+    planned_total: number;
+    actual_total: number;
+    variance_total: number;
+    flagged_count: number;
+    lines: BudgetVarianceLine[];
+}
+
+export function listBudgets(status?: BudgetStatus): Promise<Budget[]> {
+    return apiFetch<Budget[]>(`${FINANCE}/budgets${status ? `?status=${status}` : ""}`);
+}
+
+export function createBudget(input: BudgetCreateInput): Promise<Budget> {
+    return apiPost<Budget>(`${FINANCE}/budgets`, input);
+}
+
+export function getBudget(budgetId: string): Promise<Budget> {
+    return apiFetch<Budget>(`${FINANCE}/budgets/${budgetId}`);
+}
+
+export function updateBudget(
+    budgetId: string,
+    input: BudgetUpdateInput,
+): Promise<Budget> {
+    return apiFetch<Budget>(`${FINANCE}/budgets/${budgetId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    });
+}
+
+export function activateBudget(budgetId: string): Promise<Budget> {
+    return apiPost<Budget>(`${FINANCE}/budgets/${budgetId}/activate`, {});
+}
+
+export function closeBudget(budgetId: string): Promise<Budget> {
+    return apiPost<Budget>(`${FINANCE}/budgets/${budgetId}/close`, {});
+}
+
+export function addBudgetLines(
+    budgetId: string,
+    lines: BudgetLineInput[],
+): Promise<BudgetLine[]> {
+    return apiPost<BudgetLine[]>(`${FINANCE}/budgets/${budgetId}/lines`, lines);
+}
+
+export function getBudgetVariance(budgetId: string): Promise<BudgetVariance> {
+    return apiFetch<BudgetVariance>(`${FINANCE}/budgets/${budgetId}/variance`);
+}
+
+// --- Fixed assets & depreciation (SKY-85 B13/B28) ---
+
+export type AssetStatus = "active" | "disposed" | "fully_depreciated";
+
+export interface FixedAsset {
+    id: string;
+    name: string;
+    category: string | null;
+    cost: number;
+    acquisition_date: string;
+    useful_life_years: number;
+    depreciation_method: string;
+    salvage_value: number;
+    accumulated_depreciation: number;
+    net_book_value: number;
+    status: AssetStatus;
+    disposed_at: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface FixedAssetCreateInput {
+    name: string;
+    cost: number;
+    acquisition_date: string;
+    useful_life_years: number;
+    category?: string | null;
+    depreciation_method?: string;
+    salvage_value?: number;
+}
+
+export interface FixedAssetUpdateInput {
+    name?: string | null;
+    category?: string | null;
+    cost?: number | null;
+    acquisition_date?: string | null;
+    useful_life_years?: number | null;
+    salvage_value?: number | null;
+}
+
+export interface DepreciationRunResult {
+    period: string;
+    ran_at: string;
+    assets_considered: number;
+    entries_created: number;
+    entries_skipped: number;
+    total_amount: number;
+    entry_ids: string[];
+}
+
+export interface DepreciationEntry {
+    id: string;
+    asset_id: string;
+    period: string;
+    amount: number;
+    status: string;
+    journal_entry_id: string | null;
+    created_at: string | null;
+}
+
+export function listAssets(status?: AssetStatus): Promise<FixedAsset[]> {
+    return apiFetch<FixedAsset[]>(`${FINANCE}/assets${status ? `?status=${status}` : ""}`);
+}
+
+export function createAsset(input: FixedAssetCreateInput): Promise<FixedAsset> {
+    return apiPost<FixedAsset>(`${FINANCE}/assets`, input);
+}
+
+export function getAsset(assetId: string): Promise<FixedAsset> {
+    return apiFetch<FixedAsset>(`${FINANCE}/assets/${assetId}`);
+}
+
+export function updateAsset(
+    assetId: string,
+    input: FixedAssetUpdateInput,
+): Promise<FixedAsset> {
+    return apiFetch<FixedAsset>(`${FINANCE}/assets/${assetId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    });
+}
+
+export function disposeAsset(assetId: string, disposedOn: string): Promise<FixedAsset> {
+    return apiPost<FixedAsset>(
+        `${FINANCE}/assets/${assetId}/dispose?disposed_on=${encodeURIComponent(disposedOn)}`,
+        {},
+    );
+}
+
+export function runDepreciation(period: string): Promise<DepreciationRunResult> {
+    return apiPost<DepreciationRunResult>(
+        `${FINANCE}/assets/depreciation/run?period=${encodeURIComponent(period)}`,
+        {},
+    );
+}
+
+export function listDepreciationEntries(
+    period?: string,
+): Promise<DepreciationEntry[]> {
+    return apiFetch<DepreciationEntry[]>(
+        `${FINANCE}/assets/depreciation/entries${period ? `?period=${period}` : ""}`,
+    );
+}
+
+// --- Expense policy, claims & violations (SKY-85 B16) ---
+
+export interface ExpensePolicy {
+    id: string;
+    category: string;
+    name: string | null;
+    cap_amount: number | null;
+    requires_receipt: boolean;
+    advance_limit: number | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface ExpensePolicyInput {
+    category: string;
+    name?: string | null;
+    cap_amount?: number | null;
+    requires_receipt?: boolean;
+    advance_limit?: number | null;
+}
+
+export interface ExpensePolicyUpdateInput {
+    name?: string | null;
+    cap_amount?: number | null;
+    requires_receipt?: boolean | null;
+    advance_limit?: number | null;
+}
+
+export type ExpenseClaimStatus =
+    | "submitted"
+    | "approved"
+    | "rejected";
+
+export interface ExpenseClaim {
+    id: string;
+    category: string;
+    amount: number;
+    description: string | null;
+    receipt_url: string | null;
+    advance_amount: number | null;
+    status: ExpenseClaimStatus;
+    source_ref: string | null;
+    submitted_by: string | null;
+    approved_by: string | null;
+    approved_at: string | null;
+    rejection_reason: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface ExpenseClaimInput {
+    category: string;
+    amount: number;
+    description?: string | null;
+    receipt_url?: string | null;
+    advance_amount?: number | null;
+    source_ref?: string | null;
+}
+
+export interface ExpenseViolation {
+    id: string;
+    category: string;
+    reason_code: string;
+    outcome: string;
+    amount: number;
+    claim_id: string | null;
+    submitted_by: string | null;
+    message: string | null;
+    created_at: string | null;
+}
+
+export interface ExpenseEvaluation {
+    claim: ExpenseClaim;
+    violations: ExpenseViolation[];
+    decision: "approved" | "blocked";
+}
+
+export function listExpensePolicies(): Promise<ExpensePolicy[]> {
+    return apiFetch<ExpensePolicy[]>(`${FINANCE}/expenses/policies`);
+}
+
+export function createExpensePolicy(input: ExpensePolicyInput): Promise<ExpensePolicy> {
+    return apiPost<ExpensePolicy>(`${FINANCE}/expenses/policies`, input);
+}
+
+export function updateExpensePolicy(
+    category: string,
+    input: ExpensePolicyUpdateInput,
+): Promise<ExpensePolicy> {
+    return apiFetch<ExpensePolicy>(`${FINANCE}/expenses/policies/${category}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    });
+}
+
+export function submitExpenseClaim(input: ExpenseClaimInput): Promise<ExpenseEvaluation> {
+    return apiPost<ExpenseEvaluation>(`${FINANCE}/expenses/claims`, input);
+}
+
+export function listExpenseClaims(
+    status?: ExpenseClaimStatus,
+): Promise<ExpenseClaim[]> {
+    return apiFetch<ExpenseClaim[]>(
+        `${FINANCE}/expenses/claims${status ? `?status=${status}` : ""}`,
+    );
+}
+
+export function approveExpenseClaim(claimId: string): Promise<ExpenseClaim> {
+    return apiPost<ExpenseClaim>(`${FINANCE}/expenses/claims/${claimId}/approve`, {});
+}
+
+export function rejectExpenseClaim(
+    claimId: string,
+    rejection_reason: string,
+): Promise<ExpenseClaim> {
+    return apiPost<ExpenseClaim>(
+        `${FINANCE}/expenses/claims/${claimId}/reject?rejection_reason=${encodeURIComponent(rejection_reason)}`,
+        {},
+    );
+}
+
+export function listExpenseViolations(reason_code?: string): Promise<ExpenseViolation[]> {
+    return apiFetch<ExpenseViolation[]>(
+        `${FINANCE}/expenses/violations${reason_code ? `?reason_code=${reason_code}` : ""}`,
+    );
+}
+
+// --- Compliance calendar (SKY-85 B27) ---
+
+export type ComplianceRecurrence = "monthly" | "quarterly" | "yearly";
+export type ComplianceStatus = "open" | "completed";
+
+export interface ComplianceItem {
+    id: string;
+    title: string;
+    due_on: string;
+    description: string | null;
+    obligation_type: string | null;
+    recurrence: ComplianceRecurrence | null;
+    lead_days: number;
+    status: ComplianceStatus;
+    assignee_id: string | null;
+    completed_at: string | null;
+    completed_by: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    overdue: boolean;
+}
+
+export interface ComplianceItemInput {
+    title: string;
+    due_on: string;
+    description?: string | null;
+    obligation_type?: string | null;
+    recurrence?: ComplianceRecurrence | null;
+    lead_days?: number;
+}
+
+export interface ComplianceItemUpdateInput {
+    title?: string | null;
+    due_on?: string | null;
+    description?: string | null;
+    obligation_type?: string | null;
+    recurrence?: ComplianceRecurrence | null;
+    lead_days?: number | null;
+}
+
+export function listComplianceItems(
+    status?: ComplianceStatus,
+): Promise<ComplianceItem[]> {
+    return apiFetch<ComplianceItem[]>(
+        `${FINANCE}/compliance${status ? `?status=${status}` : ""}`,
+    );
+}
+
+export function listComplianceUpcoming(leadDays = 14): Promise<ComplianceItem[]> {
+    return apiFetch<ComplianceItem[]>(`${FINANCE}/compliance/upcoming?lead_days=${leadDays}`);
+}
+
+export function createComplianceItem(
+    input: ComplianceItemInput,
+): Promise<ComplianceItem> {
+    return apiPost<ComplianceItem>(`${FINANCE}/compliance`, input);
+}
+
+export function updateComplianceItem(
+    itemId: string,
+    input: ComplianceItemUpdateInput,
+): Promise<ComplianceItem> {
+    return apiFetch<ComplianceItem>(`${FINANCE}/compliance/${itemId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+    });
+}
+
+export function completeComplianceItem(itemId: string): Promise<ComplianceItem> {
+    return apiPost<ComplianceItem>(`${FINANCE}/compliance/${itemId}/complete`, {});
+}

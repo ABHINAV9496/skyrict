@@ -58,6 +58,10 @@ if TYPE_CHECKING:
     from core.features.documents.service import DocumentsService
     from core.features.finance.automation import FinanceAutomationService
     from core.features.finance.automation_wave3 import FinanceWave3Service
+    from core.features.finance.budgets import FinanceBudgetsService
+    from core.features.finance.compliance_calendar import FinanceComplianceService
+    from core.features.finance.depreciation import FinanceDepreciationService
+    from core.features.finance.expense_policy import FinanceExpensePolicyService
     from core.features.finance.payment_match import PaymentMatchService
     from core.features.finance.ports import AuditSink, PayrollAccrualPort
     from core.features.finance.service import FinanceService
@@ -1059,6 +1063,76 @@ def get_finance_wave4_service(
         finance=finance,
         audit=cast("AuditSink", AuditRepository(db)),
         customers=CrmRepository(db),
+    )
+
+
+def get_finance_budgets_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceBudgetsService:
+    """Composition root for operating budgets (FIN-AUT-004 B21)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.budgets import FinanceBudgetsService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    return FinanceBudgetsService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_depreciation_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceDepreciationService:
+    """Composition root for fixed assets & depreciation (FIN-AUT-004 B13/B28)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.depreciation import FinanceDepreciationService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    repo = FinanceRepository(db)
+    return FinanceDepreciationService(
+        repo=repo,
+        ledger=repo,
+        audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_expense_policy_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceExpensePolicyService:
+    """Composition root for expense policies & claims (FIN-AUT-004 B16)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.expense_policy import FinanceExpensePolicyService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    return FinanceExpensePolicyService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
+    )
+
+
+def get_finance_compliance_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> FinanceComplianceService:
+    """Composition root for the compliance calendar (FIN-AUT-004 B27)."""
+    from core.features.audit.repository import AuditRepository
+    from core.features.finance.compliance_calendar import FinanceComplianceService
+    from core.features.finance.repository import FinanceRepository
+
+    correlation_id = getattr(request.state, "request_id", None)
+    _ = correlation_id
+    return FinanceComplianceService(
+        repo=FinanceRepository(db),
+        audit=cast("AuditSink", AuditRepository(db)),
     )
 
 

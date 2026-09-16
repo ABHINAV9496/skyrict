@@ -368,7 +368,7 @@ export const erpNavGroups: NavGroup[] = [
                 children: [
                     {
                         href: "/dashboard/erp/finance/accounts",
-                        label: "Accounts",
+                        label: "Ledger",
                         icon: BookOpen,
                         permission: "erp.finance.read",
                     },
@@ -394,6 +394,12 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/dashboard/erp/finance/statements",
                         label: "Statements",
                         icon: BarChart3,
+                        permission: "erp.finance.read",
+                    },
+                    {
+                        href: "/dashboard/erp/finance/controls",
+                        label: "Planning & Policy",
+                        icon: SlidersHorizontal,
                         permission: "erp.finance.read",
                     },
                     {

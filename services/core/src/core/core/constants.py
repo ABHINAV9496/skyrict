@@ -150,6 +150,11 @@ INVENTORY_ASSET_ACCOUNT_CODE = "1300"
 SALARY_EXPENSE_ACCOUNT_CODE = "5010"
 ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE = "2010"
 DEDUCTIONS_PAYABLE_ACCOUNT_CODE = "2020"
+# FIN-AUT-004 (SKY-85 B28): the depreciation run books
+# DR Depreciation Expense / CR Accumulated Depreciation against these codes,
+# seeded per-tenant in the demo chart (see backlog gap doc).
+DEPRECIATION_EXPENSE_ACCOUNT_CODE = "5100"
+ACCUMULATED_DEPRECIATION_ACCOUNT_CODE = "1700"
 
 # ---------------------------------------------------------------------------
 # Finance - journal entry and invoice provenance (idempotency source keys).
@@ -167,6 +172,10 @@ JOURNAL_SOURCE_TEMPLATE = "journal_template"
 # HR-AI-004 (SKY-93, Commit 4): idempotency source key for proposed budget
 # drafts exported from the L4 what-if planner (erp_budget_drafts).
 BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN = "workforce_plan"
+# FIN-AUT-004 (SKY-85): depreciation run stamps its DRAFT journal entries with
+# source='depreciation' + source_ref=f"{asset_id}:{period}" so the UNIQUE lock
+# makes every (asset, period) accrual exactly-once across replayed runs.
+JOURNAL_SOURCE_DEPRECIATION = "depreciation"
 INVOICE_SOURCE_MANUAL = "manual"
 INVOICE_SOURCE_SALES_ORDER = "sales_order"
 PAYMENT_SOURCE_MANUAL = "manual"

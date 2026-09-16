@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 import structlog
 from sqlalchemy import delete, func, select, text, update
@@ -21,19 +21,28 @@ from sqlalchemy import delete, func, select, text, update
 from core.db.session import async_session_factory
 from core.domain.value_objects import (
     AccountType,
+    BudgetStatus,
+    ComplianceItemStatus,
+    ComplianceRecurrence,
     CreditCheckResult,
     CrmEntityType,
     CrmTimelineEventType,
     EntryStatus,
+    ExpenseClaimStatus,
+    ExpenseViolationReason,
+    FixedAssetStatus,
     InvoiceStatus,
     OrderStatus,
     PaymentStatus,
     StockMovementType,
+    ViolationOutcome,
 )
 from core.features.crm.models.customer import ErpCrmCustomerModel
 from core.features.crm.models.timeline_event import ErpCrmTimelineEventModel
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger("core.seed.demo")
@@ -92,6 +101,31 @@ def _date_ago(days: int) -> date:
 
 def _date_ahead(days: int) -> date:
     return date.today() + timedelta(days=days)
+
+
+def _month_start(months_back: int) -> date:
+    """First day of the month ``months_back`` months before the current month."""
+    ref = _today().replace(day=1)
+    total = ref.year * 12 + (ref.month - 1) - months_back
+    year, month = divmod(total, 12)
+    return date(year, month + 1, 1)
+
+
+def _month_start_days_ago(months_back: int) -> int:
+    """Days between today and the first of the month ``months_back`` back."""
+    return (_today() - _month_start(months_back)).days
+
+
+def _month_iter(start: date, end: date) -> Iterator[date]:
+    """Yield the first day of each month from ``start`` through ``end`` inclusive."""
+    cursor = start.replace(day=1)
+    last = end.replace(day=1)
+    while cursor <= last:
+        yield cursor
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -448,6 +482,8 @@ ACCOUNT_ROWS: tuple[dict[str, object], ...] = (
     {"code": "5050", "name": "Office Supplies", "type": AccountType.EXPENSE},
     {"code": "5060", "name": "Depreciation Expense", "type": AccountType.EXPENSE},
     {"code": "5070", "name": "Insurance Expense", "type": AccountType.EXPENSE},
+    {"code": "1700", "name": "Accumulated Depreciation", "type": AccountType.ASSET},
+    {"code": "5100", "name": "Depreciation Expense", "type": AccountType.EXPENSE},
 )
 
 FISCAL_PERIOD_ROWS: tuple[dict[str, object], ...] = (
@@ -538,14 +574,6 @@ JOURNAL_ENTRY_ROWS: tuple[dict[str, object], ...] = (
         "status": EntryStatus.POSTED,
         "days_ago": 20,
         "lines": [(0, Decimal("25000"), None), (10, None, Decimal("25000"))],
-    },
-    {
-        "memo": "Equipment depreciation - Q1",
-        "source": "manual",
-        "source_ref": "JE-0010",
-        "status": EntryStatus.POSTED,
-        "days_ago": 10,
-        "lines": [(18, Decimal("2500"), None), (3, None, Decimal("2500"))],
     },
     {
         "memo": "Office supplies purchase",
@@ -848,6 +876,481 @@ PAYMENT_ROWS: tuple[dict[str, object], ...] = (
         "amount": Decimal("22400"),
         "method": "credit_card",
         "days_ago": 30,
+    },
+)
+
+# ───────────────────────────────────────────────────────────────────────────
+# MONTHLY FINANCE DATA (8 months of JE/invoice/payment coverage)
+#
+# The static rows above only cover ~90 days of journal entries. These
+# generators build one JE + one invoice (and a payment when PAID) anchored to
+# the same relative day each of the last 8 months, so the finance dashboards /
+# AI-agent rules see steady monthly activity instead of a spike + silence.
+# Run inside seed_demo_data after the existing rows and shared inserts.
+# ───────────────────────────────────────────────────────────────────────────
+
+_MONTH_DAYS_AGO: dict[int, int] = {}
+
+
+def _build_monthly_je_rows() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    # Months back 1..8 = the previous 8 full months; anchor each entry ~5 days
+    # into its target month so every calendar month in the window has data.
+    for m in range(1, 9):
+        days_ago = max(_month_start_days_ago(m) - 5, 1)
+        _MONTH_DAYS_AGO[m] = days_ago
+        label = f"{_month_start(m):%B %Y}"
+        rows.append(
+            {
+                "memo": f"Rent - {label}",
+                "source": "manual",
+                "source_ref": f"JE-M{m:02d}-RENT",
+                "status": EntryStatus.POSTED,
+                "days_ago": days_ago,
+                "lines": [(14, Decimal("12000"), None), (0, None, Decimal("12000"))],
+            }
+        )
+        rows.append(
+            {
+                "memo": f"Payroll - {label}",
+                "source": "payroll",
+                "source_ref": f"PR-M{m:02d}",
+                "status": EntryStatus.POSTED,
+                "days_ago": days_ago,
+                "lines": [(13, Decimal("45000"), None), (5, None, Decimal("45000"))],
+            }
+        )
+        rows.append(
+            {
+                "memo": f"Cloud infrastructure - {label}",
+                "source": "manual",
+                "source_ref": f"JE-M{m:02d}-CLOUD",
+                "status": EntryStatus.POSTED,
+                "days_ago": days_ago,
+                "lines": [(15, Decimal("8500"), None), (0, None, Decimal("8500"))],
+            }
+        )
+        if m % 2 == 0:
+            rows.append(
+                {
+                    "memo": f"Marketing campaign - {label}",
+                    "source": "manual",
+                    "source_ref": f"JE-M{m:02d}-MKT",
+                    "status": EntryStatus.POSTED,
+                    "days_ago": days_ago,
+                    "lines": [(16, Decimal("15000"), None), (0, None, Decimal("15000"))],
+                }
+            )
+    return rows
+
+
+MONTHLY_JE_ROWS: tuple[dict[str, object], ...] = tuple(_build_monthly_je_rows())
+
+
+def _build_monthly_invoice_rows() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for m in range(1, 9):
+        days_ago = _MONTH_DAYS_AGO[m]
+        is_paid = m in (2, 4, 6, 8)
+        rows.append(
+            {
+                "number": f"INV-M{m:02d}",
+                "days_ago": days_ago,
+                "due_ahead": 15,
+                "status": InvoiceStatus.PAID if is_paid else InvoiceStatus.APPROVED,
+                "total": Decimal("25000") + Decimal(m * 1000),
+                "source": "sales_order",
+                "source_ref": f"SO-M{m:02d}",
+                "lines": [
+                    {
+                        "desc": f"Managed services - {_month_start(m):%B %Y}",
+                        "account_idx": 10,
+                        "qty": 1,
+                        "price": Decimal("25000") + Decimal(m * 1000),
+                    }
+                ],
+            }
+        )
+    return rows
+
+
+MONTHLY_INVOICE_ROWS: tuple[dict[str, object], ...] = tuple(_build_monthly_invoice_rows())
+
+
+def _build_monthly_payment_rows() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for m in (2, 4, 6, 8):
+        rows.append(
+            {
+                "invoice_idx": len(INVOICE_ROWS) + (m - 1),
+                "number": f"PAY-M{m:02d}",
+                "amount": Decimal("25000") + Decimal(m * 1000),
+                "method": "bank_transfer",
+                "days_ago": max(_MONTH_DAYS_AGO[m] - 2, 1),
+            }
+        )
+    return rows
+
+
+MONTHLY_PAYMENT_ROWS: tuple[dict[str, object], ...] = tuple(_build_monthly_payment_rows())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SKY-85 seed data (budgets, fixed assets/depreciation, expense policy,
+# expense claims/violations, compliance calendar)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _BudgetSeedRow(TypedDict):
+    name: str
+    description: str
+    fiscal_year: int
+    status: BudgetStatus
+    lines: tuple[tuple[str, Decimal], ...]
+
+
+class _FixedAssetSeedRow(TypedDict):
+    name: str
+    category: str
+    cost: Decimal
+    acquisition_days_ago: int
+    useful_life_years: int
+    salvage: Decimal
+    status: FixedAssetStatus
+
+
+class _ExpenseViolationSeedRow(TypedDict):
+    category: str
+    reason_code: ExpenseViolationReason
+    outcome: ViolationOutcome
+    amount: Decimal
+    claim_id_idx: int | None
+    message: str
+
+
+# Budgets: (name, description, fiscal_year, status, lines [(account_code, amount)])
+BUDGET_ROWS: tuple[_BudgetSeedRow, ...] = (
+    {
+        "name": "FY2026 Annual Operating Budget",
+        "description": "Approved operating plan for fiscal year 2026.",
+        "fiscal_year": 2026,
+        "status": BudgetStatus.ACTIVE,
+        "lines": (
+            ("4000", Decimal("600000")),
+            ("4010", Decimal("180000")),
+            ("5000", Decimal("120000")),
+            ("5010", Decimal("360000")),
+            ("5020", Decimal("144000")),
+            ("5030", Decimal("60000")),
+            ("5040", Decimal("90000")),
+            ("5050", Decimal("24000")),
+            ("5060", Decimal("30000")),
+            ("5070", Decimal("36000")),
+            ("5100", Decimal("18000")),
+        ),
+    },
+    {
+        "name": "FY2026 Q3 Growth Plan",
+        "description": "Draft plan for the Q3 expansion push.",
+        "fiscal_year": 2026,
+        "status": BudgetStatus.DRAFT,
+        "lines": (
+            ("5040", Decimal("45000")),
+            ("5010", Decimal("90000")),
+        ),
+    },
+    {
+        "name": "FY2025 Initial Operating Budget",
+        "description": "Original plan for fiscal year 2025.",
+        "fiscal_year": 2025,
+        "status": BudgetStatus.CLOSED,
+        "lines": (
+            ("4000", Decimal("500000")),
+            ("5010", Decimal("300000")),
+            ("5020", Decimal("144000")),
+        ),
+    },
+)
+
+# Fixed assets: (name, category, cost, acquisition_days_ago, life_years,
+# salvage, status) - acquisitions are 8 months back so the monthly accrual
+# history spans the same window as the JEs above.
+FIXED_ASSET_ROWS: tuple[_FixedAssetSeedRow, ...] = (
+    {
+        "name": "Warehouse Forklift",
+        "category": "Vehicles",
+        "cost": Decimal("42000"),
+        "acquisition_days_ago": _month_start_days_ago(8),
+        "useful_life_years": 5,
+        "salvage": Decimal("2000"),
+        "status": FixedAssetStatus.ACTIVE,
+    },
+    {
+        "name": "CRM Server Rack",
+        "category": "IT Equipment",
+        "cost": Decimal("31000"),
+        "acquisition_days_ago": _month_start_days_ago(8),
+        "useful_life_years": 5,
+        "salvage": Decimal("1000"),
+        "status": FixedAssetStatus.ACTIVE,
+    },
+    {
+        "name": "Conference Room AV System",
+        "category": "IT Equipment",
+        "cost": Decimal("18500"),
+        "acquisition_days_ago": _month_start_days_ago(8),
+        "useful_life_years": 4,
+        "salvage": Decimal("500"),
+        "status": FixedAssetStatus.ACTIVE,
+    },
+    {
+        "name": "Warehouse Pallet Racking",
+        "category": "Fixtures",
+        "cost": Decimal("21000"),
+        "acquisition_days_ago": _month_start_days_ago(8),
+        "useful_life_years": 10,
+        "salvage": Decimal("1000"),
+        "status": FixedAssetStatus.ACTIVE,
+    },
+)
+
+# Expense policies: (category, name, cap_amount, requires_receipt, advance_limit)
+EXPENSE_POLICY_ROWS: tuple[dict[str, object], ...] = (
+    {
+        "category": "Office Supplies",
+        "name": "Office Supplies",
+        "cap_amount": Decimal("500"),
+        "requires_receipt": True,
+        "advance_limit": None,
+    },
+    {
+        "category": "Travel",
+        "name": "Domestic Travel",
+        "cap_amount": Decimal("3000"),
+        "requires_receipt": True,
+        "advance_limit": Decimal("1500"),
+    },
+    {
+        "category": "Meals & Entertainment",
+        "name": "Client Meals",
+        "cap_amount": Decimal("250"),
+        "requires_receipt": True,
+        "advance_limit": None,
+    },
+    {
+        "category": "Subscriptions",
+        "name": "Software Subscriptions",
+        "cap_amount": Decimal("1200"),
+        "requires_receipt": False,
+        "advance_limit": None,
+    },
+    {
+        "category": "Training",
+        "name": "Professional Training",
+        "cap_amount": Decimal("2500"),
+        "requires_receipt": True,
+        "advance_limit": None,
+    },
+    {
+        "category": "DEFAULT",
+        "name": "Default Category",
+        "cap_amount": Decimal("1000"),
+        "requires_receipt": False,
+        "advance_limit": None,
+    },
+)
+
+# Expense claims: (source_ref, category, amount, description, receipt_url,
+# advance_amount, status, submitted_days_ago, rejection_reason)
+EXPENSE_CLAIM_ROWS: tuple[dict[str, object], ...] = (
+    {
+        "source_ref": "EC-0001",
+        "category": "Office Supplies",
+        "amount": Decimal("180"),
+        "description": "Printer toner cartridges",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0001.pdf",
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 200,
+    },
+    {
+        "source_ref": "EC-0002",
+        "category": "Travel",
+        "amount": Decimal("1250"),
+        "description": "Client site visit - KL office",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0002.pdf",
+        "advance_amount": Decimal("1250"),
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 170,
+    },
+    {
+        "source_ref": "EC-0003",
+        "category": "Subscriptions",
+        "amount": Decimal("900"),
+        "description": "Quarterly analytics platform",
+        "receipt_url": None,
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 140,
+    },
+    {
+        "source_ref": "EC-0004",
+        "category": "Meals & Entertainment",
+        "amount": Decimal("235"),
+        "description": "Dinner with enterprise prospect",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0004.pdf",
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 110,
+    },
+    {
+        "source_ref": "EC-0005",
+        "category": "Training",
+        "amount": Decimal("2400"),
+        "description": "AWS Solutions Architect certification",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0005.pdf",
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 80,
+    },
+    {
+        "source_ref": "EC-0006",
+        "category": "Travel",
+        "amount": Decimal("1850"),
+        "description": "Singapore partner summit",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0006.pdf",
+        "advance_amount": Decimal("1850"),
+        "status": ExpenseClaimStatus.SUBMITTED,
+        "days_ago": 30,
+    },
+    {
+        "source_ref": "EC-0007",
+        "category": "Meals & Entertainment",
+        "amount": Decimal("140"),
+        "description": "Team lunch - no receipt on file",
+        "receipt_url": None,
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.REJECTED,
+        "days_ago": 60,
+        "rejection_reason": "Receipt required for Meals & Entertainment claims",
+    },
+    {
+        "source_ref": "EC-0008",
+        "category": "Office Supplies",
+        "amount": Decimal("350"),
+        "description": "Standing desk accessory",
+        "receipt_url": "https://demo.skyrict.io/receipts/ec-0008.pdf",
+        "advance_amount": None,
+        "status": ExpenseClaimStatus.APPROVED,
+        "days_ago": 20,
+    },
+)
+
+# Expense policy violations: (category, reason_code, outcome, amount, claim_id_idx, message)
+# claim_id_idx is an index into the claim list (or None for blocked claims).
+EXPENSE_VIOLATION_ROWS: tuple[_ExpenseViolationSeedRow, ...] = (
+    {
+        "category": "Office Supplies",
+        "reason_code": ExpenseViolationReason.CATEGORY_CAP_EXCEEDED,
+        "outcome": ViolationOutcome.BLOCKED,
+        "amount": Decimal("620"),
+        "claim_id_idx": None,
+        "message": "Office Supplies claim of $620 exceeds the $500 category cap",
+    },
+    {
+        "category": "Meals & Entertainment",
+        "reason_code": ExpenseViolationReason.RECEIPT_REQUIRED,
+        "outcome": ViolationOutcome.BLOCKED,
+        "amount": Decimal("300"),
+        "claim_id_idx": None,
+        "message": "Meals & Entertainment claim without a receipt",
+    },
+    {
+        "category": "Travel",
+        "reason_code": ExpenseViolationReason.ADVANCE_LIMIT_EXCEEDED,
+        "outcome": ViolationOutcome.WARNING,
+        "amount": Decimal("1850"),
+        "claim_id_idx": 5,
+        "message": "Travel advance exceeds the $1500 advance limit - flagged for review",
+    },
+)
+
+# Compliance calendar: (title, description, obligation_type, recurrence, due_days_ahead,
+# lead_days, status, completed_days_ago)
+COMPLIANCE_ITEM_ROWS: tuple[dict[str, object], ...] = (
+    {
+        "title": "Monthly SST filing",
+        "description": "Submit Malaysia Sales & Service Tax return.",
+        "obligation_type": "tax",
+        "recurrence": ComplianceRecurrence.MONTHLY,
+        "due_days_ahead": 55,
+        "lead_days": 7,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "Quarterly corporate tax installment",
+        "description": "Q3 corporate tax installment payment.",
+        "obligation_type": "tax",
+        "recurrence": ComplianceRecurrence.QUARTERLY,
+        "due_days_ahead": 25,
+        "lead_days": 14,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "Annual WHT reconciliation",
+        "description": "Withholding tax reconciliation for prior year.",
+        "obligation_type": "tax",
+        "recurrence": ComplianceRecurrence.YEARLY,
+        "due_days_ahead": 200,
+        "lead_days": 30,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "SOC 2 Type II readiness review",
+        "description": "Annual security controls evidence review.",
+        "obligation_type": "compliance",
+        "recurrence": ComplianceRecurrence.YEARLY,
+        "due_days_ahead": 90,
+        "lead_days": 30,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "PCI DSS quarterly scan",
+        "description": "External vulnerability scan against cardholder environment.",
+        "obligation_type": "itsec",
+        "recurrence": ComplianceRecurrence.QUARTERLY,
+        "due_days_ahead": 45,
+        "lead_days": 7,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "Business license renewal",
+        "description": "City business operating license.",
+        "obligation_type": "license",
+        "recurrence": None,
+        "due_days_ahead": 8,
+        "lead_days": 10,
+        "status": ComplianceItemStatus.OPEN,
+    },
+    {
+        "title": "June SST filing",
+        "description": "June monthly SST return - completed.",
+        "obligation_type": "tax",
+        "recurrence": ComplianceRecurrence.MONTHLY,
+        "due_days_ahead": -40,
+        "lead_days": 7,
+        "status": ComplianceItemStatus.COMPLETED,
+        "completed_days_ago": 35,
+    },
+    {
+        "title": "Q2 PAYG withholding remittance",
+        "description": "Q2 payroll withholding remittance - completed.",
+        "obligation_type": "payroll",
+        "recurrence": ComplianceRecurrence.QUARTERLY,
+        "due_days_ahead": -25,
+        "lead_days": 7,
+        "status": ComplianceItemStatus.COMPLETED,
+        "completed_days_ago": 30,
     },
 )
 
@@ -1972,8 +2475,17 @@ async def seed_demo_data(
         UtilizationAlertModel,
         UtilizationAlertType,
     )
+    from core.features.finance.models.budget import ErpBudgetLineModel, ErpBudgetModel
     from core.features.finance.models.chart_of_account import ErpChartOfAccountModel
+    from core.features.finance.models.compliance_item import ErpComplianceItemModel
+    from core.features.finance.models.depreciation_entry import ErpDepreciationEntryModel
+    from core.features.finance.models.expense_claim import ErpExpenseClaimModel
+    from core.features.finance.models.expense_policy import ErpExpensePolicyModel
+    from core.features.finance.models.expense_policy_violation import (
+        ErpExpensePolicyViolationModel,
+    )
     from core.features.finance.models.fiscal_period import ErpFiscalPeriodModel
+    from core.features.finance.models.fixed_asset import ErpFixedAssetModel
     from core.features.finance.models.invoice import ErpInvoiceModel
     from core.features.finance.models.invoice_line import ErpInvoiceLineModel
     from core.features.finance.models.journal_entry import ErpJournalEntryModel
@@ -2108,6 +2620,16 @@ async def seed_demo_data(
                 QualityScoreModel,
                 EmployeeModel,
                 DepartmentModel,
+                ErpBudgetLineModel,
+                ErpBudgetModel,
+                ErpDepreciationEntryModel,
+                ErpFixedAssetModel,
+                ErpExpensePolicyViolationModel,
+                ErpExpenseClaimModel,
+                ErpExpensePolicyModel,
+                ErpComplianceItemModel,
+                ErpSupplierPerformanceModel,
+                ErpSupplierModel,
             ):
                 await session.execute(
                     delete(model.__table__).where(model.__table__.c.tenant_id == tenant_id)  # type: ignore[arg-type]
@@ -2397,6 +2919,9 @@ async def seed_demo_data(
             await session.flush()
             account_ids.append(acct.id)
         counts["accounts"] = len(account_ids)
+        account_id_by_code = {
+            str(row["code"]): account_ids[i] for i, row in enumerate(ACCOUNT_ROWS)
+        }
 
         # ── FISCAL PERIODS ───────────────────────────────────────────
         for row in FISCAL_PERIOD_ROWS:
@@ -2411,7 +2936,8 @@ async def seed_demo_data(
         counts["fiscal_periods"] = len(FISCAL_PERIOD_ROWS)
 
         # ── JOURNAL ENTRIES + LINES ──────────────────────────────────
-        for row in JOURNAL_ENTRY_ROWS:
+        _all_je_rows = (*JOURNAL_ENTRY_ROWS, *MONTHLY_JE_ROWS)
+        for row in _all_je_rows:
             je = ErpJournalEntryModel(
                 tenant_id=tenant_id,
                 entry_date=_date_ago(int(str(row["days_ago"]))),
@@ -2437,7 +2963,7 @@ async def seed_demo_data(
                     currency="USD",
                 )
                 session.add(jl)
-        counts["journal_entries"] = len(JOURNAL_ENTRY_ROWS)
+        counts["journal_entries"] = len(_all_je_rows)
 
         # ── CRM CUSTOMERS (fetch existing) ───────────────────────────
         customer_ids: list[uuid.UUID] = [
@@ -2469,7 +2995,8 @@ async def seed_demo_data(
 
         # ── INVOICES + LINES ─────────────────────────────────────────
         invoice_ids: list[uuid.UUID] = []
-        for idx, row in enumerate(INVOICE_ROWS):
+        _all_invoice_rows = (*INVOICE_ROWS, *MONTHLY_INVOICE_ROWS)
+        for idx, row in enumerate(_all_invoice_rows):
             inv = ErpInvoiceModel(
                 tenant_id=tenant_id,
                 invoice_number=row["number"],
@@ -2500,7 +3027,7 @@ async def seed_demo_data(
         counts["invoices"] = len(invoice_ids)
 
         # ── PAYMENTS ─────────────────────────────────────────────────
-        for row in PAYMENT_ROWS:
+        for row in (*PAYMENT_ROWS, *MONTHLY_PAYMENT_ROWS):
             pay = ErpPaymentModel(
                 tenant_id=tenant_id,
                 payment_number=row["number"],
@@ -2513,11 +3040,11 @@ async def seed_demo_data(
                 source_ref=row["number"],
             )
             session.add(pay)
-        counts["payments"] = len(PAYMENT_ROWS)
+        counts["payments"] = len(PAYMENT_ROWS) + len(MONTHLY_PAYMENT_ROWS)
 
         # ── CRM TIMELINE EVENTS (finance activity) ───────────────────
         timeline_count = 0
-        for idx, inv_row in enumerate(INVOICE_ROWS):
+        for idx, inv_row in enumerate(_all_invoice_rows):
             if inv_row["status"] in (InvoiceStatus.APPROVED, InvoiceStatus.PAID):
                 evt = ErpCrmTimelineEventModel(
                     tenant_id=tenant_id,
@@ -2530,7 +3057,7 @@ async def seed_demo_data(
                 )
                 session.add(evt)
                 timeline_count += 1
-        for pay_row in PAYMENT_ROWS:
+        for pay_row in (*PAYMENT_ROWS, *MONTHLY_PAYMENT_ROWS):
             inv_idx = int(str(pay_row["invoice_idx"]))
             evt = ErpCrmTimelineEventModel(
                 tenant_id=tenant_id,
@@ -2544,6 +3071,251 @@ async def seed_demo_data(
             session.add(evt)
             timeline_count += 1
         counts["crm_timeline_events"] = timeline_count
+
+        # ── BUDGETS + BUDGET LINES (SKY-85 B21) ─────────────────────
+        budget_ids: list[uuid.UUID] = []
+        budget_line_count = 0
+        for budget_row in BUDGET_ROWS:
+            budget = ErpBudgetModel(
+                tenant_id=tenant_id,
+                name=budget_row["name"],
+                description=budget_row["description"],
+                fiscal_year=budget_row["fiscal_year"],
+                status=budget_row["status"],
+                currency="USD",
+                created_by=owner_id,
+            )
+            session.add(budget)
+            await session.flush()
+            budget_ids.append(budget.id)
+            for account_code, amount in budget_row["lines"]:
+                line = ErpBudgetLineModel(
+                    tenant_id=tenant_id,
+                    budget_id=budget.id,
+                    account_code=account_code,
+                    amount=amount,
+                )
+                session.add(line)
+                budget_line_count += 1
+        counts["budgets"] = len(budget_ids)
+        counts["budget_lines"] = budget_line_count
+
+        # ── FIXED ASSETS + DEPRECIATION ENTRIES (SKY-85 B13/B28) ────
+        asset_ids: list[uuid.UUID] = []
+        dep_entry_count = 0
+        fa_cost_acct = account_id_by_code["1500"]
+        cash_acct = account_id_by_code["1200"]
+        dep_expense_acct = account_id_by_code["5100"]
+        dep_contra_acct = account_id_by_code["1700"]
+        today = _today()
+        for asset_row in FIXED_ASSET_ROWS:
+            asset = ErpFixedAssetModel(
+                tenant_id=tenant_id,
+                name=asset_row["name"],
+                category=asset_row["category"],
+                cost=asset_row["cost"],
+                acquisition_date=_date_ago(int(str(asset_row["acquisition_days_ago"]))),
+                useful_life_years=asset_row["useful_life_years"],
+                depreciation_method="straight_line",
+                salvage_value=asset_row["salvage"],
+                accumulated_depreciation=Decimal("0"),
+                status=asset_row["status"],
+                created_by=owner_id,
+            )
+            session.add(asset)
+            await session.flush()
+            asset_ids.append(asset.id)
+
+            # Capitalize the purchase: DEBIT office equipment, CREDIT cash on
+            # the acquisition date so the ledger's 1500 + accumulated 1700
+            # reconcile with the asset register's net book value (FIN-AUT-004).
+            acquisition_date = _date_ago(int(str(asset_row["acquisition_days_ago"])))
+            acq_je = ErpJournalEntryModel(
+                tenant_id=tenant_id,
+                entry_date=acquisition_date,
+                memo=f"Purchase {asset_row['name']}",
+                status=EntryStatus.POSTED,
+                source="manual",
+                source_ref=f"ACQ-{asset_row['name'][:40]}",
+                posted_by_user_id=owner_id,
+                posted_at=_ago(float(str(asset_row["acquisition_days_ago"]))),
+            )
+            session.add(acq_je)
+            await session.flush()
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=acq_je.id,
+                    account_id=fa_cost_acct,
+                    debit=row["cost"],
+                    credit=None,
+                    currency="USD",
+                )
+            )
+            session.add(
+                ErpJournalLineModel(
+                    tenant_id=tenant_id,
+                    entry_id=acq_je.id,
+                    account_id=cash_acct,
+                    debit=None,
+                    credit=row["cost"],
+                    currency="USD",
+                )
+            )
+
+            # Straight-line monthly accrual ~ the shared depreciation service,
+            # so the seeded history matches what a live run for the same month
+            # would have booked. Half-year convention when in the acquisition
+            # year; floor monthly accrual at 2dp.
+            depreciable = Decimal(asset_row["cost"]) - Decimal(asset_row["salvage"])
+            accumulator = Decimal("0")
+            for cursor in _month_iter(acquisition_date, today):
+                period = f"{cursor.year:04d}-{cursor.month:02d}"
+                annual = depreciable / Decimal(asset_row["useful_life_years"])
+                if cursor.year == acquisition_date.year:
+                    annual = annual / 2
+                monthly = (annual / Decimal("12")).quantize(Decimal("0.01"))
+                remaining = depreciable - accumulator
+                amount = min(monthly, remaining)
+                if amount <= 0:
+                    continue
+                # DRAFT journal entry stamped like the depreciation engine so
+                # the UI "JE created" badge resolves and (asset, period) stays
+                # exactly-once against a future live run.
+                dep_je = ErpJournalEntryModel(
+                    tenant_id=tenant_id,
+                    entry_date=date(cursor.year, cursor.month, 28),
+                    memo=f"Depreciation {period} - {row['name']}",
+                    status=EntryStatus.DRAFT,
+                    source="depreciation",
+                    source_ref=f"{asset.id}:{period}",
+                    posted_by_user_id=None,
+                    posted_at=None,
+                )
+                session.add(dep_je)
+                await session.flush()
+                session.add(
+                    ErpJournalLineModel(
+                        tenant_id=tenant_id,
+                        entry_id=dep_je.id,
+                        account_id=dep_expense_acct,
+                        debit=amount,
+                        credit=None,
+                        currency="USD",
+                    )
+                )
+                session.add(
+                    ErpJournalLineModel(
+                        tenant_id=tenant_id,
+                        entry_id=dep_je.id,
+                        account_id=dep_contra_acct,
+                        debit=None,
+                        credit=amount,
+                        currency="USD",
+                    )
+                )
+                session.add(
+                    ErpDepreciationEntryModel(
+                        tenant_id=tenant_id,
+                        asset_id=asset.id,
+                        period=period,
+                        amount=amount,
+                        status="draft",
+                        journal_entry_id=dep_je.id,
+                    )
+                )
+                dep_entry_count += 1
+                accumulator += amount
+            asset.accumulated_depreciation = accumulator
+        counts["fixed_assets"] = len(asset_ids)
+        counts["depreciation_entries"] = dep_entry_count
+        counts["depreciation_journal_entries"] = dep_entry_count
+        counts["fixed_asset_acquisitions"] = len(asset_ids)
+
+        # ── EXPENSE POLICIES (SKY-85 B16) ───────────────────────────
+        policy_ids: list[uuid.UUID] = []
+        for row in EXPENSE_POLICY_ROWS:
+            policy = ErpExpensePolicyModel(
+                tenant_id=tenant_id,
+                category=row["category"],
+                name=row["name"],
+                cap_amount=row["cap_amount"],
+                requires_receipt=row["requires_receipt"],
+                advance_limit=row["advance_limit"],
+                created_by=owner_id,
+            )
+            session.add(policy)
+            await session.flush()
+            policy_ids.append(policy.id)
+        counts["expense_policies"] = len(policy_ids)
+
+        # ── EXPENSE CLAIMS (SKY-85 B16) ─────────────────────────────
+        claim_ids: list[uuid.UUID] = []
+        for row in EXPENSE_CLAIM_ROWS:
+            claim_status = row["status"]
+            is_approved = claim_status == ExpenseClaimStatus.APPROVED
+            claim = ErpExpenseClaimModel(
+                tenant_id=tenant_id,
+                category=row["category"],
+                amount=row["amount"],
+                description=row["description"],
+                receipt_url=row["receipt_url"],
+                advance_amount=row["advance_amount"],
+                status=claim_status,
+                source_ref=row["source_ref"],
+                submitted_by=owner_id,
+                approved_by=owner_id if is_approved else None,
+                approved_at=_ago(float(str(row["days_ago"])) + 2) if is_approved else None,
+                rejection_reason=row.get("rejection_reason"),
+            )
+            session.add(claim)
+            await session.flush()
+            claim_ids.append(claim.id)
+        counts["expense_claims"] = len(claim_ids)
+
+        # ── EXPENSE POLICY VIOLATIONS (SKY-85 B16) ──────────────────
+        for violation_row in EXPENSE_VIOLATION_ROWS:
+            claim_id_idx = violation_row["claim_id_idx"]
+            session.add(
+                ErpExpensePolicyViolationModel(
+                    tenant_id=tenant_id,
+                    category=violation_row["category"],
+                    reason_code=violation_row["reason_code"],
+                    outcome=violation_row["outcome"],
+                    amount=violation_row["amount"],
+                    claim_id=None if claim_id_idx is None else claim_ids[int(claim_id_idx)],
+                    submitted_by=owner_id,
+                    message=violation_row["message"],
+                )
+            )
+        counts["expense_policy_violations"] = len(EXPENSE_VIOLATION_ROWS)
+
+        # ── COMPLIANCE CALENDAR (SKY-85 B27) ────────────────────────
+        for row in COMPLIANCE_ITEM_ROWS:
+            item_status = row["status"]
+            session.add(
+                ErpComplianceItemModel(
+                    tenant_id=tenant_id,
+                    title=row["title"],
+                    description=row["description"],
+                    obligation_type=row["obligation_type"],
+                    recurrence=row["recurrence"],
+                    due_on=_date_ahead(int(str(row["due_days_ahead"]))),
+                    lead_days=row["lead_days"],
+                    status=item_status,
+                    assignee_id=owner_id,
+                    completed_at=(
+                        _ago(float(str(row.get("completed_days_ago", 0))))
+                        if item_status == ComplianceItemStatus.COMPLETED
+                        else None
+                    ),
+                    completed_by=owner_id
+                    if item_status == ComplianceItemStatus.COMPLETED
+                    else None,
+                    created_by=owner_id,
+                )
+            )
+        counts["compliance_items"] = len(COMPLIANCE_ITEM_ROWS)
 
         # ── SUPPLIERS (SKY-86 / INV-AI-004) ──────────────────────────
         supplier_ids: list[uuid.UUID] = []
@@ -3074,10 +3846,10 @@ async def seed_demo_data(
             await session.execute(
                 text(
                     "INSERT INTO erp_tenant_settings (tenant_id, id, key, value) "
-                    "SELECT :tid, gen_random_uuid(), :flag_key, 'true' "
+                    "SELECT :tid, gen_random_uuid(), CAST(:flag_key AS varchar), 'true' "
                     "WHERE NOT EXISTS ("
                     "  SELECT 1 FROM erp_tenant_settings"
-                    "  WHERE tenant_id = :tid AND key = :flag_key"
+                    "  WHERE tenant_id = :tid AND key = CAST(:flag_key AS varchar)"
                     ")"
                 ),
                 {"tid": tenant_id, "flag_key": _flag_key},

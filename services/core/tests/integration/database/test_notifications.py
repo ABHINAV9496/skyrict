@@ -786,16 +786,18 @@ class TestComplianceReminderHook:
             tenant_id = uuid.UUID(world["tenant"])
             TenantContext.set(world["tenant"])
 
+            due_on = date.today() + timedelta(days=7)
             item = ComplianceItem(
                 tenant_id=tenant_id,
                 title="VAT return",
-                due_on=date(2026, 1, 15),
+                due_on=due_on,
                 obligation_type="tax",
                 lead_days=14,
                 created_by=uuid.UUID(world["compliance_user"]),
                 id=uuid.uuid4(),
                 status=ComplianceItemStatus.OPEN,
             )
+            dedupe_key = f"compliance:{item.id}:{due_on.isoformat()}"
 
             await emit_compliance_reminders(
                 session,
@@ -808,7 +810,7 @@ class TestComplianceReminderHook:
                 select(ErpNotificationModel).where(
                     ErpNotificationModel.tenant_id == tenant_id,
                     ErpNotificationModel.recipient_user_id == uuid.UUID(world["compliance_user"]),
-                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.dedupe_key == dedupe_key,
                 )
             )
             rows = list(compliance_rows)
@@ -830,7 +832,7 @@ class TestComplianceReminderHook:
                 .where(
                     ErpNotificationModel.tenant_id == tenant_id,
                     ErpNotificationModel.recipient_user_id == uuid.UUID(world["compliance_user"]),
-                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.dedupe_key == dedupe_key,
                 )
             )
             assert count == 1
@@ -842,7 +844,7 @@ class TestComplianceReminderHook:
                 .where(
                     ErpNotificationModel.tenant_id == tenant_id,
                     ErpNotificationModel.recipient_user_id == uuid.UUID(world["no_access_user"]),
-                    ErpNotificationModel.dedupe_key == f"compliance:{item.id}:2026-01-15",
+                    ErpNotificationModel.dedupe_key == dedupe_key,
                 )
             )
             assert count_b == 0

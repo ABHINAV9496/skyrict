@@ -113,7 +113,11 @@ class FixedAssetUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _salvage_below_cost(self) -> FixedAssetUpdateRequest:
-        if self.salvage_value is not None and self.cost is not None and self.salvage_value >= self.cost:
+        if (
+            self.salvage_value is not None
+            and self.cost is not None
+            and self.salvage_value >= self.cost
+        ):
             raise ValueError("salvage_value must be less than cost")
         return self
 

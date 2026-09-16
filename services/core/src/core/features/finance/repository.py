@@ -1101,9 +1101,7 @@ class FinanceRepository:
         *,
         status: InvoiceStatus | None = None,
     ) -> int:
-        stmt = select(func.count(ErpInvoiceModel.id)).where(
-            ErpInvoiceModel.tenant_id == tenant_id
-        )
+        stmt = select(func.count(ErpInvoiceModel.id)).where(ErpInvoiceModel.tenant_id == tenant_id)
         if status is not None:
             stmt = stmt.where(ErpInvoiceModel.status == status)
         return int((await self.session.execute(stmt)).scalar_one())

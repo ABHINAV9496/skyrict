@@ -910,9 +910,7 @@ class FinanceService:
         )
         number = await self._repo.next_payment_number(tenant_id, paid_at.year)
         try:
-            created = await self._repo.create_payment(
-                replace(payment, payment_number=number)
-            )
+            created = await self._repo.create_payment(replace(payment, payment_number=number))
         except ConflictError:
             # Racing replay: the UNIQUE (tenant, source, source_ref) won - return
             # the payment the other request booked instead of 409ing a legal replay.

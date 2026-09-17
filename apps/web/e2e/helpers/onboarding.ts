@@ -116,8 +116,10 @@ export async function registerTenant(
             message: "Captcha answer was not returned by /api/auth/captcha.",
         })
         .toBeTruthy();
-    await page.getByLabel("Password").fill(input.password);
-    await page.getByLabel("Confirm password").fill(input.password);
+    await page.getByLabel("Password", { exact: true }).fill(input.password);
+    await page
+        .getByLabel("Confirm password", { exact: true })
+        .fill(input.password);
     await page.getByLabel("Enter the code").fill(captchaAnswer ?? "");
 
     if (input.rejectWrongCaptcha) {
@@ -137,8 +139,19 @@ export async function registerTenant(
             : `${originalAnswer}a`;
         await page.getByLabel("Enter the code").fill(wrongAnswer);
         await page.getByRole("button", { name: "Continue" }).click();
+        // The rejection surfaces one of two copies. The normal path is the
+        // backend 422 ("Unable to verify the security code. Try again."),
+        // which is the STABLE signal; the client guard copy ("Enter the code
+        // shown above to continue.") only appears when no code was committed,
+        // and is cleared the instant the rotated challenge re-fetches
+        // (onError(false)) - so asserting it alone is racy. Match either copy;
+        // .first() avoids strict mode for the brief window where both render.
         await expect(
-            page.getByText("Enter the code shown above to continue."),
+            page
+                .getByText(
+                    /Enter the code shown above to continue\.|Unable to verify the security code\. Try again\./,
+                )
+                .first(),
             "a wrong CAPTCHA answer must be rejected on the security step",
         ).toBeVisible({ timeout: 10_000 });
         await expect

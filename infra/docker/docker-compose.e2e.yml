@@ -67,7 +67,7 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # Identity Service (ENVIRONMENT=test for plaintext OTP + captcha)
+  # Identity Service (IDENTITY_ENVIRONMENT=test for plaintext OTP + captcha)
   # ---------------------------------------------------------------------------
   identity:
     build:
@@ -80,7 +80,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      ENVIRONMENT: test
+      IDENTITY_ENVIRONMENT: test
       LOG_LEVEL: INFO
       LOG_JSON: "true"
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity

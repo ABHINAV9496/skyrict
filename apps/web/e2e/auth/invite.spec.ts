@@ -106,8 +106,8 @@ test("invite link is created, accepted, and the invitee appears in the members t
         await inviteePage.getByLabel("Full name").fill("Invitee User");
 
         const inviteePassword = "Invitee123!Pass";
-        await inviteePage.getByLabel("Password").fill(inviteePassword);
-        await inviteePage.getByLabel("Confirm password").fill(inviteePassword);
+        await inviteePage.getByLabel("Password", { exact: true }).fill(inviteePassword);
+        await inviteePage.getByLabel("Confirm password", { exact: true }).fill(inviteePassword);
         await inviteePage
             .getByRole("button", { name: "Accept invitation" })
             .click();

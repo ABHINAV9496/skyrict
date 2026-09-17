@@ -116,3 +116,58 @@ default it back to `settings.DEFAULT_CURRENCY` (USD). Re-flip after reseeding.
 Note the finance/CIM seeders (`seed_crm`, `seed_revenue_history`,
 `seed_overdue_invoices`, sales orders) still use USD — that is a deliberate,
 detached seam: only HR/payroll is INR.
+
+---
+
+## Entry E — 3 pre-existing core migration-downgrade test failures (not this branch)
+
+**Status: open upstream issue, not introduced by fix/BUG-WEB-001.**
+
+Three `services/core/tests/integration/database` alembic downgrade round-trip
+tests fail on the live dev DB:
+
+- `test_crm_sales.py::TestDowngradeRoundTrip::test_downgrade_then_upgrade_restores_head`
+- `test_crm_workspace.py::TestDowngradeRoundTrip0016::test_downgrade_to_0015_then_upgrade_restores_head`
+- `test_report_cache_repository.py::TestCacheRoundTrip::test_delete_expired_purges_only_expired`
+
+Failure signature (all three): `asyncpg.exceptions.DependentObjectsStillExistError:
+cannot drop table erp_documents because other objects depend on it` — the
+downgrade from revision 0049 → 0048 (SKY-87 document management spine) tries to
+drop `erp_documents`, but later revisions (or objects created by them) still
+reference it, so the migration cannot unwind below 0048.
+
+Verified **pre-existing**: `git diff origin/dev...HEAD` on the failing test
+files and `services/core/alembic/` is **empty** — the branch under test
+(introduced no migration changes) neither introduced nor worsened these. They
+also reproduce on the parent of the branch tip.
+
+**Repro:** with a DB migrated to core head, run:
+
+```
+pytest services/core/tests/integration/database/test_crm_sales.py::TestDowngradeRoundTrip
+```
+
+**Likely fix (not done here):** the 0048 downgrade must drop (or the later
+revisions must drop) the dependent objects first — e.g. `erp_document_chunks` /
+FK back-edges created post-0048 — before `erp_documents`. Needs an upstream
+migration fix authored against origin/dev, out of scope for this branch.
+
+---
+
+## Entry F — sentry-sdk missing from the local venv (stale, not lockfile drift)
+
+**Status: resolved, local-only.**
+
+`mypy services/ libs/` failed with `Cannot find implementation or library stub
+for module named "sentry_sdk"` even though `sentry-sdk[fastapi]>=2.14,<3` is a
+declared dependency of identity/core/ai-agent. Root cause: the local `.venv`
+was bootstrapped (with bare `pip`, after `ensurepip`) before uv's lockfile
+pinned sentry-sdk at `2.69.2` (commit `22fa93fb`, "add sentry-sdk fastapi extra
+to uv.lock", 2026-09-15) — so the package was never installed locally.
+
+Not a lockfile/dependency-drift issue: `uv.lock` resolves
+`sentry-sdk==2.69.2` for all three services, and CI installs via
+`uv sync --all-packages`, so a fresh clone gets it. Fix applied locally:
+`python -m pip install "sentry-sdk[fastapi]>=2.14,<3"` → mypy now green
+(921 files, no issues). If mypy complains about `sentry_sdk` again, run
+`uv sync --all-packages` (or the equivalent pip install) first.

@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.core.email import EmailService, LogEmailService
+from identity.core.permissions import BILLING_MANAGE
 from identity.core.rate_limit import RateLimiter
 from identity.core.rate_limit import limiter as default_rate_limiter
 from identity.core.security import verify_jwt
@@ -28,6 +29,7 @@ from identity.features.audit.repository import AuditRepository
 from identity.features.auth.mfa_challenge_store import MfaChallengeStore
 from identity.features.auth.security import cross_check_jwt_tenant
 from identity.features.auth.verification_store import VerificationStore
+from identity.features.billing.security import validate_tenant_owner
 from identity.features.memberships.repository import MembershipRepository
 from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from identity.features.auth.service import AuthenticationService, TokenService
     from identity.features.avatars.service import AvatarService
     from identity.features.avatars.storage import AvatarStoragePort
+    from identity.features.billing.service import BillingService
     from identity.features.handoffs.repository import HandoffRepository
     from identity.features.handoffs.service import HandoffService
     from identity.features.invitations.repository import InvitationRepository
@@ -355,6 +358,44 @@ def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo))
     from identity.features.organizations.service import TenantService
 
     return TenantService(tenant_repo)
+
+
+def get_billing_service(tenant_repo: TenantRepository = Depends(get_tenant_repo)) -> BillingService:
+    from identity.features.billing.service import BillingService
+
+    return BillingService(tenant_repo)
+
+
+def require_billing_owner() -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Dependency factory - tenant_owner role + billing.manage permission."""
+    check_billing_manage = require_permission(BILLING_MANAGE)
+
+    async def _guard(
+        current_user: dict[str, Any] = Depends(check_billing_manage),
+        role_repo: RoleRepository = Depends(get_role_repo),
+    ) -> dict[str, Any]:
+        await validate_tenant_owner(current_user, role_repo)
+        return current_user
+
+    return _guard
+
+
+def require_plan(*required_tiers: str) -> Callable[[], Awaitable[dict[str, Any]]]:
+    """Gate dependency factory - 403 when tier is too low, 402 when unpaid.
+
+    Reusable by future identity feature routes::
+
+        @router.get("/insights", dependencies=[Depends(require_plan("pro"))])
+    """
+
+    async def _gate(
+        current_user: dict[str, Any] = Depends(get_current_user),
+        billing_svc: BillingService = Depends(get_billing_service),
+    ) -> dict[str, Any]:
+        await billing_svc.require_plan_access(current_user["tenant_id"], required_tiers)
+        return current_user
+
+    return _gate
 
 
 def get_invitation_repo(

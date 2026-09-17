@@ -461,6 +461,7 @@ class AuthenticationService:
             raise UserAlreadyExistsError()
 
         tenant_id = uuid.uuid4()
+        trial_ends_at = datetime.now(UTC) + timedelta(days=settings.BILLING_TRIAL_DAYS)
         await self.tenant_repo.create(
             Tenant(
                 name=request.company_name,
@@ -468,6 +469,8 @@ class AuthenticationService:
                 plan_tier=resolve_tier(request.plan_id),
                 industry=request.industry,
                 billing_address=self._billing_address_payload(request),
+                trial_ends_at=trial_ends_at,
+                subscription_status="trialing",
                 id=tenant_id,
             )
         )
@@ -539,6 +542,8 @@ class AuthenticationService:
             "mfa_required": True,
             "tenant_id": tenant_id,
             "tenant_slug": slug,
+            "subscription_status": "trialing",
+            "trial_ends_at": trial_ends_at,
         }
 
     async def _require_verification_token(self, token: str, email: str) -> dict[str, str]:

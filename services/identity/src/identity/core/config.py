@@ -361,6 +361,15 @@ class Settings(BaseSettings):
             "does NOT re-price the catalog."
         ),
     )
+    BILLING_TRIAL_DAYS: int = Field(
+        default=14,
+        gt=0,
+        description=(
+            "Length of the free trial granted to a newly provisioned "
+            "organization. The tenant is created with subscription_status "
+            "'trialing' and trial_ends_at = signup time + this many days."
+        ),
+    )
 
     # --- Avatar uploads ---
     AVATAR_STORAGE_BACKEND: str = Field(

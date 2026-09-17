@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Tenant
@@ -50,6 +51,11 @@ def _from_orm(model: TenantModel) -> Tenant:
         industry=model.industry,
         billing_address=model.billing_address,
         onboarding_completed_at=model.onboarding_completed_at,
+        trial_ends_at=model.trial_ends_at,
+        subscription_status=model.subscription_status,
+        stripe_customer_id=model.stripe_customer_id,
+        stripe_subscription_id=model.stripe_subscription_id,
+        billing_email=model.billing_email,
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
@@ -83,6 +89,49 @@ class TenantRepository(SqlRepository):
         await self.session.refresh(model)
         return _from_orm(model)
 
+    async def update_billing(
+        self,
+        tenant_id: str | uuid.UUID,
+        *,
+        plan_tier: str | None = None,
+        subscription_status: str | None = None,
+        trial_ends_at: datetime | None = None,
+    ) -> Tenant:
+        """Update billing fields on a tenant (partial update, flush + refresh)."""
+        values: dict[str, Any] = {}
+        if plan_tier is not None:
+            values["plan_tier"] = plan_tier
+        if subscription_status is not None:
+            values["subscription_status"] = subscription_status
+        if trial_ends_at is not None:
+            values["trial_ends_at"] = trial_ends_at
+        if not values:
+            return await self._require_by_id(tenant_id)
+        stmt = update(TenantModel).where(TenantModel.id == tenant_id).values(**values)
+        await self.session.execute(stmt)
+        await self.session.flush()
+        return await self._require_by_id(tenant_id)
+
+    async def mark_trial_expired_if_past(self, tenant_id: str | uuid.UUID, now: datetime) -> bool:
+        """Atomically flip trialing→expired when trial has passed (idempotent).
+
+        Returns True if a row was updated, False if already expired/active/none.
+        Uses a conditional UPDATE to avoid read-modify-write races.
+        """
+        stmt = (
+            update(TenantModel)
+            .where(
+                TenantModel.id == tenant_id,
+                TenantModel.subscription_status == "trialing",
+                TenantModel.trial_ends_at.isnot(None),
+                TenantModel.trial_ends_at < now,
+            )
+            .values(subscription_status="expired")
+        )
+        result = cast("CursorResult[Any]", await self.session.execute(stmt))
+        await self.session.flush()
+        return result.rowcount > 0
+
     async def mark_onboarding_complete(self, tenant_id: str | uuid.UUID) -> Tenant:
         """Stamp onboarding_completed_at (idempotent) and flush."""
         model = await self.session.get(TenantModel, tenant_id)
@@ -93,3 +142,10 @@ class TenantRepository(SqlRepository):
         await self.session.flush()
         await self.session.refresh(model)
         return _from_orm(model)
+
+    async def _require_by_id(self, tenant_id: str | uuid.UUID) -> Tenant:
+        """Fetch by ID, raising TenantNotFoundError when absent."""
+        tenant = await self.get_by_id(tenant_id)
+        if tenant is None:
+            raise TenantNotFoundError("Organization not found")
+        return tenant

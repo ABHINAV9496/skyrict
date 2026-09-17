@@ -38,6 +38,14 @@ class PermissionDeniedError(AuthorizationError):
     code = "PERMISSION_DENIED"
 
 
+# ---------- Billing ----------
+
+
+class PaymentRequiredError(SkyrictError):
+    message = "An active subscription is required"
+    code = "PAYMENT_REQUIRED"
+
+
 class TokenExpiredError(AuthenticationError):
     message = "Token has expired"
     code = "TOKEN_EXPIRED"

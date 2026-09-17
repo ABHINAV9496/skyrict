@@ -71,10 +71,12 @@ test("invite link is created, accepted, and the invitee appears in the members t
 
     await ownerPage.getByLabel("Email address").fill(inviteeEmail);
 
-    // Open the role select and pick Standard User explicitly (no dependency
-    // on role sort order or the default-first-role memo).
+    // Open the role select and pick the standard member role explicitly (no
+    // dependency on role sort order or the default-first-role memo). The
+    // combobox renders the display label (SYSTEM_ROLE_LABELS), so the option
+    // for standard_user is "Member" — not "Standard User".
     await ownerPage.getByLabel("Role").click();
-    await ownerPage.getByRole("option", { name: "Standard User" }).click();
+    await ownerPage.getByRole("option", { name: "Member" }).click();
 
     await ownerPage.getByRole("button", { name: "Send invite" }).click();
 
@@ -94,8 +96,10 @@ test("invite link is created, accepted, and the invitee appears in the members t
     try {
         await inviteePage.goto(acceptUrl);
 
-        // The accept form shows the role the invitee is being added as.
-        await expect(inviteePage.getByText("Standard User")).toBeVisible({
+        // The accept form shows the raw role name the invitation carries
+        // (verify returns role_name from the invitations table, e.g.
+        // "standard_user"); display labels only appear in the dashboard.
+        await expect(inviteePage.getByText("standard_user")).toBeVisible({
             timeout: 10_000,
         });
 
@@ -122,13 +126,15 @@ test("invite link is created, accepted, and the invitee appears in the members t
         ownerPage.getByRole("heading", { name: "Members", exact: true }),
     ).toBeVisible();
 
-    // The invitee row is visible with the correct email and assigned role.
-    await expect(
-        ownerPage.getByRole("cell", { name: inviteeEmail }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-        ownerPage.getByRole("cell", { name: "Standard User" }),
-    ).toBeVisible({ timeout: 15_000 });
+    // The invitee row is visible with the correct email and the assigned role
+    // badge. The members dashboard renders rows as a <ul>/<li> list — there
+    // is no table/cell role, so assert on the row containing the email and
+    // the roleDisplayName ("Member" for standard_user) within it.
+    const inviteeRow = ownerPage
+        .getByRole("listitem")
+        .filter({ hasText: inviteeEmail });
+    await expect(inviteeRow).toBeVisible({ timeout: 15_000 });
+    await expect(inviteeRow).toContainText("Member");
 
     await ownerContext.close();
 });

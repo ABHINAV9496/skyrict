@@ -65,16 +65,16 @@ test("valid credentials sign in through MFA and open the workspace", async ({
         await waitForWorkspaceSettled(page, ADMIN_EMAIL);
 
         // The session works at the app level: the members dashboard loads the
-        // admin's own row through the real members API.
+        // admin's own row through the real members API. The dashboard renders
+        // members as list rows (there is no table/cell role), so assert on the
+        // row containing the admin's email.
         await page.goto(`${workspaceUrl(SLUG)}/dashboard/members`);
         await expect(
             page.getByRole("heading", { name: "Members", exact: true }),
         ).toBeVisible();
-        await expect(page.getByRole("cell", { name: ADMIN_EMAIL })).toBeVisible(
-            {
-                timeout: 15_000,
-            },
-        );
+        await expect(
+            page.getByRole("listitem").filter({ hasText: ADMIN_EMAIL }),
+        ).toBeVisible({ timeout: 15_000 });
     } finally {
         await context.close();
     }
@@ -93,7 +93,11 @@ test("wrong password is rejected with the anti-enumeration copy and no session",
         await signInWithPassword(page, ADMIN_EMAIL, "Definitely-Wrong-2026!");
 
         // ADR-004 anti-enumeration: EVERY failure mode surfaces this same message.
-        const alert = page.getByRole("alert");
+        // Next.js also injects a global role="alert" route announcer on the
+        // signin surface, so scope the assertion to the form's error alert.
+        const alert = page
+            .getByRole("alert")
+            .filter({ hasText: "Invalid email or password." });
         await expect(alert).toBeVisible({ timeout: 10_000 });
         await expect(alert).toHaveText("Invalid email or password.");
 

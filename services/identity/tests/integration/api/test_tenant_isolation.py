@@ -253,6 +253,31 @@ class TestTwoRealTenants:
                     await _delete_tenant_by_id(org_id)
 
 
+class TestCrossTenantMfaReset:
+    """An owner can only reset MFA for a user in their own tenant."""
+
+    async def test_owner_cannot_reset_mfa_for_another_tenant(self, client: AsyncClient) -> None:
+        tenant_a = await _register_and_login(client)
+        tenant_b = await _register_and_login(client)
+        try:
+            headers_a = {
+                "X-Tenant-Slug": tenant_a["slug"],
+                "Authorization": f"Bearer {tenant_a['token']}",
+            }
+            reset = await client.post(
+                "/api/v1/mfa/reset",
+                headers=headers_a,
+                json={"user_id": tenant_b["user_id"]},
+            )
+            assert reset.status_code == 404, (
+                f"cross-tenant mfa reset -> {reset.status_code} {reset.text[:300]}"
+            )
+            assert reset.json()["type"].endswith("/user-not-found")
+        finally:
+            await _delete_tenant_by_slug(tenant_a["slug"])
+            await _delete_tenant_by_slug(tenant_b["slug"])
+
+
 class TestTenantIsolation:
     """JWT-vs-routed-tenant cross-check is enforced on every request."""
 

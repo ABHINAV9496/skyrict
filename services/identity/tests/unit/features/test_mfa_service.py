@@ -115,7 +115,7 @@ def _make_user(
     mfa_backup_codes: list[str | None] | None = None,
 ) -> User:
     return User(
-        tenant_id=uuid.uuid4(),
+        tenant_id=uuid.UUID(TenantContext.get()),
         email="user@example.com",
         password_hash=hash_password("Password1!"),
         full_name="Test User",

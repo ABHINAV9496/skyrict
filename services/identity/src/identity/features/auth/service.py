@@ -56,6 +56,7 @@ from identity.features.auth.verification_store import (
     generate_verification_token,
     hash_otp,
 )
+from identity.features.billing.plans import resolve_tier
 from skyrict_common.exceptions import (
     AuthenticationError,
     ConflictError,
@@ -464,7 +465,7 @@ class AuthenticationService:
             Tenant(
                 name=request.company_name,
                 slug=slug,
-                plan_tier=request.plan_id,
+                plan_tier=resolve_tier(request.plan_id),
                 industry=request.industry,
                 billing_address=self._billing_address_payload(request),
                 id=tenant_id,

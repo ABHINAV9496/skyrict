@@ -28,6 +28,11 @@ def _to_orm(tenant: Tenant) -> TenantModel:
         "industry": tenant.industry,
         "billing_address": tenant.billing_address,
         "onboarding_completed_at": tenant.onboarding_completed_at,
+        "trial_ends_at": tenant.trial_ends_at,
+        "subscription_status": tenant.subscription_status,
+        "stripe_customer_id": tenant.stripe_customer_id,
+        "stripe_subscription_id": tenant.stripe_subscription_id,
+        "billing_email": tenant.billing_email,
     }
     if tenant.id is not None:
         model_kwargs["id"] = tenant.id

@@ -109,6 +109,11 @@ class Tenant:
     industry: str | None = None
     billing_address: dict[str, Any] | None = None
     onboarding_completed_at: datetime | None = None
+    trial_ends_at: datetime | None = None
+    subscription_status: str = "none"
+    stripe_customer_id: str | None = None
+    stripe_subscription_id: str | None = None
+    billing_email: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None

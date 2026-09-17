@@ -221,9 +221,9 @@ Two shared table implementations coexist:
 `ErpColumn<T>` is defined twice with **different `key` types**:
 `key: string` (`erp-table.tsx:8`) vs `key: keyof T & string`
 (`shared/erp-data-table.tsx:11`). The stricter form catches typos but the
-looser form has ~9 consumers importing from `erp-table.tsx` (activities,
-contacts, customer-detail, customers, leads, opportunities/sales orders,
-order-detail) — merging requires auditing all of them.
+looser form has **7** consumers importing from `erp-table.tsx` (crm
+activities/contacts/customers/leads tables, crm customer-detail, sales
+orders-table, sales order-detail) — merging requires auditing all of them.
 
 `PaginationMeta` is defined **4** times in **two incompatible shapes**:
 

@@ -8,14 +8,27 @@ import {
     backendError,
     callBackend,
     hostSurface,
+    resolveTenantSlug,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
 function workspaceUrl(request: NextRequest, slug: string): string {
-    const { protocol, hostname, port } = request.nextUrl;
-    const apex = hostname.split(".").slice(1).join(".") || hostname;
-    return `${protocol}//${slug}.${apex}${port ? `:${port}` : ""}`;
+    // Build the workspace origin from the client-facing Host header, not
+    // request.nextUrl: nextUrl reports the server's own socket port (3100),
+    // which the browser cannot reach through the CSP form-action allowlist.
+    const host = request.headers.get("host") ?? "";
+    const port = host.includes(":") ? host.slice(host.indexOf(":")) : "";
+    const hostname = host.replace(/:\d+$/, "").toLowerCase();
+    // The mint runs on the signin surface, so the {slug}.signin. label must be
+    // stripped before deriving the apex: default.signin.localhost -> localhost.
+    // Without this the handoff form would post back to the signin host, where
+    // the redeem route rejects the surface with "Invalid request origin.".
+    const apex = hostname.includes(".signin.")
+        ? hostname.split(".signin.").pop() ?? ""
+        : hostname.split(".").slice(1).join(".") || hostname;
+    const tenant = slug || resolveTenantSlug(host) || "app";
+    return `${request.nextUrl.protocol}//${tenant}.${apex}${port}`;
 }
 
 /**

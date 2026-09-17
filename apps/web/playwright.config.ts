@@ -1,14 +1,13 @@
 /*
- * Playwright config for the reports workspace smoke suite (RPT-UI-001).
+ * Playwright config for the multi-tenant E2E harness (SKY-103).
  *
- * The app serves four subdomain surfaces (see src/middleware.ts); the suite
- * runs against the tenant workspace (default.localhost) which the identity
- * seed creates with the admin sign-in used by the setup project.
- *
- * Local smoke runs reuse an already-running Next.js dev server when one is up
- * (webServer.reuseExistingServer = true off CI); otherwise Playwright boots
- * `pnpm run dev` itself. The default base URL can be overridden with
- * E2E_BASE_URL when the stack runs on another host/port.
+ * The app serves four subdomain surfaces (see src/middleware.ts): marketing
+ * (localhost), signup (signup.localhost), signin ({slug}.signin.localhost)
+ * and workspace ({slug}.localhost). In CI all traffic reaches Next.js through
+ * nginx on the E2E origin (E2E_BASE_URL, default http://default.localhost:3000;
+ * nginx injects the tenant slug from the subdomain and proxies to the
+ * `next start` server on :3100). Locally the dev server serves the same
+ * surfaces directly.
  *
  * Projects:
  *   - setup: signs in as the seeded admin (through /signin on the signin
@@ -19,27 +18,48 @@
  *     context fixture (the runner's default per-test context cannot be used;
  *     see the spec header).
  *
- * The whole suite must run serially in one worker. Identity rotates the
- * refresh token on every /api/auth/session hydration, and presenting an
- * already-rotated token is treated as token reuse, which revokes the session
- * family. Per-test contexts loaded from the same storage state would present
- * the same token seven times and revoke the family on the second test. The
- * reports smoke spec instead opens ONE worker-scoped context from the stored
- * token and walks the rotation chain sequentially (T0 -> T1 -> ...) across its
- * tests, which is exactly what identity expects.
+ * Workers and refresh-token rotation
+ * ----------------------------------
+ * The suite may run several workers (fullyParallel; CI defaults to 2).
+ * Identity rotates the refresh token on every /api/auth/session hydration and
+ * treats presenting an already-rotated token as token reuse, which revokes the
+ * session family. Every worker therefore owns ONE worker-scoped browser
+ * context (the `workspace` fixture in fixtures/auth.ts or the `tenant`
+ * fixture in fixtures/tenants.ts) so its cookie jar advances a single rotation
+ * chain (T0 -> T1 -> ...), exactly what identity expects. Never load the same
+ * storage-state snapshot into two contexts.
  */
 
 import { defineConfig } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://default.localhost:3000";
 
+/*
+ * CI boots the whole stack (nginx + services via docker compose) and runs
+ * `next start` itself, so Playwright must reuse that origin (E2E_SKIP_WEBSERVER=1).
+ * Local runs reuse a running dev server when one is up, otherwise Playwright
+ * boots `pnpm run dev` itself.
+ */
+const webServer =
+  process.env.E2E_SKIP_WEBSERVER === "1"
+    ? undefined
+    : {
+        command: "pnpm run dev",
+        // Readiness probe must use `localhost`: the Node-side check cannot
+        // resolve `*.localhost` (only Chromium can). Tests still navigate the
+        // tenant surfaces via the URL builders under e2e/support/urls.ts.
+        url: "http://localhost:3000/",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      };
+
 export default defineConfig({
   testDir: "./e2e",
-  // Serial within a worker: see the header comment on refresh-token rotation.
-  fullyParallel: false,
+  // Worker-isolated sessions (see header) make parallel workers safe.
+  fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
+  workers: process.env.CI ? 2 : 1,
   timeout: 30_000,
   expect: { timeout: 8_000 },
   reporter: process.env.CI ? "html" : "list",
@@ -58,25 +78,9 @@ export default defineConfig({
       testIgnore: /auth\.setup\.ts/,
       dependencies: ["setup"],
       // NOTE: no `use.storageState` here. The spec opens a single
-      // worker-scoped context from e2e/.auth/admin.json so the cookie jar can
-      // advance the refresh-token rotation chain across its seven tests.
+      // worker-scoped context per worker so the cookie jar can advance the
+      // refresh-token rotation chain across its tests (see the header).
     },
   ],
-  webServer: {
-    // Run the DEV server (turbopack). `next start`/`next build` force
-    // NODE_ENV=production, which makes applySessionCookie set a `Secure`
-    // cookie - and over plain http://localhost Chromium drops Secure cookies,
-    // so the rotated token never reaches the context jar and the next page
-    // reload presents a stale token (a reuse that revokes the family).
-    // Dev mode sets Secure:false, so the rotation propagates correctly.
-    command: "pnpm run dev",
-    // Readiness probe must use `localhost`: the Node-side check cannot
-    // resolve `*.localhost` (only Chromium can). Tests still navigate the
-    // tenant surface via baseURL above.
-    url: "http://localhost:3000/",
-    // Reuse an already-running dev server locally (avoids the "port in use"
-    // error and keeps iteration fast); CI always boots its own.
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  ...(webServer ? { webServer } : {}),
 });

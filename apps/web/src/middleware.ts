@@ -52,9 +52,15 @@ function baseParts(request: NextRequest): {
     port: string;
     apex: string;
 } {
-    const { protocol, hostname, port } = request.nextUrl;
+    // Derive port from the Host header, not request.nextUrl (which uses the
+    // server's own socket port, ignoring the client-facing port behind a proxy).
+    // request.nextUrl.port is e.g. 3100 (Next.js listen port) while Host
+    // carries 3000 (the nginx edge port the browser connected to).
+    const host = request.headers.get("host") ?? "";
+    const hostname = host.replace(/:\d+$/, "").toLowerCase();
+    const port = host.includes(":") ? `:${host.split(":").pop()}` : "";
     const apex = hostname.split(".").slice(1).join(".") || hostname;
-    return { protocol, port: port ? `:${port}` : "", apex };
+    return { protocol: request.nextUrl.protocol, port, apex };
 }
 
 function signupOrigin(request: NextRequest): string {

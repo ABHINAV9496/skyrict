@@ -34,12 +34,13 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from sqlalchemy import Date, and_, case, cast, func, select, text, update
+from sqlalchemy import Date, and_, case, cast, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from core.core.constants import (
     BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
     INVOICE_PREFIX,
+    JOURNAL_SOURCE_PAYMENT,
     PAYMENT_PREFIX,
 )
 from core.db.parallel import parallel_reads
@@ -749,6 +750,21 @@ class FinanceRepository:
         lines = await self._journal_lines(entry_id, tenant_id)
         return _journal_entry_from_orm(model, lines)
 
+    async def get_journal_entry_by_source_ref(
+        self, source: str, source_ref: str, tenant_id: uuid.UUID
+    ) -> JournalEntry | None:
+        stmt = select(ErpJournalEntryModel).where(
+            ErpJournalEntryModel.tenant_id == tenant_id,
+            ErpJournalEntryModel.source == source,
+            ErpJournalEntryModel.source_ref == source_ref,
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        assert model.id is not None
+        lines = await self._journal_lines(model.id, tenant_id)
+        return _journal_entry_from_orm(model, lines)
+
     async def list_journal_entries(
         self,
         tenant_id: uuid.UUID,
@@ -794,6 +810,25 @@ class FinanceRepository:
             _journal_entry_from_orm(model, lines_by_entry.get(model.id, ()))
             for model in entry_models
         ]
+
+    async def count_journal_entries(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: EntryStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> int:
+        stmt = select(func.count(ErpJournalEntryModel.id)).where(
+            ErpJournalEntryModel.tenant_id == tenant_id
+        )
+        if status is not None:
+            stmt = stmt.where(ErpJournalEntryModel.status == status)
+        if from_date is not None:
+            stmt = stmt.where(ErpJournalEntryModel.entry_date >= from_date)
+        if to_date is not None:
+            stmt = stmt.where(ErpJournalEntryModel.entry_date <= to_date)
+        return int((await self.session.execute(stmt)).scalar_one())
 
     async def post_journal_entry(
         self,
@@ -995,6 +1030,23 @@ class FinanceRepository:
         lines = await self._invoice_lines(invoice_id, tenant_id)
         return _invoice_from_orm(model, lines)
 
+    async def get_invoice_for_update(  # H1: row lock so apply_payment cannot double-collect
+        self, invoice_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> Invoice | None:
+        stmt = (
+            select(ErpInvoiceModel)
+            .where(
+                ErpInvoiceModel.tenant_id == tenant_id,
+                ErpInvoiceModel.id == invoice_id,
+            )
+            .with_for_update()
+        )
+        model = (await self.session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        lines = await self._invoice_lines(invoice_id, tenant_id)
+        return _invoice_from_orm(model, lines)
+
     async def get_invoice_by_source_ref(
         self, source: str, source_ref: str, tenant_id: uuid.UUID
     ) -> Invoice | None:
@@ -1042,6 +1094,17 @@ class FinanceRepository:
                     _invoice_line_from_orm(line_model)
                 )
         return [_invoice_from_orm(model, lines_by_invoice.get(model.id, ())) for model in models]
+
+    async def count_invoices(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+    ) -> int:
+        stmt = select(func.count(ErpInvoiceModel.id)).where(ErpInvoiceModel.tenant_id == tenant_id)
+        if status is not None:
+            stmt = stmt.where(ErpInvoiceModel.status == status)
+        return int((await self.session.execute(stmt)).scalar_one())
 
     async def issue_invoice(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID, *, issued_at: datetime
@@ -1315,8 +1378,32 @@ class FinanceRepository:
         if model is None:
             return False
         await self.session.delete(model)
+        # The payment's ledger entry (source='payment', source_ref=payment_id)
+        # goes with it - journal lines RESTRICT on the entry FK, so lines first.
+        await self._delete_journal_entry_by_source_ref(
+            JOURNAL_SOURCE_PAYMENT, str(payment_id), tenant_id
+        )
         await self.session.flush()
         return True
+
+    async def _delete_journal_entry_by_source_ref(
+        self, source: str, source_ref: str, tenant_id: uuid.UUID
+    ) -> None:
+        stmt = select(ErpJournalEntryModel).where(
+            ErpJournalEntryModel.tenant_id == tenant_id,
+            ErpJournalEntryModel.source == source,
+            ErpJournalEntryModel.source_ref == source_ref,
+        )
+        entry = (await self.session.execute(stmt)).scalar_one_or_none()
+        if entry is None:
+            return
+        await self.session.execute(
+            delete(ErpJournalLineModel).where(
+                ErpJournalLineModel.tenant_id == tenant_id,
+                ErpJournalLineModel.entry_id == entry.id,
+            )
+        )
+        await self.session.delete(entry)
 
     async def settle_invoice_payment_status(
         self, invoice_id: uuid.UUID, tenant_id: uuid.UUID

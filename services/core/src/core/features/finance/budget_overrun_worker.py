@@ -156,7 +156,11 @@ class BudgetOverrunWorker:
                     await session.commit()
                 except Exception:
                     await session.rollback()
-                    raise
+                    logger.exception(
+                        "budget.overrun.tenant_failed",
+                        extra={"tenant_id": tid},
+                    )
+                    continue  # one tenant's failure never aborts the rest
                 finally:
                     TenantContext.reset()
         return BudgetOverrunOutcome(

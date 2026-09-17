@@ -39,6 +39,7 @@ from core.core.constants import (
     ACCRUED_SALARIES_PAYABLE_ACCOUNT_CODE,
     AR_ACCOUNT_CODE,
     BUDGET_DRAFT_SOURCE_WORKFORCE_PLAN,
+    CASH_ACCOUNT_CODE,
     COGS_ACCOUNT_CODE,
     DEDUCTIONS_PAYABLE_ACCOUNT_CODE,
     INVENTORY_ASSET_ACCOUNT_CODE,
@@ -47,6 +48,7 @@ from core.core.constants import (
     JOURNAL_SOURCE_COGS,
     JOURNAL_SOURCE_INVOICE,
     JOURNAL_SOURCE_MANUAL,
+    JOURNAL_SOURCE_PAYMENT,
     JOURNAL_SOURCE_PAYROLL,
     PAYMENT_SOURCE_MANUAL,
     REVENUE_ACCOUNT_CODE,
@@ -279,6 +281,18 @@ class FinanceService:
             limit=limit,
         )
 
+    async def count_journal_entries(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: EntryStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> int:
+        return await self._repo.count_journal_entries(
+            tenant_id, status=status, from_date=from_date, to_date=to_date
+        )
+
     async def post_journal_entry(
         self,
         *,
@@ -351,6 +365,17 @@ class FinanceService:
         auto-approval - the column supports it and the audit transition
         already records the system actor.
         """
+        entry = await self.get_journal_entry(tenant_id, entry_id)
+        if entry.status != EntryStatus.DRAFT:
+            raise ConflictError(
+                "Journal entry could not be posted; it is no longer draft "
+                "(another request posted or voided it concurrently)"
+            )
+        if await self._repo.is_period_closed(entry.entry_date, tenant_id):
+            raise ConflictError(
+                f"Entry date {entry.entry_date.isoformat()} falls in a closed fiscal period"
+            )
+
         posted = await self._repo.post_journal_entry(
             entry_id,
             tenant_id,
@@ -573,7 +598,17 @@ class FinanceService:
             lines=tuple(invoice_lines),
             issued_at=datetime.now(UTC),
         )
-        created = await self._repo.create_invoice(invoice)
+        try:
+            created = await self._repo.create_invoice(invoice)
+        except ConflictError:
+            # Racing replay: the UNIQUE (tenant, source, source_ref) won -
+            # return the invoice the other request created.
+            existing = await self._repo.get_invoice_by_source_ref(
+                INVOICE_SOURCE_SALES_ORDER, order.order_id, order.tenant_id
+            )
+            if existing is not None:
+                return existing
+            raise
         await self._announce_invoice_created(order.tenant_id, created, user_id=None)
         return created
 
@@ -602,6 +637,14 @@ class FinanceService:
         limit: int = 50,
     ) -> Sequence[Invoice]:
         return await self._repo.list_invoices(tenant_id, status=status, offset=offset, limit=limit)
+
+    async def count_invoices(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: InvoiceStatus | None = None,
+    ) -> int:
+        return await self._repo.count_invoices(tenant_id, status=status)
 
     async def list_invoices_with_customer_names(
         self,
@@ -806,7 +849,9 @@ class FinanceService:
         (payment-match bulk accept) can validate every item before any money
         moves.
         """
-        invoice = await self.get_invoice(tenant_id, invoice_id)
+        invoice = await self._repo.get_invoice_for_update(invoice_id, tenant_id)
+        if invoice is None:
+            raise NotFoundError(f"Invoice {invoice_id} not found")
         if invoice.status != InvoiceStatus.APPROVED:
             raise ConflictError("Only approved invoices can receive payments")
         if amount <= 0:
@@ -837,6 +882,17 @@ class FinanceService:
         zero the invoice is marked paid in the same transaction. Idempotent per
         ``(source, source_ref)`` - a replayed request can never double-book.
         """
+        # H3: deterministic source_ref so the UNIQUE (tenant, source, source_ref)
+        # lock is a real DB backstop - identical replays hit the constraint (or a
+        # conflict re-fetch below) instead of booking the same money twice.
+        ref_input = f"{invoice_id}:{amount}:{paid_at.isoformat()}"
+        source_ref = f"manual:{uuid.uuid5(uuid.NAMESPACE_URL, ref_input)}"
+        existing = await self._repo.get_payment_by_source_ref(
+            PAYMENT_SOURCE_MANUAL, source_ref, tenant_id
+        )
+        if existing is not None:
+            return existing
+
         invoice, outstanding = await self.preflight_payment(
             tenant_id=tenant_id, invoice_id=invoice_id, amount=amount
         )
@@ -850,15 +906,49 @@ class FinanceService:
             paid_at=paid_at,
             status=PaymentStatus.APPLIED,
             source=PAYMENT_SOURCE_MANUAL,
-            source_ref=None,
+            source_ref=source_ref,
         )
         number = await self._repo.next_payment_number(tenant_id, paid_at.year)
-        created = await self._repo.create_payment(replace(payment, payment_number=number))
+        try:
+            created = await self._repo.create_payment(replace(payment, payment_number=number))
+        except ConflictError:
+            # Racing replay: the UNIQUE (tenant, source, source_ref) won - return
+            # the payment the other request booked instead of 409ing a legal replay.
+            existing = await self._repo.get_payment_by_source_ref(
+                PAYMENT_SOURCE_MANUAL, source_ref, tenant_id
+            )
+            if existing is not None:
+                return existing
+            raise
         assert created.id is not None
 
         remaining = outstanding - amount
         if remaining == 0:
             await self._repo.mark_invoice_paid(invoice_id, tenant_id)
+
+        # H2: post the receipt leg (DR Cash / CR AR) so the ledger records it.
+        cash_account = await self._repo.get_account_by_code(CASH_ACCOUNT_CODE, tenant_id)
+        if cash_account is None or not cash_account.is_active:
+            raise NotFoundError(f"Cash account '{CASH_ACCOUNT_CODE}' not found")
+        ar_account = await self._repo.get_account_by_code(AR_ACCOUNT_CODE, tenant_id)
+        if ar_account is None or not ar_account.is_active:
+            raise NotFoundError(f"AR account '{AR_ACCOUNT_CODE}' not found")
+        assert cash_account.id is not None and ar_account.id is not None
+
+        entry = JournalEntry(
+            tenant_id=tenant_id,
+            entry_date=paid_at.date(),
+            memo=f"Payment {created.payment_number} applied to {invoice.invoice_number}",
+            status=EntryStatus.POSTED,
+            source=JOURNAL_SOURCE_PAYMENT,
+            source_ref=str(created.id),
+            lines=(
+                JournalLine(account_id=cash_account.id, debit=amount),
+                JournalLine(account_id=ar_account.id, credit=amount),
+            ),
+            posted_at=datetime.now(UTC),
+        )
+        await self._repo.create_journal_entry(entry)
 
         await self._audit.log(
             tenant_id=tenant_id,
@@ -956,7 +1046,15 @@ class FinanceService:
             ),
             posted_at=datetime.now(UTC),
         )
-        created = await self._repo.create_journal_entry(entry)
+        existing = await self._repo.get_journal_entry_by_source_ref(
+            JOURNAL_SOURCE_COGS, order_id, tenant_id
+        )
+        if existing is not None:
+            return
+        try:
+            created = await self._repo.create_journal_entry(entry)
+        except ConflictError:
+            return  # racing replay: the UNIQUE (source, source_ref) already won
         assert created.id is not None
 
         await self._audit.log(

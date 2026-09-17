@@ -1,0 +1,307 @@
+# =============================================================================
+# Skyrict - full-stack E2E test environment
+#
+# Boots a production-like compose cluster (Postgres, Redis, Mailpit,
+# Identity, Core, AI-Agent, Nginx) with inline environment variables
+# (no env_file dependency, safe for CI). Each Python service migrates its
+# schema, seeds the database, and starts uvicorn in a single entrypoint.
+#
+# Build choice: this compose uses Dockerfile.dev (not the production
+# Dockerfiles) because the production Dockerfiles have a latent bug —
+# `uv sync` runs in the base stage where no source exists, creating broken
+# editable installs (dist-info metadata only, no .pth hooks). The dev
+# Dockerfiles have `uv` at runtime and volume-mounting source on top makes
+# everything work. The E2E-specific env vars (ENVIRONMENT=test, no
+# --reload, seed steps) make it production-like in behaviour even though
+# the images are dev-targeted.
+#
+# The web tier (Next.js) runs ON THE HOST and is NOT part of this compose
+# stack: its E2E workflow builds it, starts it on port 3100, and then
+# launches Playwright against the nginx origin (http://default.localhost:3000).
+#
+# Usage:
+#   docker compose -f infra/docker/docker-compose.e2e.yml up -d --build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL (pgvector for ai-agent embedding columns)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: skyrict-e2e-postgres
+    environment:
+      POSTGRES_USER: skyrict
+      POSTGRES_PASSWORD: skyrict
+      POSTGRES_DB: skyrict_identity
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyrict -d skyrict_identity"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Redis (session + event broker cache)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:8-alpine
+    container_name: skyrict-e2e-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      start_period: 3s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Mailpit (catch-all SMTP for dev + E2E)
+  # ---------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: skyrict-e2e-mailpit
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8025/api/v1/info || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Identity Service (ENVIRONMENT=test for plaintext OTP + captcha)
+  # ---------------------------------------------------------------------------
+  identity:
+    build:
+      context: ../..
+      dockerfile: services/identity/Dockerfile.dev
+    container_name: skyrict-e2e-identity
+    # The host-side Next.js BFF proxies /api/v1/* here (auth.ts defaults to
+    # http://localhost:8000), so the container port must be published to the
+    # host - same mapping as the dev compose.
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: test
+      LOG_LEVEL: INFO
+      LOG_JSON: "true"
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
+      IDENTITY_REDIS_URL: redis://skyrict-e2e-redis:6379/0
+      IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
+      IDENTITY_DEFAULT_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      # Relative paths: uv run CWD = /app/services/identity, so .dev/keys
+      # resolves to /app/services/identity/.dev/keys (where keys are mounted).
+      IDENTITY_JWT_PRIVATE_KEY_PATH: .dev/keys/private.pem
+      IDENTITY_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
+      IDENTITY_JWKS_ISSUER: http://default.localhost:3000
+      IDENTITY_JWKS_AUDIENCE: default.localhost:3000
+      # E2E-only test key for MFA TOTP secrets at rest (like .dev/keys, not a
+      # production secret; a fixed fixture value is fine for disposable tenants).
+      IDENTITY_MFA_ENCRYPTION_KEY: b5NfYZ9zPGOH1WnvKja_ceryP61ejCjNyx5HGMJQlKk=
+      IDENTITY_BASE_DOMAIN: localhost
+      IDENTITY_APP_URL: http://default.localhost:3000
+      # E2E-stack accommodation: every worker/repeat signs in FRESH through the
+      # real login endpoint (that isolation is the whole point of the harness),
+      # so the production-login limit of 5 per 300s window would trip during
+      # repeat/parallel runs. The sign-in still requires valid credentials +
+      # MFA; only the anti-brute-force window is widened for the disposable
+      # test stack (production default in config.py stays 5). Note the IDENTITY_
+      # env prefix (config.py env_prefix="IDENTITY_").
+      IDENTITY_RATE_LIMIT_LOGIN: "1000"
+      IDENTITY_EMAIL_SMTP_HOST: skyrict-e2e-mailpit
+      IDENTITY_EMAIL_SMTP_PORT: "1025"
+      IDENTITY_HOST: 0.0.0.0
+      IDENTITY_PORT: "8000"
+      # PYTHONPATH: guarantees Python finds all src-layout packages regardless
+      # of whether the editable .pth hooks were written (they weren't — see
+      # Dockerfile.dev header comment).  Order: own src first, then libs.
+      PYTHONPATH: /app/services/identity/src:/app/libs/skyrict-common/src:/app/libs/skyrict-events/src
+    volumes:
+      - ../../services/identity/src:/app/services/identity/src
+      - ../../services/identity/alembic:/app/services/identity/alembic
+      - ../../services/identity/alembic.ini:/app/services/identity/alembic.ini:ro
+      - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
+      - ../../.dev/keys:/app/services/identity/.dev/keys:ro
+    # Boot: migrate, seed, and start.  Uses uv run (uv is in the dev image)
+    # with --no-proxy-headers. Single worker: uvicorn runs lifespan per
+    # worker process, so workers>1 would race startup work (identity seeding
+    # / core's sync_rbac_from_identity) between processes. No --reload in E2E.
+    # Single-line string: folded YAML scalars with indented continuations
+    # insert literal newlines, breaking the sh -c.
+    command:
+      - sh
+      - -c
+      - "uv run --directory services/identity alembic upgrade head && uv run --directory services/identity python -m identity.seed && uv run --directory services/identity uvicorn identity.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-proxy-headers"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      # Cold boots are slow: `uv run` rebuilds the editable workspace
+      # packages on every container start (the image was built before source
+      # is mounted), then alembic + seed + uvicorn run. start_period 90s +
+      # retries 6 keeps compose from flagging a healthy-but-still-booting
+      # service. Same window for the nginx dependency + ai-agent cascade.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+
+  # ---------------------------------------------------------------------------
+  # Core Service
+  # ---------------------------------------------------------------------------
+  core:
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile.dev
+    container_name: skyrict-e2e-core
+    # The host-side Next.js BFF proxies /api/v1/{crm,sales,reports,...} here
+    # (auth.ts defaults to http://localhost:8001), so the container port must
+    # be published to the host - same mapping as the dev compose.
+    ports:
+      - "8001:8001"
+    environment:
+      CORE_ENVIRONMENT: test
+      CORE_LOG_LEVEL: INFO
+      CORE_LOG_JSON: "true"
+      CORE_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
+      CORE_AI_AGENT_URL: http://skyrict-e2e-ai-agent:8000
+      CORE_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
+      # Core verifies the JWT issuer/audience that identity signs with, so
+      # these must match IDENTITY_JWKS_ISSUER / IDENTITY_JWKS_AUDIENCE.
+      CORE_JWKS_ISSUER: http://default.localhost:3000
+      CORE_JWKS_AUDIENCE: default.localhost:3000
+      CORE_DEFAULT_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      CORE_EMAIL_SMTP_HOST: skyrict-e2e-mailpit
+      CORE_EMAIL_SMTP_PORT: "1025"
+      CORE_HOST: 0.0.0.0
+      CORE_PORT: "8001"
+      PYTHONPATH: /app/services/core/src:/app/libs/skyrict-common/src:/app/libs/skyrict-events/src
+    volumes:
+      - ../../services/core/src:/app/services/core/src
+      - ../../services/core/alembic:/app/services/core/alembic
+      - ../../services/core/alembic.ini:/app/services/core/alembic.ini:ro
+      - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../libs/skyrict-events/src:/app/libs/skyrict-events/src
+      - ../../.dev/keys:/app/services/core/.dev/keys:ro
+    command:
+      - sh
+      - -c
+      - "uv run --directory services/core alembic upgrade head && uv run --directory services/core python -m core.seed --tenant-id 00000000-0000-0000-0000-000000000001 && uv run --directory services/core uvicorn core.main:app --host 0.0.0.0 --port 8001 --workers 1 --no-proxy-headers"
+    depends_on:
+      # Core FKs reference the tenants table created by identity's migration,
+      # so core must wait for identity to finish migrating + seeding.
+      identity:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      # Cold boots are slow: `uv run` rebuilds the editable workspace
+      # packages on every container start (the image was built before source
+      # is mounted), then alembic + seed + uvicorn run. start_period 90s +
+      # retries 6 keeps compose from flagging a healthy-but-still-booting
+      # service. Same window for the nginx dependency + ai-agent cascade.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+
+  # ---------------------------------------------------------------------------
+  # AI Agent Service
+  # ---------------------------------------------------------------------------
+  ai-agent:
+    build:
+      context: ../..
+      dockerfile: services/ai-agent/Dockerfile.dev
+    container_name: skyrict-e2e-ai-agent
+    environment:
+      AI_ENVIRONMENT: test
+      AI_LOG_LEVEL: INFO
+      AI_LOG_JSON: "true"
+      AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
+      AI_REDIS_URL: redis://skyrict-e2e-redis:6379/0
+      AI_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
+      # Verifies JWT issuer/audience that identity signs with (must match
+      # IDENTITY_JWKS_ISSUER / IDENTITY_JWKS_AUDIENCE).
+      AI_JWKS_ISSUER: http://default.localhost:3000
+      AI_JWKS_AUDIENCE: default.localhost:3000
+      INVENTORY_SERVICE_URL: http://skyrict-e2e-core:8001
+      REPORT_SERVICE_URL: http://skyrict-e2e-core:8001
+      AI_HOST: 0.0.0.0
+      AI_PORT: "8000"
+      PYTHONPATH: /app/services/ai-agent/src:/app/libs/skyrict-common/src
+    volumes:
+      - ../../services/ai-agent/src:/app/services/ai-agent/src
+      - ../../services/ai-agent/alembic:/app/services/ai-agent/alembic
+      - ../../services/ai-agent/alembic.ini:/app/services/ai-agent/alembic.ini:ro
+      - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ../../.dev/keys:/app/services/ai-agent/.dev/keys:ro
+    command:
+      - sh
+      - -c
+      - "uv run --directory services/ai-agent alembic upgrade head && uv run --directory services/ai-agent uvicorn ai_agent.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-proxy-headers"
+    depends_on:
+      # ai_* table FKs reference tenants (identity) and erp_products (core),
+      # so ai-agent must wait for both to finish migrating.
+      identity:
+        condition: service_healthy
+      core:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Cold boots are slow: `uv run` rebuilds the editable workspace
+      # packages on every container start (the image was built before source
+      # is mounted), then alembic + uvicorn run. start_period 90s +
+      # retries 6 keeps compose from flagging a healthy-but-still-booting
+      # service. Same window for the nginx dependency + ai-agent cascade.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+
+  # ---------------------------------------------------------------------------
+  # Nginx - E2E origin (http://default.localhost:3000 -> host Next.js :3100)
+  #
+  # All traffic reaches Next.js on the host (the BFF handles /api/auth/* and
+  # proxies /api/v1/* to the backends). The E2E nginx routes everything
+  # through host.docker.internal:3100, unlike the dev conf which splits
+  # /api/* to identity directly.
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.30-alpine
+    container_name: skyrict-e2e-nginx
+    ports:
+      - "3000:80"
+    volumes:
+      - ../../infra/nginx/e2e.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      # Maps host.docker.internal → the host's gateway IP. On Linux CI
+      # (ubuntu-latest) Docker does NOT provide this automatically; the
+      # previous "host-gateway:127.0.0.1" form created the wrong hostname
+      # and pointed it at the container's own loopback.  This form is
+      # standard across Linux and Docker Desktop.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      identity:
+        condition: service_healthy
+      core:
+        condition: service_healthy
+    healthcheck:
+      # /healthz is served directly by nginx (no proxy), so it succeeds
+      # immediately once nginx starts - before Next.js is running.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

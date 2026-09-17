@@ -186,6 +186,8 @@ class FinanceDepreciationService:
             raise ValidationError("Asset is already disposed")
         if disposed_on < current.acquisition_date:
             raise ValidationError("Disposal date cannot precede acquisition date")
+        if disposed_on > date.today():
+            raise ValidationError("Disposal date cannot be in the future")
         updated = replace(
             current,
             status=FixedAssetStatus.DISPOSED,

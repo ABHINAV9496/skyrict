@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Budgets (B21)
@@ -96,6 +96,12 @@ class FixedAssetCreateRequest(BaseModel):
     depreciation_method: str = Field(default="straight_line", max_length=32)
     salvage_value: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
 
+    @model_validator(mode="after")
+    def _salvage_below_cost(self) -> FixedAssetCreateRequest:
+        if self.salvage_value >= self.cost:
+            raise ValueError("salvage_value must be less than cost")
+        return self
+
 
 class FixedAssetUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=150)
@@ -104,6 +110,16 @@ class FixedAssetUpdateRequest(BaseModel):
     acquisition_date: date | None = None
     useful_life_years: int | None = Field(default=None, ge=1, le=100)
     salvage_value: Decimal | None = Field(default=None, ge=Decimal("0"))
+
+    @model_validator(mode="after")
+    def _salvage_below_cost(self) -> FixedAssetUpdateRequest:
+        if (
+            self.salvage_value is not None
+            and self.cost is not None
+            and self.salvage_value >= self.cost
+        ):
+            raise ValueError("salvage_value must be less than cost")
+        return self
 
 
 class FixedAssetResponse(BaseModel):

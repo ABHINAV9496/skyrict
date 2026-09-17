@@ -18,7 +18,7 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
     __table_args__ = (
         CheckConstraint(
-            "plan_tier IN ('free', 'starter', 'professional', 'business', 'enterprise')",
+            "plan_tier IN ('free', 'starter', 'pro', 'business', 'enterprise')",
             name="ck_tenants_plan_tier",
         ),
     )
@@ -34,6 +34,15 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # --- billing (SKY-33) ---
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="none", server_default="none"
+    )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    billing_email: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     users = relationship("UserModel", back_populates="tenant", lazy="selectin")

@@ -950,7 +950,7 @@ class TestWizard:
         tenant = harness.tenant_repo.created[0]
         assert tenant.name == "Acme Inc"
         assert tenant.slug == "acme-inc"
-        assert tenant.plan_tier == "professional"
+        assert tenant.plan_tier == "pro"
         assert tenant.industry == "Technology"
         assert tenant.is_active is True
 

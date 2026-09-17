@@ -59,7 +59,7 @@ async def seed(tenant_slug: str, email: str) -> None:
             name=f"E2E {tenant_slug}",
             slug=tenant_slug,
             is_active=True,
-            plan_tier="professional",
+            plan_tier="pro",
         )
         session.add(tenant)
         await session.flush()

@@ -336,6 +336,32 @@ class Settings(BaseSettings):
         description="max backup-code regenerations per user per window",
     )
 
+    # --- Billing (SKY-33, ADR-009) ---
+    BILLING_STRIPE_SECRET_KEY: str = Field(
+        default="",
+        description=(
+            "Stripe secret key (sk_...) used to create customers and "
+            "subscriptions. Empty in dev/test: the on-page plan catalog and "
+            "registration keep working, but Stripe calls are disabled."
+        ),
+    )
+    BILLING_STRIPE_WEBHOOK_SECRET: str = Field(
+        default="",
+        description=(
+            "Stripe webhook signing secret (whsec_...) used to verify "
+            "subscription lifecycle events. Empty in dev/test: webhook "
+            "verification is bypassed in a development-only stub."
+        ),
+    )
+    BILLING_CURRENCY: str = Field(
+        default="usd",
+        description=(
+            "ISO 4217 currency code for all billing amounts. 'usd' is the "
+            "default everywhere prices are expressed in cents; changing it "
+            "does NOT re-price the catalog."
+        ),
+    )
+
     # --- Avatar uploads ---
     AVATAR_STORAGE_BACKEND: str = Field(
         default="local",

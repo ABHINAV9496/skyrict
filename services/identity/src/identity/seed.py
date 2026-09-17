@@ -16,7 +16,14 @@ from identity.core.config import settings
 from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
 from identity.core.security import hash_password
 from identity.db.session import async_session_factory
-from identity.domain.entities import Membership, MembershipStatus, ScopeType, Tenant, User
+from identity.domain.entities import (
+    Membership,
+    MembershipStatus,
+    Role,
+    ScopeType,
+    Tenant,
+    User,
+)
 from identity.features.memberships.repository import MembershipRepository
 from identity.features.roles.repository import RoleRepository
 from identity.models.role import RoleModel
@@ -27,6 +34,28 @@ DEFAULT_ROLES = [
     {"name": name, "permissions": list(permissions)}
     for name, permissions in SYSTEM_ROLE_DEFINITIONS
 ]
+
+# RBAC E2E coverage (SKY-104): a non-owner account that can read finance and
+# reports but has deliberately NO erp.payroll.* permission. Core mirrors the
+# role + grant on boot (core.api.lifespan -> sync_rbac_from_identity), so the
+# E2E suite can drive real 403-style denial through the request-time
+# require_permission path.
+FINANCE_VIEWER_ROLE = "finance_viewer"
+FINANCE_VIEWER_EMAIL = "finance@skyrict.io"
+FINANCE_VIEWER_PASSWORD = "Finance123!"
+FINANCE_VIEWER_PERMISSIONS = tuple(
+    {
+        "users:read",
+        "settings:read",
+        "erp.invoice.read",
+        "erp.crm.read",
+        "erp.sales.read",
+        "erp.inventory.read",
+        "erp.finance.read",
+        "erp.hr.read",
+        "erp.reports.read",
+    }
+)
 
 
 async def seed_default_tenant() -> None:
@@ -160,6 +189,89 @@ async def seed_admin_membership() -> None:
         await session.commit()
 
 
+async def seed_finance_viewer() -> None:
+    """Seed the finance_viewer role + user for RBAC E2E coverage.
+
+    Mirrors ``seed_admin_membership``: creates the custom ``finance_viewer``
+    role (standard-user read permissions plus ``erp.reports.read``, with no
+    ``erp.payroll.*`` keys), the ``finance@skyrict.io`` user, an active
+    membership, and the tenant-scoped role grant on the default tenant.
+    Idempotent - safe to re-run, and the E2E stack re-seeds on every boot.
+
+    Core's lifespan sync (``core.api.lifespan`` ->
+    ``sync_rbac_from_identity``) copies identity roles/grants into
+    ``core_roles``/``core_user_roles`` when the core API boots, so this user
+    resolves through the real request-time ``require_permission`` path: finance
+    read endpoints stay open while payroll endpoints deny with 403.
+    """
+    from identity.features.users.repository import UserRepository
+
+    default_tenant_id = uuid.UUID(settings.DEFAULT_TENANT_ID)
+
+    async with async_session_factory() as session:
+        user_repo = UserRepository(session)
+        role_repo = RoleRepository(session)
+        membership_repo = MembershipRepository(session)
+
+        role = await role_repo.get_by_name(default_tenant_id, FINANCE_VIEWER_ROLE)
+        if role is None:
+            role = await role_repo.create(
+                Role(
+                    tenant_id=default_tenant_id,
+                    name=FINANCE_VIEWER_ROLE,
+                    permissions=list(FINANCE_VIEWER_PERMISSIONS),
+                    is_system_role=False,
+                )
+            )
+            logger.info("seed.finance_viewer.role.created", role=FINANCE_VIEWER_ROLE)
+        if role.id is None:
+            raise RuntimeError(f"seeded {FINANCE_VIEWER_ROLE} role has no id")
+
+        user = await user_repo.get_by_email(default_tenant_id, FINANCE_VIEWER_EMAIL)
+        if user is None:
+            user = await user_repo.create(
+                User(
+                    tenant_id=default_tenant_id,
+                    email=FINANCE_VIEWER_EMAIL,
+                    password_hash=hash_password(FINANCE_VIEWER_PASSWORD),
+                    full_name="Finance Viewer",
+                    is_active=True,
+                    is_verified=True,
+                )
+            )
+            logger.info("seed.finance_viewer.user.created", email=FINANCE_VIEWER_EMAIL)
+        if user.id is None:
+            raise RuntimeError(f"seeded user {FINANCE_VIEWER_EMAIL} has no id")
+
+        membership = await membership_repo.get_by_user(user.id, default_tenant_id)
+        if membership is None:
+            await membership_repo.create(
+                Membership(
+                    tenant_id=default_tenant_id,
+                    user_id=user.id,
+                    invited_email=user.email,
+                    status=MembershipStatus.ACTIVE,
+                    role_id=role.id,
+                    joined_at=datetime.now(UTC),
+                )
+            )
+            logger.info("seed.finance_viewer.membership.created", email=user.email)
+
+        granted = await role_repo.grant_exists(
+            user.id, role.id, ScopeType.TENANT, default_tenant_id
+        )
+        if not granted:
+            await role_repo.grant_to_user(
+                user_id=user.id,
+                role_id=role.id,
+                tenant_id=default_tenant_id,
+                scope_id=default_tenant_id,
+            )
+            logger.info("seed.finance_viewer.granted", role=FINANCE_VIEWER_ROLE, email=user.email)
+
+        await session.commit()
+
+
 async def run_seed() -> None:
     """Run all seed operations."""
     logger.info("seed.start")
@@ -167,6 +279,7 @@ async def run_seed() -> None:
     await seed_default_roles()
     await seed_admin_user()
     await seed_admin_membership()
+    await seed_finance_viewer()
     logger.info("seed.complete")
 
 

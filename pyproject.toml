@@ -144,6 +144,7 @@ modules = [
     "identity.features.sso",
     "identity.features.roles",
     "identity.features.audit",
+    "identity.features.billing",
 ]
 # Legitimate exceptions, ignored so the contract protects real coupling:
 # 1. Every feature router consumes the api composition root (get_current_user,
@@ -151,9 +152,12 @@ modules = [
 #    never import one another's services directly.
 # 2. The auth feature embeds the user profile in its response schema - a pure
 #    pydantic model cross-reference (data contract), not a behavioral coupling.
+# 3. auth provisioning and billing both need the planId<->tier catalog
+#    (PLAN_ID_MAP), a pure reference-data module - not a behavioral coupling.
 ignore_imports = [
     "identity.features.**.router -> identity.api.deps",
     "identity.features.auth.schemas -> identity.features.users.schemas",
+    "identity.features.auth.service -> identity.features.billing.plans",
 ]
 
 [[tool.importlinter.contracts]]

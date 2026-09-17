@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -231,3 +232,5 @@ class CreateOrganizationResponse(_CamelModel):
     mfa_required: bool = True
     tenant_id: UUID
     tenant_slug: str
+    subscription_status: Literal["trialing"] = "trialing"
+    trial_ends_at: datetime | None = None

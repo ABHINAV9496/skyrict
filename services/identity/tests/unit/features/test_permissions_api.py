@@ -42,6 +42,11 @@ def test_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
         industry=None,
         billing_address=None,
         onboarding_completed_at=None,
+        trial_ends_at=None,
+        subscription_status="none",
+        stripe_customer_id=None,
+        stripe_subscription_id=None,
+        billing_email=None,
         created_at=now,
         updated_at=now,
     )

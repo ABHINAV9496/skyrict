@@ -222,7 +222,7 @@ def build_embedding_provider(config: Settings) -> EmbeddingProvider | None:
             (openai), or a missing base URL (ollama).
     """
     raw_key = config.EMBEDDING_PROVIDER
-    if raw_key is None:
+    if raw_key is None or not raw_key.strip():
         return None
     key = raw_key.strip().lower()
     if key not in EMBEDDING_KEYS:

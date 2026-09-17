@@ -235,6 +235,14 @@ services:
       AI_JWKS_AUDIENCE: default.localhost:3000
       INVENTORY_SERVICE_URL: http://skyrict-e2e-core:8001
       REPORT_SERVICE_URL: http://skyrict-e2e-core:8001
+      # Semantic inventory search (SKY-70): the E2E workflow passes
+      # AI_EMBEDDING_PROVIDER + AI_EMBEDDING_API_KEY through when the
+      # repo-level secrets are configured (openai). Otherwise the vars stay
+      # empty and embedding.py treats a blank provider as disabled - the
+      # search endpoint degrades to exact-only, which the inventory spec
+      # asserts via its E2E_SEMANTIC_SEARCH gate.
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
       AI_HOST: 0.0.0.0
       AI_PORT: "8000"
       PYTHONPATH: /app/services/ai-agent/src:/app/libs/skyrict-common/src

@@ -73,6 +73,13 @@ jobs:
       - name: Start compose stack
         run: docker compose -f infra/docker/docker-compose.e2e.yml up -d --build
         timeout-minutes: 15
+        env:
+          # Semantic inventory search (SKY-70): forwards the repo-level
+          # embedding secrets into the ai-agent container via compose
+          # interpolation. When the secrets are unset (empty), the ai-agent
+          # boots with embeddings disabled and search degrades to exact-only.
+          AI_EMBEDDING_PROVIDER: ${{ secrets.AI_EMBEDDING_PROVIDER }}
+          AI_EMBEDDING_API_KEY: ${{ secrets.AI_EMBEDDING_API_KEY }}
 
       # ---- Seeds -----------------------------------------------------------
       - name: Wait for identity and seed database
@@ -153,6 +160,12 @@ jobs:
           E2E_TENANT_SLUG: "default"
           E2E_ADMIN_EMAIL: "admin@skyrict.io"
           E2E_ADMIN_PASSWORD: "Admin123!"
+          # True (1) only when BOTH embedding secrets are configured, so the
+          # inventory spec asserts real hybrid results when the provider+key
+          # are set together and the graceful exact-only degradation otherwise.
+          # (A key without a provider stays disabled in ai-agent boot, so
+          # gating on the pair keeps the assertion honest.)
+          E2E_SEMANTIC_SEARCH: "${{ secrets.AI_EMBEDDING_PROVIDER != '' && secrets.AI_EMBEDDING_API_KEY != '' }}"
 
       # ---- Artifacts -------------------------------------------------------
       - name: Upload Playwright HTML report

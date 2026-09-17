@@ -54,12 +54,8 @@ class PlanLimits(BaseModel):
     ai_credits_monthly: int | None = Field(
         default=None, description="Monthly AI credit budget (None = custom)"
     )
-    max_agents: int | None = Field(
-        default=None, description="Maximum AI agents (None = unlimited)"
-    )
-    modules: list[str] = Field(
-        default_factory=list, description="Included platform modules"
-    )
+    max_agents: int | None = Field(default=None, description="Maximum AI agents (None = unlimited)")
+    modules: list[str] = Field(default_factory=list, description="Included platform modules")
 
 
 # -- Plan catalog ------------------------------------------------------------

@@ -36,18 +36,12 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     # --- billing (SKY-33) ---
-    trial_ends_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     subscription_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="none", server_default="none"
     )
-    stripe_customer_id: Mapped[str | None] = mapped_column(
-        String, nullable=True, unique=True
-    )
-    stripe_subscription_id: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True)
     billing_email: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships

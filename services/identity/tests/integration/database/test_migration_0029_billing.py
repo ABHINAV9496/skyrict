@@ -284,8 +284,7 @@ def test_0029_billing_roundtrip() -> None:
             asyncio.run(_create_scratch_db(maint_dsn, dbname))
         except asyncpg.exceptions.InsufficientPrivilegeError:
             pytest.skip(
-                "skyrict role lacks CREATEDB; run on CI or grant with: "
-                "ALTER ROLE skyrict CREATEDB;"
+                "skyrict role lacks CREATEDB; run on CI or grant with: ALTER ROLE skyrict CREATEDB;"
             )
 
         overrides = {"IDENTITY_DATABASE_URL": scratch_url}

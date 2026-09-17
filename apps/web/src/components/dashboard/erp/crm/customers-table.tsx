@@ -17,6 +17,7 @@ import { TableSkeleton } from "@/components/ui/page-skeletons";
 import { useModuleAccess } from "@/lib/access/modules";
 import { listCustomers, type Customer } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { formatDate, formatMoney } from "@/lib/erp/money";
 
 const PAGE_SIZE = 50;
@@ -38,7 +39,10 @@ export function CustomersTable() {
     const [offset, setOffset] = useState(0);
     const [createOpen, setCreateOpen] = useState(false);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const result = await listCustomers({
@@ -46,19 +50,21 @@ export function CustomersTable() {
                 offset,
                 limit: PAGE_SIZE,
             });
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 customers: result.data,
                 total: result.meta.total,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load customers.";
             setStatus({ state: "error", message });
         }
-    }, [includeInactive, offset]);
+    }, [includeInactive, offset, requestGuard]);
 
     useEffect(() => {
         void load();

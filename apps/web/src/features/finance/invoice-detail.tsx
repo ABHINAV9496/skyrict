@@ -44,8 +44,9 @@ import {
     type ReminderDraft,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/finance/format";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import {
     FinanceTable,
     type FinanceColumn,
@@ -115,6 +116,7 @@ function ApplyPaymentDialog({
                     ? error.message
                     : "The payment could not be applied.",
             );
+            onApiError(error);
         }
     }
 
@@ -267,7 +269,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
         if (!reminder) return;
         const text = `Subject: ${reminder.subject}\n\n${reminder.body}`;
         try {
-            await navigator.clipboard.writeText(text);
+            await copyToClipboard(text);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch {

@@ -25,7 +25,7 @@ import {
     type TrialBalance,
     type TrialBalanceRow,
 } from "@/lib/api/finance-api";
-import { ApiError } from "@/lib/api/http";
+import { apiErrorMessage as errorMessage } from "@/lib/api/error-toast";
 import {
     ACCOUNT_TYPE_LABELS,
     type AccountType,
@@ -73,10 +73,6 @@ function today(): string {
 
 function firstOfMonth(): string {
     return `${today().slice(0, 8)}01`;
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-    return error instanceof ApiError ? error.message : fallback;
 }
 
 function ReportToolbar({

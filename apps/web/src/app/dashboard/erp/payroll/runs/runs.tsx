@@ -20,6 +20,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 
 type PageStatus =
   | { state: "loading" }
@@ -52,7 +53,10 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
 
   const [createOpen, setCreateOpen] = useState(false);
 
+  const requestGuard = useLatestRequest();
+
   const load = useCallback(async () => {
+    const requestId = requestGuard.next();
     setStatus({ state: "loading" });
     try {
       const result = await listPayrollRuns({
@@ -60,17 +64,19 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
         pageSize: PAGE_SIZE,
         status: statusFilter === "all" ? undefined : statusFilter,
       });
+      if (!requestGuard.isCurrent(requestId)) return;
       setStatus({
         state: "ready",
         runs: result.items,
         totalPages: result.meta.total_pages,
       });
     } catch (error) {
+      if (!requestGuard.isCurrent(requestId)) return;
       const message =
         error instanceof ApiError ? error.message : "Could not load payroll runs.";
       setStatus({ state: "error", message });
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, requestGuard]);
 
   useEffect(() => {
     void load();

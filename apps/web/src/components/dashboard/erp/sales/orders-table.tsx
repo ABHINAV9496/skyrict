@@ -27,6 +27,7 @@ import {
     type SalesOrder,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { formatDate, formatMoney } from "@/lib/erp/money";
 import { orderStatusBadgeClass, ORDER_STATUS_LABELS } from "@/lib/erp/labels";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,10 @@ export function OrdersTable() {
     const [offset, setOffset] = useState(0);
     const [createOpen, setCreateOpen] = useState(false);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const result = await listOrders({
@@ -68,19 +72,21 @@ export function OrdersTable() {
                 offset,
                 limit: PAGE_SIZE,
             });
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 orders: result.data,
                 total: result.meta.total,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load orders.";
             setStatus({ state: "error", message });
         }
-    }, [statusFilter, offset]);
+    }, [statusFilter, offset, requestGuard]);
 
     useEffect(() => {
         void load();

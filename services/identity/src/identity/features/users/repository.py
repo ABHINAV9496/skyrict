@@ -70,8 +70,17 @@ class UserRepository(SqlRepository):
     """Repository for user persistence (implements ``UserRepositoryPort``)."""
 
     async def get_by_id(self, user_id: str | uuid.UUID) -> User | None:
-        """Fetch a user by primary key, or None when absent."""
-        model = await self.session.get(UserModel, user_id)
+        """Fetch a user by primary key within the current tenant, or None when absent.
+
+        The tenant is taken from TenantContext so a raw primary-key lookup can
+        never cross tenant boundaries (RLS is not guaranteed to be active).
+        """
+        stmt = select(UserModel).where(
+            UserModel.id == user_id,
+            UserModel.tenant_id == TenantContext.get(),
+        )
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
         return _from_orm(model) if model is not None else None
 
     async def get_by_email(self, tenant_id: str | uuid.UUID, email: str) -> User | None:

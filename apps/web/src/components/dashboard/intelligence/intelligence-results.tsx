@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import type { SearchResponse, SearchResult } from "@/lib/mock/intelligence";
+import { searchIntelligence } from "@/lib/api/ai-api";
 import { IntelligenceResultsListSkeleton } from "@/components/ui/page-skeletons";
 import { cn } from "@/lib/utils";
 
@@ -172,12 +173,9 @@ export function IntelligenceResults() {
         let cancelled = false;
         setResponse(null);
         setError(false);
-        fetch(`/api/v1/intelligence/search?q=${encodeURIComponent(query)}`)
-            .then((res) =>
-                res.ok ? res.json() : Promise.reject(new Error("failed")),
-            )
-            .then((body) => {
-                if (!cancelled) setResponse(body.data as SearchResponse);
+        searchIntelligence<SearchResponse>(query)
+            .then((data) => {
+                if (!cancelled) setResponse(data);
             })
             .catch(() => {
                 if (!cancelled) setError(true);

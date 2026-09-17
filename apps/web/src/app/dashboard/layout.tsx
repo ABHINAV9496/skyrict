@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ShellRouter } from "@/components/dashboard/shared/shell-router";
+import { Toaster } from "@/components/ui/sonner";
 import { SESSION_COOKIE } from "@/lib/server/auth";
 import { signinUrl } from "@/lib/server/urls";
 
@@ -27,5 +28,10 @@ export default async function DashboardLayout({
         );
     }
 
-    return <ShellRouter>{children}</ShellRouter>;
+    return (
+        <>
+            <ShellRouter>{children}</ShellRouter>
+            <Toaster />
+        </>
+    );
 }

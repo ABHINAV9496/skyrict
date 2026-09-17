@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     createWarehouse,
     deleteWarehouse,
@@ -172,6 +173,7 @@ export function WarehousesClient() {
                       ? "Could not update the warehouse."
                       : "Could not create the warehouse.";
             setFormError(message);
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }
@@ -194,6 +196,7 @@ export function WarehousesClient() {
                     ? error.message
                     : "Could not delete the warehouse.";
             setDeleteError(message);
+            onApiError(error);
         } finally {
             setDeletingBusy(false);
         }

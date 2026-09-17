@@ -46,6 +46,7 @@ import {
     type Opportunity,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { LEAD_STATUS_LABELS, leadStatusBadgeClass } from "@/lib/erp/labels";
 import { formatDate } from "@/lib/erp/money";
 import { setPageTitle } from "@/lib/topbar-title";
@@ -419,6 +420,7 @@ function QualifyDialog({
                     ? error.message
                     : "Could not qualify the lead.",
             );
+            onApiError(error);
         } finally {
             setSaving(false);
         }

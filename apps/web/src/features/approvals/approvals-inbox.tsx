@@ -36,7 +36,7 @@ import {
     type ApprovalInstance,
     type ApprovalSuggestion,
 } from "@/lib/api/approval-api";
-import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 type InboxState =
     | { state: "loading" }
@@ -117,9 +117,9 @@ type DetailState =
     | { state: "ready"; instance: ApprovalInstance };
 
 function errorMessage(error: unknown): string {
-    if (error instanceof ApiError) return error.message;
-    if (error instanceof Error) return error.message;
-    return "Request failed. Please try again.";
+    return error instanceof Error
+        ? error.message
+        : "Request failed. Please try again.";
 }
 
 function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
@@ -153,6 +153,7 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
             onDecided(result);
         } catch (error: unknown) {
             setSubmitError(errorMessage(error));
+            onApiError(error);
         } finally {
             setSubmitting(null);
         }

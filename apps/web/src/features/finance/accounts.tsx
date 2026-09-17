@@ -41,6 +41,7 @@ import {
     type TrialBalanceRow,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     ACCOUNT_TYPE_LABELS,
     formatDate,
@@ -121,6 +122,7 @@ function CreateAccountDialog({ onCreated }: { onCreated: () => void }) {
                     ? error.message
                     : "The account could not be created.",
             );
+            onApiError(error);
         }
     }
 

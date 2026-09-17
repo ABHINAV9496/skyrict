@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     releaseStock,
     type Product,
@@ -110,6 +111,7 @@ export function ReleaseStockDialog({
                     ? submitError.message
                     : "Could not release stock.";
             setError(message);
+            onApiError(submitError);
         } finally {
             setSubmitting(false);
         }

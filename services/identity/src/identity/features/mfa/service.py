@@ -10,6 +10,7 @@ its position until a regeneration replaces all ten.
 from __future__ import annotations
 
 import secrets
+import uuid
 from typing import TYPE_CHECKING, Any
 
 import pyotp
@@ -31,8 +32,6 @@ from skyrict_common.exceptions import (
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from identity.features.audit.service import AuditService
     from identity.features.roles.ports import RoleRepositoryPort
     from identity.features.users.ports import UserRepositoryPort
@@ -224,7 +223,7 @@ class MFAService:
             raise PermissionDeniedError("Only a tenant owner can reset MFA")
 
         target = await self.user_repo.get_by_id(target_user_id)
-        if target is None:
+        if target is None or target.tenant_id != uuid.UUID(tenant_id):
             raise UserNotFoundError()
 
         await self.user_repo.disable_mfa(target_user_id)

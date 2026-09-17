@@ -148,8 +148,11 @@ async function readPayload<T>(response: Response): Promise<Envelope<T>> {
  * Normalize every error shape the backends produce into one human message:
  * the envelope's `{error: {message}}`, plain strings, and FastAPI's 422
  * validation array (`[{loc: ["body", "email"], msg: "…"}]`).
+ *
+ * Exported for `onApiError` in @/lib/api/error-toast so the toast surface
+ * shows the exact same message the inline error states render.
  */
-function extractErrorMessage(
+export function extractErrorMessage(
   detail:
     | { error?: { message?: string }; message?: string }
     | string

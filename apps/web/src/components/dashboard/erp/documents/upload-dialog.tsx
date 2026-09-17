@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { uploadDocument } from "@/lib/api/documents-api";
 
 const MODULE_OPTIONS = [
@@ -83,6 +84,7 @@ export function DocumentsUploadDialog({
                     ? err.message
                     : "Could not upload the document.";
             setError(message);
+            onApiError(err);
         } finally {
             setBusy(false);
         }

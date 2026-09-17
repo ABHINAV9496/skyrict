@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     reserveStock,
     type Product,
@@ -95,6 +96,7 @@ export function ReserveStockDialog({
                     ? submitError.message
                     : "Could not reserve stock.";
             setError(message);
+            onApiError(submitError);
         } finally {
             setSubmitting(false);
         }

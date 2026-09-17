@@ -14,7 +14,7 @@ import {
     updateAutomationSettings,
     type InvoiceNumberingScheme,
 } from "@/lib/api/finance-api";
-import { ApiError } from "@/lib/api/http";
+import { apiErrorMessage as message } from "@/lib/api/error-toast";
 
 type PageStatus =
     | { state: "loading" }
@@ -22,10 +22,6 @@ type PageStatus =
     | { state: "ready" };
 
 type Notice = { tone: "success" | "error"; text: string };
-
-function message(error: unknown, fallback: string): string {
-    return error instanceof ApiError ? error.message : fallback;
-}
 
 export function FinanceSettings() {
     const { permissions } = useModuleAccess();

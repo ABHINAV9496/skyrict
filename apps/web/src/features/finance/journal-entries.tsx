@@ -50,6 +50,8 @@ import {
     type JournalEntry,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import {
     ACCOUNT_TYPE_LABELS,
     extractAmountFromText,
@@ -488,6 +490,7 @@ function CreateJournalEntryDialog({
                     ? error.message
                     : "The journal entry could not be created.",
             );
+            onApiError(error);
         }
     }
 
@@ -1013,7 +1016,10 @@ function FinanceJournalEntries() {
         [],
     );
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const range = resolvePeriodRange(periodValue);
@@ -1025,9 +1031,11 @@ function FinanceJournalEntries() {
                 }),
                 listFiscalPeriods(),
             ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setPeriods(fetchedPeriods);
             setStatus({ state: "ready", entries: entries.data });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "error",
                 message:
@@ -1036,7 +1044,7 @@ function FinanceJournalEntries() {
                         : "Could not load journal entries.",
             });
         }
-    }, [periodValue]);
+    }, [periodValue, requestGuard]);
 
     useEffect(() => {
         void load();

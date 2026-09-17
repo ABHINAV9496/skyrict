@@ -42,7 +42,7 @@ from identity.models.tenant import TenantModel
 from identity.models.user import UserModel
 
 PORT = 3000
-PASSWORD = "E2EPass123!"
+PASSWORD = os.environ.get("E2E_PASSWORD", "E2EPass123!")
 
 checks: list[tuple[str, bool, str]] = []
 

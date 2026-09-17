@@ -15,6 +15,7 @@ import {
 } from "@/features/finance/components/finance-table";
 import { FinanceErrorState } from "@/features/finance/components/state-cards";
 import { useLatestRequest } from "@/lib/hooks/use-latest-request";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 const PAGE_SIZE = 50;
 
@@ -128,7 +129,7 @@ function exportCsv(entries: AuditLogEntry[]): void {
 export function FinanceAuditLog() {
     const [status, setStatus] = useState<Status>({ state: "loading" });
     const [query, setQuery] = useState("");
-    const [debouncedQuery, setDebouncedQuery] = useState("");
+    const debouncedQuery = useDebounce(query, 350);
     const [offset, setOffset] = useState(0);
 
     const requestGuard = useLatestRequest();
@@ -162,11 +163,6 @@ export function FinanceAuditLog() {
             });
         }
     }, [debouncedQuery, offset, requestGuard]);
-
-    useEffect(() => {
-        const timer = window.setTimeout(() => setDebouncedQuery(query), 350);
-        return () => window.clearTimeout(timer);
-    }, [query]);
 
     useEffect(() => {
         setOffset(0);

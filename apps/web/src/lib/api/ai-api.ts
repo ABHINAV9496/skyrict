@@ -268,3 +268,13 @@ export async function searchInventory(query: string): Promise<SearchResponse> {
         `/api/v1/ai/inventory/search?q=${encodeURIComponent(query)}`,
     );
 }
+
+// ---------------------------------------------------------------------------
+// Cross-module intelligence search (BFF → core `intelligence` router)
+// ---------------------------------------------------------------------------
+
+export function searchIntelligence<T>(query: string): Promise<T> {
+    return apiFetchBody<{ data: T }>(
+        `/api/v1/intelligence/search?q=${encodeURIComponent(query)}`,
+    ).then(({ data }) => data);
+}

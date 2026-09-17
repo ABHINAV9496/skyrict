@@ -14,7 +14,7 @@ import {
 import Markdown from "react-markdown";
 
 import { AiGlyph } from "@/components/brand/logo";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import type { AgentChatMessage } from "@/lib/chat/use-agent-chat";
 
 /* ------------------------------------------------------------------ */
@@ -119,7 +119,7 @@ function AttachmentCard({
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
     const handleCopy = useCallback(() => {
-        void navigator.clipboard?.writeText(text);
+        void copyToClipboard(text);
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
     }, [text]);

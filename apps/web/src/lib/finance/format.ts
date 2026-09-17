@@ -1,3 +1,11 @@
+import type {
+    AccountType,
+    EntryStatus,
+    InvoiceStatus,
+} from "@/lib/api/finance-api";
+
+export type { AccountType, EntryStatus, InvoiceStatus };
+
 const moneyFormatter = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -69,9 +77,6 @@ export function formatDateTime(value: string | null | undefined): string {
     return dateTimeFormatter.format(date);
 }
 
-export type AccountType =
-    "asset" | "liability" | "equity" | "revenue" | "expense";
-
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
     asset: "Asset",
     liability: "Liability",
@@ -80,16 +85,12 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
     expense: "Expense",
 };
 
-export type EntryStatus = "draft" | "posted" | "voided" | "reversed";
-
 export const ENTRY_STATUS_LABELS: Record<EntryStatus, string> = {
     draft: "Draft",
     posted: "Posted",
     voided: "Voided",
     reversed: "Reversed",
 };
-
-export type InvoiceStatus = "draft" | "issued" | "approved" | "paid" | "voided";
 
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
     draft: "Draft",

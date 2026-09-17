@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api/http";
+import { apiErrorMessage as message } from "@/lib/api/error-toast";
 import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import {
     ACCOUNT_TYPE_LABELS,
@@ -78,10 +78,6 @@ import {
     FinanceErrorState,
     FinanceEmptyState,
 } from "@/features/finance/components/state-cards";
-
-function message(error: unknown, fallback: string): string {
-    return error instanceof ApiError ? error.message : fallback;
-}
 
 /** Turn a stored payment channel ("bank_transfer", "credit card") into a label. */
 function formatPaymentMethod(method: string): string {

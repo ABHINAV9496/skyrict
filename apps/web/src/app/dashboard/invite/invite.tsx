@@ -36,7 +36,7 @@ import {
     type RoleSummary,
 } from "@/lib/api/identity-api";
 import { ListSkeleton } from "@/components/ui/page-skeletons";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 type Status =
     | { state: "loading" }
@@ -219,7 +219,7 @@ export default function InviteClient() {
 
     async function copyInviteLink(url: string) {
         try {
-            await navigator.clipboard.writeText(url);
+            await copyToClipboard(url);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch {

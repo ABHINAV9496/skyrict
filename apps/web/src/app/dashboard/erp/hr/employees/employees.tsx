@@ -29,6 +29,7 @@ import { createInvitation } from "@/lib/api/identity-api";
 import { ApiError } from "@/lib/api/http";
 import { formatDate, formatMoney } from "@/lib/format";
 import { useLatestRequest } from "@/lib/hooks/use-latest-request";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import { cn } from "@/lib/utils";
 
 export type EmployeeListView = "active" | "terminated";
@@ -80,7 +81,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
   const [invitingEmployee, setInvitingEmployee] = useState<Employee | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
 
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debouncedQuery = useDebounce(query.trim(), 300);
 
   const statusOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -100,11 +101,6 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
     ],
     [departments],
   );
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   const requestGuard = useLatestRequest();
 

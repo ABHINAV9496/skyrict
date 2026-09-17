@@ -15,6 +15,17 @@ interface OnApiErrorOptions {
 }
 
 /**
+ * Resolve a caught error to a user-facing message: an `ApiError` carries its
+ * normalized backend message; anything else gets the caller's fallback.
+ */
+export function apiErrorMessage(
+    error: unknown,
+    fallback: string = "Request failed. Please try again.",
+): string {
+    return error instanceof ApiError ? error.message : fallback;
+}
+
+/**
  * A shared toast-on-error handler for every mutation and list-load catch
  * block. Resolves the message the same way the inline error states do (an
  * `ApiError` carries its normalized backend message; anything else gets the
@@ -31,10 +42,7 @@ const DEDUP_WINDOW_MS = 3000;
 
 export function onApiError(error: unknown, options: OnApiErrorOptions = {}) {
     const status = error instanceof ApiError ? error.status : null;
-    const message =
-        error instanceof ApiError
-            ? error.message
-            : options.fallback ?? "Request failed. Please try again.";
+    const message = apiErrorMessage(error, options.fallback);
 
     const key = `${status ?? "net"}:${message}`;
     const now = Date.now();

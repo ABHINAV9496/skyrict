@@ -27,6 +27,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from identity.core.config import settings
 from identity.domain.entities import Tenant
 from identity.features.billing.plans import PLANS, resolve_plan_id, resolve_tier
 from skyrict_common.exceptions import (
@@ -37,6 +38,7 @@ from skyrict_common.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from identity.features.audit.service import AuditService
     from identity.features.organizations.repository import TenantRepository
 
 _FREE_TIER = "free"
@@ -50,9 +52,16 @@ class BillingService:
         tenant_repo: TenantRepository,
         *,
         now: datetime | None = None,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._tenant_repo = tenant_repo
         self._now = now
+        # Fallback is for test ergonomics only: unit tests construct
+        # ``BillingService(repo)`` without an audit service. Production wiring
+        # (identity.api.deps.get_billing_service) ALWAYS injects one, so a
+        # missing audit record cannot happen through the DI graph. Do not
+        # make this parameter required.
+        self._audit_service = audit_service
 
     # -- Internal helpers -----------------------------------------------------
 
@@ -69,14 +78,41 @@ class BillingService:
 
     # -- Subscription read ----------------------------------------------------
 
-    async def refresh_subscription(self, tenant_id: str | uuid.UUID) -> Tenant:
-        """Atomically flip trialing→expired when trial has passed (idempotent).
+    @property
+    def _grace_days(self) -> int:
+        """Grace period length after 'past_due', read live so tests can override."""
+        return settings.BILLING_GRACE_PERIOD_DAYS
 
-        Returns the (possibly updated) tenant. The conditional UPDATE avoids
-        read-modify-write races under concurrent subscription reads.
+    async def refresh_subscription(self, tenant_id: str | uuid.UUID) -> Tenant:
+        """Apply lazy expiry checks and return the authoritative tenant state.
+
+        Runs two conditional-UPDATE checks (idempotent, race-free):
+          1. trial expiry  - trialing -> expired when ``trial_ends_at`` passes.
+          2. grace expiry  - past_due -> free when ``grace_started_at`` exceeds
+             ``BILLING_GRACE_PERIOD_DAYS`` (soft downgrade; data preserved).
+        Both flip on every read, so no scheduler is required - the same
+        lazy-on-read pattern the trial already uses.
         """
         await self._tenant_repo.mark_trial_expired_if_past(tenant_id, self._utcnow)
-        return await self._require_tenant(tenant_id)
+        tenant = await self._require_tenant(tenant_id)
+        if tenant.subscription_status == "past_due":
+            previous_tier = tenant.plan_tier
+            if await self._tenant_repo.mark_grace_expired_if_past(
+                tenant_id, self._utcnow, self._grace_days
+            ):
+                await self._emit_audit(
+                    action="billing.downgraded",
+                    target=f"tenant:{tenant_id}",
+                    details={
+                        "reason": "grace_expired",
+                        "previous_tier": previous_tier,
+                        "previous_status": "past_due",
+                        "grace_days": self._grace_days,
+                    },
+                    tenant_id=str(tenant_id),
+                )
+                tenant = await self._require_tenant(tenant_id)
+        return tenant
 
     async def get_subscription(self, tenant_id: str | uuid.UUID) -> dict[str, Any]:
         """Return subscription state suitable for ``SubscriptionResponse``."""
@@ -159,6 +195,176 @@ class BillingService:
             raise PermissionDeniedError("This feature requires a higher plan tier")
         raise PaymentRequiredError("An active subscription is required to access this feature")
 
+    # -- Stripe webhook lifecycle (BILLING-SERV-002) --------------------------
+
+    async def handle_stripe_event(
+        self,
+        *,
+        event_id: str,
+        event_type: str,
+        event_object: dict[str, Any],
+    ) -> str:
+        """Apply a signature-verified Stripe event, idempotently.
+
+        Returns ``applied`` (state changed), ``skipped`` (duplicate delivery of
+        a processed event), or ``ignored`` (event type we do not handle, still
+        acknowledged so Stripe stops retrying). The idempotency marker is
+        written in the same transaction as the state mutation, so a failed
+        handler rolls back its marker and Stripe's retry re-runs it cleanly.
+        """
+        event_type = event_type or ""
+        tenant = await self._resolve_event_tenant(event_type, event_object)
+
+        first_delivery = await self._tenant_repo.mark_event_processed(
+            event_id,
+            event_type,
+            tenant_id=tenant.id if tenant is not None else None,
+        )
+        if not first_delivery:
+            return "skipped"
+
+        if event_type == "checkout.session.completed":
+            await self._handle_checkout_completed(event_object, tenant)
+            return "applied"
+        if event_type == "customer.subscription.updated":
+            await self._handle_subscription_updated(event_object, tenant)
+            return "applied"
+        if event_type == "customer.subscription.deleted":
+            await self._handle_subscription_deleted(event_object, tenant)
+            return "applied"
+        return "ignored"
+
+    async def _resolve_event_tenant(
+        self, event_type: str, event_object: dict[str, Any]
+    ) -> Tenant | None:
+        """Locate the tenant an event targets (None when orphaned)."""
+        if event_type == "checkout.session.completed":
+            reference = event_object.get("client_reference_id")
+            if reference:
+                tenant = await self._tenant_repo.get_by_id(reference)
+                if tenant is not None:
+                    return tenant
+        if event_object.get("customer"):
+            tenant = await self._tenant_repo.get_by_stripe_customer_id(event_object["customer"])
+            if tenant is not None:
+                return tenant
+        if event_object.get("id") and event_type.startswith("customer.subscription"):
+            return await self._tenant_repo.get_by_stripe_subscription_id(event_object["id"])
+        return None
+
+    async def _handle_checkout_completed(
+        self, session: dict[str, Any], tenant: Tenant | None
+    ) -> None:
+        """Persist Stripe ids after checkout and activate the subscription.
+
+        The checkout session does not carry trial state; Stripe always follows
+        checkout with ``customer.subscription.created/updated`` events, which
+        mirror ``trialing`` on the next delivery. Marking ``active`` now and
+        letting that event correct the status is the standard integration flow.
+        """
+        if tenant is None or tenant.id is None:
+            return
+        tenant_id = tenant.id
+        customer_id = session.get("customer")
+        subscription_id = session.get("subscription")
+        customer_details = session.get("customer_details") or {}
+        await self._tenant_repo.update_billing(
+            tenant_id,
+            subscription_status="active",
+            stripe_customer_id=customer_id,
+            stripe_subscription_id=subscription_id,
+            billing_email=customer_details.get("email"),
+        )
+        await self._emit_audit(
+            action="billing.checkout.completed",
+            target=f"tenant:{tenant_id}",
+            details={
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "plan_tier": tenant.plan_tier,
+            },
+            tenant_id=str(tenant_id),
+        )
+
+    async def _handle_subscription_updated(
+        self, subscription: dict[str, Any], tenant: Tenant | None
+    ) -> None:
+        """Mirror Stripe's subscription status atomically.
+
+        ``past_due`` starts the grace clock ONCE (guarded by the repository);
+        ``active`` clears it in the same statement, so a later past_due starts
+        a fresh window (past_due -> active -> past_due never reuses a stale
+        clock).
+        """
+        if tenant is None or tenant.id is None:
+            return
+        tenant_id = tenant.id
+        previous = await self._require_tenant(tenant_id)
+        new_status = subscription.get("status") or previous.subscription_status
+        updated = await self._tenant_repo.apply_subscription_status(
+            tenant_id, new_status, now=self._utcnow
+        )
+        await self._emit_audit(
+            action="billing.subscription.updated",
+            target=f"tenant:{tenant_id}",
+            details={
+                "previous_status": previous.subscription_status,
+                "new_status": updated.subscription_status,
+            },
+            tenant_id=str(tenant_id),
+        )
+        if new_status == "past_due" and previous.subscription_status != "past_due":
+            await self._emit_audit(
+                action="billing.grace.started",
+                target=f"tenant:{tenant_id}",
+                details={"grace_days": self._grace_days},
+                tenant_id=str(tenant_id),
+            )
+
+    async def _handle_subscription_deleted(
+        self, subscription: dict[str, Any], tenant: Tenant | None
+    ) -> None:
+        """Soft-downgrade on cancellation - never locks owners/members out.
+
+        All data and access are preserved: only plan_tier and the subscription
+        state drop to ``free``.
+        """
+        if tenant is None or tenant.id is None:
+            return
+        tenant_id = tenant.id
+        previous = await self._require_tenant(tenant_id)
+        await self._tenant_repo.downgrade_to_free(tenant_id)
+        await self._emit_audit(
+            action="billing.subscription.deleted",
+            target=f"tenant:{tenant_id}",
+            details={"stripe_subscription_id": subscription.get("id")},
+            tenant_id=str(tenant_id),
+        )
+        await self._emit_audit(
+            action="billing.downgraded",
+            target=f"tenant:{tenant_id}",
+            details={
+                "reason": "subscription_deleted",
+                "previous_tier": previous.plan_tier,
+                "previous_status": previous.subscription_status,
+            },
+            tenant_id=str(tenant_id),
+        )
+
+    async def tick(self, tenant_id: str | uuid.UUID) -> dict[str, Any]:
+        """Explicit lazy-check trigger for ops/cron (same path as reads).
+
+        Runs the trial + grace expiry checks and reports whether subscription
+        state changed, so callers can observe the transition.
+        """
+        before = await self._require_tenant(tenant_id)
+        after = await self.refresh_subscription(tenant_id)
+        changed = (
+            before.subscription_status != after.subscription_status
+            or before.plan_tier != after.plan_tier
+        )
+        return {"tenant_id": str(tenant_id), "checked": True, "changed": changed}
+
     # -- Private helpers ------------------------------------------------------
 
     def _effective_tier(self, tenant: Tenant) -> str:
@@ -167,9 +373,13 @@ class BillingService:
             if tenant.trial_ends_at is not None and tenant.trial_ends_at > self._utcnow:
                 return tenant.plan_tier
             return _FREE_TIER
-        if tenant.subscription_status == "active":
+        if tenant.subscription_status in ("active", "past_due"):
+            # past_due keeps the paid tier for the grace window: the lazy
+            # refresh_subscription downgrades to free once grace lapses, so a
+            # tenant can never be served a tier past its grace period (never
+            # locks owners/members out mid-payment-interruption).
             return tenant.plan_tier
-        # none / expired / past_due / canceled  →  treat as free
+        # none / expired / free / canceled  →  treat as free
         return _FREE_TIER
 
     def _compute_days_remaining(self, tenant: Tenant) -> int:
@@ -205,6 +415,24 @@ class BillingService:
                 "modules": [],
             },
         }
+
+    async def _emit_audit(
+        self,
+        *,
+        action: str,
+        target: str,
+        details: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
+    ) -> None:
+        """Write a billing lifecycle audit entry (no-op when no service wired)."""
+        if self._audit_service is None:
+            return
+        await self._audit_service.log(
+            action=action,
+            target=target,
+            details=details,
+            tenant_id=tenant_id,
+        )
 
     async def _emit_plan_changed(
         self,

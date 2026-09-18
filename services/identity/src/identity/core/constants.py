@@ -69,12 +69,15 @@ LOGIN_FAILED_MESSAGE = "Invalid email or password."
 # Everything else - including /api/v1/auth/login - requires tenant resolution
 # so the tenant is known before route execution. The onboarding wizard paths
 # (/auth/signup/*) and /invitations/accept|verify are self-service (no tenant
-# exists yet), so they bypass tenant resolution.
+# exists yet), so they bypass tenant resolution. The Stripe webhook bypasses it
+# too: Stripe authenticates via its own signature over the raw body, and no
+# tenant context exists for a pre-checkout event.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {
         f"{API_V1_PREFIX}/health",
         f"{API_V1_PREFIX}/ready",
+        f"{API_V1_PREFIX}/billing/webhooks",
         f"{API_V1_PREFIX}/auth/signup/start",
         f"{API_V1_PREFIX}/auth/signup/send-code",
         f"{API_V1_PREFIX}/auth/signup/verify-code",

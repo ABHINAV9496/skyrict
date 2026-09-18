@@ -37,6 +37,7 @@ dependencies = [
     "user-agents>=2.2,<3",
     "geoip2>=4.8,<6",
     "sentry-sdk[fastapi]>=2.14,<3",
+    "stripe>=9,<10",
 ]
 
 [project.optional-dependencies]

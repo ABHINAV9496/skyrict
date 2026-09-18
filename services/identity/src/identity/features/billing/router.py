@@ -11,16 +11,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
-from identity.api.deps import get_billing_service, get_current_user, require_billing_owner
+from identity.api.deps import (
+    get_billing_service,
+    get_current_user,
+    get_stripe_client,
+    require_billing_owner,
+)
+from identity.core.stripe import InvalidSignatureError, StripeClient
 from identity.core.tenant_context import get_current_tenant
 from identity.features.billing.schemas import (
     PlanResponse,
     PlanUpdateRequest,
     SubscriptionResponse,
+    TickResponse,
+    WebhookAckResponse,
 )
 from identity.features.billing.service import BillingService
+from skyrict_common.exceptions import AuthenticationError
 from skyrict_common.schemas import ResponseEnvelope
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -78,3 +87,48 @@ async def list_plans(
     """Return the full plan catalog in canonical order (any authenticated member)."""
     plans = await billing_svc.list_plans()
     return ResponseEnvelope(data=[_as_plan_response(p) for p in plans])
+
+
+@router.post("/webhooks", response_model=ResponseEnvelope[WebhookAckResponse])
+async def receive_webhook(
+    request: Request,
+    billing_svc: BillingService = Depends(get_billing_service),
+    stripe_client: StripeClient = Depends(get_stripe_client),
+) -> ResponseEnvelope[WebhookAckResponse]:
+    """Receive a Stripe lifecycle event (signature IS the authentication).
+
+    The Stripe signature over the raw body is verified before anything is
+    processed - there is no bearer token on Stripe webhooks. On failure the
+    handler raises 401 and Stripe retries; on success it acks and Stripe
+    stops delivering. Duplicate deliveries are acknowledged and skipped by the
+    idempotency store, never double-applied.
+    """
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_client.construct_event(payload, signature)
+    except InvalidSignatureError as exc:
+        raise AuthenticationError("Invalid Stripe webhook signature") from exc
+
+    status = await billing_svc.handle_stripe_event(
+        event_id=event.id,
+        event_type=event.type,
+        event_object=dict(event.data.object),
+    )
+    return ResponseEnvelope(data=WebhookAckResponse(status=status))
+
+
+@router.post("/tick", response_model=ResponseEnvelope[TickResponse])
+async def billing_tick(
+    current_user: dict[str, Any] = Depends(_require_billing_owner),
+    billing_svc: BillingService = Depends(get_billing_service),
+    tenant_id: str = Depends(get_current_tenant),
+) -> ResponseEnvelope[TickResponse]:
+    """Explicit lazy-check trigger (ops/cron) - same path as subscription reads.
+
+    Runs trial-expiry and grace-expiry checks now and reports whether state
+    changed, so a scheduler can invoke this on an interval instead of relying
+    on a read occurring. Mirrors the payroll tick precedent.
+    """
+    result = await billing_svc.tick(tenant_id)
+    return ResponseEnvelope(data=TickResponse.model_validate(result))

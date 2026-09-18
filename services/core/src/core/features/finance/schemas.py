@@ -505,6 +505,7 @@ class DraftEntryResponse(BaseModel):
     confidence: Decimal
     reasoning: str = ""
     model_used: str = ""
+    fallback: bool = False
 
 
 class AnomalyNarrationRequest(BaseModel):

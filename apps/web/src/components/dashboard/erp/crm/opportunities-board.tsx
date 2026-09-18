@@ -105,10 +105,14 @@ export function OpportunitiesBoard() {
         return map;
     }, [status]);
 
-    async function runMove(opportunity: Opportunity, stage: OpportunityStage) {
+    async function runMove(
+        opportunity: Opportunity,
+        stage: OpportunityStage,
+        lostReason?: string,
+    ) {
         setPending({ id: opportunity.id, stage });
         try {
-            await changeOpportunityStage(opportunity.id, stage);
+            await changeOpportunityStage(opportunity.id, stage, lostReason);
             await load();
         } catch (error) {
             const message =
@@ -162,10 +166,11 @@ export function OpportunitiesBoard() {
 
     function onConfirm() {
         if (!confirming) return;
-        const { opportunity, stage } = confirming;
+        const { opportunity, stage, action } = confirming;
+        const reason = action === "lost" ? lostReason.trim() : "";
         setConfirming(null);
         setLostReason("");
-        void runMove(opportunity, stage);
+        void runMove(opportunity, stage, reason || undefined);
     }
 
     if (status.state === "loading") {
@@ -284,7 +289,12 @@ export function OpportunitiesBoard() {
                                             onMove={(nextStage) =>
                                                 setConfirming({
                                                     opportunity,
-                                                    action: "move",
+                                                    action:
+                                                        nextStage === "won"
+                                                            ? "won"
+                                                            : nextStage === "lost"
+                                                              ? "lost"
+                                                              : "move",
                                                     stage: nextStage,
                                                 })
                                             }

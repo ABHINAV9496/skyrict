@@ -632,20 +632,37 @@ class TokenService:
 
         # A terminal session was already handled when it died - a client
         # retrying that refresh token is rejected quietly so the reuse handler
-        # (family revoke + audit log) is not re-armed on every retry.
+        # (family revoke + audit log) is not re-armed on every retry. Reuse of
+        # a rotated token is only EVER tolerated inside the grace window - a
+        # dead session is already beyond it, so the reuse-detect stays.
         if session is not None and session.status is not SessionStatus.ACTIVE:
             raise TokenReuseDetectedError()
+
+        now = datetime.now(UTC)
+        presented_hash = hash_refresh_token(refresh_token)
+        # A benign race (two tabs, a dropped response) re-sends the token that
+        # was rotated out milliseconds ago. Accept and re-rotate it inside the
+        # grace window instead of treating the whole family as stolen.
+        within_grace = (
+            session is not None
+            and session.previous_refresh_token_hash == presented_hash
+            and session.previous_token_valid_until is not None
+            and now <= session.previous_token_valid_until
+        )
 
         if (
             session is None
             or session.user_id != uuid.UUID(user_id)
-            or session.refresh_token_hash != hash_refresh_token(refresh_token)
-        ):
+            or session.refresh_token_hash != presented_hash
+        ) and not within_grace:
             await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session=session)
             raise TokenReuseDetectedError()
 
+        # within_grace implies a stored session, so past the guard above there
+        # must be one to rotate against.
+        assert session is not None
         assert session.id is not None
-        if session.expires_at <= datetime.now(UTC):
+        if session.expires_at <= now:
             await self.session_service.expire_session(session.id, tenant_id=tenant_id)
             raise TokenExpiredError()
 
@@ -657,8 +674,11 @@ class TokenService:
         rotated = await self.session_service.rotate_session(
             session.id,
             refresh_token_hash=hash_refresh_token(tokens.refresh_token),
-            expires_at=datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             tenant_id=tenant_id,
+            previous_refresh_token_hash=session.refresh_token_hash,
+            previous_token_valid_until=now
+            + timedelta(seconds=settings.REFRESH_REUSE_GRACE_SECONDS),
         )
         assert rotated is not None and rotated.id is not None
         await self.audit_service.log(

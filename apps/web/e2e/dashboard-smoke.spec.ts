@@ -22,40 +22,35 @@
  * Run alone: `npx playwright test dashboard-smoke`.
  */
 
-import {
-  expect,
-  test as base,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-const AUTH_FILE = "e2e/.auth/admin.json";
-const WORKSPACE_BASE_URL =
-  process.env.E2E_BASE_URL ?? "http://default.localhost:3000";
+import { test } from "./fixtures/auth";
 
 const HYDRATION_WARN = /hydrat|text content did not match|Server and Client/i;
 
-const test = base.extend<{ workspacePage: Page }, { workspaceContext: BrowserContext }>({
-  workspaceContext: [
-    async ({ browser }, use) => {
-      const context = await browser.newContext({
-        baseURL: WORKSPACE_BASE_URL,
-        storageState: AUTH_FILE,
-        viewport: { width: 1280, height: 800 },
-      });
-      await use(context);
-      await context.close();
-    },
-    { scope: "worker" },
-  ],
-  workspacePage: async ({ workspaceContext }, use) => {
-    const page = await workspaceContext.newPage();
-    await use(page);
-    await page.close();
-  },
-});
-
 test.setTimeout(600_000);
+
+/**
+ * Navigate to a route and wait for the shell's client session hydration to
+ * finish (its `/api/auth/session` rotation response) before returning.
+ *
+ * The h1 renders from the server shell as soon as a cookie exists - long
+ * before SessionProvider.restore() rotates the refresh token. Letting the
+ * next goto fire while that fetch is in flight aborts it: the backend still
+ * advances the token hash but the browser never stores the new Set-Cookie, so
+ * the following navigation presents a stale token, trips identity's reuse
+ * detector, and revokes the whole family (-> /signin bounce). Awaiting the
+ * rotation response serializes the chain and removes the race.
+ */
+async function gotoRoute(page: Page, route: string): Promise<void> {
+  const rotated = page
+    .waitForResponse((response) => response.url().includes("/api/auth/session"), {
+      timeout: 15_000,
+    })
+    .catch(() => null);
+  await page.goto(route);
+  await rotated;
+}
 
 /** Assert a route rendered: h1 visible, no hydration warnings, no page errors. */
 async function expectRendered(page: Page, heading?: string | RegExp) {
@@ -84,8 +79,9 @@ async function expectRendered(page: Page, heading?: string | RegExp) {
 }
 
 test("dashboard smoke: routes render + error paths recover", async ({
-  workspacePage: page,
+  workspace,
 }) => {
+  const { page } = workspace;
   const routesDone: string[] = [];
 
   await test.step("stale-guard pages render", async () => {
@@ -103,7 +99,7 @@ test("dashboard smoke: routes render + error paths recover", async ({
       ["/erp/orders", /Orders/],
     ];
     for (const [route, heading] of guarded) {
-      await page.goto(route);
+      await gotoRoute(page, route);
       await expectRendered(page, heading);
       routesDone.push(route);
     }
@@ -120,7 +116,7 @@ test("dashboard smoke: routes render + error paths recover", async ({
       ["/leave", /leave/i],
     ];
     for (const [route, heading] of modest) {
-      await page.goto(route);
+      await gotoRoute(page, route);
       await expectRendered(page, heading);
       routesDone.push(route);
     }
@@ -151,7 +147,7 @@ test("dashboard smoke: routes render + error paths recover", async ({
     });
 
     try {
-      await page.goto("/erp/hr/employees");
+      await gotoRoute(page, "/erp/hr/employees");
       await expect(
         page.getByRole("button", { name: "Try again" }),
       ).toBeVisible({ timeout: 20_000 });

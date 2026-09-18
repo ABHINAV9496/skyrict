@@ -740,6 +740,7 @@ export interface DraftEntry {
     confidence: number;
     reasoning: string;
     model_used: string;
+    fallback?: boolean;
 }
 
 export interface AnomalyNarration {

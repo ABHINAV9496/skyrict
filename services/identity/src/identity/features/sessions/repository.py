@@ -23,6 +23,8 @@ def _to_orm(session: Session) -> SessionModel:
         "user_id": session.user_id,
         "tenant_id": session.tenant_id,
         "refresh_token_hash": session.refresh_token_hash,
+        "previous_refresh_token_hash": session.previous_refresh_token_hash,
+        "previous_token_valid_until": session.previous_token_valid_until,
         "device_info": session.device_info,
         "ip_address": session.ip_address,
         "user_agent": session.user_agent,
@@ -47,6 +49,8 @@ def _from_orm(model: SessionModel) -> Session:
         user_id=model.user_id,
         tenant_id=model.tenant_id,
         refresh_token_hash=model.refresh_token_hash,
+        previous_refresh_token_hash=model.previous_refresh_token_hash,
+        previous_token_valid_until=model.previous_token_valid_until,
         device_info=model.device_info,
         ip_address=model.ip_address,
         user_agent=model.user_agent,
@@ -238,6 +242,8 @@ class SessionRepository(SqlRepository):
         refresh_token_hash: str,
         expires_at: datetime,
         tenant_id: str | uuid.UUID | None = None,
+        previous_refresh_token_hash: str | None = None,
+        previous_token_valid_until: datetime | None = None,
     ) -> None:
         stmt = select(SessionModel).where(SessionModel.id == session_id)
         if tenant_id is not None:
@@ -246,6 +252,8 @@ class SessionRepository(SqlRepository):
         if model is None:
             return
         model.refresh_token_hash = refresh_token_hash
+        model.previous_refresh_token_hash = previous_refresh_token_hash
+        model.previous_token_valid_until = previous_token_valid_until
         model.expires_at = expires_at
         model.last_active_at = datetime.now(UTC)
         await self.session.flush()

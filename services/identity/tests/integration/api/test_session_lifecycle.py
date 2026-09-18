@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pyotp
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from identity.db.session import async_session_factory
 from identity.models.audit_log import AuditLogModel
+from identity.models.session import SessionModel
 from identity.models.tenant import TenantModel
 from tests.integration.api.wizard import provision_tenant
 
@@ -130,6 +132,17 @@ class TestSessionLifecycle:
             assert first.status_code == 200
             assert first.json()["data"]["refresh_token"] != refresh
 
+            # Age the tolerance window past expiry: a genuine re-transmission of
+            # the rotated-out token must STILL chain-kill the family. The
+            # within-grace tolerance is covered by the test below.
+            async with async_session_factory() as session:
+                await session.execute(
+                    update(SessionModel)
+                    .where(SessionModel.user_id == uuid.UUID(user_id))
+                    .values(previous_token_valid_until=datetime.now(UTC) - timedelta(seconds=1))
+                )
+                await session.commit()
+
             reuse = await _refresh(client, slug=slug, refresh_token=refresh)
             assert reuse.status_code == 401
             assert reuse.json()["type"].endswith("/token-reuse-detected")
@@ -144,6 +157,27 @@ class TestSessionLifecycle:
                     )
                 )
                 assert row is not None
+        finally:
+            await _delete_tenant_by_slug(slug)
+
+    async def test_refresh_reuse_within_grace_is_tolerated(self, client: AsyncClient) -> None:
+        slug, email = await _provision(client)
+        _, access, refresh = await _login(client, slug=slug, email=email)
+        try:
+            first = await _refresh(client, slug=slug, refresh_token=refresh)
+            assert first.status_code == 200
+            assert first.json()["data"]["refresh_token"] != refresh
+
+            # Benign race (two tabs / a dropped response): presenting the token
+            # that was rotated out milliseconds ago issues a fresh pair instead
+            # of revoking the whole session family.
+            tolerated = await _refresh(client, slug=slug, refresh_token=refresh)
+            assert tolerated.status_code == 200
+            assert tolerated.json()["data"]["refresh_token"] != refresh
+
+            sessions = await _list_sessions(client, slug=slug, access_token=access)
+            assert len(sessions) == 1
+            assert sessions[0]["status"] == "active"
         finally:
             await _delete_tenant_by_slug(slug)
 

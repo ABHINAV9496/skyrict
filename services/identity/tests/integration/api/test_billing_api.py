@@ -58,13 +58,15 @@ def _owner_headers(tenant: dict) -> dict:
     return {"X-Tenant-Slug": tenant["slug"], "Authorization": f"Bearer {tenant['token']}"}
 
 
-async def _invite_and_login_member(client: AsyncClient, *, tenant: dict) -> dict:
+async def _invite_and_login_member(
+    client: AsyncClient, *, tenant: dict, role_name: str = "standard_user"
+) -> dict:
     owner_headers = _owner_headers(tenant)
     invite_email = f"bill-member-{uuid.uuid4().hex[:8]}@test.com"
     create_resp = await client.post(
         "/api/v1/invitations",
         headers=owner_headers,
-        json={"email": invite_email, "role_name": "standard_user"},
+        json={"email": invite_email, "role_name": role_name},
     )
     assert create_resp.status_code == 200
     invite_token = create_resp.json()["data"]["token"]
@@ -306,6 +308,24 @@ class TestCheckoutSessionEndpoint:
         finally:
             await _cleanup_tenant(tenant["slug"])
 
+    async def test_admin_member_post_checkout_returns_403(self, client: AsyncClient) -> None:
+        """organization_admin has billing.manage but not tenant_owner: the
+        role half of the owner gate must still reject the POST."""
+        tenant = await _register_tenant(client)
+        member = await _invite_and_login_member(
+            client, tenant=tenant, role_name="organization_admin"
+        )
+        try:
+            resp = await client.post(
+                "/api/v1/billing/checkout-session",
+                headers=member["headers"],
+                json={"planId": "business", "interval": "year"},
+            )
+            assert resp.status_code == 403
+            assert resp.json()["type"].endswith("/permission-denied")
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
     async def test_unconfigured_stripe_returns_503(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -388,6 +408,23 @@ class TestPortalSessionEndpoint:
     async def test_member_post_portal_returns_403(self, client: AsyncClient) -> None:
         tenant = await _register_tenant(client)
         member = await _invite_and_login_member(client, tenant=tenant)
+        try:
+            resp = await client.post(
+                "/api/v1/billing/portal-session",
+                headers=member["headers"],
+            )
+            assert resp.status_code == 403
+            assert resp.json()["type"].endswith("/permission-denied")
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
+    async def test_admin_member_post_portal_returns_403(self, client: AsyncClient) -> None:
+        """organization_admin has billing.manage but not tenant_owner: the
+        role half of the owner gate must still reject the POST."""
+        tenant = await _register_tenant(client)
+        member = await _invite_and_login_member(
+            client, tenant=tenant, role_name="organization_admin"
+        )
         try:
             resp = await client.post(
                 "/api/v1/billing/portal-session",

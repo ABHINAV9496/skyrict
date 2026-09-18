@@ -171,3 +171,20 @@ node scripts/perf/parse-bundle-sizes.mjs --log build.log --analyze .next/analyze
 ```
 
 The CI gate does not need the analyzer: `ci-web.yml` runs a plain `next build`, then `node scripts/perf/assert-bundle-sizes.mjs --log build.log` against the committed `scripts/perf/perf-baseline.json`.
+
+## Lighthouse performance gate (Commit 4)
+
+Lighthouse runs in CI (`.github/workflows/lighthouse.yml`) against the four budgeted ERP surfaces once a stack is booted and the seeded admin has a real session.
+
+- **Method**: each URL is audited 3× with the Lighthouse mobile preset (Moto-G-class emulation, simulated throttling ~4× CPU, 1.5 Mbps down / 675 kbps up, 150 ms RTT); the median of LCP / CLS / TBT is asserted against the budget. Raw per-run JSON + HTML reports and a `summary.json` land in `scripts/perf/lighthouse-results/` (gitignored, uploaded as CI artifacts).
+- **Auth**: the audit logs in through the real signin + mandatory-MFA UI every run (enrollment path on a fresh stack, challenge path via `E2E_TOTP_SECRET` otherwise) and sends the session cookie via `extraHeaders` — no mocked auth.
+- **Budgets**: LCP ≤ 2500 ms, CLS ≤ 0.1, TBT < 200 ms.
+- **Escape hatch**: `PERF_RELAX=1` downgrades a breach to a warning (the gate still prints the breach) — deliberately visible, never silent.
+- **Run locally**: `E2E_BASE_URL=… pnpm --filter @skyrict/web run lighthouse:audit` against a running stack + `next start`.
+
+| Route | LCP ≤ 2500 ms | CLS ≤ 0.1 | TBT < 200 ms |
+|---|---|---|---|
+| `/dashboard` | measured in CI | measured in CI | measured in CI |
+| `/dashboard/erp/reports` | measured in CI | measured in CI | measured in CI |
+| `/dashboard/erp/payroll` | measured in CI | measured in CI | measured in CI |
+| `/dashboard/erp/inventory` | measured in CI | measured in CI | measured in CI |

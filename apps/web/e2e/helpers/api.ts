@@ -264,7 +264,7 @@ export async function seedLead(
     name: string,
 ): Promise<{ id: string }> {
     return api.post<{ id: string }>("/api/v1/crm/leads", {
-        name,
+        first_name: name,
         company: name,
     });
 }
@@ -286,8 +286,11 @@ export async function changeOpportunityStage(
     opportunityId: string,
     stage: string,
 ): Promise<Opportunity> {
-    return api.post<Opportunity>(
+    // The /stage endpoint returns { opportunity, customer } — unwrap the
+    // opportunity so callers read `.stage` directly.
+    const result = await api.post<{ opportunity: Opportunity }>(
         `/api/v1/crm/opportunities/${opportunityId}/stage`,
         { stage },
     );
+    return result.opportunity;
 }

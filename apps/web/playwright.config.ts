@@ -38,6 +38,12 @@
 
 import { defineConfig } from "@playwright/test";
 
+// Windows Node cannot resolve `*.localhost`; this makes BffApi's Node-side
+// requests reach the E2E origin (served by nginx on 127.0.0.1) the same way
+// CI and Chromium already do. No-op elsewhere.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require("./e2e/localhost-dns.cjs");
+
 const baseURL = process.env.E2E_BASE_URL ?? "http://default.localhost:3000";
 
 /*

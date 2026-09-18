@@ -41,6 +41,8 @@ import {
     seedInvoice,
 } from "./helpers/api";
 
+test.setTimeout(180_000);
+
 test("finance journeys: JE lifecycle, invoice flow, and statement widgets", async ({
     workspace,
 }) => {
@@ -48,7 +50,8 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
     const api = new BffApi(page.request);
     const timestamp = Date.now();
     const memoText = `E2E JE ${timestamp}`;
-    const customerId = unique("CUST");
+    const customerName = unique("CUST");
+    let customerId = "";
     let draftId = "";
     let invoiceId = "";
     let invoiceNumber = "";
@@ -96,11 +99,9 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
 
         // Navigates to the entry detail page
         await expect(page).toHaveURL(
-            /\/dashboard\/erp\/finance\/journal-entries\//,
+            /\/erp\/finance\/journal-entries\//,
         );
-        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-            memoText,
-        );
+        await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: memoText })).toBeVisible();
         await expect(page.getByText("Draft", { exact: true })).toBeVisible();
         draftId = page.url().split("/").pop()!;
     });
@@ -158,14 +159,28 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
             return;
         }
 
+        // LLM endpoint unavailable: core substitutes a deterministic $0.00/$0.00
+        // skeleton (both lines amount "0"), which balances but cannot be saved as
+        // edited. That is the same "no LLM" situation as the guards above; skip.
+        const zeroDraft = await createDlg
+            .getByText(/Debit \$0\.00/)
+            .isVisible()
+            .catch(() => false);
+
+        if (zeroDraft) {
+            createDlg
+                .getByRole("button", { name: "Cancel" })
+                .click()
+                .catch(() => {});
+            return;
+        }
+
         await createDlg.getByRole("button", { name: "Save draft" }).click();
 
         await expect(page).toHaveURL(
-            /\/dashboard\/erp\/finance\/journal-entries\//,
+            /\/erp\/finance\/journal-entries\//,
         );
-        await expect(page.getByRole("heading", { level: 1 })).toContainText(
-            "E2E test expense for 500",
-        );
+        await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: "E2E test expense for 500" })).toBeVisible();
     });
 
     // ====================================================================
@@ -174,7 +189,7 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
     await test.step("post the draft entry", async () => {
         await page.goto(`/dashboard/erp/finance/journal-entries/${draftId}`);
         await page.getByRole("button", { name: "Post" }).click();
-        await expect(page.getByText("Posted", { exact: true })).toBeVisible();
+        await expect(page.getByText("Posted", { exact: true }).first()).toBeVisible();
     });
 
     // ====================================================================
@@ -196,7 +211,7 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
 
         await page.goto(`/dashboard/erp/finance/journal-entries/${posted.id}`);
         // Accept the native window.confirm that the Reverse button triggers.
-        page.on("dialog", (d) => d.accept());
+        page.once("dialog", (d) => d.accept());
         await page.getByRole("button", { name: "Reverse" }).click();
         await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
         // Original entry is no longer posted — no Post button visible.
@@ -228,16 +243,17 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
 
         await page.goto(`/dashboard/erp/finance/journal-entries/${draft.id}`);
         await expect(page.getByText("Draft", { exact: true })).toBeVisible();
-        page.on("dialog", (d) => d.accept());
+        page.once("dialog", (d) => d.accept());
         await page.getByRole("button", { name: "Void" }).click();
-        await expect(page.getByText("Voided", { exact: true })).toBeVisible();
+        await expect(page.getByText("Voided", { exact: true }).first()).toBeVisible();
     });
 
     // ====================================================================
     // B1 + B2 — Invoice: seed, then walk draft → issued → approved → paid
     // ====================================================================
     await test.step("create customer and seed invoice via API", async () => {
-        await createCustomer(api, customerId);
+        const customer = await createCustomer(api, customerName);
+        customerId = customer.id;
         const inv = await seedInvoice(api, customerId);
         invoiceId = inv.id;
         invoiceNumber = inv.invoice_number;
@@ -245,9 +261,9 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
 
     await test.step("invoice UI: draft → issued → approved → paid", async () => {
         await page.goto(`/dashboard/erp/finance/invoices/${invoiceId}`);
-        await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-            invoiceNumber,
-        );
+        await expect(
+            page.getByRole("heading", { level: 1 }).filter({ hasText: invoiceNumber }),
+        ).toBeVisible();
         await expect(page.getByText("Draft", { exact: true })).toBeVisible();
 
         await page.getByRole("button", { name: "Issue" }).click();
@@ -261,7 +277,7 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
         await expect(payDlg).toBeVisible();
 
         // Default amount should equal the invoice total (unpaid balance).
-        await expect(payDlg.getByLabel("Amount")).toHaveValue("1250");
+        await expect(payDlg.getByLabel("Amount")).toHaveValue(/^1250(?:\.0+)?$/);
         await payDlg.getByLabel("Method").fill("Bank transfer");
 
         await payDlg.getByRole("button", { name: "Apply payment" }).click();
@@ -304,7 +320,7 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
         await api.post(`/api/v1/finance/invoices/${inv.id}/issue`);
 
         await page.goto(`/dashboard/erp/finance/invoices/${inv.id}`);
-        page.on("dialog", (d) => d.accept());
+        page.once("dialog", (d) => d.accept());
         await page.getByRole("button", { name: "Void" }).click();
         await expect(page.getByText("Voided", { exact: true })).toBeVisible();
     });

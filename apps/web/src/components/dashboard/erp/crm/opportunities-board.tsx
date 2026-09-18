@@ -284,7 +284,12 @@ export function OpportunitiesBoard() {
                                             onMove={(nextStage) =>
                                                 setConfirming({
                                                     opportunity,
-                                                    action: "move",
+                                                    action:
+                                                        nextStage === "won"
+                                                            ? "won"
+                                                            : nextStage === "lost"
+                                                              ? "lost"
+                                                              : "move",
                                                     stage: nextStage,
                                                 })
                                             }

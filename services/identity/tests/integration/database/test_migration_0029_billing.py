@@ -2,11 +2,14 @@
 
 Proves the billing migration in isolation against a disposable
 database: upgrade the identity chain to 0027, seed a tenant row carrying the
-legacy ``professional`` tier value, upgrade to head (runs 0028 erp permissions
+legacy ``professional`` tier value, upgrade to 0029 (runs 0028 erp permissions
 then 0029 billing), assert the new billing columns exist and the row was
 canonicalized to ``pro`` and the CHECK constraint rejects the old literal -
 then downgrade back to 0027 and assert the reverse (columns gone, row
 reverted to ``professional``).
+
+Pinned to 0029 rather than ``head``: later migrations must not change what
+this round-trip is asserting.
 
 The test owns its scratch database and never touches the shared test
 database (``migrated_schema``): it destroys the schema it builds.
@@ -297,7 +300,11 @@ def test_0029_billing_roundtrip() -> None:
 
         tenant_id = asyncio.run(_seed_legacy_professional(scratch_url))
 
-        _run_alembic(_ALEMBIC_INI, ["upgrade", "head"], overrides)
+        _run_alembic(
+            _ALEMBIC_INI,
+            ["upgrade", "0029"],
+            overrides,
+        )
         asyncio.run(_assert_upgraded(scratch_url, tenant_id))
 
         _run_alembic(_ALEMBIC_INI, ["downgrade", "0027"], overrides)

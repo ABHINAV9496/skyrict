@@ -48,9 +48,21 @@ const nextConfig = {
 // the upload credentials are not configured.
 const { withSentryConfig } = require("@sentry/nextjs"); // eslint-disable-line @typescript-eslint/no-require-imports -- CommonJS config file per Next.js convention
 
-module.exports = withSentryConfig(nextConfig, {
-  org: process.env.SENTRY_ORG ?? "",
-  project: process.env.SENTRY_PROJECT ?? "",
-  authToken: process.env.SENTRY_AUTH_TOKEN ?? "",
-  silent: true,
+// Bundle analyzer runs only when ANALYZE=true (size baseline + CI budget gate).
+// It sits OUTSIDE Sentry and chains the inner webpack hook, so an analyzer
+// build still gets Sentry's instrumentation config; a regular build (ANALYZE
+// unset) is byte-for-byte the same config as before this wrapper.
+const withBundleAnalyzer = require("@next/bundle-analyzer")({ // eslint-disable-line @typescript-eslint/no-require-imports -- CommonJS config file per Next.js convention
+  enabled: process.env.ANALYZE === "true",
+  defaultSizes: "gzip",
+  generateStatsFile: true,
 });
+
+module.exports = withBundleAnalyzer(
+  withSentryConfig(nextConfig, {
+    org: process.env.SENTRY_ORG ?? "",
+    project: process.env.SENTRY_PROJECT ?? "",
+    authToken: process.env.SENTRY_AUTH_TOKEN ?? "",
+    silent: true,
+  }),
+);

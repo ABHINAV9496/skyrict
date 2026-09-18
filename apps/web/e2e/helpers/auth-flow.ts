@@ -93,7 +93,20 @@ export async function completeMfaChallenge(
     page: Page,
     secret: string,
 ): Promise<void> {
-    await fillOtp(page, "Two-factor code", totp(secret));
+    // Try the current, previous, and next 30s windows to dodge clock
+    // boundaries (the enrollment arm below retries the same offsets). A
+    // rejected code leaves the page on the signin host; the handoff to the
+    // workspace host proves the code was accepted.
+    for (const offset of [0, -1, 1]) {
+        await fillOtp(page, "Two-factor code", totp(secret, offset));
+        const landed = await page
+            .waitForURL((url) => !url.hostname.includes(".signin."), {
+                timeout: 8_000,
+            })
+            .then(() => true)
+            .catch(() => false);
+        if (landed) return;
+    }
     await waitForWorkspace(page);
 }
 

@@ -54,6 +54,8 @@ apps/web/test-results/
 apps/web/playwright-report/
 apps/web/blob-report/
 apps/web/playwright/.cache/
+apps/web/scripts/perf/lighthouse-results/
+apps/web/build.log
 
 # ---------- Linting / Formatting ----------
 .ruff_cache/
@@ -238,3 +240,4 @@ blob-report/
 playwright/.cache/
 .vercel/
 .import_linter_cache/
+apps/web/next-start.log*

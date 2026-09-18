@@ -16,7 +16,7 @@ of the codebase is insulated from the untyped ``stripe`` module.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from identity.core.config import settings
 
@@ -92,10 +92,14 @@ class StripeClient:
             )
         stripe = self._import_stripe()
         try:
-            return stripe.Webhook.construct_event(
-                payload=payload,
-                sig_header=signature_header,
-                secret=self._webhook_secret,
+            # The SDK module is untyped (Any); pin the strict return type.
+            return cast(
+                "Event",
+                stripe.Webhook.construct_event(
+                    payload=payload,
+                    sig_header=signature_header,
+                    secret=self._webhook_secret,
+                ),
             )
         except stripe.error.SignatureVerificationError as exc:
             raise InvalidSignatureError(str(exc)) from exc

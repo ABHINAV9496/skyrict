@@ -25,6 +25,7 @@ import {
     seedLead,
     qualifyLead,
     changeOpportunityStage,
+    getOpportunity,
 } from "./helpers/api";
 
 test("crm deal pipeline: validate API errors and walk prospecting → won through the board", async ({
@@ -238,5 +239,9 @@ test("crm deal pipeline: validate API errors and walk prospecting → won throug
                 .filter({ hasText: lostName })
                 .locator("footer button"),
         ).toHaveCount(0);
+
+        // The lost reason entered in the dialog must have been persisted.
+        const saved = await getOpportunity(api, lostOpp.id);
+        expect(saved.lostReason).toBe("Went with a competitor");
     });
 });

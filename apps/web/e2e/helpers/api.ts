@@ -198,6 +198,7 @@ export interface Opportunity {
     leadId?: string | null;
     amount?: string | null;
     currency?: string | null;
+    lostReason?: string | null;
 }
 
 // -- Factory functions -----------------------------------------------------
@@ -293,4 +294,19 @@ export async function changeOpportunityStage(
         { stage },
     );
     return result.opportunity;
+}
+
+export async function getOpportunity(
+    api: BffApi,
+    opportunityId: string,
+): Promise<Opportunity> {
+    const raw = await api.get<Record<string, unknown>>(
+        `/api/v1/crm/opportunities/${opportunityId}`,
+    );
+    return {
+        id: String(raw.id ?? ""),
+        name: String(raw.name ?? ""),
+        stage: String(raw.stage ?? ""),
+        lostReason: (raw.lost_reason as string | null | undefined) ?? null,
+    };
 }

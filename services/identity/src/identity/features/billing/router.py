@@ -5,6 +5,9 @@ Route guards mirror the ticket semantics:
   * ``GET /billing/plan`` and ``PATCH /billing/plan`` — tenant owner only
     (``billing.manage`` permission + ``tenant_owner`` role).
   * ``GET /billing/plans`` — any authenticated tenant member (catalog).
+  * ``POST /billing/checkout-session`` and ``POST /billing/portal-session`` —
+    tenant owner only; owner-only because they mint Stripe sessions that can
+    charge the workspace card.
 """
 
 from __future__ import annotations
@@ -22,8 +25,11 @@ from identity.api.deps import (
 from identity.core.stripe import InvalidSignatureError, StripeClient
 from identity.core.tenant_context import get_current_tenant
 from identity.features.billing.schemas import (
+    CheckoutSessionRequest,
+    CheckoutSessionResponse,
     PlanResponse,
     PlanUpdateRequest,
+    PortalSessionResponse,
     SubscriptionResponse,
     TickResponse,
     WebhookAckResponse,
@@ -87,6 +93,39 @@ async def list_plans(
     """Return the full plan catalog in canonical order (any authenticated member)."""
     plans = await billing_svc.list_plans()
     return ResponseEnvelope(data=[_as_plan_response(p) for p in plans])
+
+
+@router.post("/checkout-session", response_model=ResponseEnvelope[CheckoutSessionResponse])
+async def start_checkout(
+    body: CheckoutSessionRequest,
+    current_user: dict[str, Any] = Depends(_require_billing_owner),
+    billing_svc: BillingService = Depends(get_billing_service),
+    tenant_id: str = Depends(get_current_tenant),
+) -> ResponseEnvelope[CheckoutSessionResponse]:
+    """Create a Stripe Checkout session for a paid plan upgrade (owner only).
+
+    Returns a Stripe-hosted ``url`` the owner's browser redirects to. When
+    Stripe is not configured the endpoint returns a sanitized 503; plans
+    without a configured Stripe Price (Starter, custom-priced Enterprise)
+    return 422.
+    """
+    session = await billing_svc.create_checkout_session(tenant_id, body.plan_id, body.interval)
+    return ResponseEnvelope(data=CheckoutSessionResponse.model_validate(session))
+
+
+@router.post("/portal-session", response_model=ResponseEnvelope[PortalSessionResponse])
+async def create_billing_portal(
+    current_user: dict[str, Any] = Depends(_require_billing_owner),
+    billing_svc: BillingService = Depends(get_billing_service),
+    tenant_id: str = Depends(get_current_tenant),
+) -> ResponseEnvelope[PortalSessionResponse]:
+    """Create a Stripe Customer Portal session to manage billing (owner only).
+
+    Returns a Stripe-hosted ``url`` the owner's browser redirects to. A tenant
+    that has never checked out (no Stripe customer) gets 402.
+    """
+    session = await billing_svc.create_portal_session(tenant_id)
+    return ResponseEnvelope(data=PortalSessionResponse.model_validate(session))
 
 
 @router.post("/webhooks", response_model=ResponseEnvelope[WebhookAckResponse])

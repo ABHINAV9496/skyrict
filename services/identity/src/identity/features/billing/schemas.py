@@ -1,4 +1,4 @@
-"""Billing schemas - subscription, plan, and plan-update request models.
+"""Billing schemas - subscription, plan, plan-update, and Stripe session models.
 
 Used by the billing router (SKY-35) and plan-management UI.  All response
 models use snake_case to match the codebase convention; requests use
@@ -8,6 +8,7 @@ models use snake_case to match the codebase convention; requests use
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import AliasGenerator, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -87,6 +88,32 @@ class PlanUpdateRequest(_CamelModel):
     """PATCH /billing/plan — switch the tenant's paid plan (owner-only)."""
 
     plan_id: PLAN_ID_LITERAL = Field(..., description="Target plan to switch to")
+
+
+# -- Stripe sessions (BILLING-UI-004) ----------------------------------------
+
+
+class CheckoutSessionRequest(_CamelModel):
+    """POST /billing/checkout-session — start a Stripe Checkout for a plan."""
+
+    plan_id: PLAN_ID_LITERAL = Field(..., description="Paid plan to subscribe to")
+    interval: Literal["month", "year"] = Field(
+        default="month", description="Billing interval (monthly or annual)"
+    )
+
+
+class CheckoutSessionResponse(BaseModel):
+    """Stripe Checkout session — the client redirects the browser to ``url``."""
+
+    session_id: str = Field(..., description="Stripe Checkout Session id (cs_...)")
+    url: str = Field(..., description="Stripe-hosted checkout URL to redirect to")
+
+
+class PortalSessionResponse(BaseModel):
+    """Stripe Customer Portal session — manage payment methods, invoices, plan."""
+
+    session_id: str = Field(..., description="Stripe Billing Portal Session id")
+    url: str = Field(..., description="Stripe-hosted portal URL to redirect to")
 
 
 # -- Stripe webhook + tick (BILLING-SERV-002) -----------------------------------

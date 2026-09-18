@@ -382,6 +382,29 @@ class Settings(BaseSettings):
             "behaviour post-launch."
         ),
     )
+    BILLING_APP_URL: str = Field(
+        default="",
+        description=(
+            "App origin used to build Stripe success/cancel/return redirect "
+            "URLs. May contain a single '{slug}' placeholder replaced with the "
+            "tenant slug for workspace subdomains (e.g. "
+            "'https://{slug}.app.skyrict.com'). Empty in dev/test: creating "
+            "checkout or portal sessions fails with 503 rather than emitting "
+            "a broken redirect."
+        ),
+    )
+    BILLING_STRIPE_PRICE_IDS: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Stripe Price IDs keyed '<plan_id>:<interval>' (e.g. "
+            "'professional:month', 'business:year'). Prices are managed in "
+            "the Stripe dashboard; this map lets the server build Checkout "
+            "sessions without hardcoding Stripe ids. Loaded from a JSON env "
+            "var or .env entry. Plans without an entry (Starter is free, "
+            "Enterprise is custom-priced) cannot be purchased via Checkout "
+            "and return 422."
+        ),
+    )
 
     # --- Avatar uploads ---
     AVATAR_STORAGE_BACKEND: str = Field(

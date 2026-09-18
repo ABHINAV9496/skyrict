@@ -171,7 +171,17 @@ async function login(page) {
     if (!secret) {
       throw new Error("MFA challenge requires E2E_TOTP_SECRET (no persisted secret found).");
     }
-    await fillOtp(page, "Two-factor code", totp(secret));
+    // Try the current, previous, and next 30s windows to dodge clock
+    // boundaries (mirrors the enrollment arm below). A rejected code keeps the
+    // page on the signin host; the workspace handoff proves acceptance.
+    for (const offset of [0, -1, 1]) {
+      await fillOtp(page, "Two-factor code", totp(secret, offset));
+      const landed = await page
+        .waitForURL((url) => !url.hostname.includes(".signin."), { timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (landed) break;
+    }
     await waitForWorkspaceSettled(page);
     return;
   }

@@ -3,7 +3,8 @@
  *
  * Drives the real signup wizard (signup surface, /register) end to end
  * through the browser: email step -> OTP verification -> password + text
- * CAPTCHA -> plan -> organization -> provisioning -> signin redirect.
+ * CAPTCHA -> plan -> organization -> billing (free Starter path) -> review
+ * -> signin redirect.
  *
  * The identity service runs with ENVIRONMENT=test on the E2E stack, which is
  * the ONLY environment that returns the plaintext OTP (`code`) and the text
@@ -167,11 +168,13 @@ export async function registerTenant(
     await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForURL("**/register/plan**");
 
-    /* ---------- plan step ---------- */
+    /* ---------- plan step (before organization creation) ---------- */
 
     // Starter is $0; the driver picks it so the harness never touches billing.
     await page.getByRole("radio", { name: /Starter/ }).click();
-    await page.getByRole("button", { name: "Continue with Starter" }).click();
+    await page
+        .getByRole("button", { name: "Continue with Starter" })
+        .click();
     await page.waitForURL("**/register/organization**");
 
     /* ---------- organization step ---------- */
@@ -209,7 +212,19 @@ export async function registerTenant(
         .toBeTruthy();
 
     // Creation triggers a provisioning screen (a ~10.4s sequence of timers) that
-    // then hands off to {slug}.signin.{apex}:{port}/signin?email=... on its own.
+    // then hands off to the billing step with the tenant context in the URL.
+    await page.waitForURL("**/register/billing**", { timeout: 45_000 });
+
+    /* ---------- billing step (free Starter path) ---------- */
+
+    await page.getByRole("button", { name: "Continue for free" }).click();
+    await page.waitForURL("**/register/review**");
+
+    /* ---------- review step ---------- */
+
+    // The review handoff returns to {slug}.signin.{apex}:{port}/signin?email=...
+    // so the caller can sign the owner in next.
+    await page.getByRole("button", { name: /Enter my workspace/ }).click();
     await page.waitForURL((url) => url.hostname.startsWith(`${slug}.signin.`), {
         timeout: 45_000,
     });

@@ -15,10 +15,12 @@ import { NextResponse } from "next/server";
 
 import { reportsKpis } from "@/lib/mock/erp";
 import {
+  applySessionCookie,
   assertSameOrigin,
   callBackend,
   callBackendStream,
   resolveTenantSlug,
+  sessionAccessToken,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -53,10 +55,26 @@ async function reportsProxy(request: NextRequest): Promise<Response> {
       ? undefined
       : await request.json().catch(() => undefined);
 
+  // Resolve the access token. Bearer headers (the client's in-memory access
+  // token) win; raw same-origin fetches carry only the session cookie, so
+  // mint a fresh access token from it server-side and write the rotated
+  // refresh cookie back on the response.
   const authorization = request.headers.get("authorization");
-  const token = authorization?.toLowerCase().startsWith("bearer ")
-    ? authorization.slice("Bearer ".length)
-    : null;
+  let token: string | null = null;
+  let rotatedRefreshToken: string | null = null;
+  if (authorization?.toLowerCase().startsWith("bearer ")) {
+    token = authorization.slice("Bearer ".length);
+  } else {
+    const session = await sessionAccessToken(request);
+    if (!session) {
+      return NextResponse.json(
+        { detail: "Missing Authorization header" },
+        { status: 401 },
+      );
+    }
+    token = session.token;
+    rotatedRefreshToken = session.refreshToken;
+  }
   const tenantSlug = resolveTenantSlug(request.headers.get("host"));
 
   // Relay CSV exports without buffering the body: only the download-relevant
@@ -85,7 +103,12 @@ async function reportsProxy(request: NextRequest): Promise<Response> {
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
     }
-    return new Response(upstream.body, { status: upstream.status, headers });
+    const response = new NextResponse(upstream.body, {
+      status: upstream.status,
+      headers,
+    });
+    if (rotatedRefreshToken) applySessionCookie(response, rotatedRefreshToken);
+    return response;
   }
 
   const result = await callBackend(path, {
@@ -97,22 +120,28 @@ async function reportsProxy(request: NextRequest): Promise<Response> {
   });
 
   if (result.status === 0) {
+    let response: NextResponse;
     if (isBareListRequest(path, request.method)) {
-      return NextResponse.json(
+      response = NextResponse.json(
         {
           data: { kpis: reportsKpis },
           message: "Core service is unavailable. Showing sample report metrics.",
         },
         { status: 200, headers: { "X-Mock-Fallback": "true" } },
       );
+    } else {
+      response = NextResponse.json(
+        { detail: "Core service is unavailable. Please try again." },
+        { status: 502 },
+      );
     }
-    return NextResponse.json(
-      { detail: "Core service is unavailable. Please try again." },
-      { status: 502 },
-    );
+    if (rotatedRefreshToken) applySessionCookie(response, rotatedRefreshToken);
+    return response;
   }
 
-  return NextResponse.json(result.payload, { status: result.status });
+  const response = NextResponse.json(result.payload, { status: result.status });
+  if (rotatedRefreshToken) applySessionCookie(response, rotatedRefreshToken);
+  return response;
 }
 
 export const GET = reportsProxy;

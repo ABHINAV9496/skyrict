@@ -210,9 +210,10 @@ export async function registerTenant(
 
     // Creation triggers a provisioning screen (a ~10.4s sequence of timers) that
     // then hands off to {slug}.signin.{apex}:{port}/signin?email=... on its own.
-    await page.waitForURL((url) => url.hostname.startsWith(`${slug}.signin.`), {
-        timeout: 45_000,
-    });
+    await page.waitForURL(
+        (url) => url.hostname.startsWith(`${slug}.signin.`),
+        { timeout: 45_000 },
+    );
 
     return {
         slug,

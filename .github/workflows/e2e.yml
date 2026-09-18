@@ -73,6 +73,13 @@ jobs:
       - name: Start compose stack
         run: docker compose -f infra/docker/docker-compose.e2e.yml up -d --build
         timeout-minutes: 15
+        env:
+          # Semantic inventory search (SKY-70): forwards the repo-level
+          # embedding secrets into the ai-agent container via compose
+          # interpolation. When the secrets are unset (empty), the ai-agent
+          # boots with embeddings disabled and search degrades to exact-only.
+          AI_EMBEDDING_PROVIDER: ${{ secrets.AI_EMBEDDING_PROVIDER }}
+          AI_EMBEDDING_API_KEY: ${{ secrets.AI_EMBEDDING_API_KEY }}
 
       # ---- Seeds -----------------------------------------------------------
       - name: Wait for identity and seed database
@@ -110,14 +117,18 @@ jobs:
             sleep 2
           done
 
-          # Core seed populates the report catalog for the default tenant.
+          # Core seed populates the report catalog, leave-type catalogue,
+          # roles, approvals, and finance chart for the default tenant.
+          # Invoked through the typer CLI (core.cli): `python -m core.seed`
+          # has no __main__ and is a silent no-op, which left erp_leave_types
+          # empty until the payroll hire's accrual FK-violated (500).
           # The tenant UUID is the identity service's DEFAULT_TENANT_ID.
           # --workdir: same CWD rationale as the identity seed above.
           docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
             --workdir /app/services/core core \
-            python -m core.seed \
+            python -m core.cli seed \
             --tenant-id 00000000-0000-0000-0000-000000000001
-          echo "Seeded core report catalog"
+          echo "Seeded core report catalog + HR/Payroll defaults"
         timeout-minutes: 10
 
       # ---- Build + start Next.js -------------------------------------------
@@ -131,10 +142,44 @@ jobs:
         # `-- -p 3100` arg through pnpm: pnpm appends the literal `--` to the
         # script argv, `next start` then treats `-p` as a positional project
         # directory and exits with "Invalid project directory provided".
+        #
+        # The probe hits /api/v1/health, a static Next route that answers 200
+        # without touching a backend or requiring a session cookie. If it ever
+        # fails again, fail fast with the server log + last response body so
+        # the cause (404/500, rebind, process exit) is obvious instead of a
+        # silent 90s timeout.
         run: |
-          pnpm --filter @skyrict/web start &
-          bash scripts/e2e/wait-for-health.sh http://localhost:3100/api/v1/health 90
-          echo "Next.js listening on :3100"
+          set -o pipefail
+
+          pnpm --filter @skyrict/web start > /tmp/next.log 2>&1 &
+          NEXT_PID=$!
+
+          for i in $(seq 1 90); do
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "Next.js exited unexpectedly" >&2
+              cat /tmp/next.log >&2
+              exit 1
+            fi
+
+            status=$(curl -sS -o /tmp/health-response \
+              -w "%{http_code}" \
+              http://127.0.0.1:3100/api/v1/health || true)
+
+            if [ "$status" = "200" ]; then
+              echo "HEALTHY http://127.0.0.1:3100/api/v1/health"
+              exit 0
+            fi
+
+            echo "Waiting for Next.js health endpoint ($i/90), HTTP status: $status"
+            sleep 1
+          done
+
+          echo "TIMED OUT waiting for http://127.0.0.1:3100/api/v1/health after 90s" >&2
+          echo "--- /tmp/next.log ---" >&2
+          cat /tmp/next.log >&2 || true
+          echo "--- /tmp/health-response ---" >&2
+          cat /tmp/health-response 2>/dev/null || true
+          exit 1
         env:
           SESSION_COOKIE_SECURE: "false"
           PORT: "3100"
@@ -153,6 +198,12 @@ jobs:
           E2E_TENANT_SLUG: "default"
           E2E_ADMIN_EMAIL: "admin@skyrict.io"
           E2E_ADMIN_PASSWORD: "Admin123!"
+          # True (1) only when BOTH embedding secrets are configured, so the
+          # inventory spec asserts real hybrid results when the provider+key
+          # are set together and the graceful exact-only degradation otherwise.
+          # (A key without a provider stays disabled in ai-agent boot, so
+          # gating on the pair keeps the assertion honest.)
+          E2E_SEMANTIC_SEARCH: "${{ secrets.AI_EMBEDDING_PROVIDER != '' && secrets.AI_EMBEDDING_API_KEY != '' }}"
 
       # ---- Artifacts -------------------------------------------------------
       - name: Upload Playwright HTML report

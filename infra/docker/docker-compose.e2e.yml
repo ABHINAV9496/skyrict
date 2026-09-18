@@ -80,9 +80,13 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Config uses env_prefix="IDENTITY_" (pydantic-settings): bare
+      # ENVIRONMENT / LOG_* vars are silently ignored, which keeps identity in
+      # DEV (no plaintext OTP / CAPTCHA answers) and breaks the signup
+      # wizard. Prefixed forms are the only ones that take effect.
       IDENTITY_ENVIRONMENT: test
-      LOG_LEVEL: INFO
-      LOG_JSON: "true"
+      IDENTITY_LOG_LEVEL: INFO
+      IDENTITY_LOG_JSON: "true"
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
       IDENTITY_REDIS_URL: redis://skyrict-e2e-redis:6379/0
       IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
@@ -199,7 +203,7 @@ services:
     command:
       - sh
       - -c
-      - "uv run --directory services/core alembic upgrade head && uv run --directory services/core python -m core.seed --tenant-id 00000000-0000-0000-0000-000000000001 && uv run --directory services/core uvicorn core.main:app --host 0.0.0.0 --port 8001 --workers 1 --no-proxy-headers"
+      - "uv run --directory services/core alembic upgrade head && uv run --directory services/core python -m core.cli seed --tenant-id 00000000-0000-0000-0000-000000000001 && uv run --directory services/core uvicorn core.main:app --host 0.0.0.0 --port 8001 --workers 1 --no-proxy-headers"
     depends_on:
       # Core FKs reference the tenants table created by identity's migration,
       # so core must wait for identity to finish migrating + seeding.
@@ -244,6 +248,14 @@ services:
       AI_JWKS_AUDIENCE: default.localhost:3000
       INVENTORY_SERVICE_URL: http://skyrict-e2e-core:8001
       REPORT_SERVICE_URL: http://skyrict-e2e-core:8001
+      # Semantic inventory search (SKY-70): the E2E workflow passes
+      # AI_EMBEDDING_PROVIDER + AI_EMBEDDING_API_KEY through when the
+      # repo-level secrets are configured (openai). Otherwise the vars stay
+      # empty and embedding.py treats a blank provider as disabled - the
+      # search endpoint degrades to exact-only, which the inventory spec
+      # asserts via its E2E_SEMANTIC_SEARCH gate.
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
       AI_HOST: 0.0.0.0
       AI_PORT: "8000"
       PYTHONPATH: /app/services/ai-agent/src:/app/libs/skyrict-common/src

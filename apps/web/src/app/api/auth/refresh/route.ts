@@ -5,8 +5,8 @@ import {
     SESSION_COOKIE,
     applySessionCookie,
     backendError,
-    callBackend,
     resolveTenantSlug,
+    rotateRefreshToken,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -22,11 +22,9 @@ export async function POST(request: NextRequest) {
     }
 
     const slug = resolveTenantSlug(request.headers.get("host"));
-    const result = await callBackend("/auth/refresh", {
-        body: { refresh_token: refreshToken },
-        tenantSlug: slug,
-    });
-    if (!result.ok) {
+    const rotated = await rotateRefreshToken(refreshToken, slug);
+    const result = rotated.result;
+    if (!rotated.access) {
         if (result.status === 401 || result.status === 0) {
             const clear = NextResponse.json(
                 { status: "unauthenticated" },
@@ -38,20 +36,12 @@ export async function POST(request: NextRequest) {
         return backendError(result);
     }
 
-    const data = result.data;
-    if (!data?.access_token) {
-        return NextResponse.json(
-            { status: "unauthenticated" },
-            { status: 401 },
-        );
-    }
-
     const response = NextResponse.json({
         status: "authenticated",
-        accessToken: data.access_token,
-        expiresIn: data.expires_in ?? 0,
+        accessToken: rotated.access.token,
+        expiresIn: rotated.access.expiresIn,
     });
-    if (data.refresh_token)
-        applySessionCookie(response, String(data.refresh_token));
+    if (rotated.access.refreshToken)
+        applySessionCookie(response, rotated.access.refreshToken);
     return response;
 }

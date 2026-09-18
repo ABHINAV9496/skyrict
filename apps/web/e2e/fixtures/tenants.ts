@@ -16,6 +16,7 @@
 import { expect, test as base, type BrowserContext, type Page } from "@playwright/test";
 
 import {
+  assertSessionReachesBff,
   enrollMfaAndFinish,
   installMfaSecretCapture,
   refreshSession,
@@ -67,6 +68,10 @@ export const test = base.extend<{}, { tenant: TenantSession }>({
       // 3. Workspace landed; let the shell finish its session hydration
       //    before the test's first navigation.
       await waitForWorkspaceSettled(page);
+
+      // Fail fast here instead of inside the suite: prove the fresh tenant's
+      // session also authenticates cookie-only BFF calls.
+      await assertSessionReachesBff(page);
 
       const session: TenantSession = {
         slug,

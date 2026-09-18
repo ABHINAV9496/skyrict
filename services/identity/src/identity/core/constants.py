@@ -71,13 +71,16 @@ LOGIN_FAILED_MESSAGE = "Invalid email or password."
 # (/auth/signup/*) and /invitations/accept|verify are self-service (no tenant
 # exists yet), so they bypass tenant resolution. The Stripe webhook bypasses it
 # too: Stripe authenticates via its own signature over the raw body, and no
-# tenant context exists for a pre-checkout event.
+# tenant context exists for a pre-checkout event. The public signup plan
+# catalog serves the pre-login wizard Plan step; the signup checkout-session
+# endpoint is guarded by the wizard verification token instead of a session.
 # ---------------------------------------------------------------------------
 SKIP_AUTH_PATHS = frozenset(
     {
         f"{API_V1_PREFIX}/health",
         f"{API_V1_PREFIX}/ready",
         f"{API_V1_PREFIX}/billing/webhooks",
+        f"{API_V1_PREFIX}/billing/signup/plans",
         f"{API_V1_PREFIX}/auth/signup/start",
         f"{API_V1_PREFIX}/auth/signup/send-code",
         f"{API_V1_PREFIX}/auth/signup/verify-code",
@@ -86,6 +89,7 @@ SKIP_AUTH_PATHS = frozenset(
         f"{API_V1_PREFIX}/auth/signup/check-email",
         f"{API_V1_PREFIX}/auth/signup/check-slug",
         f"{API_V1_PREFIX}/auth/signup/organization",
+        f"{API_V1_PREFIX}/auth/signup/checkout-session",
         f"{API_V1_PREFIX}/invitations/accept",
         f"{API_V1_PREFIX}/invitations/verify",
         "/docs",

@@ -6,7 +6,7 @@ import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
     title: "Verify your email",
-    description: "Step 2 of 5 - confirm your email address.",
+    description: "Step 2 of 7 - confirm your email address.",
 };
 
 export default async function VerifyPage({
@@ -41,7 +41,7 @@ export default async function VerifyPage({
         <div className="space-y-6">
             <div className="space-y-2">
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-                    Step 2 of 5 · Verification
+                    Step 2 of 7 · Verification
                 </p>
                 <h1 className="font-display text-2xl font-semibold text-foreground">
                     Check your inbox

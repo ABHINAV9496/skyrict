@@ -1,0 +1,89 @@
+# Identity service import-linter configuration - enforced architecture.
+#
+# Run from the repo root:
+#   uv run lint-imports --config services/identity/import-linter.toml
+#
+# Mirrors services/core and services/ai-agent but scoped to the identity
+# package so each service's contracts evolve independently.
+
+[tool.importlinter]
+root_package = "identity"
+include_external_packages = false
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Feature packages are independent"
+type = "forbidden"
+source_modules = [
+    "identity.features.audit",
+    "identity.features.auth",
+    "identity.features.avatars",
+    "identity.features.billing",
+    "identity.features.handoffs",
+    "identity.features.invitations",
+    "identity.features.members",
+    "identity.features.memberships",
+    "identity.features.mfa",
+    "identity.features.organizations",
+    "identity.features.passkeys",
+    "identity.features.roles",
+    "identity.features.sessions",
+    "identity.features.sso",
+    "identity.features.users",
+]
+forbidden_modules = []
+# Cross-feature imports for shared types and orchestrated flows are allowed
+# via ignore_imports below. Each entry documents the architectural reason.
+ignore_imports = [
+    # Billing currency types are shared across features for checkout flows.
+    # Auth needs CURRENCY_LITERAL for signup-with-checkout requests; billing
+    # is the canonical source of truth for supported currencies.
+    "identity.features.auth.schemas -> identity.features.billing.plans",
+
+    # Auth router orchestrates signup checkout by calling the billing service.
+    # This is the composition root for the signup-with-checkout flow.
+    "identity.features.auth.router -> identity.features.billing.schemas",
+    "identity.features.auth.router -> identity.features.billing.service",
+]
+
+[[tool.importlinter.contracts]]
+name = "Foundations never depend on features or api"
+type = "forbidden"
+source_modules = [
+    "identity.core",
+    "identity.db",
+    "identity.models",
+    "identity.domain",
+    "identity.events",
+]
+forbidden_modules = ["identity.features", "identity.api"]
+
+[[tool.importlinter.contracts]]
+name = "Only repositories touch the database layer"
+type = "forbidden"
+source_modules = ["identity.features"]
+forbidden_modules = ["identity.models", "identity.db"]
+# Feature repositories are the sanctioned ORM gateway; they alone may reach
+# the shared db layer and models. Some services also need db.session for
+# session management (e.g., async_session_factory for transactional boundaries).
+ignore_imports = [
+    "identity.features.**.repository -> identity.db.**",
+    "identity.features.**.repository -> identity.models.**",
+    "identity.features.invitations.service -> identity.db.session",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure"
+type = "forbidden"
+source_modules = ["identity.domain"]
+forbidden_modules = ["identity.models", "identity.db", "identity.features", "identity.api"]
+
+[[tool.importlinter.contracts]]
+name = "API never touches ORM models"
+type = "forbidden"
+source_modules = ["identity.api"]
+forbidden_modules = ["identity.models"]
+# Direct-import only: api.deps legitimately wires repositories (which touch
+# models) as the composition root, so indirect chains are not flagged.
+allow_indirect_imports = true

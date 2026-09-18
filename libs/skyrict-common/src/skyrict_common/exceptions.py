@@ -171,6 +171,14 @@ class RateLimitUnavailableError(SkyrictError):
     code = "RATE_LIMIT_UNAVAILABLE"
 
 
+# ---------- Infrastructure / Availability ----------
+
+
+class ServiceUnavailableError(SkyrictError):
+    message = "Service temporarily unavailable"
+    code = "SERVICE_UNAVAILABLE"
+
+
 class InvitationNotFoundError(NotFoundError):
     message = "Invitation not found"
     code = "INVITATION_NOT_FOUND"

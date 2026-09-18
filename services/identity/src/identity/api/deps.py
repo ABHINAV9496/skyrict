@@ -361,19 +361,20 @@ def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo))
     return TenantService(tenant_repo)
 
 
-def get_billing_service(
-    tenant_repo: TenantRepository = Depends(get_tenant_repo),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> BillingService:
-    from identity.features.billing.service import BillingService
-
-    return BillingService(tenant_repo, audit_service=audit_service)
-
-
 def get_stripe_client() -> StripeClient:
     from identity.core.stripe import StripeClient
 
     return StripeClient()
+
+
+def get_billing_service(
+    tenant_repo: TenantRepository = Depends(get_tenant_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+    stripe_client: StripeClient = Depends(get_stripe_client),
+) -> BillingService:
+    from identity.features.billing.service import BillingService
+
+    return BillingService(tenant_repo, audit_service=audit_service, stripe_client=stripe_client)
 
 
 def require_billing_owner() -> Callable[[], Awaitable[dict[str, Any]]]:

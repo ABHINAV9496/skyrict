@@ -21,12 +21,17 @@ const callBackend = vi.fn();
 const callBackendRaw = vi.fn();
 const assertSameOrigin = vi.fn();
 const resolveTenantSlug = vi.fn();
+const sessionAccessToken = vi.fn();
+const applySessionCookie = vi.fn();
 
 vi.mock("@/lib/server/auth", () => ({
   callBackend: (path: string, options?: unknown) => callBackend(path, options),
   callBackendRaw: (path: string, options?: unknown) => callBackendRaw(path, options),
   assertSameOrigin: (request: unknown) => assertSameOrigin(request),
   resolveTenantSlug: (host: string | null | undefined) => resolveTenantSlug(host),
+  sessionAccessToken: (request: unknown) => sessionAccessToken(request),
+  applySessionCookie: (response: unknown, refreshToken: string) =>
+    applySessionCookie(response, refreshToken),
 }));
 
 import { DELETE, GET, PATCH, POST, PUT } from "./route";
@@ -54,6 +59,14 @@ describe("BFF catch-all proxy segment", () => {
     vi.resetAllMocks();
     resolveTenantSlug.mockReturnValue("tenant-acme");
     assertSameOrigin.mockReturnValue(true);
+    // Requests without an Authorization header resolve the access token from
+    // the httpOnly session cookie (the BFF cookie bridge); the rotated
+    // refresh token is written back onto the response.
+    sessionAccessToken.mockResolvedValue({
+      token: "abc123",
+      refreshToken: "refresh-456",
+    });
+    applySessionCookie.mockImplementation(() => undefined);
     callBackend.mockResolvedValue({
       ok: true,
       status: 200,

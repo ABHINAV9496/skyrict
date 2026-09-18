@@ -143,23 +143,35 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
 
                     {draft ? (
                         <div className="grid gap-3">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-muted-foreground">
-                                    Confidence
-                                </span>
-                                <span
-                                    className={cn(
-                                        "rounded-full px-2 py-0.5 text-xs font-semibold",
-                                        confidencePct >= 75
-                                            ? "bg-emerald-100 text-emerald-700"
-                                            : confidencePct >= 50
-                                              ? "bg-amber-100 text-amber-700"
-                                              : "bg-red-100 text-red-700",
-                                    )}
+                            {draft.fallback ? (
+                                <p
+                                    role="alert"
+                                    className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700"
                                 >
-                                    {confidencePct}%
-                                </span>
-                            </div>
+                                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                                    AI drafting is temporarily unavailable —
+                                    showing suggested accounts. Enter the
+                                    amounts in the editor before saving.
+                                </p>
+                            ) : (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                        Confidence
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            "rounded-full px-2 py-0.5 text-xs font-semibold",
+                                            confidencePct >= 75
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : confidencePct >= 50
+                                                  ? "bg-amber-100 text-amber-700"
+                                                  : "bg-red-100 text-red-700",
+                                        )}
+                                    >
+                                        {confidencePct}%
+                                    </span>
+                                </div>
+                            )}
 
                             {draft.lines.length > 0 ? (
                                 <div className="grid gap-1.5 rounded-lg border border-border p-3">
@@ -209,22 +221,24 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
                                 </p>
                             ) : null}
 
-                            <div
-                                className={cn(
-                                    "flex items-center gap-2 text-xs font-medium",
-                                    balanced
-                                        ? "text-emerald-600"
-                                        : "text-amber-600",
-                                )}
-                            >
-                                {balanced
-                                    ? "Balanced ✓"
-                                    : `Off by $${Math.abs(debitTotal - creditTotal).toFixed(2)}`}
-                                <span className="text-muted-foreground">
-                                    Dr {debitTotal.toFixed(2)} / Cr{" "}
-                                    {creditTotal.toFixed(2)}
-                                </span>
-                            </div>
+                            {draft.fallback ? null : (
+                                <div
+                                    className={cn(
+                                        "flex items-center gap-2 text-xs font-medium",
+                                        balanced
+                                            ? "text-emerald-600"
+                                            : "text-amber-600",
+                                    )}
+                                >
+                                    {balanced
+                                        ? "Balanced ✓"
+                                        : `Off by $${Math.abs(debitTotal - creditTotal).toFixed(2)}`}
+                                    <span className="text-muted-foreground">
+                                        Dr {debitTotal.toFixed(2)} / Cr{" "}
+                                        {creditTotal.toFixed(2)}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     ) : null}
                 </div>

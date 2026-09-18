@@ -6,7 +6,8 @@
  *
  *   Group A — Journal entries
  *     A1  UI create balanced draft → detail page
- *     A3  AI-generated draft (skipped when LLM endpoint unavailable)
+ *     A3  AI-generated draft (asserts "suggested accounts" notice when the
+ *         LLM endpoint is unavailable, runs the AI path when it is)
  *     A4  Post the draft
  *     A5  Unbalanced post fails (API)
  *     A6  Reverse a posted entry (API)
@@ -107,9 +108,9 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
     });
 
     // ====================================================================
-    // A3 — AI-generated draft (skip if LLM unavailable)
+    // A3 — AI-generated draft (fallback notice when LLM endpoint unavailable)
     // ====================================================================
-    await test.step("AI draft (skip if LLM unavailable)", async () => {
+    await test.step("AI draft (fallback notice when LLM unavailable)", async () => {
         await page.goto("/dashboard/erp/finance/journal-entries");
         await page.getByRole("button", { name: "AI Draft" }).click();
         const aiDlg = page.getByRole("dialog", { name: "AI Draft Entry" });
@@ -118,19 +119,25 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
         await aiDlg.getByLabel("Description").fill("E2E test expense for 500");
         await aiDlg.getByRole("button", { name: "Generate" }).click();
 
-        const applyVisible = await aiDlg
-            .getByRole("button", { name: "Apply Draft" })
-            .waitFor({ state: "visible", timeout: 15_000 })
-            .then(() => true)
-            .catch(() => false);
+        // Wait for the request to resolve. The Apply button is rendered whether
+        // the real LLM answered or core substituted its deterministic draft.
+        const applyButton = aiDlg.getByRole("button", { name: "Apply Draft" });
+        await expect(applyButton).toBeVisible({ timeout: 15_000 });
 
-        if (!applyVisible) {
-            // LLM endpoint unavailable — skip this step, continue the rest.
+        // No LLM endpoint: core substitutes a deterministic account-code draft.
+        // The dialog must surface it honestly as suggested accounts (not a
+        // finished AI entry) — assert that notice, then bail.
+        if (
+            await aiDlg
+                .getByText(/suggested accounts/i)
+                .isVisible()
+                .catch(() => false)
+        ) {
             await aiDlg.getByRole("button", { name: "Cancel" }).click();
             return;
         }
 
-        await aiDlg.getByRole("button", { name: "Apply Draft" }).click();
+        await applyButton.click();
 
         // Create dialog opens with AI-generated lines prefilled.
         const createDlg = page.getByRole("dialog", {
@@ -159,9 +166,8 @@ test("finance journeys: JE lifecycle, invoice flow, and statement widgets", asyn
             return;
         }
 
-        // LLM endpoint unavailable: core substitutes a deterministic $0.00/$0.00
-        // skeleton (both lines amount "0"), which balances but cannot be saved as
-        // edited. That is the same "no LLM" situation as the guards above; skip.
+        // A $0.00/$0.00 draft balances but the backend rejects zero-value
+        // entries — also a model-quality outcome; skip the step.
         const zeroDraft = await createDlg
             .getByText(/Debit \$0\.00/)
             .isVisible()

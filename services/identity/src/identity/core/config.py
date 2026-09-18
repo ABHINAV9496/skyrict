@@ -370,6 +370,18 @@ class Settings(BaseSettings):
             "'trialing' and trial_ends_at = signup time + this many days."
         ),
     )
+    BILLING_GRACE_PERIOD_DAYS: int = Field(
+        default=7,
+        gt=0,
+        description=(
+            "Length of the payment-grace period granted after a Stripe "
+            "subscription enters 'past_due'. Counted from the first receipt "
+            "of the past_due event (grace_started_at). When it passes, the "
+            "tenant is soft-downgraded to free on the next read or tick. "
+            "7 days is the default; tune against real Stripe dunning "
+            "behaviour post-launch."
+        ),
+    )
 
     # --- Avatar uploads ---
     AVATAR_STORAGE_BACKEND: str = Field(

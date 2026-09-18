@@ -38,6 +38,7 @@ from identity.features.users.repository import UserRepository
 from skyrict_common.exceptions import AuthenticationError, MFARequiredError
 
 if TYPE_CHECKING:
+    from identity.core.stripe import StripeClient
     from identity.features.audit.service import AuditService
     from identity.features.auth.captcha.captcha_store import CaptchaStore
     from identity.features.auth.service import AuthenticationService, TokenService
@@ -360,10 +361,19 @@ def get_tenant_service(tenant_repo: TenantRepository = Depends(get_tenant_repo))
     return TenantService(tenant_repo)
 
 
-def get_billing_service(tenant_repo: TenantRepository = Depends(get_tenant_repo)) -> BillingService:
+def get_billing_service(
+    tenant_repo: TenantRepository = Depends(get_tenant_repo),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> BillingService:
     from identity.features.billing.service import BillingService
 
-    return BillingService(tenant_repo)
+    return BillingService(tenant_repo, audit_service=audit_service)
+
+
+def get_stripe_client() -> StripeClient:
+    from identity.core.stripe import StripeClient
+
+    return StripeClient()
 
 
 def require_billing_owner() -> Callable[[], Awaitable[dict[str, Any]]]:

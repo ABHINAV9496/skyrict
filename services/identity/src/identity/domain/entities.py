@@ -114,6 +114,7 @@ class Tenant:
     stripe_customer_id: str | None = None
     stripe_subscription_id: str | None = None
     billing_email: str | None = None
+    grace_started_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: UUID | None = None

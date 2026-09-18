@@ -208,6 +208,7 @@ class FakeStripeClient:
         cancel_url: str,
         client_reference_id: str,
         metadata: dict[str, str] | None = None,
+        automatic_tax: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         session_id = f"cs_{len(self.created_checkout_sessions) + 1}"
         self.created_checkout_sessions.append(
@@ -219,6 +220,7 @@ class FakeStripeClient:
                 "cancel_url": cancel_url,
                 "client_reference_id": client_reference_id,
                 "metadata": metadata or {},
+                "automatic_tax": automatic_tax or {},
             }
         )
         return {"id": session_id, "url": f"https://checkout.stripe.com/c/pay/{session_id}"}
@@ -233,8 +235,9 @@ class FakeStripeClient:
 
 @pytest.fixture(autouse=True)
 def _stripe_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point session creation at a fake app origin and a minimal price map."""
+    """Point session creation at fake app origins and a minimal price map."""
     monkeypatch.setattr(settings, "BILLING_APP_URL", "https://{slug}.acme.test")
+    monkeypatch.setattr(settings, "SIGNUP_APP_URL", "https://signup.acme.test")
     monkeypatch.setattr(
         settings,
         "BILLING_STRIPE_PRICE_IDS",
@@ -853,7 +856,9 @@ class TestCheckoutSession:
             "tenant_id": tid,
             "plan_id": "professional",
             "interval": "month",
+            "currency": "usd",
         }
+        assert session["automatic_tax"] == {"enabled": True}
         assert session["success_url"].endswith("/dashboard/settings/billing?checkout=success")
         assert session["cancel_url"].endswith("/dashboard/settings/billing?checkout=cancelled")
         assert [e["action"] for e in audit.entries] == ["billing.checkout.created"]
@@ -922,6 +927,191 @@ class TestCheckoutSession:
 
         with pytest.raises(ServiceUnavailableError, match="BILLING_APP_URL"):
             await svc.create_checkout_session(tid, "professional", "month")
+
+
+class TestSignupCheckoutSession:
+    """create_signup_checkout_session: mid-wizard redirects to the signup surface."""
+
+    async def test_creates_customer_and_session_for_paid_plan(self) -> None:
+        repo = FakeTenantRepo([_tenant(billing_email="billing@acme.io")])
+        audit = FakeAuditService()
+        stripe = FakeStripeClient()
+        svc = _service(repo, audit=audit, stripe=stripe)
+        tid = str(next(iter(repo.tenants)))
+
+        result = await svc.create_signup_checkout_session(tid, "professional", "month")
+
+        tenant = repo.tenants[uuid.UUID(tid)]
+        assert result["session_id"].startswith("cs_")
+        assert result["url"].startswith("https://checkout.stripe.com/")
+        assert tenant.stripe_customer_id == "cus_1"
+        assert stripe.created_customers[0]["email"] == "billing@acme.io"
+        session = stripe.created_checkout_sessions[0]
+        assert session["price_id"] == "price_pro_month"
+        assert session["client_reference_id"] == tid
+        assert session["metadata"] == {
+            "tenant_id": tid,
+            "plan_id": "professional",
+            "interval": "month",
+            "currency": "usd",
+        }
+        assert session["automatic_tax"] == {"enabled": True}
+        assert session["success_url"] == (
+            "https://signup.acme.test/register/review"
+            "?plan=professional&interval=month&currency=usd&checkout=success"
+        )
+        assert session["cancel_url"] == (
+            "https://signup.acme.test/register/billing"
+            "?plan=professional&interval=month&currency=usd&checkout=cancelled"
+        )
+        assert [e["action"] for e in audit.entries] == ["billing.checkout.created"]
+        assert audit.entries[0]["details"]["plan_id"] == "professional"
+
+    async def test_reuses_existing_stripe_customer(self) -> None:
+        repo = FakeTenantRepo([_tenant(stripe_customer_id="cus_existing")])
+        stripe = FakeStripeClient()
+        svc = _service(repo, stripe=stripe)
+        tid = str(next(iter(repo.tenants)))
+
+        result = await svc.create_signup_checkout_session(tid, "professional", "month")
+
+        assert stripe.created_customers == []
+        assert result["session_id"].startswith("cs_")
+        assert stripe.created_checkout_sessions[0]["customer_id"] == "cus_existing"
+
+    async def test_annual_interval_flows_into_redirect_and_price(self) -> None:
+        repo = FakeTenantRepo([_tenant()])
+        stripe = FakeStripeClient()
+        svc = _service(repo, stripe=stripe)
+        tid = str(next(iter(repo.tenants)))
+
+        await svc.create_signup_checkout_session(tid, "business", "year")
+
+        session = stripe.created_checkout_sessions[0]
+        assert session["price_id"] == "price_biz_year"
+        assert session["success_url"] == (
+            "https://signup.acme.test/register/review"
+            "?plan=business&interval=year&currency=usd&checkout=success"
+        )
+
+    async def test_currency_specific_price_is_selected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ':currency' price-id entry wins over the base (USD) entry."""
+        monkeypatch.setattr(
+            settings,
+            "BILLING_STRIPE_PRICE_IDS",
+            {
+                "professional:month": "price_pro_month",
+                "professional:month:inr": "price_pro_month_inr",
+            },
+        )
+        repo = FakeTenantRepo([_tenant()])
+        stripe = FakeStripeClient()
+        svc = _service(repo, stripe=stripe)
+        tid = str(next(iter(repo.tenants)))
+
+        await svc.create_signup_checkout_session(tid, "professional", "month", "inr")
+
+        session = stripe.created_checkout_sessions[0]
+        assert session["price_id"] == "price_pro_month_inr"
+        assert session["metadata"]["currency"] == "inr"
+        assert session["success_url"] == (
+            "https://signup.acme.test/register/review"
+            "?plan=professional&interval=month&currency=inr&checkout=success"
+        )
+
+    async def test_unpriced_currency_falls_back_to_base_price(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A currency with no ':currency' entry bills against the USD Price."""
+        monkeypatch.setattr(
+            settings,
+            "BILLING_STRIPE_PRICE_IDS",
+            {
+                "professional:month:inr": "price_pro_month_inr",
+                "business:month": "price_biz_month",
+            },
+        )
+        repo = FakeTenantRepo([_tenant()])
+        stripe = FakeStripeClient()
+        svc = _service(repo, stripe=stripe)
+        tid = str(next(iter(repo.tenants)))
+
+        await svc.create_checkout_session(tid, "business", "month", "gbp")
+
+        assert stripe.created_checkout_sessions[0]["price_id"] == "price_biz_month"
+
+    async def test_unpriced_currency_with_no_base_price_raises_validation_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No fallback exists when the base (USD) Price is also unconfigured."""
+        monkeypatch.setattr(
+            settings,
+            "BILLING_STRIPE_PRICE_IDS",
+            {"professional:month:inr": "price_pro_month_inr"},
+        )
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ValidationError, match="No Stripe price"):
+            await svc.create_signup_checkout_session(tid, "professional", "month", "gbp")
+
+    async def test_unsupported_currency_raises_validation_error(self) -> None:
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ValidationError, match="Unsupported currency"):
+            await svc.create_signup_checkout_session(tid, "professional", "month", "jpy")
+
+    async def test_pricing_pending_currency_is_rejected(self) -> None:
+        """AED/SAR are allowlisted but cannot check out (no USD catch-all)."""
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ValidationError, match="not available yet"):
+            await svc.create_signup_checkout_session(tid, "professional", "month", "aed")
+        with pytest.raises(ValidationError, match="not available yet"):
+            await svc.create_signup_checkout_session(tid, "business", "year", "sar")
+
+    async def test_unknown_plan_raises_validation_error(self) -> None:
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ValidationError, match="Unknown plan"):
+            await svc.create_signup_checkout_session(tid, "enterprise-plus", "month")
+
+    async def test_plan_without_configured_price_raises_validation_error(self) -> None:
+        """Starter is free and Enterprise is custom-priced - no Checkout price map entry."""
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ValidationError, match="No Stripe price"):
+            await svc.create_signup_checkout_session(tid, "enterprise", "month")
+
+    async def test_disabled_stripe_raises_service_unavailable(self) -> None:
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient(enabled=False))
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ServiceUnavailableError, match="Stripe is not configured"):
+            await svc.create_signup_checkout_session(tid, "professional", "month")
+
+    async def test_missing_signup_app_url_raises_service_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "SIGNUP_APP_URL", "")
+        repo = FakeTenantRepo([_tenant()])
+        svc = _service(repo, stripe=FakeStripeClient())
+        tid = str(next(iter(repo.tenants)))
+
+        with pytest.raises(ServiceUnavailableError, match="SIGNUP_APP_URL"):
+            await svc.create_signup_checkout_session(tid, "professional", "month")
 
 
 class TestPortalSession:

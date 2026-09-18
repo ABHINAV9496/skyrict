@@ -402,6 +402,197 @@ class TestCheckoutSessionEndpoint:
             await _cleanup_tenant(tenant["slug"])
 
 
+# ---------------------------------------------------------------------------
+# GET /billing/signup/plans (public pre-login catalog)
+# ---------------------------------------------------------------------------
+
+
+class TestSignupCatalogEndpoint:
+    """The pre-login Plan step reads the public catalog - no tenant, no token."""
+
+    async def test_public_catalog_matches_authed_catalog(self, client: AsyncClient) -> None:
+        tenant = await _register_tenant(client)
+        try:
+            public = await client.get("/api/v1/billing/signup/plans")
+            assert public.status_code == 200, public.text
+            public_ids = [p["id"] for p in public.json()["data"]]
+            assert public_ids == ["starter", "professional", "business", "enterprise"]
+
+            authed = await client.get("/api/v1/billing/plans", headers=_owner_headers(tenant))
+            assert authed.status_code == 200
+            authed_ids = [p["id"] for p in authed.json()["data"]]
+            assert public_ids == authed_ids
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/signup/checkout-session (token-gated pre-login checkout)
+# ---------------------------------------------------------------------------
+
+
+class TestSignupCheckoutSessionEndpoint:
+    """Stripe Checkout for the wizard Plan/Billing steps - the verification
+    token is the credential; paid plans stay ``trialing`` until the real
+    subscription webhook fires."""
+
+    async def test_invalid_verification_token_returns_401(self, client: AsyncClient) -> None:
+        tenant = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant["email"],
+                    "verificationToken": "not-a-real-token",
+                    "tenantId": tenant["tenant_id"],
+                    "planId": "professional",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 401, resp.text
+            assert resp.json()["type"].endswith("/token-invalid")
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
+    async def test_email_not_member_of_tenant_returns_401(self, client: AsyncClient) -> None:
+        """A token bound to tenant B's owner cannot mint a Checkout session
+        for tenant A - the caller must belong to the target tenant."""
+        tenant_a = await provision_tenant(client)
+        tenant_b = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant_b["email"],
+                    "verificationToken": tenant_b["verification_token"],
+                    "tenantId": tenant_a["tenant_id"],
+                    "planId": "professional",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 401, resp.text
+            assert resp.json()["type"].endswith("/token-invalid")
+        finally:
+            await _cleanup_tenant(tenant_a["slug"])
+            await _cleanup_tenant(tenant_b["slug"])
+
+    async def test_unknown_plan_returns_422(self, client: AsyncClient) -> None:
+        tenant = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant["email"],
+                    "verificationToken": tenant["verification_token"],
+                    "tenantId": tenant["tenant_id"],
+                    "planId": "nonexistent",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 422, resp.text
+            assert resp.json()["type"].endswith("/validation-error")
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
+    async def test_starter_has_no_stripe_price_returns_422(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Starter is free - Checkout for it is a validation error, never a URL."""
+        monkeypatch.setattr(settings, "SIGNUP_APP_URL", "https://signup.acme.test")
+        tenant = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant["email"],
+                    "verificationToken": tenant["verification_token"],
+                    "tenantId": tenant["tenant_id"],
+                    "planId": "starter",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 422, resp.text
+            assert resp.json()["type"].endswith("/validation-error")
+        finally:
+            await _cleanup_tenant(tenant["slug"])
+
+    async def test_unconfigured_stripe_returns_503(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from identity.api.deps import get_stripe_client
+        from identity.main import app
+
+        monkeypatch.setattr(settings, "SIGNUP_APP_URL", "https://signup.acme.test")
+        monkeypatch.setattr(settings, "BILLING_STRIPE_PRICE_IDS", {"professional:month": "price_1"})
+        app.dependency_overrides[get_stripe_client] = lambda: None  # type: ignore[func-returns-value]
+        tenant = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant["email"],
+                    "verificationToken": tenant["verification_token"],
+                    "tenantId": tenant["tenant_id"],
+                    "planId": "professional",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 503, resp.text
+            body = resp.json()
+            assert body["type"].endswith("/service-unavailable")
+            assert body["status"] == 503
+        finally:
+            app.dependency_overrides.pop(get_stripe_client, None)
+            await _cleanup_tenant(tenant["slug"])
+
+    async def test_signup_checkout_returns_200(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Valid verification token + fake Stripe boundary returns Checkout
+        URLs pointed at the signup surface, and the tenant stays trialing."""
+        from identity.api.deps import get_stripe_client
+        from identity.main import app
+
+        class _FakeStripeClient:
+            enabled = True
+
+            def create_customer(self, **_kw: Any) -> dict[str, str]:
+                return {"id": "cus_fake"}
+
+            def create_checkout_session(self, **_kw: Any) -> dict[str, str]:
+                return {"id": "cs_fake", "url": "https://checkout.stripe.com/c/pay/cs_fake"}
+
+        monkeypatch.setattr(settings, "SIGNUP_APP_URL", "https://signup.acme.test")
+        monkeypatch.setattr(settings, "BILLING_STRIPE_PRICE_IDS", {"professional:month": "price_1"})
+        app.dependency_overrides[get_stripe_client] = _FakeStripeClient
+        tenant = await provision_tenant(client)
+        try:
+            resp = await client.post(
+                "/api/v1/auth/signup/checkout-session",
+                json={
+                    "email": tenant["email"],
+                    "verificationToken": tenant["verification_token"],
+                    "tenantId": tenant["tenant_id"],
+                    "planId": "professional",
+                    "interval": "month",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()["data"]
+            assert body["session_id"] == "cs_fake"
+            assert body["url"].startswith("https://checkout.stripe.com/")
+
+            # Selecting a paid plan never activates billing server-side; the
+            # tenant remains trialing until the real subscription webhook.
+            async with async_session_factory() as session:
+                row = await session.get(TenantModel, uuid.UUID(tenant["tenant_id"]))
+                assert row is not None
+                assert row.subscription_status == "trialing"
+        finally:
+            app.dependency_overrides.pop(get_stripe_client, None)
+            await _cleanup_tenant(tenant["slug"])
+
+
 class TestPortalSessionEndpoint:
     """Stripe Customer Portal session creation — owner-only, sanitized errors."""
 

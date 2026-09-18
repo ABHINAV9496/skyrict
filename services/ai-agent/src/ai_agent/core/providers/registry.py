@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ai_agent.core.exceptions import StartupError
+from ai_agent.core.providers.mock import MockBehavior, MockProvider
 from ai_agent.core.providers.openai_compatible import OpenAiCompatibleProvider
 
 if TYPE_CHECKING:
@@ -31,6 +32,9 @@ PROVIDER_PRESETS: dict[str, str] = {
 
 # Recognized-but-presetless keys (documented aliases for private gateways).
 BASE_URL_REQUIRED_KEYS = frozenset({"omniroute", "agentrouter", "generic"})
+
+# In-process keys: no endpoint, credentials, or network - test/E2E only.
+NO_NETWORK_KEYS = frozenset({"mock"})
 
 
 def resolve_base_url(provider_key: str, override: str) -> str:
@@ -59,6 +63,8 @@ def build_provider(
     local_only: bool = False,
     native: bool = False,
     timeout_seconds: float,
+    mock_behavior: MockBehavior = "ok",
+    mock_fail_after: int = 0,
 ) -> LlmProvider:
     """Instantiate one provider from its configuration quartet.
 
@@ -66,6 +72,13 @@ def build_provider(
         StartupError: On an unknown provider key or unresolvable base URL.
     """
     _validate_key(provider_key)
+    if provider_key in NO_NETWORK_KEYS:
+        return MockProvider(
+            name=provider_key,
+            model=model.strip() or "mock-e2e",
+            behavior=mock_behavior,
+            fail_after=mock_fail_after,
+        )
     return OpenAiCompatibleProvider(
         name=provider_key,
         model=model.strip(),
@@ -94,6 +107,8 @@ def build_providers_from_settings(config: Settings) -> list[LlmProvider]:
                 local_only=config.PROVIDER_LOCAL_ONLY,
                 native=config.PROVIDER_NATIVE,
                 timeout_seconds=config.PROVIDER_TIMEOUT_SECONDS,
+                mock_behavior=config.MOCK_BEHAVIOR,
+                mock_fail_after=config.MOCK_FAIL_AFTER,
             )
         )
     if config.FALLBACK_PROVIDER is not None:
@@ -105,13 +120,15 @@ def build_providers_from_settings(config: Settings) -> list[LlmProvider]:
                 api_key=config.FALLBACK_API_KEY,
                 local_only=config.FALLBACK_LOCAL_ONLY,
                 timeout_seconds=config.PROVIDER_TIMEOUT_SECONDS,
+                mock_behavior=config.MOCK_BEHAVIOR,
+                mock_fail_after=config.MOCK_FAIL_AFTER,
             )
         )
     return providers
 
 
 def _validate_key(provider_key: str) -> None:
-    known = set(PROVIDER_PRESETS) | BASE_URL_REQUIRED_KEYS
+    known = set(PROVIDER_PRESETS) | BASE_URL_REQUIRED_KEYS | NO_NETWORK_KEYS
     if provider_key not in known:
         raise StartupError(
             f"Unknown AI provider '{provider_key}' - expected one of {sorted(known)}"

@@ -28,7 +28,7 @@ import { createHmac } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
-import lighthouse from "lighthouse";
+import lighthouse, { generateReport } from "lighthouse";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "lighthouse-results");
@@ -202,11 +202,10 @@ async function login(page) {
 }
 
 async function harvestCookieHeader() {
-  const context = await browser.newContext({ locale: "en-US" });
-  const page = await context.newPage();
+  const page = await browser.newPage({ locale: "en-US" });
   try {
     await login(page);
-    const state = await context.storageState();
+    const state = await browser.storageState();
     const cookies = state.cookies
       .filter((c) => c.name === SESSION_COOKIE)
       .map((c) => `${c.name}=${c.value}`);
@@ -215,7 +214,7 @@ async function harvestCookieHeader() {
     }
     return cookies.join("; ");
   } finally {
-    await context.close();
+    await page.close();
   }
 }
 
@@ -233,7 +232,7 @@ function findFreePort() {
   });
 }
 
-async function runAudit(url, cookieHeader) {
+async function runAudit(url) {
   const flags = {
     port: chromePort,
     logLevel: "error",
@@ -254,7 +253,6 @@ async function runAudit(url, cookieHeader) {
       downloadThroughputKbps: 1638.4,
       uploadThroughputKbps: 675.84,
     },
-    extraHeaders: { Cookie: cookieHeader },
     maxWaitForFcp: 30_000,
     maxWaitForLoad: 120_000,
   };
@@ -277,9 +275,20 @@ const median = (arr) => arr.sort((a, b) => a - b)[Math.floor(arr.length / 2)];
 // ---------------------------------------------------------------------------
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
 
+// Chromium is launched as a PERSISTENT CONTEXT so the profile's default
+// (non-incognito) browser context - which is where Lighthouse creates its
+// targets when connecting over the debug port - shares the cookie jar with
+// the Playwright login flow. Passing the session to Lighthouse via
+// `extraHeaders` alone does NOT work: Lighthouse's `Network.setExtraHTTPHeaders`
+// never reaches this app (the /dashboard layout sees no session cookie and
+// redirects to sign-in), so the authenticated route is what must be measured.
+// Each harvest() signs in fresh on the shared context and rotates the cookie.
 let chromePort = await findFreePort();
-let browser = await chromium.launch({
+const PROFILE_DIR = path.join(RESULTS_DIR, ".chrome-profile");
+const browser = await chromium.launchPersistentContext(PROFILE_DIR, {
   chromiumSandbox: false,
+  headless: true,
+  locale: "en-US",
   args: [
     `--remote-debugging-port=${chromePort}`,
     "--remote-debugging-address=127.0.0.1",
@@ -292,16 +301,16 @@ let failures = 0;
 
 try {
   for (const url of URLS) {
-    const cookieHeader = await harvestCookieHeader();
+    await harvestCookieHeader();
     const runs = [];
     for (let i = 0; i < RUNS; i += 1) {
-      const run = await runAudit(url, cookieHeader);
+      const run = await runAudit(url);
       runs.push(run);
       const slug = url.replace(/^https?:\/\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
       fs.writeFileSync(path.join(RESULTS_DIR, `${slug}-run${i + 1}.json`), JSON.stringify(run.lhr));
       fs.writeFileSync(
         path.join(RESULTS_DIR, `${slug}-run${i + 1}.html`),
-        lighthouse.generateReport(run.lhr, "html"),
+        generateReport(run.lhr, "html"),
       );
       console.log(
         `  ${url} run ${i + 1}/${RUNS}: LCP ${run.lcp?.toFixed(0)}ms CLS ${run.cls?.toFixed(3)} TBT ${run.tbt?.toFixed(0)}ms`,

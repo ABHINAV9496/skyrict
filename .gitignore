@@ -240,3 +240,4 @@ blob-report/
 playwright/.cache/
 .vercel/
 .import_linter_cache/
+apps/web/next-start.log*

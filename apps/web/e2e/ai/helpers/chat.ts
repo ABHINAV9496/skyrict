@@ -47,7 +47,7 @@ export async function expectAnsweringAgent(
 /** Start a brand-new conversation from the New Chat surface with one prompt. */
 export async function askAgent(page: Page, question: string): Promise<Locator> {
     await page.goto("/dashboard/agents");
-    const composer = page.getByLabel("Message");
+    const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeVisible();
     await composer.fill(question);
     await page.getByRole("button", { name: "Send message" }).click();
@@ -61,7 +61,7 @@ export async function sendFollowUp(
     page: Page,
     question: string,
 ): Promise<Locator> {
-    const composer = page.getByLabel("Message");
+    const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEditable();
     await composer.fill(question);
     await page.getByRole("button", { name: "Send message" }).click();

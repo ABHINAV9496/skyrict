@@ -70,15 +70,34 @@ export async function whichMfaPath(
     page: Page,
     timeoutMs = 15_000,
 ): Promise<MfaPath> {
-    return new Promise<MfaPath>((resolve) => {
+    return new Promise<MfaPath>((resolve, reject) => {
+        let settled = false;
+        const finish = (path: MfaPath) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(path);
+        };
+        // Neither arm resolving means sign-in never reached an MFA surface -
+        // e.g. the handoff bounced back with ?error=... Reject with the URL
+        // instead of hanging until the whole test times out.
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(
+                new Error(
+                    `MFA path not detected within ${timeoutMs}ms; current URL: ${page.url()}`,
+                ),
+            );
+        }, timeoutMs + 500);
         void page
             .waitForURL("**/setup-mfa", { timeout: timeoutMs })
-            .then(() => resolve("enrollment"))
+            .then(() => finish("enrollment"))
             .catch(() => {});
         void page
             .getByRole("heading", { name: "Two-factor check" })
             .waitFor({ timeout: timeoutMs })
-            .then(() => resolve("challenge"))
+            .then(() => finish("challenge"))
             .catch(() => {});
     });
 }
@@ -93,7 +112,27 @@ export async function completeMfaChallenge(
     page: Page,
     secret: string,
 ): Promise<void> {
-    await fillOtp(page, "Two-factor code", totp(secret));
+    // Try the current, previous, and next 30s windows. A single-window code
+    // races the TOTP boundary (and a code already consumed earlier in the same
+    // window by the setup project); when it is stale the form rejects it
+    // inline and then waits forever for a handoff that never happens.
+    for (const offset of [0, -1, 1]) {
+        await fillOtp(page, "Two-factor code", totp(secret, offset));
+        const landed = page
+            .waitForURL((url) => !url.hostname.includes(".signin."), {
+                timeout: 10_000,
+            })
+            .then(() => true)
+            .catch(() => false);
+        const rejected = page
+            .getByText("That code didn't match")
+            .waitFor({ timeout: 10_000 })
+            .then(() => false)
+            .catch(() => false);
+        if (await Promise.race([landed, rejected])) {
+            return;
+        }
+    }
     await waitForWorkspace(page);
 }
 

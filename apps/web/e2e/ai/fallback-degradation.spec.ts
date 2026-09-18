@@ -36,7 +36,7 @@ const UNREACHABLE_TEXT = "The agent could not be reached. Please try again.";
 /** Open the New Chat surface, submit one prompt, and land on the conversation. */
 async function startChat(page: Page, prompt: string): Promise<void> {
     await page.goto("/dashboard/agents");
-    const composer = page.getByLabel("Message");
+    const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeVisible();
     await composer.fill(prompt);
     await page.getByRole("button", { name: "Send message" }).click();
@@ -95,7 +95,7 @@ test.describe("AI supervisor fallbacks and degradation", () => {
 
             // The composer recovered - it is editable and ready to send again
             // (not stuck in the "Stop generating" streaming state).
-            const composer = page.getByLabel("Message");
+            const composer = page.getByRole("textbox", { name: "Message" });
             await expect(composer).toBeEditable();
             await composer.fill("Try again");
             await expect(

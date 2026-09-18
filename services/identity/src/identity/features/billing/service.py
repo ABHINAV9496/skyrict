@@ -22,12 +22,14 @@ failure modes:
 
 from __future__ import annotations
 
+import asyncio
 import math
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from identity.core.config import settings
+from identity.core.stripe import StripeError
 from identity.domain.entities import Tenant
 from identity.features.billing.plans import PLANS, resolve_plan_id, resolve_tier
 from skyrict_common.exceptions import (
@@ -203,18 +205,31 @@ class BillingService:
             raise ServiceUnavailableError("Stripe is not configured")
 
         tenant = await self._require_tenant(tenant_id)
+        # Deterministic config check BEFORE any external call: a missing app
+        # URL must never leave a phantom Stripe customer behind.
+        app_url = self._billing_app_url(tenant)
         if not tenant.stripe_customer_id:
             tenant = await self._create_stripe_customer(tenant)
         assert tenant.stripe_customer_id is not None  # set by _create_stripe_customer
-        app_url = self._billing_app_url(tenant)
-        session = self._stripe_client.create_checkout_session(
-            customer_id=tenant.stripe_customer_id,
-            price_id=price_id,
-            success_url=f"{app_url}/dashboard/settings/billing?checkout=success",
-            cancel_url=f"{app_url}/dashboard/settings/billing?checkout=cancelled",
-            client_reference_id=str(tenant.id),
-            metadata={"tenant_id": str(tenant.id), "plan_id": plan_id, "interval": interval},
-        )
+        try:
+            # The Stripe SDK is synchronous; offload so the identity event loop
+            # is not blocked for the ~0.3-1s round trip (repo pattern in
+            # core/email.py, avatars). Failures map to the sanitized 503.
+            session = await asyncio.to_thread(
+                self._stripe_client.create_checkout_session,
+                customer_id=tenant.stripe_customer_id,
+                price_id=price_id,
+                success_url=f"{app_url}/dashboard/settings/billing?checkout=success",
+                cancel_url=f"{app_url}/dashboard/settings/billing?checkout=cancelled",
+                client_reference_id=str(tenant.id),
+                metadata={
+                    "tenant_id": str(tenant.id),
+                    "plan_id": plan_id,
+                    "interval": interval,
+                },
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
         await self._emit_audit(
             action="billing.checkout.created",
             target=f"tenant:{tenant_id}",
@@ -247,10 +262,14 @@ class BillingService:
             raise PaymentRequiredError(
                 "An active subscription is required to manage billing settings"
             )
-        session = self._stripe_client.create_portal_session(
-            customer_id=customer_id,
-            return_url=f"{self._billing_app_url(tenant)}/dashboard/settings/billing",
-        )
+        try:
+            session = await asyncio.to_thread(
+                self._stripe_client.create_portal_session,
+                customer_id=customer_id,
+                return_url=f"{self._billing_app_url(tenant)}/dashboard/settings/billing",
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
         await self._emit_audit(
             action="billing.portal.opened",
             target=f"tenant:{tenant_id}",
@@ -473,10 +492,14 @@ class BillingService:
         """
         assert self._stripe_client is not None  # guarded by callers
         assert tenant.id is not None  # loaded from the repo
-        customer = self._stripe_client.create_customer(
-            email=tenant.billing_email,
-            metadata={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
-        )
+        try:
+            customer = await asyncio.to_thread(
+                self._stripe_client.create_customer,
+                email=tenant.billing_email,
+                metadata={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
         return await self._tenant_repo.update_billing(tenant.id, stripe_customer_id=customer["id"])
 
     def _billing_app_url(self, tenant: Tenant) -> str:

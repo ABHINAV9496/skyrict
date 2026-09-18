@@ -2,10 +2,12 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import {
+  applySessionCookie,
   assertSameOrigin,
   callBackend,
   callBackendRaw,
   resolveTenantSlug,
+  sessionAccessToken,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +19,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  *
  * The browser talks to these same-origin handlers instead of the backend:
  * (a) the tenant slug is always derived server-side from the Host header (the
- * client's X-Tenant-Slug is ignored), (b) the client's Bearer access token is
- * forwarded when present - on the workspace origin it is absent on first load,
- * so the backend answers 401 and the client's single-flight silent refresh
- * (/api/auth/refresh, driven by the httpOnly session cookie) retries once,
- * and (c) state-changing methods must pass the Origin/Referer CSRF gate.
+ * client's X-Tenant-Slug is ignored), (b) the access token comes from the
+ * client's Bearer header when present, otherwise minted server-side from the
+ * httpOnly session cookie (so raw same-origin fetches that only carry cookies
+ * still authenticate), and (c) state-changing methods must pass the
+ * Origin/Referer CSRF gate. When a token was minted from the session cookie
+ * the rotated refresh cookie is written back on the response so the browser
+ * keeps a current token for the next cookie-only call.
  */
 async function proxy(request: NextRequest) {
   if (SAFE_METHODS.has(request.method.toUpperCase()) === false && !assertSameOrigin(request)) {
@@ -30,6 +34,27 @@ async function proxy(request: NextRequest) {
 
   const slug = resolveTenantSlug(request.headers.get("host"));
   const authorization = request.headers.get("authorization");
+
+  // Resolve the access token. Bearer headers (the client's in-memory access
+  // token) win; raw same-origin fetches carry only the session cookie, so
+  // mint a fresh access token from it server-side - the same silent refresh
+  // the /api/auth/refresh route performs, keeping identity's single rotation
+  // per request and returning the rotated refresh cookie for write-back.
+  let token: string | null = null;
+  let rotatedRefreshToken: string | null = null;
+  if (authorization?.toLowerCase().startsWith("bearer ")) {
+    token = authorization.slice("Bearer ".length);
+  } else {
+    const session = await sessionAccessToken(request);
+    if (!session) {
+      return NextResponse.json(
+        { detail: "Missing Authorization header" },
+        { status: 401 },
+      );
+    }
+    token = session.token;
+    rotatedRefreshToken = session.refreshToken;
+  }
 
   const pathname = request.nextUrl.pathname.replace(/^\/api\/v1\//, "");
   const path = `/${pathname}${request.nextUrl.search}`;
@@ -45,25 +70,28 @@ async function proxy(request: NextRequest) {
     const raw = await callBackendRaw(path, {
       target: "core",
       tenantSlug: slug,
-      token: authorization?.toLowerCase().startsWith("bearer ")
-        ? authorization.slice("Bearer ".length)
-        : null,
+      token,
     });
-    if (!raw) {
-      return NextResponse.json(
-        { detail: "Core service is unavailable. Please try again." },
-        { status: 502 },
-      );
-    }
-    const body = await raw.arrayBuffer();
-    return new NextResponse(body, {
-      status: raw.status,
-      headers: {
-        "Content-Type": raw.headers.get("content-type") ?? "application/octet-stream",
-        "Content-Disposition":
-          raw.headers.get("content-disposition") ?? 'attachment; filename="download"',
-      },
-    });
+    const downloadResponse = async (): Promise<NextResponse> => {
+      if (!raw) {
+        return NextResponse.json(
+          { detail: "Core service is unavailable. Please try again." },
+          { status: 502 },
+        );
+      }
+      const body = await raw.arrayBuffer();
+      return new NextResponse(body, {
+        status: raw.status,
+        headers: {
+          "Content-Type": raw.headers.get("content-type") ?? "application/octet-stream",
+          "Content-Disposition":
+            raw.headers.get("content-disposition") ?? 'attachment; filename="download"',
+        },
+      });
+    };
+    const response = await downloadResponse();
+    if (rotatedRefreshToken) applySessionCookie(response, rotatedRefreshToken);
+    return response;
   }
 
   const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents", "notifications"].includes(
@@ -87,9 +115,7 @@ async function proxy(request: NextRequest) {
     body: isMultipart ? undefined : body,
     formData: isMultipart ? (body as FormData | undefined) : undefined,
     tenantSlug: slug,
-    token: authorization?.toLowerCase().startsWith("bearer ")
-      ? authorization.slice("Bearer ".length)
-      : null,
+    token,
     target,
   });
 
@@ -101,7 +127,9 @@ async function proxy(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(result.payload, { status: result.status });
+  const response = NextResponse.json(result.payload, { status: result.status });
+  if (rotatedRefreshToken) applySessionCookie(response, rotatedRefreshToken);
+  return response;
 }
 
 export const GET = proxy;

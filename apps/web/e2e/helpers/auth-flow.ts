@@ -220,6 +220,42 @@ export async function refreshSession(page: Page): Promise<void> {
 }
 
 /**
+ * Verify the authenticated session actually authenticates BFF calls before a
+ * fixture yields the workspace.
+ *
+ * The sidebar email only proves the shell hydrated once from a refresh
+ * cookie; it says nothing about whether the BFF can forward the session
+ * downstream when the browser only sends cookies (no in-memory access token).
+ * Hit the identity current-user endpoint through the BFF and require 200:
+ * when this fails, every suite would otherwise drown in opaque
+ * ``401 Missing Authorization header`` errors from raw page.evaluate fetches.
+ *
+ * The probe rotates the refresh token once through the BFF - safe here
+ * because it runs after waitForWorkspaceSettled() left the shell idle, so it
+ * cannot race the app's own single-flight rotation.
+ */
+export async function assertSessionReachesBff(page: Page): Promise<void> {
+  const probe = await page.evaluate(async () => {
+    const res = await fetch("/api/v1/users/me", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    let body = "";
+    try {
+      body = (await res.text()).slice(0, 240);
+    } catch {
+      // keep the body empty when the stream cannot be read
+    }
+    return { status: res.status, body };
+  });
+  expect(
+    probe.status,
+    `BFF session probe to /api/v1/users/me did not authenticate: ` +
+      `HTTP ${probe.status} ${probe.body}`,
+  ).toBe(200);
+}
+
+/**
  * Wait for the workspace shell to finish its initial session hydration.
  *
  * The logo link ("Skyrict dashboard") is part of the SERVER-rendered shell and
@@ -244,17 +280,15 @@ export async function refreshSession(page: Page): Promise<void> {
  * parallel /api/auth/session from the harness would race it and revoke the
  * whole token family.
  */
-export async function waitForWorkspaceSettled(
-    page: Page,
-    email = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io",
-): Promise<void> {
-    await expect(
-        page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(
-        page.getByText(email, { exact: true }).first(),
-        "sidebar user menu must render the signed-in user's email after session hydration",
-    ).toBeVisible({ timeout: 20_000 });
+export async function waitForWorkspaceSettled(page: Page, email?: string): Promise<void> {
+  await expect(
+    page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
+  await expect(
+    page.getByText(expected, { exact: true }).first(),
+    "sidebar user menu must render the signed-in user's email after session hydration",
+  ).toBeVisible({ timeout: 20_000 });
 }
 
 /**

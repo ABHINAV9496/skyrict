@@ -1236,6 +1236,7 @@ class DraftEntry:
     confidence: Decimal
     reasoning: str = ""
     model_used: str = ""
+    fallback: bool = False
 
 
 @dataclass(frozen=True)

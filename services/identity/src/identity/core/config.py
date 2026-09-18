@@ -101,6 +101,14 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="access token TTL")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="refresh token TTL")
+    REFRESH_REUSE_GRACE_SECONDS: int = Field(
+        default=10,
+        description=(
+            "how long a just-rotated-out refresh token is re-accepted. Benign "
+            "races (two tabs, dropped responses) land in this window without "
+            "arming reuse chain-kill; anything older still revokes the family"
+        ),
+    )
     MAX_CONCURRENT_SESSIONS: int = Field(
         default=5, description="max active sessions per user - oldest are evicted"
     )

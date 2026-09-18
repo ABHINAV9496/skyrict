@@ -174,11 +174,15 @@ class FakeSessionRepo:
         refresh_token_hash: str,
         expires_at: datetime,
         tenant_id: str | uuid.UUID | None = None,
+        previous_refresh_token_hash: str | None = None,
+        previous_token_valid_until: datetime | None = None,
     ) -> None:
         session = self.sessions.get(uuid.UUID(str(session_id)))
         if session is not None and (
             tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
         ):
+            session.previous_refresh_token_hash = previous_refresh_token_hash
+            session.previous_token_valid_until = previous_token_valid_until
             session.refresh_token_hash = refresh_token_hash
             session.expires_at = expires_at
 

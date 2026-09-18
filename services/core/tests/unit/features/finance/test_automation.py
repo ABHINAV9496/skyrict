@@ -400,6 +400,7 @@ async def test_draft_journal_entry_uses_keyword_when_no_ai_suggest() -> None:
     assert draft.lines[1].account_code == "1000"
     assert draft.lines[1].side == "credit"
     assert draft.reasoning == "Deterministic fallback — AI service unavailable"
+    assert draft.fallback is True
 
 
 async def test_draft_journal_entry_no_contra_falls_back_to_suggested() -> None:

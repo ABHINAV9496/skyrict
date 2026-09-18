@@ -61,12 +61,16 @@ class FakeSessionService:
         refresh_token_hash: str,
         expires_at: datetime,
         tenant_id: str | uuid.UUID | None = None,
+        previous_refresh_token_hash: str | None = None,
+        previous_token_valid_until: datetime | None = None,
     ) -> Session | None:
         self.rotations.append((uuid.UUID(str(session_id)), refresh_token_hash))
         session = self.sessions.get(uuid.UUID(str(session_id)))
         if session is not None and (
             tenant_id is None or session.tenant_id == uuid.UUID(str(tenant_id))
         ):
+            session.previous_refresh_token_hash = previous_refresh_token_hash
+            session.previous_token_valid_until = previous_token_valid_until
             session.refresh_token_hash = refresh_token_hash
             session.expires_at = expires_at
         return session
@@ -208,6 +212,12 @@ class TestRefreshTokens:
             hash_refresh_token(pair.refresh_token)
         )
         assert service.session_service.sessions[session_id].expires_at > original_expires_at
+        assert service.session_service.sessions[session_id].previous_refresh_token_hash == (
+            hash_refresh_token(token)
+        )
+        assert service.session_service.sessions[session_id].previous_token_valid_until > (
+            datetime.now(UTC)
+        )
 
     async def test_rotation_preserves_token_family(self) -> None:
         token, _ = uuid_token_and_session()
@@ -254,6 +264,10 @@ class TestRefreshTokens:
 
         await service.refresh_tokens(token)
 
+        # Age the tolerance window past expiry: a genuine re-transmission of a
+        # rotated-out token (e.g. exfiltrated) must still chain-kill the family.
+        session.previous_token_valid_until = datetime.now(UTC) - timedelta(seconds=1)
+
         with pytest.raises(TokenReuseDetectedError):
             await service.refresh_tokens(token)
 
@@ -263,6 +277,26 @@ class TestRefreshTokens:
         assert audit.events[-1]["action"] == AUTH_REFRESH_REUSE_DETECTED
         assert audit.events[-1]["target"] == f"session:{session.id}"
         assert session_service.committed is True
+
+    async def test_reuse_within_grace_window_is_tolerated(self) -> None:
+        token, _ = uuid_token_and_session()
+        family_id = uuid.uuid4()
+        session = _bound_session(token, family_id=family_id)
+        session_service = FakeSessionService([session])
+        audit = FakeAuditService()
+        service = TokenService(session_service, audit)
+
+        await service.refresh_tokens(token)
+
+        # Benign race: two tabs / a dropped response re-send the token that was
+        # rotated out milliseconds ago. Accept it inside the window and re-rotate,
+        # instead of revoking the whole family.
+        pair = await service.refresh_tokens(token)
+
+        assert session_service.revoked_families == []
+        assert session.status is SessionStatus.ACTIVE
+        assert pair.refresh_token != token
+        assert len(service.session_service.rotations) == 2
 
     async def test_reuse_when_session_missing_falls_back_to_all_user_revoke(self) -> None:
         token, _ = uuid_token_and_session()

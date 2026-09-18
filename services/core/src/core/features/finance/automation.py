@@ -652,6 +652,7 @@ class FinanceAutomationService:
             explanation="",
             confidence=suggestion.confidence,
             reasoning="Deterministic fallback — AI service unavailable",
+            fallback=True,
         )
         await self.audit.log(
             tenant_id=tenant_id,
@@ -1086,6 +1087,7 @@ async def draft_journal_entry(
             confidence=draft.confidence,
             reasoning=draft.reasoning,
             model_used=draft.model_used,
+            fallback=draft.fallback,
         )
     )
 

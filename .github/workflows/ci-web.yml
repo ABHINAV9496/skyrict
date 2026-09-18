@@ -61,3 +61,13 @@ jobs:
         run: pnpm build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Capture bundle sizes
+        run: |
+          pnpm --filter @skyrict/web exec next build > apps/web/build.log 2>&1
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Enforce bundle budget
+        run: node scripts/perf/assert-bundle-sizes.mjs --log build.log
+        working-directory: apps/web

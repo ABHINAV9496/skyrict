@@ -43,6 +43,20 @@ os.environ.setdefault(
     "postgresql+asyncpg://skyrict:skyrict@localhost:5433/skyrict_identity",
 )
 os.environ.setdefault("IDENTITY_REDIS_URL", "redis://localhost:6379/0")
+# The e2e compose injects live-app rate limits into the container
+# (IDENTITY_RATE_LIMIT_LOGIN=1000, IDENTITY_SIGNUP_*=50/100) for the running
+# service. Those must not leak into the test process: pop them so the generous
+# test limits below apply, and IDENTITY_RATE_LIMIT_LOGIN falls back to its
+# default 5 - the value tests/integration/api/test_auth.py is written against.
+# This mirrors CI, which sets none of these.
+for _live_app_rate_limit in (
+    "IDENTITY_RATE_LIMIT_LOGIN",
+    "IDENTITY_SIGNUP_START_RATE_LIMIT",
+    "IDENTITY_SIGNUP_CODE_RATE_LIMIT",
+    "IDENTITY_SIGNUP_CAPTCHA_RATE_LIMIT",
+):
+    os.environ.pop(_live_app_rate_limit, None)
+
 os.environ.setdefault("IDENTITY_RATE_LIMIT_REGISTER", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_START_RATE_LIMIT", "10000")
 os.environ.setdefault("IDENTITY_SIGNUP_CODE_RATE_LIMIT", "10000")

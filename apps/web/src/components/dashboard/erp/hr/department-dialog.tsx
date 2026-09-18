@@ -27,6 +27,7 @@ import {
     type Employee,
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 interface DepartmentFormState {
     name: string;
@@ -110,6 +111,7 @@ export function DepartmentDialog({
                     ? error.message
                     : "Could not save the department.",
             );
+            onApiError(error);
         } finally {
             setSaving(false);
         }

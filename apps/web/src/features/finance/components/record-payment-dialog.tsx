@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { registerPaymentIntent, extractVendorRef } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 
 const PAYMENT_METHODS = [
     { value: "bank_transfer", label: "Bank transfer" },
@@ -139,6 +140,7 @@ export function RecordPaymentDialog({ onRecorded }: RecordPaymentDialogProps) {
                     ? err.message
                     : "Could not register the payment.",
             );
+            onApiError(err);
         }
     }
 

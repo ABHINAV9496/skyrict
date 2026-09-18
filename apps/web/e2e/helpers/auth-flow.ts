@@ -20,20 +20,26 @@ export const TOTP_SECRET_FILE = "e2e/.auth/totp-secret";
 
 /** The enrolled TOTP secret: env override wins, else the persisted file. */
 export function readEnrolledSecret(secretFile = TOTP_SECRET_FILE): string {
-  const fromEnv = process.env.E2E_TOTP_SECRET;
-  if (fromEnv) return fromEnv;
-  try {
-    return readFileSync(secretFile, "utf8").trim();
-  } catch {
-    return "";
-  }
+    const fromEnv = process.env.E2E_TOTP_SECRET;
+    if (fromEnv) return fromEnv;
+    try {
+        return readFileSync(secretFile, "utf8").trim();
+    } catch {
+        return "";
+    }
 }
 
 /** Fill each OtpInput digit box (aria-label "<label> digit N"). */
-export async function fillOtp(page: Page, label: string, code: string): Promise<void> {
-  for (let i = 0; i < code.length; i += 1) {
-    await page.locator(`input[aria-label="${label} digit ${i + 1}"]`).fill(code[i]!);
-  }
+export async function fillOtp(
+    page: Page,
+    label: string,
+    code: string,
+): Promise<void> {
+    for (let i = 0; i < code.length; i += 1) {
+        await page
+            .locator(`input[aria-label="${label} digit ${i + 1}"]`)
+            .fill(code[i]!);
+    }
 }
 
 /**
@@ -42,13 +48,13 @@ export async function fillOtp(page: Page, label: string, code: string): Promise<
  * surface's auto-completed email would otherwise be stale.
  */
 export async function signInWithPassword(
-  page: Page,
-  email: string,
-  password: string,
+    page: Page,
+    email: string,
+    password: string,
 ): Promise<void> {
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
 }
 
 export type MfaPath = "enrollment" | "challenge";
@@ -60,18 +66,21 @@ export type MfaPath = "enrollment" | "challenge";
  * established pattern - both waits observe the same page and the winner
  * resolves first.
  */
-export async function whichMfaPath(page: Page, timeoutMs = 15_000): Promise<MfaPath> {
-  return new Promise<MfaPath>((resolve) => {
-    void page
-      .waitForURL("**/setup-mfa", { timeout: timeoutMs })
-      .then(() => resolve("enrollment"))
-      .catch(() => {});
-    void page
-      .getByRole("heading", { name: "Two-factor check" })
-      .waitFor({ timeout: timeoutMs })
-      .then(() => resolve("challenge"))
-      .catch(() => {});
-  });
+export async function whichMfaPath(
+    page: Page,
+    timeoutMs = 15_000,
+): Promise<MfaPath> {
+    return new Promise<MfaPath>((resolve) => {
+        void page
+            .waitForURL("**/setup-mfa", { timeout: timeoutMs })
+            .then(() => resolve("enrollment"))
+            .catch(() => {});
+        void page
+            .getByRole("heading", { name: "Two-factor check" })
+            .waitFor({ timeout: timeoutMs })
+            .then(() => resolve("challenge"))
+            .catch(() => {});
+    });
 }
 
 /**
@@ -80,9 +89,12 @@ export async function whichMfaPath(page: Page, timeoutMs = 15_000): Promise<MfaP
  * filled, so no click is needed - and none is safe (the button is mid-flight
  * disabled).
  */
-export async function completeMfaChallenge(page: Page, secret: string): Promise<void> {
-  await fillOtp(page, "Two-factor code", totp(secret));
-  await waitForWorkspace(page);
+export async function completeMfaChallenge(
+    page: Page,
+    secret: string,
+): Promise<void> {
+    await fillOtp(page, "Two-factor code", totp(secret));
+    await waitForWorkspace(page);
 }
 
 /**
@@ -97,13 +109,16 @@ export async function completeMfaChallenge(page: Page, secret: string): Promise<
  * response lands).
  */
 export function installMfaSecretCapture(page: Page): () => string | null {
-  let mfaSecret: string | null = null;
-  page.on("response", async (response) => {
-    if (!response.url().includes("/api/auth/mfa/setup")) return;
-    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    mfaSecret = typeof body.secret === "string" ? body.secret : null;
-  });
-  return () => mfaSecret;
+    let mfaSecret: string | null = null;
+    page.on("response", async (response) => {
+        if (!response.url().includes("/api/auth/mfa/setup")) return;
+        const body = (await response.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+        >;
+        mfaSecret = typeof body.secret === "string" ? body.secret : null;
+    });
+    return () => mfaSecret;
 }
 
 /**
@@ -118,69 +133,70 @@ export function installMfaSecretCapture(page: Page): () => string | null {
  * leaves a recoverable secret. Returns the resolved secret.
  */
 export async function enrollMfaAndFinish(
-  page: Page,
-  options: {
-    secretGetter?: () => string | null;
-    knownSecret?: string;
-    onWritten?: (secret: string) => void;
-  } = {},
+    page: Page,
+    options: {
+        secretGetter?: () => string | null;
+        knownSecret?: string;
+        onWritten?: (secret: string) => void;
+    } = {},
 ): Promise<string> {
-  if (options.secretGetter) {
-    await expect
-      .poll(() => options.secretGetter?.() ?? null, {
-        timeout: 10_000,
-        message: "MFA setup response did not include a TOTP secret.",
-      })
-      .toBeTruthy();
-  }
-
-  const secret = options.secretGetter?.() ?? options.knownSecret ?? "";
-  expect(secret, "MFA setup secret is missing.").toBeTruthy();
-  options.onWritten?.(secret);
-
-  // Verify a TOTP code generated from the secret. Try the current, previous,
-  // and next 30s windows to dodge clock boundaries.
-  let verified = false;
-  for (const offset of [0, -1, 1]) {
-    await fillOtp(page, "Authenticator code", totp(secret, offset));
-    await page.getByRole("button", { name: "Verify and continue" }).click();
-
-    const success = page
-      .getByText("Authenticator verified")
-      .waitFor({ timeout: 4_000 })
-      .then(() => true)
-      .catch(() => false);
-    const failure = page
-      .getByText("That code doesn't match")
-      .waitFor({ timeout: 4_000 })
-      .then(() => false)
-      .catch(() => false);
-    if (await Promise.race([success, failure])) {
-      verified = true;
-      break;
+    if (options.secretGetter) {
+        await expect
+            .poll(() => options.secretGetter?.() ?? null, {
+                timeout: 10_000,
+                message: "MFA setup response did not include a TOTP secret.",
+            })
+            .toBeTruthy();
     }
-  }
-  expect(
-    verified,
-    "TOTP enrollment failed across the current, previous, and next windows.",
-  ).toBe(true);
 
-  // Acknowledge and finish; the handoff form-POSTs to the workspace origin
-  // and lands on {slug}.localhost (never the signin host).
-  await page
-    .getByRole("button", { name: "I've saved my recovery codes somewhere safe." })
-    .click();
-  await page.getByRole("button", { name: "Finish setup" }).click();
-  await waitForWorkspace(page);
-  return secret;
+    const secret = options.secretGetter?.() ?? options.knownSecret ?? "";
+    expect(secret, "MFA setup secret is missing.").toBeTruthy();
+    options.onWritten?.(secret);
+
+    // Verify a TOTP code generated from the secret. Try the current, previous,
+    // and next 30s windows to dodge clock boundaries.
+    let verified = false;
+    for (const offset of [0, -1, 1]) {
+        await fillOtp(page, "Authenticator code", totp(secret, offset));
+        await page.getByRole("button", { name: "Verify and continue" }).click();
+
+        const success = page
+            .getByText("Authenticator verified")
+            .waitFor({ timeout: 4_000 })
+            .then(() => true)
+            .catch(() => false);
+        const failure = page
+            .getByText("That code doesn't match")
+            .waitFor({ timeout: 4_000 })
+            .then(() => false)
+            .catch(() => false);
+        if (await Promise.race([success, failure])) {
+            verified = true;
+            break;
+        }
+    }
+    expect(
+        verified,
+        "TOTP enrollment failed across the current, previous, and next windows.",
+    ).toBe(true);
+
+    // Acknowledge and finish; the handoff form-POSTs to the workspace origin
+    // and lands on {slug}.localhost (never the signin host).
+    await page
+        .getByRole("button", {
+            name: "I've saved my recovery codes somewhere safe.",
+        })
+        .click();
+    await page.getByRole("button", { name: "Finish setup" }).click();
+    await waitForWorkspace(page);
+    return secret;
 }
 
 /** Wait for the login/MFA handoff to land on the workspace host. */
 export async function waitForWorkspace(page: Page): Promise<void> {
-  await page.waitForURL(
-    (url) => !url.hostname.includes(".signin."),
-    { timeout: 20_000 },
-  );
+    await page.waitForURL((url) => !url.hostname.includes(".signin."), {
+        timeout: 20_000,
+    });
 }
 
 /**
@@ -192,15 +208,15 @@ export async function waitForWorkspace(page: Page): Promise<void> {
  * default-origin page would dereference a tenant that does not exist.
  */
 export async function refreshSession(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const res = await fetch("/api/auth/session", {
-      credentials: "include",
-      cache: "no-store",
+    await page.evaluate(async () => {
+        const res = await fetch("/api/auth/session", {
+            credentials: "include",
+            cache: "no-store",
+        });
+        if (!res.ok) {
+            throw new Error(`Session refresh failed: HTTP ${res.status}`);
+        }
     });
-    if (!res.ok) {
-      throw new Error(`Session refresh failed: HTTP ${res.status}`);
-    }
-  });
 }
 
 /**
@@ -273,4 +289,35 @@ export async function waitForWorkspaceSettled(page: Page, email?: string): Promi
     page.getByText(expected, { exact: true }).first(),
     "sidebar user menu must render the signed-in user's email after session hydration",
   ).toBeVisible({ timeout: 20_000 });
+}
+export async function waitForWorkspaceSettled(
+    page: Page,
+    email = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io",
+): Promise<void> {
+    await expect(
+        page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+        page.getByText(email, { exact: true }).first(),
+        "sidebar user menu must render the signed-in user's email after session hydration",
+    ).toBeVisible({ timeout: 20_000 });
+}
+
+/**
+ * First sign-in of a freshly registered tenant owner: mandatory MFA takes the
+ * enrollment path (/setup-mfa) because a brand-new account has no authenticator
+ * enrolled. Attaches the secret capture BEFORE the BFF login handoff (the setup
+ * page calls the API on mount), signs in, asserts the enrollment path, and
+ * completes it. Returns the captured TOTP secret so the caller can later play
+ * the challenge leg.
+ */
+export async function firstOwnerSignInAndEnrollMfa(
+    page: Page,
+    email: string,
+    password: string,
+): Promise<string> {
+    const getMfaSecret = installMfaSecretCapture(page);
+    await signInWithPassword(page, email, password);
+    expect(await whichMfaPath(page)).toBe("enrollment");
+    return enrollMfaAndFinish(page, { secretGetter: getMfaSecret });
 }

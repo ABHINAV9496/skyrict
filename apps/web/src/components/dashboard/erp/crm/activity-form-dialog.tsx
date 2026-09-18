@@ -35,6 +35,7 @@ import {
     type CrmEntityType,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { ACTIVITY_KIND_LABELS, ENTITY_TYPE_LABELS } from "@/lib/erp/labels";
 import { cn } from "@/lib/utils";
 
@@ -222,6 +223,7 @@ export function ActivityFormDialog({
                           ? "Could not update the activity."
                           : "Could not create the activity.",
             });
+            onApiError(error);
         } finally {
             setSaving(false);
         }

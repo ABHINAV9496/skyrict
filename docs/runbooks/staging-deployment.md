@@ -114,8 +114,13 @@ kubectl create secret generic identity-secrets-staging \
   --from-literal=IDENTITY_JWT_PUBLIC_KEY_PATH=... \
   --from-literal=IDENTITY_JWKS_ISSUER=... \
   --from-literal=IDENTITY_JWKS_AUDIENCE=... \
-  --from-literal=IDENTITY_CORS_ORIGINS='["https://app.skyrict.com"]'
+  --from-literal=IDENTITY_CORS_ORIGINS='["https://app.skyrict.com"]' \
+  --from-literal=IDENTITY_SENTRY_DSN='https://<key>@o<org>.ingest.sentry.io/<project>'
 ```
+
+> `IDENTITY_SENTRY_DSN` is optional: empty disables Sentry init (dev/test never
+> set it). Only add the literal above when error tracking is configured for the
+> project.
 
 > `IDENTITY_BASE_DOMAIN`, `ENVIRONMENT`, `LOG_*` are already set in the
 > deployment manifest - only the secret-required values above belong in the

@@ -47,6 +47,7 @@ import {
     type FinanceAnomaly,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import { CreateAccountDialog } from "@/features/finance/accounts";
@@ -182,6 +183,8 @@ export function FinanceOverview() {
     const [startingChat, setStartingChat] = useState(false);
     const [chatError, setChatError] = useState<string | null>(null);
 
+    const requestGuard = useLatestRequest();
+
     const startAdvisorChat = useCallback(async () => {
         if (startingChat) return;
         setStartingChat(true);
@@ -201,6 +204,7 @@ export function FinanceOverview() {
     }, [router, startingChat]);
 
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const range = resolvePeriodRange(periodValue);
@@ -245,6 +249,7 @@ export function FinanceOverview() {
                 getPaymentMethodAnalytics(pnlFrom, pnlTo).catch(() => null),
                 getAuditReadiness().catch(() => null),
             ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 accounts,
@@ -262,6 +267,7 @@ export function FinanceOverview() {
                 scanning: false,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "error",
                 message:
@@ -270,7 +276,7 @@ export function FinanceOverview() {
                         : "Could not load finance data.",
             });
         }
-    }, [periodValue]);
+    }, [periodValue, requestGuard]);
 
     const runScan = useCallback(async () => {
         if (status.state !== "ready" || status.scanning) return;

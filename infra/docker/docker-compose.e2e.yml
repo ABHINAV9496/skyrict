@@ -67,7 +67,7 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # Identity Service (ENVIRONMENT=test for plaintext OTP + captcha)
+  # Identity Service (IDENTITY_ENVIRONMENT=test for plaintext OTP + captcha)
   # ---------------------------------------------------------------------------
   identity:
     build:
@@ -87,6 +87,9 @@ services:
       IDENTITY_ENVIRONMENT: test
       IDENTITY_LOG_LEVEL: INFO
       IDENTITY_LOG_JSON: "true"
+      IDENTITY_ENVIRONMENT: test
+      LOG_LEVEL: INFO
+      LOG_JSON: "true"
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
       IDENTITY_REDIS_URL: redis://skyrict-e2e-redis:6379/0
       IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'
@@ -110,6 +113,15 @@ services:
       # test stack (production default in config.py stays 5). Note the IDENTITY_
       # env prefix (config.py env_prefix="IDENTITY_").
       IDENTITY_RATE_LIMIT_LOGIN: "1000"
+      # Signup rate limits: the registration specs (mfa, signup-captcha) each
+      # walk the onboarding wizard with retries, sharing one CI egress IP. The
+      # production limits (start=5, code=10, captcha=30 per 300s) exhaust fast
+      # under parallel workers with retries=2. Raised generously for the
+      # disposable test stack; production defaults in config.py are unchanged.
+      IDENTITY_SIGNUP_START_RATE_LIMIT: "50"
+      IDENTITY_SIGNUP_CODE_RATE_LIMIT: "100"
+      IDENTITY_SIGNUP_CAPTCHA_RATE_LIMIT: "100"
+      IDENTITY_CAPTCHA_TTL_SECONDS: "600"
       IDENTITY_EMAIL_SMTP_HOST: skyrict-e2e-mailpit
       IDENTITY_EMAIL_SMTP_PORT: "1025"
       IDENTITY_HOST: 0.0.0.0

@@ -30,6 +30,7 @@ import {
     type FiscalPeriod,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate } from "@/lib/finance/format";
 import {
     FinanceTable,
@@ -107,6 +108,7 @@ function CreateFiscalPeriodDialog({ onCreated }: { onCreated: () => void }) {
                     ? error.message
                     : "The fiscal period could not be created.",
             );
+            onApiError(error);
         }
     }
 

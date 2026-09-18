@@ -28,6 +28,7 @@ import {
     type Employee,
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { CountryCombobox } from "@/components/dashboard/erp/hr/country-combobox";
 import { getCountryByCode, splitDialCode } from "@/lib/hr/countries";
 
@@ -272,6 +273,7 @@ export function EmployeeFormDialog({
                     ? error.message
                     : "Could not save the employee.",
             );
+            onApiError(error);
         } finally {
             setSaving(false);
         }
@@ -575,6 +577,7 @@ export function ChangeStatusDialog({
                     ? caught.message
                     : "Could not update the employee status.",
             );
+            onApiError(caught);
         } finally {
             setSaving(false);
         }
@@ -681,6 +684,7 @@ export function TerminateEmployeeDialog({
                     ? caught.message
                     : "Could not terminate the employee.",
             );
+            onApiError(caught);
         } finally {
             setSaving(false);
         }

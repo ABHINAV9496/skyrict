@@ -22,6 +22,7 @@ import {
 import { byEmployeeName, employeeName, type Employee } from "@/lib/api/hr-api";
 import { createCompensationChange } from "@/lib/api/payroll-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate } from "@/lib/format";
 
 interface RecordState {
@@ -118,6 +119,7 @@ export function CompensationDialog({
                     ? error.message
                     : "Could not record the change.",
             );
+            onApiError(error);
         } finally {
             setRecordSaving(false);
         }

@@ -30,6 +30,7 @@ import {
     type SalesOrder,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatMoney } from "@/lib/erp/money";
 
 interface OrderCreateDialogProps {
@@ -162,6 +163,7 @@ export function OrderCreateDialog({
                     ? error.message
                     : "Could not create the order.",
             );
+            onApiError(error);
         } finally {
             setSaving(false);
         }

@@ -28,6 +28,7 @@ import {
     type HrLeaveSuggestion,
 } from "@/lib/api/hr-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate } from "@/lib/format";
 
 const LEAVE_TYPES = [
@@ -190,6 +191,7 @@ export function LogLeaveDialog({
                     ? err.message
                     : "Could not create leave request.",
             );
+            onApiError(err);
         } finally {
             setSaving(false);
         }

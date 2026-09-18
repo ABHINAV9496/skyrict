@@ -14,6 +14,7 @@ from identity.models.membership import MembershipModel
 from identity.models.permission import PermissionModel
 from identity.models.role import RoleModel
 from identity.models.session import SessionModel
+from identity.models.stripe_event import ProcessedStripeEventModel
 from identity.models.tenant import TenantModel
 from identity.models.user import UserModel
 from identity.models.user_role import UserRoleModel
@@ -24,6 +25,7 @@ __all__ = [
     "InvitationModel",
     "MembershipModel",
     "PermissionModel",
+    "ProcessedStripeEventModel",
     "RoleModel",
     "SessionModel",
     "TenantModel",

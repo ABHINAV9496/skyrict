@@ -45,6 +45,7 @@ import {
     type Customer,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -78,7 +79,10 @@ export function ContactsTable() {
     const [deactivating, setDeactivating] = useState<Contact | null>(null);
     const [busy, setBusy] = useState(false);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const [contactsResult, customersResult] = await Promise.all([
@@ -91,6 +95,7 @@ export function ContactsTable() {
                 }),
                 listCustomers({ limit: 100 }),
             ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setCustomers(customersResult.data);
             setStatus({
                 state: "ready",
@@ -98,13 +103,14 @@ export function ContactsTable() {
                 total: contactsResult.meta.total,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load contacts.";
             setStatus({ state: "error", message });
         }
-    }, [customerFilter, includeInactive, offset]);
+    }, [customerFilter, includeInactive, offset, requestGuard]);
 
     useEffect(() => {
         void load();

@@ -36,6 +36,7 @@ import {
     type FixedAsset,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { formatDate, formatMoney, sumMoney } from "@/lib/finance/format";
 import {
     FinanceTable,
@@ -125,6 +126,7 @@ function CreateAssetDialog({
                     ? error.message
                     : "The asset could not be created.",
             );
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }
@@ -299,6 +301,7 @@ function DisposeAssetDialog({
                     ? error.message
                     : "The asset could not be disposed.",
             );
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }

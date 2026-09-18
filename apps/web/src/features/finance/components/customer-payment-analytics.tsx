@@ -9,6 +9,7 @@ import {
     type CustomerPaymentAnalytics,
 } from "@/lib/api/finance-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import { formatMoney } from "@/lib/finance/format";
 import { cn } from "@/lib/utils";
 import {
@@ -60,21 +61,27 @@ export function CustomerPaymentAnalytics({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setLoading(true);
         setError(null);
         try {
-            setAnalytics(await getCustomerAnalytics(fromDate, toDate));
+            const result = await getCustomerAnalytics(fromDate, toDate);
+            if (!requestGuard.isCurrent(requestId)) return;
+            setAnalytics(result);
         } catch (err) {
+            if (!requestGuard.isCurrent(requestId)) return;
             setError(
                 err instanceof ApiError
                     ? err.message
                     : "Could not load payment analytics.",
             );
         } finally {
-            setLoading(false);
+            if (requestGuard.isCurrent(requestId)) setLoading(false);
         }
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, requestGuard]);
 
     useEffect(() => {
         void load();

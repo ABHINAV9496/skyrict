@@ -24,6 +24,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import {
     transferStock,
     type Product,
@@ -106,6 +107,7 @@ export function TransferStockDialog({
                     ? submitError.message
                     : "Could not transfer stock.";
             setError(message);
+            onApiError(submitError);
         } finally {
             setSubmitting(false);
         }

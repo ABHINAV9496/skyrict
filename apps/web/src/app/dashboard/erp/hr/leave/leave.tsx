@@ -48,6 +48,7 @@ import {
 import { ApiError } from "@/lib/api/http";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 
 type PageStatus =
     | { state: "loading" }
@@ -142,7 +143,10 @@ export function LeaveClient({
         [balances],
     );
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const [requestsResult, employeeList, policyResult] =
@@ -164,6 +168,7 @@ export function LeaveClient({
                     listEmployees({ pageSize: 100 }),
                     getLeavePolicy(),
                 ]);
+            if (!requestGuard.isCurrent(requestId)) return;
             setEmployees(employeeList.items);
             setPolicy(policyResult);
             setStatus({
@@ -172,13 +177,14 @@ export function LeaveClient({
                 totalPages: requestsResult.meta.total_pages,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load leave requests.";
             setStatus({ state: "error", message });
         }
-    }, [page, statusFilter, employeeFilter]);
+    }, [page, statusFilter, employeeFilter, requestGuard]);
 
     useEffect(() => {
         void load();

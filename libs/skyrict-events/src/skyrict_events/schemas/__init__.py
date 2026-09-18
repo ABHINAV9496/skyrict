@@ -8,12 +8,15 @@ Each event model:
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from skyrict_events.base import BaseEvent
 
 TENANT_PROVISIONED_EVENT_TYPE = "identity.tenant.provisioned"
 RBAC_ROLE_GRANTED_EVENT_TYPE = "identity.rbac.role_granted"
+PLAN_CHANGED_EVENT_TYPE = "identity.billing.plan_changed"
 
 
 class RoleGrant(BaseModel):
@@ -100,6 +103,17 @@ class RbacRoleGranted(BaseEvent):
     grant: RoleGrant
 
 
+class PlanChanged(BaseEvent):
+    """Published when a tenant's subscription plan tier changes."""
+
+    event_type: str = "identity.billing.plan_changed"
+    tenant_id: str
+    previous_tier: str
+    new_tier: str
+    subscription_status: str
+    trial_ends_at: datetime | None = None
+
+
 class SessionCreated(BaseEvent):
     """Published when a user session is created."""
 
@@ -136,12 +150,14 @@ class MFAFailed(BaseEvent):
 
 
 __all__ = [
+    "PLAN_CHANGED_EVENT_TYPE",
     "RBAC_ROLE_GRANTED_EVENT_TYPE",
     "TENANT_PROVISIONED_EVENT_TYPE",
     "AuthLoginFailed",
     "AuthLoginSuccess",
     "MFAFailed",
     "MFASuccess",
+    "PlanChanged",
     "RbacRoleGranted",
     "RoleGrant",
     "SessionCreated",

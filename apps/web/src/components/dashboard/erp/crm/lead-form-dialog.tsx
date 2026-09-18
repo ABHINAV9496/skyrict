@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createLead, type Lead } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { cn } from "@/lib/utils";
 
 interface LeadFormDialogProps {
@@ -99,6 +100,7 @@ export function LeadFormDialog({
                         ? error.message
                         : "Could not create the lead.",
             });
+            onApiError(error);
         } finally {
             setSaving(false);
         }

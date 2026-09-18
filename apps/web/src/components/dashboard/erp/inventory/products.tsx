@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { listAbcClassifications } from "@/lib/api/ai-api";
 import {
     createProduct,
@@ -204,6 +205,7 @@ export function ProductsClient() {
                       ? "Could not update the product."
                       : "Could not create the product.";
             setFormError(message);
+            onApiError(error);
         } finally {
             setSubmitting(false);
         }
@@ -226,6 +228,7 @@ export function ProductsClient() {
                     ? error.message
                     : "Could not delete the product.";
             setDeleteError(message);
+            onApiError(error);
         } finally {
             setDeletingBusy(false);
         }

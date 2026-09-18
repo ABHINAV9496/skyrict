@@ -24,7 +24,7 @@ import {
 import { resolveHandoffDestination } from "@/lib/auth/handoff";
 import { AuthButton } from "@/lib/auth/AuthButton";
 import { OtpInput } from "@/lib/auth/OtpInput";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 function MfaSetupStep() {
     const setupRef = useRef<{ started: boolean; mounted: boolean } | null>(
@@ -69,14 +69,14 @@ function MfaSetupStep() {
 
     async function copySecret() {
         if (!setup) return;
-        await navigator.clipboard.writeText(setup.secret);
+        await copyToClipboard(setup.secret);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     }
 
     async function copyCodes() {
         if (!setup || setup.backupCodes.length === 0) return;
-        await navigator.clipboard.writeText(setup.backupCodes.join("\n"));
+        await copyToClipboard(setup.backupCodes.join("\n"));
         setCodesCopied(true);
         setTimeout(() => setCodesCopied(false), 1500);
     }

@@ -6,12 +6,14 @@ import { notFound } from "next/navigation";
 import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
+import { ErrorState } from "@/components/dashboard/erp/error-state";
 import {
     appendAgentMessage,
     getConversation,
     saveUserMessage,
 } from "@/lib/api/agents-api";
 import type { ChatMessage, Conversation } from "@/lib/api/agents-api";
+import { ApiError } from "@/lib/api/http";
 import { useSession } from "@/lib/auth/session";
 import {
     CONVERSATION_LIST_CHANGED_EVENT,
@@ -137,9 +139,13 @@ export default function ConversationPage({
 }) {
     const [conversation, setConversation] = useState<Conversation | null>(null);
     const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        setLoading(true);
+        setErrorMessage(null);
         void params
             .then(({ id }) => getConversation(id))
             .then((data) => {
@@ -148,13 +154,23 @@ export default function ConversationPage({
                     setLoading(false);
                 }
             })
-            .catch(() => {
-                if (!cancelled) setLoading(false);
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                if (error instanceof ApiError && error.status === 404) {
+                    notFound();
+                    return;
+                }
+                setLoading(false);
+                setErrorMessage(
+                    error instanceof ApiError
+                        ? error.message
+                        : "Could not load this conversation.",
+                );
             });
         return () => {
             cancelled = true;
         };
-    }, [params]);
+    }, [params, reloadKey]);
 
     // Reflect server-side metadata changes (e.g. the AI title landing right
     // after a turn) by refreshing ONLY the header fields - the live message
@@ -197,6 +213,15 @@ export default function ConversationPage({
             <div className="flex h-full flex-1 items-center justify-center">
                 <div className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
             </div>
+        );
+    }
+
+    if (errorMessage) {
+        return (
+            <ErrorState
+                message={errorMessage}
+                onRetry={() => setReloadKey((key) => key + 1)}
+            />
         );
     }
 

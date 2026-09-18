@@ -35,6 +35,7 @@ import {
     type SalesOrder,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { onApiError } from "@/lib/api/error-toast";
 import { orderActions } from "@/lib/erp/actions";
 import { formatDate, formatMoney, formatNumber } from "@/lib/erp/money";
 import { orderStatusBadgeClass, ORDER_STATUS_LABELS } from "@/lib/erp/labels";
@@ -113,6 +114,7 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
                       }
                     : current,
             );
+            onApiError(error);
         } finally {
             setPendingAction(null);
         }

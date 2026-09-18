@@ -45,6 +45,7 @@ import {
     type CrmEntityType,
 } from "@/lib/api/crm-api";
 import { ApiError } from "@/lib/api/http";
+import { useLatestRequest } from "@/lib/hooks/use-latest-request";
 import {
     ACTIVITY_KIND_LABELS,
     activityKindBadgeClass,
@@ -122,7 +123,10 @@ export function ActivitiesTable() {
     const [completingId, setCompletingId] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
+    const requestGuard = useLatestRequest();
+
     const load = useCallback(async () => {
+        const requestId = requestGuard.next();
         setStatus({ state: "loading" });
         try {
             const result = await listActivities({
@@ -132,19 +136,21 @@ export function ActivitiesTable() {
                 offset,
                 limit: PAGE_SIZE,
             });
+            if (!requestGuard.isCurrent(requestId)) return;
             setStatus({
                 state: "ready",
                 activities: result.data,
                 total: result.meta.total,
             });
         } catch (error) {
+            if (!requestGuard.isCurrent(requestId)) return;
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Could not load activities.";
             setStatus({ state: "error", message });
         }
-    }, [statusFilter, kindFilter, entityFilter, offset]);
+    }, [statusFilter, kindFilter, entityFilter, offset, requestGuard]);
 
     useEffect(() => {
         void load();

@@ -106,8 +106,10 @@ export async function registerTenant(
       message: "Captcha answer was not returned by /api/auth/captcha.",
     })
     .toBeTruthy();
-  await page.getByLabel("Password").fill(input.password);
-  await page.getByLabel("Confirm password").fill(input.password);
+  // exact: true - getByLabel otherwise also matches the "Show password"
+  // toggle's aria-label and the "Confirm password" label via substring.
+  await page.getByLabel("Password", { exact: true }).fill(input.password);
+  await page.getByLabel("Confirm password", { exact: true }).fill(input.password);
   await page.getByLabel("Enter the code").fill(captchaAnswer ?? "");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL("**/register/plan**");

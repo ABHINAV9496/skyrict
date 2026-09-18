@@ -76,8 +76,10 @@ test("payroll full journey: automation, hire, run, batch, approve, notify", asyn
   // ── navigate to payroll review page ──────────────────────────────────
   await test.step("navigate to payroll review page", async () => {
     await page.goto("/dashboard/erp/payroll");
+    // exact: true - the breadcrumb "Business Operations · Payroll" also
+    // matches the substring otherwise (strict-mode violation).
     await expect(
-      page.getByRole("heading", { name: "Payroll" }),
+      page.getByRole("heading", { name: "Payroll", exact: true }),
     ).toBeVisible();
   });
 
@@ -90,6 +92,6 @@ test("payroll full journey: automation, hire, run, batch, approve, notify", asyn
   // ── navigate to notifications page ───────────────────────────────────
   await test.step("navigate to notifications page", async () => {
     await page.goto("/dashboard/settings/notifications");
-    await expect(page.getByRole("heading")).toBeVisible();
+    await expect(page.getByRole("heading").first()).toBeVisible();
   });
 });

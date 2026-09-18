@@ -36,12 +36,24 @@ async function bff<T = unknown>(
 export async function scanAnomalies(
   page: Page,
 ): Promise<{ detected: number; duplicates_skipped: number }> {
+  // The BFF/core relay passes the ai-agent's scan response through verbatim
+  // (no envelope), so the body is FLAT: {detected, duplicates_skipped}.
+  // `res.data` is undefined here; treat the flat body as the source and keep
+  // the enveloped fallback only as a defensive path. Decode without trusting
+  // res.data first (that's what masked a successful server-side scan as 0).
   const res = await bff<BffResponse<{ detected: number; duplicates_skipped: number }>>(
     page,
     "/api/v1/ai/anomalies/scan",
     { method: "POST" },
   );
-  return res.data ?? { detected: 0, duplicates_skipped: 0 };
+  const src =
+    (typeof res.data === "object" && res.data !== null && "detected" in res.data
+      ? res.data
+      : (res as { detected?: number; duplicates_skipped?: number })) ?? {};
+  return {
+    detected: src.detected ?? 0,
+    duplicates_skipped: src.duplicates_skipped ?? 0,
+  };
 }
 
 export async function listAnomalies(

@@ -69,6 +69,7 @@ export async function hireEmployee(
     jobTitle?: string;
     hireDate?: string;
     email?: string;
+    phone?: string;
     monthlySalary?: string;
   },
 ): Promise<{ id: string; first_name: string; last_name: string }> {
@@ -81,6 +82,7 @@ export async function hireEmployee(
       job_title: opts.jobTitle ?? "Engineer",
       hire_date: opts.hireDate ?? "2026-01-05",
       email: opts.email ?? `e2e-${s}@example.com`,
+      phone: opts.phone ?? "+1 555 010 0000",
       monthly_salary: opts.monthlySalary ?? "5000.00",
     }),
   });

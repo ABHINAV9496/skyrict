@@ -65,7 +65,7 @@ test("inventory journey: create, restock, alert, anomaly, semantic search", asyn
       (l) => l.product_id === productId && l.warehouse_id === warehouseId,
     );
     expect(level).toBeDefined();
-    expect(String(level!.qty_on_hand)).toBe("100");
+    expect(Number(level!.qty_on_hand)).toBe(100);
   });
 
   // ── reduce stock below reorder point and verify alert ──────────────────

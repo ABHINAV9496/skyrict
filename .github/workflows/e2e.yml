@@ -117,14 +117,18 @@ jobs:
             sleep 2
           done
 
-          # Core seed populates the report catalog for the default tenant.
+          # Core seed populates the report catalog, leave-type catalogue,
+          # roles, approvals, and finance chart for the default tenant.
+          # Invoked through the typer CLI (core.cli): `python -m core.seed`
+          # has no __main__ and is a silent no-op, which left erp_leave_types
+          # empty until the payroll hire's accrual FK-violated (500).
           # The tenant UUID is the identity service's DEFAULT_TENANT_ID.
           # --workdir: same CWD rationale as the identity seed above.
           docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
             --workdir /app/services/core core \
-            python -m core.seed \
+            python -m core.cli seed \
             --tenant-id 00000000-0000-0000-0000-000000000001
-          echo "Seeded core report catalog"
+          echo "Seeded core report catalog + HR/Payroll defaults"
         timeout-minutes: 10
 
       # ---- Build + start Next.js -------------------------------------------

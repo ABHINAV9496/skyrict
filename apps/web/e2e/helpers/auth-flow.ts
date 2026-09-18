@@ -264,13 +264,13 @@ export async function assertSessionReachesBff(page: Page): Promise<void> {
  * parallel /api/auth/session from the harness would race it and revoke the
  * whole token family.
  */
-export async function waitForWorkspaceSettled(page: Page): Promise<void> {
+export async function waitForWorkspaceSettled(page: Page, email?: string): Promise<void> {
   await expect(
     page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
   ).toBeVisible({ timeout: 20_000 });
-  const email = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
+  const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
   await expect(
-    page.getByText(email, { exact: true }).first(),
+    page.getByText(expected, { exact: true }).first(),
     "sidebar user menu must render the signed-in user's email after session hydration",
   ).toBeVisible({ timeout: 20_000 });
 }

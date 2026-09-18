@@ -64,6 +64,8 @@ class SessionRepositoryPort(Protocol):
         refresh_token_hash: str,
         expires_at: datetime,
         tenant_id: str | uuid.UUID | None = None,
+        previous_refresh_token_hash: str | None = None,
+        previous_token_valid_until: datetime | None = None,
     ) -> None: ...
 
     async def commit(self) -> None: ...

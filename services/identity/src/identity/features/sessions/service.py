@@ -191,8 +191,15 @@ class SessionService:
         refresh_token_hash: str,
         expires_at: datetime,
         tenant_id: str | uuid.UUID | None = None,
+        previous_refresh_token_hash: str | None = None,
+        previous_token_valid_until: datetime | None = None,
     ) -> Session | None:
-        """Rotate a session's refresh hash in place, preserving its token family."""
+        """Rotate a session's refresh hash in place, preserving its token family.
+
+        ``previous_refresh_token_hash`` / ``previous_token_valid_until`` keep a
+        short grace window for the just-rotated-out token so a benign race (two
+        tabs, a dropped response) does not trigger reuse chain-kill.
+        """
         session = await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         if session is None:
             return None
@@ -202,6 +209,8 @@ class SessionService:
                 refresh_token_hash=refresh_token_hash,
                 expires_at=expires_at,
                 tenant_id=tenant_id,
+                previous_refresh_token_hash=previous_refresh_token_hash,
+                previous_token_valid_until=previous_token_valid_until,
             )
             return await self.session_repo.get_by_id(session_id, tenant_id=tenant_id)
         return session

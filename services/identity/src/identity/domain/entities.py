@@ -134,6 +134,8 @@ class Session:
     user_id: UUID
     tenant_id: UUID
     refresh_token_hash: str
+    previous_refresh_token_hash: str | None = None
+    previous_token_valid_until: datetime | None = None
     user_agent: str | None = None
     device_info: dict[str, Any] | None = None
     ip_address: str | None = None

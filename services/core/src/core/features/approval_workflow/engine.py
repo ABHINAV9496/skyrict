@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from core.db.rbac import grants_permission
 from core.features.approval_workflow.delegation_repository import ApprovalDelegationRepository
 from core.features.approval_workflow.dsl import (
     AmountAtLeastCondition,
@@ -343,7 +344,9 @@ class ApprovalEngine:
                     continue
                 if grant.permission is not None and target.assignee_kind != "permission":
                     continue
-                if grant.permission is not None and grant.permission != target.assignee_value:
+                if grant.permission is not None and not grants_permission(
+                    [grant.permission], target.assignee_value
+                ):
                     continue
                 if grant.delegate == actor_id:
                     delegated_actor = grant.delegator

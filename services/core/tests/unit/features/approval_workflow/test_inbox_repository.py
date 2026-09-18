@@ -215,6 +215,30 @@ async def test_direct_assignee_via_permission_grant_appears_as_assignee() -> Non
     assert items[0].eligible_as == "assignee"
 
 
+async def test_direct_assignee_via_owner_wildcard_appears_as_assignee() -> None:
+    # The tenant owner holds only the wildcard "*" (identity tenant_owner),
+    # which grants every catalogued permission (grants_permission), so a
+    # permission-keyed step must resolve to the owner.
+    session = _FakeSession(
+        batches=[
+            [_instance()],
+            [_step(kind="permission", value="erp.finance.approve")],
+            [],
+            [["*"]],
+        ]
+    )
+    inbox = _inbox(session)
+
+    items = await inbox.list_pending_for_user(
+        tenant_id=TENANT,
+        user_id=USER_APPROVER,
+        now=FIXED_NOW,
+    )
+
+    assert len(items) == 1
+    assert items[0].eligible_as == "assignee"
+
+
 async def test_delegate_of_assignee_appears_as_delegate_with_delegator() -> None:
     session = _FakeSession(
         batches=[
@@ -390,6 +414,41 @@ async def test_permission_scoped_grant_matches_permission_keyed_step() -> None:
 
     assert len(items) == 1
     assert items[0].eligible_as == "delegate"
+
+
+async def test_wildcard_scoped_grant_matches_permission_keyed_step() -> None:
+    # A delegation grant scoped to the owner wildcard covers any
+    # permission-keyed step, matching the direct-grant wildcard semantics.
+    session = _FakeSession(
+        batches=[
+            [_instance()],
+            [_step(kind="permission", value="erp.finance.approve")],
+            [],
+            [],
+            [],
+            [["*"]],
+        ]
+    )
+    delegation_repo = _FakeDelegationRepo(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_DELEGATE,
+                permission="*",
+            )
+        ]
+    )
+    inbox = _inbox(session, delegation_repo=delegation_repo)
+
+    items = await inbox.list_pending_for_user(
+        tenant_id=TENANT,
+        user_id=USER_DELEGATE,
+        now=FIXED_NOW,
+    )
+
+    assert len(items) == 1
+    assert items[0].eligible_as == "delegate"
+    assert items[0].delegated_from == USER_APPROVER
 
 
 async def test_stranger_without_membership_or_grant_sees_nothing() -> None:

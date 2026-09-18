@@ -917,6 +917,40 @@ async def test_decide_delegation_with_matching_permission_scope_decides() -> Non
     assert repo.transitions[-1]["actor_type"] == "delegated"
 
 
+async def test_decide_delegation_with_wildcard_permission_scope_decides() -> None:
+    # A grant scoped to the owner wildcard covers any permission-keyed step.
+    repo = FakeApprovalWorkflowInstanceRepository()
+    repo.instance = _instance()
+    repo.steps = [
+        _step_row(
+            index=0,
+            key="approve",
+            kind="permission",
+            value="erp.finance.approve",
+        )
+    ]
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                permission="*",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    assert repo.transitions[-1]["actor_type"] == "delegated"
+
+
 async def test_decide_permission_scoped_grant_ignored_for_user_step() -> None:
     repo = FakeApprovalWorkflowInstanceRepository()
     _single_step_engine(repo)  # users-keyed step

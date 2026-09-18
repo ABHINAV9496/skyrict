@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import {
   Bar,
   BarChart,
@@ -18,15 +20,25 @@ import { formatNumber } from "@/lib/erp/money";
 
 const SERIES_COLORS = ["var(--primary)", "#38bdf8", "#f59e0b", "#a78bfa", "#34d399"];
 
-interface ReportChartProps {
-  plan: ChartPlan;
-  rows: Record<string, string>[];
+// Hoisted to module scope: recharts re-renders on every new inline object /
+// callback reference, so these must stay stable across renders.
+const AXIS_TICK = { fontSize: 12 } as const;
+const GRID = { strokeDasharray: "3 3", stroke: "var(--border)" } as const;
+const CHART_MARGIN = { top: 4, right: 8, left: 0, bottom: 0 } as const;
+const axisTickFormatter = (value: number) => formatNumber(value);
+const tooltipFormatter = (value: number | string) => formatNumber(Number(value));
+
+export interface ChartPoint {
+  [key: string]: string | number;
 }
 
-export function ReportChart({ plan, rows }: ReportChartProps) {
-  const data = rows
+export function buildChartData(
+  plan: ChartPlan,
+  rows: Record<string, string>[],
+): ChartPoint[] {
+  return rows
     .map((row) => {
-      const point: Record<string, string | number> = {
+      const point: ChartPoint = {
         [plan.category]: row[plan.category] ?? "",
       };
       for (const value of plan.values) {
@@ -36,22 +48,31 @@ export function ReportChart({ plan, rows }: ReportChartProps) {
       }
       return point;
     })
-    .filter((point): point is Record<string, string | number> => point !== null);
+    .filter((point): point is ChartPoint => point !== null);
+}
+
+interface ReportChartProps {
+  plan: ChartPlan;
+  rows: Record<string, string>[];
+}
+
+export function ReportChart({ plan, rows }: ReportChartProps) {
+  const data = useMemo(() => buildChartData(plan, rows), [plan, rows]);
 
   const axes = (
     <>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+      <CartesianGrid {...GRID} />
       <XAxis
         dataKey={plan.category}
-        tick={{ fontSize: 12 }}
+        tick={AXIS_TICK}
         stroke="var(--muted-foreground)"
       />
       <YAxis
-        tick={{ fontSize: 12 }}
+        tick={AXIS_TICK}
         stroke="var(--muted-foreground)"
-        tickFormatter={(value: number) => formatNumber(value)}
+        tickFormatter={axisTickFormatter}
       />
-      <Tooltip formatter={(value) => formatNumber(Number(value))} />
+      <Tooltip formatter={tooltipFormatter as never} />
       <Legend />
     </>
   );
@@ -62,7 +83,7 @@ export function ReportChart({ plan, rows }: ReportChartProps) {
       <div className="mt-4 h-72">
         <ResponsiveContainer width="100%" height="100%">
           {plan.kind === "line" ? (
-            <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <LineChart data={data} margin={CHART_MARGIN}>
               {axes}
               {plan.values.map((value, index) => (
                 <Line
@@ -76,7 +97,7 @@ export function ReportChart({ plan, rows }: ReportChartProps) {
               ))}
             </LineChart>
           ) : (
-            <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <BarChart data={data} margin={CHART_MARGIN}>
               {axes}
               {plan.values.map((value, index) => (
                 <Bar

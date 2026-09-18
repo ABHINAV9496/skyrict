@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BarChart3, SlidersHorizontal } from "lucide-react";
 
+import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { EmptyState } from "@/components/dashboard/erp/empty-state";
 import { ErrorState } from "@/components/dashboard/erp/error-state";
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
@@ -30,13 +32,22 @@ import {
   type ReportParamField,
 } from "@/lib/reports/params";
 import { setPageTitle } from "@/lib/topbar-title";
-import { ReportChart } from "@/features/reports/components/report-chart";
 import { ReportParamForm } from "@/features/reports/components/report-param-form";
 import { ReportResultsTable } from "@/features/reports/components/report-results-table";
 import {
   ReportSnapshots,
   type SnapshotsState,
 } from "@/features/reports/components/report-snapshots";
+
+// recharts lives in the dynamically-imported chart chunk; ssr:false keeps it
+// out of this report route's first-load JS and ChartSkeleton reserves height.
+const LazyReportChart = dynamic(
+  () =>
+    import("@/features/reports/components/report-chart").then(
+      (m) => m.ReportChart,
+    ),
+  { ssr: false, loading: ChartSkeleton },
+);
 
 type LoadState =
   | { status: "loading" }
@@ -282,7 +293,7 @@ export function ReportsDetail({
                   </div>
                 ) : null}
                 {view === "chart" && chartPlan ? (
-                  <ReportChart plan={chartPlan} rows={runState.result.rows} />
+                  <LazyReportChart plan={chartPlan} rows={runState.result.rows} />
                 ) : (
                   <ReportResultsTable result={runState.result} />
                 )}

@@ -235,6 +235,10 @@ export function PlansPage() {
     }
 
     const loading = subscription === null || plans === null;
+    const currentPlan =
+        subscription === null
+            ? null
+            : plans?.find((plan) => plan.id === subscription.plan_id) ?? null;
 
     return (
         <div className="space-y-6 pb-8">
@@ -293,23 +297,15 @@ export function PlansPage() {
                                 <p className="mt-1 text-sm text-muted-foreground">
                                     {subscription.subscription_status === "trialing" ? (
                                         <>
-                                            {subscription.plan_id === "free" ? (
-                                                <>Free during your trial.</>
-                                            ) : (
-                                                <>
-                                                    Professional trial -{" "}
-                                                    {trialCountdownLabel(
-                                                        subscription.days_remaining,
-                                                    )}
-                                                    .
-                                                </>
-                                            )}
+                                            {currentPlan
+                                                ? `${currentPlan.display_name} trial - ${trialCountdownLabel(subscription.days_remaining)}.`
+                                                : `Trial active - ${trialCountdownLabel(subscription.days_remaining)}.`}
                                         </>
                                     ) : (
                                         <>
-                                            {subscription.plan_id === "free"
-                                                ? "Your workspace is on the free plan."
-                                                : `${subscription.plan_id} plan`}
+                                            {currentPlan
+                                                ? `${currentPlan.display_name} plan`
+                                                : "Free plan"}
                                             {subscription.billing_email
                                                 ? ` · billed to ${subscription.billing_email}`
                                                 : ""}

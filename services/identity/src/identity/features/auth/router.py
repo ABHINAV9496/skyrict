@@ -346,9 +346,7 @@ async def signup_organization(
     )
 
 
-@router.post(
-    "/signup/checkout-session", response_model=ResponseEnvelope[CheckoutSessionResponse]
-)
+@router.post("/signup/checkout-session", response_model=ResponseEnvelope[CheckoutSessionResponse])
 async def signup_checkout_session(
     body: SignupCheckoutSessionRequest,
     authn: AuthenticationService = Depends(get_authn_service),

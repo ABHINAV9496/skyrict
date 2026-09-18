@@ -50,9 +50,7 @@ SUPPORTED_CURRENCIES: tuple[str, ...] = (
     "sar",
 )
 
-CURRENCY_LITERAL = Literal[
-    "usd", "inr", "gbp", "eur", "aud", "cad", "sgd", "aed", "sar"
-]
+CURRENCY_LITERAL = Literal["usd", "inr", "gbp", "eur", "aud", "cad", "sgd", "aed", "sar"]
 
 #: Allowlisted markets whose fixed price points have NOT been approved yet.
 #: They resolve to their local currency for messaging, but checkout is

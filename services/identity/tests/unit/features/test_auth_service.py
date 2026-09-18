@@ -1079,12 +1079,8 @@ class TestWizard:
         assert request.plan_id == "starter"
 
         harness = _Harness()
-        await harness.verification_store.set_verification_token(
-            "vt", "owner@neworg.com", "hash"
-        )
-        await harness.service.signup_create_organization(
-            request, ip_address=None, user_agent=None
-        )
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
+        await harness.service.signup_create_organization(request, ip_address=None, user_agent=None)
 
         tenant = harness.tenant_repo.created[0]
         assert tenant.plan_tier == "starter"
@@ -1097,9 +1093,7 @@ class TestResolveSignupCheckoutTenant:
         tenant = Tenant(name="Acme", slug="acme-inc", id=uuid.uuid4())
         owner = _make_user(tenant_id=tenant.id, email="owner@neworg.com")
         harness = _Harness(users=[owner], tenants=[tenant])
-        await harness.verification_store.set_verification_token(
-            "vt", "owner@neworg.com", "hash"
-        )
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
 
         resolved = await harness.service.resolve_signup_checkout_tenant(
             email="owner@neworg.com",
@@ -1123,9 +1117,7 @@ class TestResolveSignupCheckoutTenant:
     async def test_rejects_token_email_mismatch(self) -> None:
         tenant = Tenant(name="Acme", slug="acme-inc", id=uuid.uuid4())
         harness = _Harness(tenants=[tenant])
-        await harness.verification_store.set_verification_token(
-            "vt", "other@example.com", "hash"
-        )
+        await harness.verification_store.set_verification_token("vt", "other@example.com", "hash")
 
         with pytest.raises(TokenInvalidError, match="Verification session"):
             await harness.service.resolve_signup_checkout_tenant(
@@ -1136,9 +1128,7 @@ class TestResolveSignupCheckoutTenant:
 
     async def test_rejects_unknown_tenant(self) -> None:
         harness = _Harness()
-        await harness.verification_store.set_verification_token(
-            "vt", "owner@neworg.com", "hash"
-        )
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
 
         with pytest.raises(TokenInvalidError, match="Verification session"):
             await harness.service.resolve_signup_checkout_tenant(
@@ -1153,9 +1143,7 @@ class TestResolveSignupCheckoutTenant:
         other = Tenant(name="Other", slug="other", id=uuid.uuid4())
         outsider = _make_user(tenant_id=other.id, email="owner@neworg.com")
         harness = _Harness(users=[outsider], tenants=[tenant, other])
-        await harness.verification_store.set_verification_token(
-            "vt", "owner@neworg.com", "hash"
-        )
+        await harness.verification_store.set_verification_token("vt", "owner@neworg.com", "hash")
 
         with pytest.raises(TokenInvalidError, match="Verification session"):
             await harness.service.resolve_signup_checkout_tenant(

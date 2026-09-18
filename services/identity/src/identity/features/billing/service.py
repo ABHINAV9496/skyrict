@@ -285,16 +285,13 @@ class BillingService:
         normalized_currency = resolve_currency(currency)
         if normalized_currency is None:
             raise ValidationError(
-                f"Unsupported currency: {currency!r} "
-                f"(supported: {', '.join(SUPPORTED_CURRENCIES)})"
+                f"Unsupported currency: {currency!r} (supported: {', '.join(SUPPORTED_CURRENCIES)})"
             )
         if normalized_currency in PRICING_PENDING_CURRENCIES:
             # Hard allowlist, no USD catch-all: pending beta markets resolve
             # to their local currency for messaging but cannot check out
             # until business-approved price points land in the catalog.
-            raise ValidationError(
-                f"Checkout in {normalized_currency.upper()} is not available yet"
-            )
+            raise ValidationError(f"Checkout in {normalized_currency.upper()} is not available yet")
         # Currency-specific Price when configured; the USD entry is the
         # fallback so an unpriced locale never blocks checkout.
         price_id = settings.BILLING_STRIPE_PRICE_IDS.get(

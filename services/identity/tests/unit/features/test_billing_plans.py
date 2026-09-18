@@ -130,9 +130,7 @@ def test_pricing_pending_currencies_are_well_formed() -> None:
     """Pending codes are allowlisted but carry no price rows in any plan."""
     assert set(PRICING_PENDING_CURRENCIES) <= set(SUPPORTED_CURRENCIES)
     assert not set(PRICED_CURRENCIES) & set(PRICING_PENDING_CURRENCIES)
-    assert set(PRICED_CURRENCIES) | set(PRICING_PENDING_CURRENCIES) == set(
-        SUPPORTED_CURRENCIES
-    )
+    assert set(PRICED_CURRENCIES) | set(PRICING_PENDING_CURRENCIES) == set(SUPPORTED_CURRENCIES)
     for plan in PLANS.values():
         for code in PRICING_PENDING_CURRENCIES:
             assert code not in plan.prices

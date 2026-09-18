@@ -66,12 +66,12 @@ class StripeClient:
             raise StripeError("Stripe SDK is not installed") from exc
 
         try:
-            return stripe.Webhook.construct_event(
+            return stripe.Webhook.construct_event(  # type: ignore[no-any-return,no-untyped-call]
                 payload=payload,
                 sig_header=signature_header,
                 secret=self._webhook_secret,
             )
-        except stripe.error.SignatureVerificationError as exc:
+        except stripe.error.SignatureVerificationError as exc:  # type: ignore[attr-defined]
             raise InvalidSignatureError(str(exc)) from exc
         except Exception as exc:  # pragma: no cover - defensive
             raise StripeError(f"Could not construct Stripe event: {exc}") from exc

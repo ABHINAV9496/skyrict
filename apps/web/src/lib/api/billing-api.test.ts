@@ -117,7 +117,11 @@ describe("billing mutations", () => {
             "/api/v1/billing/checkout-session",
             {
                 method: "POST",
-                body: JSON.stringify({ planId: "professional", interval: "month" }),
+                body: JSON.stringify({
+                    planId: "professional",
+                    interval: "month",
+                    currency: "usd",
+                }),
             },
         );
         expect(session.session_id).toBe("cs_test_1");
@@ -139,7 +143,11 @@ describe("billing mutations", () => {
             "/api/v1/billing/checkout-session",
             {
                 method: "POST",
-                body: JSON.stringify({ planId: "professional", interval: "year" }),
+                body: JSON.stringify({
+                    planId: "professional",
+                    interval: "year",
+                    currency: "usd",
+                }),
             },
         );
     });

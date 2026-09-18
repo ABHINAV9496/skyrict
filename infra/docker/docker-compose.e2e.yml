@@ -87,9 +87,6 @@ services:
       IDENTITY_ENVIRONMENT: test
       IDENTITY_LOG_LEVEL: INFO
       IDENTITY_LOG_JSON: "true"
-      IDENTITY_ENVIRONMENT: test
-      LOG_LEVEL: INFO
-      LOG_JSON: "true"
       IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
       IDENTITY_REDIS_URL: redis://skyrict-e2e-redis:6379/0
       IDENTITY_TRUSTED_PROXIES: '["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]'

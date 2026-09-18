@@ -290,18 +290,6 @@ export async function waitForWorkspaceSettled(page: Page, email?: string): Promi
     "sidebar user menu must render the signed-in user's email after session hydration",
   ).toBeVisible({ timeout: 20_000 });
 }
-export async function waitForWorkspaceSettled(
-    page: Page,
-    email = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io",
-): Promise<void> {
-    await expect(
-        page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(
-        page.getByText(email, { exact: true }).first(),
-        "sidebar user menu must render the signed-in user's email after session hydration",
-    ).toBeVisible({ timeout: 20_000 });
-}
 
 /**
  * First sign-in of a freshly registered tenant owner: mandatory MFA takes the

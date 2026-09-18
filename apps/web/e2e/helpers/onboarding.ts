@@ -163,101 +163,6 @@ export async function registerTenant(
             .not.toBe(originalAnswer);
         await page.getByLabel("Enter the code").fill(captchaAnswer ?? "");
     }
-  });
-
-  /* ---------- account step ---------- */
-
-  await page.goto(`${signupUrl()}/register`);
-  await page.getByLabel("Work email").fill(input.email);
-  await page.getByText("This email is available.").waitFor({ timeout: 15_000 });
-  // Without a Turnstile site key (ENVIRONMENT=test) the risk challenge is a
-  // plain checkbox that runs the normal solve-captcha affordance on check.
-  await page.getByRole("checkbox", { name: "I'm not a robot" }).check();
-  await page.getByRole("button", { name: "Continue with email" }).click();
-  await page.waitForURL("**/register/verify**");
-
-  /* ---------- verify step (OTP auto-sent on mount) ---------- */
-
-  // The plaintext OTP is only returned in ENVIRONMENT=test. The OTP form
-  // submits itself as soon as the sixth digit is filled.
-  await expect
-    .poll(() => verificationCode, {
-      timeout: 10_000,
-      message: "Verification code was not returned by /api/auth/code/send.",
-    })
-    .toBeTruthy();
-  await fillOtp(page, "Verification code", verificationCode ?? "");
-  await page.waitForURL("**/register/security**");
-
-  /* ---------- security step (password + text CAPTCHA) ---------- */
-
-  await expect
-    .poll(() => captchaAnswer, {
-      timeout: 10_000,
-      message: "Captcha answer was not returned by /api/auth/captcha.",
-    })
-    .toBeTruthy();
-  // exact: true - getByLabel otherwise also matches the "Show password"
-  // toggle's aria-label and the "Confirm password" label via substring.
-  await page.getByLabel("Password", { exact: true }).fill(input.password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(input.password);
-  await page.getByLabel("Enter the code").fill(captchaAnswer ?? "");
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL("**/register/plan**");
-
-  /* ---------- plan step ---------- */
-
-  // Starter is $0; the driver picks it so the harness never touches billing.
-  await page.getByRole("radio", { name: /Starter/ }).click();
-  await page.getByRole("button", { name: "Continue with Starter" }).click();
-  await page.waitForURL("**/register/organization**");
-
-  /* ---------- organization step ---------- */
-
-  await page.getByLabel("Company name").fill(companyName);
-  // The slug auto-fills from the company name; overwrite it with the unique
-  // tenant slug (the submit handler re-checks availability regardless).
-  await page.getByLabel("Workspace URL").fill(slug);
-  await page.getByText("This URL is available.").waitFor({ timeout: 15_000 });
-  await page.locator("#industry").click();
-  await page.getByRole("option", { name: "Technology" }).click();
-  await page.getByLabel("Owner full name").fill("E2E Owner");
-  // Phone/Business-location country scopes default to the browser timezone
-  // (US in CI); only the number and address are filled below.
-  await page.getByLabel("Phone number").fill("5550101234");
-  await page.getByLabel("Street address").fill("1 Market St");
-  await page.getByLabel("City").fill("San Francisco");
-  await page.getByLabel("State / Province").fill("CA");
-  await page.getByLabel("Postal code").fill("94103");
-  await page
-    .getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ })
-    .check();
-  await page
-    .getByRole("checkbox", { name: /authorized to set up this organization/ })
-    .check();
-  await page.getByRole("button", { name: "Create my workspace" }).click();
-
-  await expect
-    .poll(() => tenantId, {
-      timeout: 10_000,
-      message: "Tenant id was not returned by /api/auth/org.",
-    })
-    .toBeTruthy();
-
-  // Creation triggers a provisioning screen (a ~10.4s sequence of timers) that
-  // then hands off to {slug}.signin.{apex}:{port}/signin?email=... on its own.
-  await page.waitForURL(
-    (url) => url.hostname.startsWith(`${slug}.signin.`),
-    { timeout: 45_000 },
-  );
-
-  return {
-    slug,
-    tenantId: tenantId ?? "",
-    email: input.email,
-    password: input.password,
-  };
-}
 
     await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForURL("**/register/plan**");
@@ -305,9 +210,10 @@ export async function registerTenant(
 
     // Creation triggers a provisioning screen (a ~10.4s sequence of timers) that
     // then hands off to {slug}.signin.{apex}:{port}/signin?email=... on its own.
-    await page.waitForURL((url) => url.hostname.startsWith(`${slug}.signin.`), {
-        timeout: 45_000,
-    });
+    await page.waitForURL(
+        (url) => url.hostname.startsWith(`${slug}.signin.`),
+        { timeout: 45_000 },
+    );
 
     return {
         slug,

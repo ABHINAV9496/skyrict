@@ -658,6 +658,9 @@ class TokenService:
             await self._handle_reuse(user_id=user_id, tenant_id=tenant_id, session=session)
             raise TokenReuseDetectedError()
 
+        # within_grace implies a stored session, so past the guard above there
+        # must be one to rotate against.
+        assert session is not None
         assert session.id is not None
         if session.expires_at <= now:
             await self.session_service.expire_session(session.id, tenant_id=tenant_id)

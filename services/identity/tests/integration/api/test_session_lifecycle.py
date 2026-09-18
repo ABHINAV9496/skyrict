@@ -139,9 +139,7 @@ class TestSessionLifecycle:
                 await session.execute(
                     update(SessionModel)
                     .where(SessionModel.user_id == uuid.UUID(user_id))
-                    .values(
-                        previous_token_valid_until=datetime.now(UTC) - timedelta(seconds=1)
-                    )
+                    .values(previous_token_valid_until=datetime.now(UTC) - timedelta(seconds=1))
                 )
                 await session.commit()
 
@@ -162,11 +160,9 @@ class TestSessionLifecycle:
         finally:
             await _delete_tenant_by_slug(slug)
 
-    async def test_refresh_reuse_within_grace_is_tolerated(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_refresh_reuse_within_grace_is_tolerated(self, client: AsyncClient) -> None:
         slug, email = await _provision(client)
-        user_id, access, refresh = await _login(client, slug=slug, email=email)
+        _, access, refresh = await _login(client, slug=slug, email=email)
         try:
             first = await _refresh(client, slug=slug, refresh_token=refresh)
             assert first.status_code == 200

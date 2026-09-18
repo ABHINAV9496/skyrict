@@ -5,6 +5,7 @@ import {
     formatPriceCents,
     isTrialActive,
     purchasablePlans,
+    subscriptionStatusLabel,
     trialCountdownLabel,
 } from "@/features/billing/billing-utils";
 
@@ -66,5 +67,17 @@ describe("purchasablePlans", () => {
             "professional",
             "business",
         ]);
+    });
+});
+
+describe("subscriptionStatusLabel", () => {
+    it("labels every backend status", () => {
+        expect(subscriptionStatusLabel("trialing")).toBe("Trial");
+        expect(subscriptionStatusLabel("active")).toBe("Active");
+        expect(subscriptionStatusLabel("past_due")).toBe("Past due");
+        expect(subscriptionStatusLabel("canceled")).toBe("Canceled");
+        expect(subscriptionStatusLabel("expired")).toBe("Expired");
+        expect(subscriptionStatusLabel("none")).toBe("Free");
+        expect(subscriptionStatusLabel("anything-else")).toBe("Free");
     });
 });

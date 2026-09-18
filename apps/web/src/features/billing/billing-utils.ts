@@ -27,3 +27,21 @@ export function trialCountdownLabel(daysRemaining: number): string {
 export function purchasablePlans(plans: BillingPlan[]): BillingPlan[] {
     return plans.filter((plan) => plan.id === "professional" || plan.id === "business");
 }
+
+/** Human label for a subscription status from the backend. */
+export function subscriptionStatusLabel(status: string): string {
+    switch (status) {
+        case "trialing":
+            return "Trial";
+        case "active":
+            return "Active";
+        case "past_due":
+            return "Past due";
+        case "canceled":
+            return "Canceled";
+        case "expired":
+            return "Expired";
+        default:
+            return "Free";
+    }
+}

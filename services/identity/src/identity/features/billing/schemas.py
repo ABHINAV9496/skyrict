@@ -87,3 +87,25 @@ class PlanUpdateRequest(_CamelModel):
     """PATCH /billing/plan — switch the tenant's paid plan (owner-only)."""
 
     plan_id: PLAN_ID_LITERAL = Field(..., description="Target plan to switch to")
+
+
+# -- Stripe webhook + tick (BILLING-SERV-002) -----------------------------------
+
+
+class WebhookAckResponse(BaseModel):
+    """Ack returned to Stripe for a signature-valid webhook delivery."""
+
+    status: str = Field(
+        ...,
+        description="Outcome: applied (state changed) | skipped (duplicate) | ignored (unhandled type)",
+    )
+
+
+class TickResponse(BaseModel):
+    """Result of an explicit lazy-check tick (ops/cron)."""
+
+    tenant_id: str = Field(..., description="Tenant the tick ran against")
+    checked: bool = Field(default=True, description="True when the tick ran")
+    changed: bool = Field(
+        ..., description="True when the tick mutated subscription state (e.g. grace downgrade)"
+    )

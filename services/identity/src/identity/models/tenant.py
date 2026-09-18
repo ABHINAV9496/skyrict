@@ -43,6 +43,9 @@ class TenantModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True)
     billing_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    grace_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     users = relationship("UserModel", back_populates="tenant", lazy="selectin")

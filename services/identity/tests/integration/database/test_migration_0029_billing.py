@@ -1,15 +1,16 @@
-"""0029 billing migration up/down round-trip on a scratch database (SKY-33).
+"""0029+0030 billing migrations up/down round-trip on a scratch database (SKY-33).
 
-Proves the billing migration in isolation against a disposable
-database: upgrade the identity chain to 0027, seed a tenant row carrying the
-legacy ``professional`` tier value, upgrade to 0029 (runs 0028 erp permissions
-then 0029 billing), assert the new billing columns exist and the row was
-canonicalized to ``pro`` and the CHECK constraint rejects the old literal -
-then downgrade back to 0027 and assert the reverse (columns gone, row
+Proves the billing migrations in isolation against a disposable database:
+upgrade the identity chain to 0027, seed a tenant row carrying the legacy
+``professional`` tier value, upgrade to 0030 (runs 0028 erp permissions,
+0029 billing, then 0030 webhook lifecycle: ``grace_started_at`` +
+``processed_stripe_events``), assert the new billing columns exist, the row
+was canonicalized to ``pro`` and the CHECK constraint rejects the old literal
+- then downgrade back to 0027 and assert the reverse (columns gone, row
 reverted to ``professional``).
 
-Pinned to 0029 rather than ``head``: later migrations must not change what
-this round-trip is asserting.
+Pinned to 0030 rather than ``head``: later migrations (e.g. 0031 session
+refresh-reuse grace) must not change what this round-trip is asserting.
 
 The test owns its scratch database and never touches the shared test
 database (``migrated_schema``): it destroys the schema it builds.
@@ -39,12 +40,15 @@ pytestmark = [pytest.mark.integration, pytest.mark.slow]
 _IDENTITY_DIR = Path(__file__).resolve().parents[3]  # services/identity
 _ALEMBIC_INI = _IDENTITY_DIR / "alembic.ini"
 
+# Columns introduced across 0029 (billing) and 0030 (grace period) - both must
+# be present at head and both must be gone again after the 0027 downgrade.
 _BILLING_COLUMNS = (
     "trial_ends_at",
     "subscription_status",
     "stripe_customer_id",
     "stripe_subscription_id",
     "billing_email",
+    "grace_started_at",
 )
 
 
@@ -138,7 +142,7 @@ async def _assert_upgraded(url: str, tenant_id: str) -> None:
             version = (
                 await conn.execute(text("SELECT version_num FROM alembic_version"))
             ).scalar_one()
-            assert version == "0029", f"head is {version}, expected 0029"
+            assert version == "0030", f"head is {version}, expected 0030"
 
             cols = {
                 row[0]
@@ -302,7 +306,7 @@ def test_0029_billing_roundtrip() -> None:
 
         _run_alembic(
             _ALEMBIC_INI,
-            ["upgrade", "0029"],
+            ["upgrade", "0030"],
             overrides,
         )
         asyncio.run(_assert_upgraded(scratch_url, tenant_id))

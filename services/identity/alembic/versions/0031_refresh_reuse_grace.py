@@ -10,8 +10,8 @@ New columns (all nullable, so existing rows need no backfill):
 * ``sessions.previous_refresh_token_hash`` - String(128)
 * ``sessions.previous_token_valid_until``   - nullable DateTime
 
-Revision ID: 0030
-Revises: 0029
+Revision ID: 0031
+Revises: 0030
 Create Date: 2026-09-18
 """
 
@@ -20,8 +20,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0030"
-down_revision = "0029"
+revision = "0031"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

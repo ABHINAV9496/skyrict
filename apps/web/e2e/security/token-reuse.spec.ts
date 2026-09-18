@@ -9,6 +9,13 @@
  *
  * This spec owns its own login context on purpose - the shared worker fixture
  * must not advance its rotation chain.
+ *
+ * The attacker replays R0 against IDENTITY directly, not through the BFF: the
+ * BFF single-flights refresh rotations in-process (rotateRefreshToken's memo
+ * keyed by tenant+token), so a same-process replay would return the cached R1
+ * pair and never arm identity's reuse detector. Identity is published on
+ * :8000 by the E2E compose stack; hitting it directly is the true replay
+ * boundary.
  */
 
 import { expect } from "@playwright/test";
@@ -19,7 +26,6 @@ import {
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
     BASE_URL,
-    SESSION_COOKIE,
     apiSignIn,
     readSessionCookie,
 } from "../helpers/security";
@@ -48,27 +54,18 @@ test("presenting a rotated refresh token revokes the session family", async ({
         expect(r1).not.toBeNull();
         expect(r1).not.toBe(r0);
 
-        // The attacker replays the OLD token on a separate client.
+        // The attacker replays the OLD token straight at identity (bypassing
+        // the BFF memo) on a separate client.
+        const identityUrl =
+            process.env.E2E_IDENTITY_URL ?? "http://localhost:8000";
         const attacker = await playwright.request.newContext({
-            baseURL: BASE_URL,
-            storageState: {
-                cookies: [
-                    {
-                        name: SESSION_COOKIE,
-                        value: r0,
-                        domain: new URL(BASE_URL).hostname,
-                        path: "/",
-                        expires: -1,
-                        httpOnly: true,
-                        secure: false,
-                        sameSite: "Lax",
-                    },
-                ],
-                origins: [],
-            },
+            baseURL: identityUrl,
         });
         try {
-            const reuse = await attacker.post("/api/auth/refresh");
+            const reuse = await attacker.post("/api/v1/auth/refresh", {
+                headers: { "X-Tenant-Slug": "default" },
+                data: { refresh_token: r0 },
+            });
             expect(reuse.status()).toBe(401);
 
             // Family kill: the rotated token is dead too.

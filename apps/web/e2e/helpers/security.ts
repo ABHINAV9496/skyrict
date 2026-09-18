@@ -65,11 +65,11 @@ export async function apiSignIn(
 
     let accessToken: string | null = null;
     switch (login.payload.status) {
-        case "mfa.setup":
+        case "mfa_setup":
         case "authenticated":
             accessToken = (login.payload.accessToken as string | null) ?? null;
             break;
-        case "mfa.challenge": {
+        case "mfa_challenge": {
             if (!totpSecret) {
                 throw new BffError(
                     401,

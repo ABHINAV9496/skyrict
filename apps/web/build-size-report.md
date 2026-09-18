@@ -9,6 +9,10 @@ Committed baseline for the frontend performance gate (PERF-WEB-001).
 - **Generated**: 2026-09-18, HEAD `82f43f5b`, Next 15.5.24 / React 19, `ANALYZE=true` build (Sentry wrapper active).
 - **Machine baseline**: `perf-baseline.json` (93 routes, shared total, top chunks) — the CI budget gate compares against this file, so it must stay in sync with any committed change to this report.
 
+## Note on shell code-splitting (measured, not assumed)
+
+`ShellRouter` eagerly imports the five dashboard shells. Converting those to `next/dynamic` was measured to have **zero first-load effect**: every route's First Load JS moved uniformly (+1 kB, build noise) because Next preloads all `dynamic()` chunk references for a served segment, and `ShellRouter` is imported by the shared `dashboard/layout`. Real per-route shell loading requires route-group layouts (e.g. `app/(erp)/dashboard/erp/layout.tsx` rendering `ErpShell`), which is a structural refactor tracked separately — not part of this workstream.
+
 ## Headline numbers
 
 | Metric | gzip |

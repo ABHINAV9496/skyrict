@@ -6,6 +6,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2, CheckCircle2, LoaderCircle } from "lucide-react";
 
+// flag-icons is used only here (phone / country code flags); importing the CSS
+// in this component keeps its ~hundreds of sprite rules out of every other page.
+import "flag-icons/css/flag-icons.min.css";
+
 import { PolicyDialog } from "@/components/onboarding/policy-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

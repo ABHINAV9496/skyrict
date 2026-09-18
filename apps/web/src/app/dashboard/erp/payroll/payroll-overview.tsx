@@ -1,15 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { BadgeCheck, PenLine, Receipt, Wallet } from "lucide-react";
-import {
-    Bar,
-    BarChart,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-} from "recharts";
 
+import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import {
     RecentActivityList,
     type ActivityItem,
@@ -39,6 +34,16 @@ type PageStatus =
     | { state: "loading" }
     | { state: "error"; message: string }
     | { state: "ready"; data: OverviewData };
+
+// recharts lives in the dynamically-imported chart chunk; ssr:false keeps it
+// out of this route's first-load JS and ChartSkeleton reserves the height.
+const LazyCostTrendChart = dynamic(
+    () =>
+        import(
+            "@/app/dashboard/erp/payroll/payroll-cost-trend-chart"
+        ).then((m) => m.PayrollCostTrendChart),
+    { ssr: false, loading: ChartSkeleton },
+);
 
 interface OverviewData {
     runs: string;
@@ -290,32 +295,10 @@ export function PayrollOverview() {
                         Monthly total net across paid runs
                     </p>
                     {data.costTrend.length > 0 ? (
-                        <div className="mt-4 h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={data.costTrend}
-                                    margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-                                >
-                                    <XAxis
-                                        dataKey="label"
-                                        tick={{ fontSize: 12 }}
-                                        stroke="var(--muted-foreground)"
-                                        interval="preserveStartEnd"
-                                    />
-                                    <Tooltip
-                                        cursor={{ fill: "var(--muted)" }}
-                                        formatter={(value) =>
-                                            formatMoney(Number(value), data.currency)
-                                        }
-                                    />
-                                    <Bar
-                                        dataKey="amount"
-                                        fill="var(--primary)"
-                                        radius={[4, 4, 0, 0]}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
+                        <LazyCostTrendChart
+                            data={data.costTrend}
+                            currency={data.currency}
+                        />
                     ) : (
                         <p className="mt-3 text-sm text-muted-foreground">
                             No paid runs yet — the cost trend appears once a run is paid.

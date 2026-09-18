@@ -15,6 +15,7 @@ import {
 } from "@/components/dashboard/workspace/sidebar-config";
 import { useModuleAccess } from "@/lib/access/modules";
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
+import { BillingTrialBanner } from "@/features/billing/billing-banner";
 import { cn } from "@/lib/utils";
 
 const COLLAPSED_KEY = "skyrict:sidebar:collapsed";
@@ -87,6 +88,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     )}
                 >
                     <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 flex-col px-4 py-6 lg:px-6 lg:py-8">
+                        <BillingTrialBanner />
                         {children}
                     </div>
                 </main>

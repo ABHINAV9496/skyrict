@@ -81,7 +81,7 @@ function PlanCard({
                 </span>
                 {price !== null && price > 0 ? (
                     <span className="text-[11px] text-muted-foreground">
-                        / user / month
+                        / month
                     </span>
                 ) : null}
             </div>

@@ -76,9 +76,7 @@ class TestWebhookSignatureRejection:
 
 
 class TestWebhookDelivery:
-    async def test_valid_unknown_event_acknowledged_and_recorded(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_valid_unknown_event_acknowledged_and_recorded(self, client: AsyncClient) -> None:
         from identity.api.deps import get_stripe_client
 
         app.dependency_overrides[get_stripe_client] = lambda: StripeClient(
@@ -90,7 +88,11 @@ class TestWebhookDelivery:
             resp = await client.post(
                 "/api/v1/billing/webhooks",
                 content=_event_payload(event_id, "invoice.payment_succeeded"),
-                headers={"stripe-signature": _stripe_signature(_event_payload(event_id, "invoice.payment_succeeded"))},
+                headers={
+                    "stripe-signature": _stripe_signature(
+                        _event_payload(event_id, "invoice.payment_succeeded")
+                    )
+                },
             )
 
             assert resp.status_code == 200, resp.text

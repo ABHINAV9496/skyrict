@@ -550,9 +550,7 @@ class TestStripeWebhookLifecycle:
         assert tenant.grace_started_at == self.NOW
 
     async def test_past_due_active_then_past_due_starts_fresh_clock(self) -> None:
-        repo = FakeTenantRepo(
-            [_tenant(subscription_status="active", stripe_customer_id="cus_123")]
-        )
+        repo = FakeTenantRepo([_tenant(subscription_status="active", stripe_customer_id="cus_123")])
         tid = str(next(iter(repo.tenants)))
         later = self.NOW + timedelta(days=1)
 

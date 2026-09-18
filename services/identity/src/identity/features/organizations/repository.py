@@ -85,9 +85,7 @@ class TenantRepository(SqlRepository):
         model = result.scalar_one_or_none()
         return _from_orm(model) if model is not None else None
 
-    async def get_by_stripe_subscription_id(
-        self, stripe_subscription_id: str
-    ) -> Tenant | None:
+    async def get_by_stripe_subscription_id(self, stripe_subscription_id: str) -> Tenant | None:
         """Fetch a tenant by Stripe subscription id (origin for webhooks)."""
         stmt = select(TenantModel).where(
             TenantModel.stripe_subscription_id == stripe_subscription_id

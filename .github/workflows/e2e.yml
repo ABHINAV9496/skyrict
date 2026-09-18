@@ -138,10 +138,44 @@ jobs:
         # `-- -p 3100` arg through pnpm: pnpm appends the literal `--` to the
         # script argv, `next start` then treats `-p` as a positional project
         # directory and exits with "Invalid project directory provided".
+        #
+        # The probe hits /api/v1/health, a static Next route that answers 200
+        # without touching a backend or requiring a session cookie. If it ever
+        # fails again, fail fast with the server log + last response body so
+        # the cause (404/500, rebind, process exit) is obvious instead of a
+        # silent 90s timeout.
         run: |
-          pnpm --filter @skyrict/web start &
-          bash scripts/e2e/wait-for-health.sh http://localhost:3100/api/v1/health 90
-          echo "Next.js listening on :3100"
+          set -o pipefail
+
+          pnpm --filter @skyrict/web start > /tmp/next.log 2>&1 &
+          NEXT_PID=$!
+
+          for i in $(seq 1 90); do
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "Next.js exited unexpectedly" >&2
+              cat /tmp/next.log >&2
+              exit 1
+            fi
+
+            status=$(curl -sS -o /tmp/health-response \
+              -w "%{http_code}" \
+              http://127.0.0.1:3100/api/v1/health || true)
+
+            if [ "$status" = "200" ]; then
+              echo "HEALTHY http://127.0.0.1:3100/api/v1/health"
+              exit 0
+            fi
+
+            echo "Waiting for Next.js health endpoint ($i/90), HTTP status: $status"
+            sleep 1
+          done
+
+          echo "TIMED OUT waiting for http://127.0.0.1:3100/api/v1/health after 90s" >&2
+          echo "--- /tmp/next.log ---" >&2
+          cat /tmp/next.log >&2 || true
+          echo "--- /tmp/health-response ---" >&2
+          cat /tmp/health-response 2>/dev/null || true
+          exit 1
         env:
           SESSION_COOKIE_SECURE: "false"
           PORT: "3100"

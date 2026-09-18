@@ -309,3 +309,104 @@ export function applySessionCookie(response: NextResponse, value: string | null)
     maxAge: value ? SESSION_MAX_AGE_SECONDS : 0,
   });
 }
+
+export interface SessionAccess {
+  /** Fresh access token minted by rotating the httpOnly refresh cookie. */
+  token: string;
+  /** Rotated refresh token to store back in the cookie, when identity rotates. */
+  refreshToken: string | null;
+  /** Access-token lifetime reported by identity (seconds). */
+  expiresIn: number;
+}
+
+interface RotatedRefresh {
+  /** Fresh access + rotated refresh token when the backend answered OK. */
+  access: SessionAccess | null;
+  /** The full upstream outcome, for routes that branch on status/detail. */
+  result: BackendCallResult;
+}
+
+/**
+ * Memoized single-flight refresh-token rotation keyed by its value.
+ *
+ * Identity rotates the refresh token on every hydration and revokes the whole
+ * token family if a value is ever presented more than once (reuse detection).
+ * The httpOnly cookie is the only cross-request carrier of the refresh value,
+ * so several BFF requests that race the same page load - the client's own
+ * single-flight ``restore()`` plus a cookie-only /api/v1 call from a
+ * component mounted before restore resolves - can carry the same value.
+ *
+ * Every consumer routes its rotation through this helper: concurrent requests
+ * coalesce onto one in-flight call, and the outcome is MEMOIZED (not evicted
+ * on settle) so a request arriving after the rotation completed answers from
+ * cache instead of re-presenting an already-rotated value to identity. Each
+ * refresh value therefore reaches ``/auth/refresh`` exactly once per process.
+ * The cache is bounded by a FIFO cap; a fresh cookie value still rotates
+ * normally.
+ */
+const ROTATION_CACHE_MAX = 64;
+const refreshRotations = new Map<string, Promise<RotatedRefresh>>();
+
+export function rotateRefreshToken(
+  refreshToken: string,
+  tenantSlug: string,
+): Promise<RotatedRefresh> {
+  const key = `${tenantSlug}:${refreshToken}`;
+  const pending = refreshRotations.get(key);
+  if (pending) return pending;
+
+  const started = callBackend("/auth/refresh", {
+    body: { refresh_token: refreshToken },
+    tenantSlug,
+  }).then((result) => {
+    const data = result.data;
+    return {
+      access:
+        result.ok && data && data.access_token
+          ? {
+              token: String(data.access_token),
+              refreshToken:
+                typeof data.refresh_token === "string" && data.refresh_token
+                  ? data.refresh_token
+                  : null,
+              expiresIn: typeof data.expires_in === "number" ? data.expires_in : 0,
+            }
+          : null,
+      result,
+    } satisfies RotatedRefresh;
+  });
+
+  refreshRotations.set(key, started);
+  if (refreshRotations.size > ROTATION_CACHE_MAX) {
+    const oldest = refreshRotations.keys().next().value;
+    if (oldest !== undefined) refreshRotations.delete(oldest);
+  }
+  return started;
+}
+
+/**
+ * Resolve a fresh access token from the httpOnly session cookie.
+ *
+ * Raw same-origin requests (server-side fetches from the BFF proxy, E2E
+ * ``page.evaluate`` calls) carry cookies but never an Authorization header.
+ * This exchanges the refresh cookie for an access token exactly like
+ * ``POST /api/auth/refresh`` does - rotating the refresh cookie - so the
+ * caller can forward the token downstream and store the rotated refresh
+ * cookie back on the response. Returns null when no cookie exists or the
+ * refresh failed; the caller must answer 401.
+ *
+ * The rotation is the memoized single-flight ``rotateRefreshToken`` shared
+ * with the /api/auth/session and /api/auth/refresh routes, so a cookie-only
+ * BFF call that races the client's own restore() never re-presents a refresh
+ * value identity is already rotating.
+ */
+export async function sessionAccessToken(
+  request: NextRequest,
+): Promise<SessionAccess | null> {
+  const refreshToken = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!refreshToken) return null;
+
+  const slug = resolveTenantSlug(request.headers.get("host"));
+  const rotated = await rotateRefreshToken(refreshToken, slug);
+  return rotated.access;
+}

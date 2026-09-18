@@ -7,6 +7,7 @@ import {
     callBackend,
     mapUser,
     resolveTenantSlug,
+    rotateRefreshToken,
 } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -23,35 +24,28 @@ export async function GET(request: NextRequest) {
     }
 
     const slug = resolveTenantSlug(request.headers.get("host"));
-    const refreshed = await callBackend("/auth/refresh", {
-        body: { refresh_token: refreshToken },
-        tenantSlug: slug,
-    });
-    if (!refreshed.ok) {
+    const rotated = await rotateRefreshToken(refreshToken, slug);
+    if (!rotated.access) {
         const response = NextResponse.json({ authenticated: false });
-        if (refreshed.status === 401 || refreshed.status === 0)
+        if (rotated.result.status === 401 || rotated.result.status === 0)
             applySessionCookie(response, null);
         return response;
     }
 
-    const data = refreshed.data;
-    if (!data?.access_token) {
-        return NextResponse.json({ authenticated: false });
-    }
+    const { token, refreshToken: rotatedToken, expiresIn } = rotated.access;
 
     const profile = await callBackend("/users/me", {
         method: "GET",
-        token: String(data.access_token),
+        token,
         tenantSlug: slug,
     });
 
     const response = NextResponse.json({
         authenticated: profile.ok,
-        accessToken: profile.ok ? String(data.access_token) : null,
-        expiresIn: data.expires_in ?? 0,
+        accessToken: profile.ok ? token : null,
+        expiresIn,
         user: profile.ok ? mapUser(profile.data) : null,
     });
-    if (profile.ok && data.refresh_token)
-        applySessionCookie(response, String(data.refresh_token));
+    if (profile.ok && rotatedToken) applySessionCookie(response, rotatedToken);
     return response;
 }

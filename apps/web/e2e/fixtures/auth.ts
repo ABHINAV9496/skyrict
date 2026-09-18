@@ -26,6 +26,7 @@ import {
 } from "@playwright/test";
 
 import {
+  assertSessionReachesBff,
   completeMfaChallenge,
   enrollMfaAndFinish,
   installMfaSecretCapture,
@@ -90,6 +91,12 @@ export const test = base.extend<{}, { workspace: AuthSession }>({
       // mount, and a goto that races that rotation would present a consumed
       // token and trip the backend's reuse detector.
       await waitForWorkspaceSettled(page);
+
+      // Fail fast here instead of inside every suite: the raw page.evaluate
+      // fetches the suites use carry cookies but no in-memory access token,
+      // so prove the BFF can turn this session into an authenticated call
+      // before any test runs.
+      await assertSessionReachesBff(page);
 
       const session: AuthSession = {
         slug,

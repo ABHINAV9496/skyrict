@@ -63,6 +63,14 @@ name = "Only repositories touch the database layer"
 type = "forbidden"
 source_modules = ["identity.features"]
 forbidden_modules = ["identity.models", "identity.db"]
+# Feature repositories are the sanctioned ORM gateway; they alone may reach
+# the shared db layer and models. Some services also need db.session for
+# session management (e.g., async_session_factory for transactional boundaries).
+ignore_imports = [
+    "identity.features.**.repository -> identity.db.**",
+    "identity.features.**.repository -> identity.models.**",
+    "identity.features.invitations.service -> identity.db.session",
+]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

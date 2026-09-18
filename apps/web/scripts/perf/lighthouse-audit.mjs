@@ -152,7 +152,7 @@ async function login(page) {
   const mfaPath = await whichMfaPath(page);
   if (mfaPath === "challenge") {
     const secret =
-      process.env.E2E_TOTP_SECRET ??
+      (process.env.E2E_TOTP_SECRET ?? "").trim() ||
       (() => {
         try {
           return fs.readFileSync(TOTP_SECRET_FILE, "utf8").trim();

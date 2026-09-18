@@ -165,7 +165,7 @@ function PlanCard({
  */
 export function PlansPage() {
     const searchParams = useSearchParams();
-    const { status: accessStatus, permissions } = useModuleAccess();
+    const { status: accessStatus, roles, permissions } = useModuleAccess();
     const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
     const [plans, setPlans] = useState<BillingPlan[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -175,8 +175,13 @@ export function PlansPage() {
     const [actionError, setActionError] = useState<string | null>(null);
     const notifiedCheckout = useRef<string | null>(null);
 
+    // Mirror the backend gate exactly: billing.manage PLUS the owner role.
+    // organization_admin holds billing.manage but not tenant_owner, so a
+    // non-owner must never see action buttons that would 403.
     const canManageBilling =
-        accessStatus === "ready" && hasPermission(permissions, BILLING_MANAGE);
+        accessStatus === "ready" &&
+        roles.includes("tenant_owner") &&
+        hasPermission(permissions, BILLING_MANAGE);
 
     const load = useCallback(() => {
         setLoadError(null);
@@ -206,6 +211,11 @@ export function PlansPage() {
                 description: "You can upgrade any time from this page.",
             });
         }
+        // Strip the query param so a later visit (no new checkout) does not
+        // replay the toast from stale URL state.
+        const url = new URL(window.location.href);
+        url.searchParams.delete("checkout");
+        window.history.replaceState(null, "", url.toString());
     }, [searchParams]);
 
     async function handleCheckout(planId: BillingPlanId, billingInterval: BillingInterval) {

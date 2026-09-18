@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { InventoryEmpty } from "@/components/dashboard/erp/inventory/inventory-empty";
 import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import { ApiError } from "@/lib/api/http";
@@ -21,16 +23,15 @@ import {
 } from "@/lib/api/inventory-api";
 import { Activity, PackageX, TrendingDown, TrendingUp } from "lucide-react";
 
-import {
-    Bar,
-    BarChart,
-    CartesianGrid,
-    Legend,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from "recharts";
+// recharts lives in the dynamically-imported chart chunk; ssr:false keeps it
+// out of this route's first-load JS and ChartSkeleton reserves the height.
+const MovementTrendChart = dynamic(
+    () =>
+        import("@/components/dashboard/erp/inventory/movement-trend-chart").then(
+            (m) => m.MovementTrendChart,
+        ),
+    { ssr: false, loading: ChartSkeleton },
+);
 
 type Status =
     | { state: "loading" }
@@ -59,6 +60,19 @@ export function StockHealthOverview() {
     const [tab, setTab] = useState<"dead" | "slow">("dead");
 
     const showCost = hasPermission(permissions, COST_PERMISSION);
+
+    // Hoisted above the early returns so hook order stays stable; empty when
+    // there is no data yet, replaced by the loaded trends once ready.
+    const chartData = useMemo(
+        () =>
+            (data?.trends ?? []).map((point) => ({
+                week: trendLabel(point.periodStart),
+                Receipts: parseFloat(point.receipts),
+                Issues: parseFloat(point.issues),
+                Adjustments: parseFloat(point.adjustments),
+            })),
+        [data?.trends],
+    );
 
     const load = useCallback(async () => {
         setStatus({ state: "loading" });
@@ -98,13 +112,7 @@ export function StockHealthOverview() {
         return <p className="text-sm text-destructive py-8 text-center">{status.message}</p>;
     }
 
-    const { summary, trends, deadStock, slowMovers } = data as HealthData;
-    const chartData = trends.map((point) => ({
-        week: trendLabel(point.periodStart),
-        Receipts: parseFloat(point.receipts),
-        Issues: parseFloat(point.issues),
-        Adjustments: parseFloat(point.adjustments),
-    }));
+    const { summary, deadStock, slowMovers } = data as HealthData;
 
     const statCards = [
         {
@@ -171,43 +179,7 @@ export function StockHealthOverview() {
                         No movement data available yet.
                     </p>
                 ) : (
-                    <div className="rounded-xl border border-border bg-card p-4 h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData}>
-                                <CartesianGrid
-                                    strokeDasharray="3 3"
-                                    stroke="var(--border)"
-                                />
-                                <XAxis
-                                    dataKey="week"
-                                    tick={{ fontSize: 12 }}
-                                    stroke="var(--muted-foreground)"
-                                />
-                                <YAxis
-                                    tick={{ fontSize: 12 }}
-                                    stroke="var(--muted-foreground)"
-                                    allowDecimals={false}
-                                />
-                                <Tooltip />
-                                <Legend />
-                                <Bar
-                                    dataKey="Receipts"
-                                    stackId="movement"
-                                    fill="var(--primary)"
-                                />
-                                <Bar
-                                    dataKey="Issues"
-                                    stackId="movement"
-                                    fill="#f59e0b"
-                                />
-                                <Bar
-                                    dataKey="Adjustments"
-                                    stackId="movement"
-                                    fill="#8b5cf6"
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                    <MovementTrendChart data={chartData} />
                 )}
             </section>
 

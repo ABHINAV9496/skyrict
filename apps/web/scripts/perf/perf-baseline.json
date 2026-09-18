@@ -3,7 +3,7 @@
     {
       "route": "/",
       "sizeKb": 1.61,
-      "firstLoadKb": 257
+      "firstLoadKb": 258
     },
     {
       "route": "/dashboard",
@@ -37,7 +37,7 @@
     },
     {
       "route": "/dashboard/erp",
-      "sizeKb": 27.2,
+      "sizeKb": 27.3,
       "firstLoadKb": 220
     },
     {
@@ -48,12 +48,12 @@
     {
       "route": "/dashboard/erp/crm/activities",
       "sizeKb": 4.46,
-      "firstLoadKb": 244
+      "firstLoadKb": 245
     },
     {
       "route": "/dashboard/erp/crm/ai",
       "sizeKb": 7.94,
-      "firstLoadKb": 182
+      "firstLoadKb": 183
     },
     {
       "route": "/dashboard/erp/crm/contacts",
@@ -67,7 +67,7 @@
     },
     {
       "route": "/dashboard/erp/crm/customers/[customerId]",
-      "sizeKb": 10.8,
+      "sizeKb": 10.9,
       "firstLoadKb": 251
     },
     {
@@ -87,7 +87,7 @@
     },
     {
       "route": "/dashboard/erp/crm/opportunities/[opportunityId]",
-      "sizeKb": 8.04,
+      "sizeKb": 8.03,
       "firstLoadKb": 245
     },
     {
@@ -103,7 +103,7 @@
     {
       "route": "/dashboard/erp/documents",
       "sizeKb": 2.98,
-      "firstLoadKb": 237
+      "firstLoadKb": 238
     },
     {
       "route": "/dashboard/erp/documents/[id]",
@@ -117,13 +117,13 @@
     },
     {
       "route": "/dashboard/erp/finance",
-      "sizeKb": 17.2,
-      "firstLoadKb": 434
+      "sizeKb": 12.1,
+      "firstLoadKb": 309
     },
     {
       "route": "/dashboard/erp/finance/accounts",
       "sizeKb": 7.36,
-      "firstLoadKb": 282
+      "firstLoadKb": 283
     },
     {
       "route": "/dashboard/erp/finance/ai-docs",
@@ -132,8 +132,8 @@
     },
     {
       "route": "/dashboard/erp/finance/audit-log",
-      "sizeKb": 8.58,
-      "firstLoadKb": 181
+      "sizeKb": 8.54,
+      "firstLoadKb": 182
     },
     {
       "route": "/dashboard/erp/finance/controls",
@@ -152,7 +152,7 @@
     },
     {
       "route": "/dashboard/erp/finance/invoices/[id]",
-      "sizeKb": 8.63,
+      "sizeKb": 8.62,
       "firstLoadKb": 246
     },
     {
@@ -168,17 +168,17 @@
     {
       "route": "/dashboard/erp/finance/settings",
       "sizeKb": 7.02,
-      "firstLoadKb": 194
+      "firstLoadKb": 195
     },
     {
       "route": "/dashboard/erp/finance/statements",
-      "sizeKb": 8.87,
+      "sizeKb": 8.86,
       "firstLoadKb": 247
     },
     {
       "route": "/dashboard/erp/hr",
-      "sizeKb": 4.61,
-      "firstLoadKb": 192
+      "sizeKb": 7.53,
+      "firstLoadKb": 193
     },
     {
       "route": "/dashboard/erp/hr/ai-alerts",
@@ -187,23 +187,23 @@
     },
     {
       "route": "/dashboard/erp/hr/attendance",
-      "sizeKb": 8.96,
+      "sizeKb": 8.95,
       "firstLoadKb": 223
     },
     {
       "route": "/dashboard/erp/hr/attrition",
-      "sizeKb": 8.77,
+      "sizeKb": 8.76,
       "firstLoadKb": 192
     },
     {
       "route": "/dashboard/erp/hr/compliance",
-      "sizeKb": 11.5,
+      "sizeKb": 8.37,
       "firstLoadKb": 195
     },
     {
       "route": "/dashboard/erp/hr/correlation",
-      "sizeKb": 9.44,
-      "firstLoadKb": 305
+      "sizeKb": 4.72,
+      "firstLoadKb": 193
     },
     {
       "route": "/dashboard/erp/hr/data-quality",
@@ -223,17 +223,17 @@
     {
       "route": "/dashboard/erp/hr/employees/[id]",
       "sizeKb": 5.11,
-      "firstLoadKb": 239
+      "firstLoadKb": 240
     },
     {
       "route": "/dashboard/erp/hr/leave",
-      "sizeKb": 11.2,
+      "sizeKb": 11.1,
       "firstLoadKb": 242
     },
     {
       "route": "/dashboard/erp/hr/planning",
-      "sizeKb": 13.7,
-      "firstLoadKb": 314
+      "sizeKb": 14.3,
+      "firstLoadKb": 194
     },
     {
       "route": "/dashboard/erp/inventory",
@@ -243,12 +243,12 @@
     {
       "route": "/dashboard/erp/inventory/abc",
       "sizeKb": 6.8,
-      "firstLoadKb": 176
+      "firstLoadKb": 177
     },
     {
       "route": "/dashboard/erp/inventory/alerts",
       "sizeKb": 2.22,
-      "firstLoadKb": 234
+      "firstLoadKb": 235
     },
     {
       "route": "/dashboard/erp/inventory/anomalies",
@@ -262,13 +262,13 @@
     },
     {
       "route": "/dashboard/erp/inventory/health",
-      "sizeKb": 4.06,
-      "firstLoadKb": 303
+      "sizeKb": 7.49,
+      "firstLoadKb": 184
     },
     {
       "route": "/dashboard/erp/inventory/movements",
       "sizeKb": 8.2,
-      "firstLoadKb": 215
+      "firstLoadKb": 216
     },
     {
       "route": "/dashboard/erp/inventory/products",
@@ -307,8 +307,8 @@
     },
     {
       "route": "/dashboard/erp/payroll",
-      "sizeKb": 6.54,
-      "firstLoadKb": 307
+      "sizeKb": 6.99,
+      "firstLoadKb": 198
     },
     {
       "route": "/dashboard/erp/payroll/anomalies",
@@ -328,21 +328,21 @@
     {
       "route": "/dashboard/erp/payroll/reviews",
       "sizeKb": 8.59,
-      "firstLoadKb": 204
+      "firstLoadKb": 205
     },
     {
       "route": "/dashboard/erp/payroll/runs",
-      "sizeKb": 9.1,
+      "sizeKb": 9.11,
       "firstLoadKb": 219
     },
     {
       "route": "/dashboard/erp/payroll/runs/[id]",
-      "sizeKb": 12,
+      "sizeKb": 11.9,
       "firstLoadKb": 219
     },
     {
       "route": "/dashboard/erp/payroll/settings",
-      "sizeKb": 9.91,
+      "sizeKb": 9.9,
       "firstLoadKb": 194
     },
     {
@@ -357,8 +357,8 @@
     },
     {
       "route": "/dashboard/erp/reports/[reportId]",
-      "sizeKb": 8.93,
-      "firstLoadKb": 315
+      "sizeKb": 11.7,
+      "firstLoadKb": 190
     },
     {
       "route": "/dashboard/intelligence",
@@ -392,7 +392,7 @@
     },
     {
       "route": "/dashboard/invite",
-      "sizeKb": 7.81,
+      "sizeKb": 7.82,
       "firstLoadKb": 217
     },
     {
@@ -413,12 +413,12 @@
     {
       "route": "/dashboard/settings",
       "sizeKb": 10.3,
-      "firstLoadKb": 197
+      "firstLoadKb": 198
     },
     {
       "route": "/dashboard/settings/notifications",
       "sizeKb": 7.87,
-      "firstLoadKb": 177
+      "firstLoadKb": 178
     },
     {
       "route": "/invite",
@@ -428,7 +428,7 @@
     {
       "route": "/login",
       "sizeKb": 6.37,
-      "firstLoadKb": 212
+      "firstLoadKb": 213
     },
     {
       "route": "/mfa/verify",

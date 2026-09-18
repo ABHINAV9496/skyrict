@@ -517,7 +517,11 @@ class AuthenticationService:
             tenant_id=str(tenant_id),
         )
 
-        await self.verification_store.delete_verification_token(request.verification_token)
+        # The verification token is intentionally KEPT: the wizard still has
+        # Plan and Billing steps ahead, and the checkout-session endpoint reuses
+        # this token as the credential. It remains short-lived (TTL-bounded in
+        # the store) and single-email-bound, so retention does not weaken the
+        # wizard's replay protections.
 
         role_grants = [
             {
@@ -545,6 +549,35 @@ class AuthenticationService:
             "subscription_status": "trialing",
             "trial_ends_at": trial_ends_at,
         }
+
+    async def resolve_signup_checkout_tenant(
+        self, *, email: str, verification_token: str, tenant_id: str | uuid.UUID
+    ) -> Tenant:
+        """Authorize a signup Checkout session against a provisioned tenant.
+
+        The wizard Plan/Billing steps run after the tenant exists but before
+        the owner has an account, so regular auth dependencies cannot guard
+        the checkout endpoint. Authorization is two-factor:
+
+        1. the verification token must still be bound to ``email`` (the token
+           is the credential minted at the verify-code step), and
+        2. the email must own a user inside ``tenant_id`` - so a valid token
+           cannot be used to mint a Checkout session for a tenant the caller
+           does not belong to.
+
+        Raises:
+            TokenInvalidError: the token is missing/mismatched, the tenant is
+                unknown, or the email is not a member of the tenant (401).
+        """
+        await self._require_verification_token(verification_token, email)
+        tenant = await self.tenant_repo.get_by_id(tenant_id)
+        if tenant is None:
+            raise TokenInvalidError("Verification session is invalid or expired")
+        assert tenant.id is not None  # loaded from the repo
+        user = await self.user_repo.get_by_email(tenant.id, email)
+        if user is None:
+            raise TokenInvalidError("Verification session is invalid or expired")
+        return tenant
 
     async def _require_verification_token(self, token: str, email: str) -> dict[str, str]:
         payload = await self.verification_store.get_verification_token(token)

@@ -13,7 +13,11 @@ from typing import Literal
 from pydantic import AliasGenerator, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from identity.features.billing.plans import PLAN_ID_LITERAL
+from identity.features.billing.plans import (
+    CURRENCY_LITERAL,
+    PLAN_ID_LITERAL,
+    SUPPORTED_CURRENCIES,
+)
 
 
 class _CamelModel(BaseModel):
@@ -64,6 +68,22 @@ class PlanLimitsResponse(BaseModel):
     modules: list[str] = Field(default_factory=list, description="Included platform modules")
 
 
+class PlanPriceResponse(BaseModel):
+    """Fixed price point for one currency in a plan."""
+
+    currency: str = Field(..., description="ISO 4217 currency code")
+    monthly_cents: int | None = Field(
+        default=None, description="Monthly price in currency cents (None = custom)"
+    )
+    annual_cents: int | None = Field(
+        default=None,
+        description="Annual monthly-equivalent price in currency cents (None = custom)",
+    )
+    display_locale: str = Field(
+        default="en-US", description="BCP-47 locale used to render this price in the UI"
+    )
+
+
 class PlanResponse(BaseModel):
     """API response for a single billing plan."""
 
@@ -75,6 +95,9 @@ class PlanResponse(BaseModel):
     )
     annual_price_cents: int | None = Field(
         default=None, description="Annual monthly-equivalent price in USD cents (None = custom)"
+    )
+    prices: dict[str, PlanPriceResponse] = Field(
+        default_factory=dict, description="Per-currency fixed price points"
     )
     features: PlanLimitsResponse = Field(default_factory=PlanLimitsResponse)
 
@@ -99,6 +122,14 @@ class CheckoutSessionRequest(_CamelModel):
     plan_id: PLAN_ID_LITERAL = Field(..., description="Paid plan to subscribe to")
     interval: Literal["month", "year"] = Field(
         default="month", description="Billing interval (monthly or annual)"
+    )
+    currency: CURRENCY_LITERAL = Field(
+        default="usd",
+        description=(
+            "Currency for the billed price. Selects a currency-specific Stripe "
+            "Price; falls back to USD when none is configured. "
+            f"Supported: {', '.join(SUPPORTED_CURRENCIES)}."
+        ),
     )
 
 

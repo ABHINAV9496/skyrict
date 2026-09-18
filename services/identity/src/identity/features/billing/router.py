@@ -5,6 +5,8 @@ Route guards mirror the ticket semantics:
   * ``GET /billing/plan`` and ``PATCH /billing/plan`` — tenant owner only
     (``billing.manage`` permission + ``tenant_owner`` role).
   * ``GET /billing/plans`` — any authenticated tenant member (catalog).
+  * ``GET /billing/signup/plans`` — PUBLIC (the pre-login signup wizard
+    Plan step runs before an account exists; same catalog as above).
   * ``POST /billing/checkout-session`` and ``POST /billing/portal-session`` —
     tenant owner only; owner-only because they mint Stripe sessions that can
     charge the workspace card.
@@ -95,6 +97,22 @@ async def list_plans(
     return ResponseEnvelope(data=[_as_plan_response(p) for p in plans])
 
 
+@router.get("/signup/plans", response_model=ResponseEnvelope[list[PlanResponse]])
+async def list_signup_plans(
+    billing_svc: BillingService = Depends(get_billing_service),
+) -> ResponseEnvelope[list[PlanResponse]]:
+    """Return the plan catalog for the pre-login signup wizard (public).
+
+    The signup Plan step runs before the owner has any account, so this
+    endpoint deliberately carries NO auth dependency. It serves the exact same
+    server-side catalog as ``GET /billing/plans`` - the frontend never
+    hardcodes prices. Only catalog data leaves the service; no tenant or
+    subscription state is exposed.
+    """
+    plans = await billing_svc.list_plans()
+    return ResponseEnvelope(data=[_as_plan_response(p) for p in plans])
+
+
 @router.post("/checkout-session", response_model=ResponseEnvelope[CheckoutSessionResponse])
 async def start_checkout(
     body: CheckoutSessionRequest,
@@ -109,7 +127,9 @@ async def start_checkout(
     without a configured Stripe Price (Starter, custom-priced Enterprise)
     return 422.
     """
-    session = await billing_svc.create_checkout_session(tenant_id, body.plan_id, body.interval)
+    session = await billing_svc.create_checkout_session(
+        tenant_id, body.plan_id, body.interval, body.currency
+    )
     return ResponseEnvelope(data=CheckoutSessionResponse.model_validate(session))
 
 

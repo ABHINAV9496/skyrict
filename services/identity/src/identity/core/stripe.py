@@ -134,26 +134,35 @@ class StripeClient:
         cancel_url: str,
         client_reference_id: str,
         metadata: dict[str, str] | None = None,
+        automatic_tax: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a Stripe Checkout Session and return ``{"id", "url"}``.
 
         The subscription-mode session redirects the browser to ``url``; the
         webhook handler matches the completing session back to the tenant via
         ``client_reference_id`` (the tenant id).
+
+        ``automatic_tax`` opts the session into Stripe Tax: when omitted the
+        session is tax-free (dev/test), and callers pass
+        ``{"enabled": True}`` to itemize location-based tax (e.g. Indian GST)
+        at checkout.
         """
         self._require_enabled()
         stripe = self._import_stripe()
         try:
-            session = stripe.checkout.Session.create(
-                mode="subscription",
-                customer=customer_id,
-                line_items=[{"price": price_id, "quantity": 1}],
-                success_url=success_url,
-                cancel_url=cancel_url,
-                client_reference_id=client_reference_id,
-                metadata=metadata or {},
-                billing_address_collection="auto",
-            )
+            create_kwargs: dict[str, Any] = {
+                "mode": "subscription",
+                "customer": customer_id,
+                "line_items": [{"price": price_id, "quantity": 1}],
+                "success_url": success_url,
+                "cancel_url": cancel_url,
+                "client_reference_id": client_reference_id,
+                "metadata": metadata or {},
+                "billing_address_collection": "auto",
+            }
+            if automatic_tax is not None:
+                create_kwargs["automatic_tax"] = automatic_tax
+            session = stripe.checkout.Session.create(**create_kwargs)
         except stripe.error.StripeError as exc:
             raise StripeError(f"Could not create checkout session: {exc}") from exc
         return {"id": session.id, "url": session.url}

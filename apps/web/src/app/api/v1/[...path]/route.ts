@@ -94,7 +94,7 @@ async function proxy(request: NextRequest) {
     return response;
   }
 
-  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "dashboards", "reports", "documents", "notifications"].includes(
+  const target = ["crm", "sales", "finance", "inventory", "hr", "payroll", "portal", "ai", "approval", "dashboards", "reports", "documents", "notifications"].includes(
     segment,
   )
     ? "core"

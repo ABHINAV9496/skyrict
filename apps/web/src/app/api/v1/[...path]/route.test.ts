@@ -49,6 +49,7 @@ const CORE_SEGMENTS = [
   "payroll",
   "portal",
   "ai",
+  "approval",
   "dashboards",
   "reports",
   "documents",

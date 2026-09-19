@@ -67,12 +67,34 @@ export class BffApi {
             this.tokenPromise = this.request
                 .get("/api/auth/session")
                 .then(async (response) => {
-                    if (!response.ok) return null;
+                    if (!response.ok()) {
+                        // 401/500 from the session route is the signature of a
+                        // revoked or unusable refresh family - surface it now
+                        // instead of sending an unauthenticated request that
+                        // fails later with the backend's generic 401.
+                        throw new Error(
+                            `Session restore failed with HTTP ${response.status()}` +
+                                ` (${await response.text().catch(() => "")})`,
+                        );
+                    }
                     const body = (await response.json().catch(() => ({}))) as {
                         accessToken?: string | null;
+                        authenticated?: boolean;
                     };
-                    this.token = body.accessToken ?? null;
-                    return this.token;
+                    // Authenticated workspace calls run under the username
+                    // fixture, so a session response with no access token is
+                    // a real failure. Throw with the payload so CI pins down
+                    // whether identity rejected the refresh or the /users/me
+                    // probe failed - not the misleading downstream 401.
+                    const token = body.accessToken ?? null;
+                    if (!token) {
+                        throw new Error(
+                            `Authenticated session returned no access token` +
+                                ` (session: ${JSON.stringify(body)})`,
+                        );
+                    }
+                    this.token = token;
+                    return token;
                 })
                 .finally(() => {
                     this.tokenPromise = null;

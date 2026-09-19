@@ -35,6 +35,13 @@ export async function fillOtp(
     label: string,
     code: string,
 ): Promise<void> {
+    // Under parallel load the MFA form can mount after the challenge heading
+    // resolves; a blind sequential fill then waits on digit 1 while the rest of
+    // the form is mid-render. Wait for the FULL digit form (exact count) to be
+    // attached BEFORE filling so every fill targets a settled, complete form.
+    await expect(
+        page.locator(`input[aria-label^="${label} digit "]`),
+    ).toHaveCount(code.length);
     for (let i = 0; i < code.length; i += 1) {
         await page
             .locator(`input[aria-label="${label} digit ${i + 1}"]`)
@@ -70,15 +77,34 @@ export async function whichMfaPath(
     page: Page,
     timeoutMs = 15_000,
 ): Promise<MfaPath> {
-    return new Promise<MfaPath>((resolve) => {
+    return new Promise<MfaPath>((resolve, reject) => {
+        let settled = false;
+        const finish = (path: MfaPath) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(path);
+        };
+        // Neither arm resolving means sign-in never reached an MFA surface -
+        // e.g. the handoff bounced back with ?error=... Reject with the URL
+        // instead of hanging until the whole test times out.
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(
+                new Error(
+                    `MFA path not detected within ${timeoutMs}ms; current URL: ${page.url()}`,
+                ),
+            );
+        }, timeoutMs + 500);
         void page
             .waitForURL("**/setup-mfa", { timeout: timeoutMs })
-            .then(() => resolve("enrollment"))
+            .then(() => finish("enrollment"))
             .catch(() => {});
         void page
             .getByRole("heading", { name: "Two-factor check" })
             .waitFor({ timeout: timeoutMs })
-            .then(() => resolve("challenge"))
+            .then(() => finish("challenge"))
             .catch(() => {});
     });
 }
@@ -93,19 +119,26 @@ export async function completeMfaChallenge(
     page: Page,
     secret: string,
 ): Promise<void> {
-    // Try the current, previous, and next 30s windows to dodge clock
-    // boundaries (the enrollment arm below retries the same offsets). A
-    // rejected code leaves the page on the signin host; the handoff to the
-    // workspace host proves the code was accepted.
+    // Try the current, previous, and next 30s windows. A single-window code
+    // races the TOTP boundary (and a code already consumed earlier in the same
+    // window by the setup project); when it is stale the form rejects it
+    // inline and then waits forever for a handoff that never happens.
     for (const offset of [0, -1, 1]) {
         await fillOtp(page, "Two-factor code", totp(secret, offset));
-        const landed = await page
+        const landed = page
             .waitForURL((url) => !url.hostname.includes(".signin."), {
-                timeout: 8_000,
+                timeout: 10_000,
             })
             .then(() => true)
             .catch(() => false);
-        if (landed) return;
+        const rejected = page
+            .getByText("That code didn't match")
+            .waitFor({ timeout: 10_000 })
+            .then(() => false)
+            .catch(() => false);
+        if (await Promise.race([landed, rejected])) {
+            return;
+        }
     }
     await waitForWorkspace(page);
 }
@@ -248,24 +281,24 @@ export async function refreshSession(page: Page): Promise<void> {
  * cannot race the app's own single-flight rotation.
  */
 export async function assertSessionReachesBff(page: Page): Promise<void> {
-  const probe = await page.evaluate(async () => {
-    const res = await fetch("/api/v1/users/me", {
-      credentials: "include",
-      cache: "no-store",
+    const probe = await page.evaluate(async () => {
+        const res = await fetch("/api/v1/users/me", {
+            credentials: "include",
+            cache: "no-store",
+        });
+        let body = "";
+        try {
+            body = (await res.text()).slice(0, 240);
+        } catch {
+            // keep the body empty when the stream cannot be read
+        }
+        return { status: res.status, body };
     });
-    let body = "";
-    try {
-      body = (await res.text()).slice(0, 240);
-    } catch {
-      // keep the body empty when the stream cannot be read
-    }
-    return { status: res.status, body };
-  });
-  expect(
-    probe.status,
-    `BFF session probe to /api/v1/users/me did not authenticate: ` +
-      `HTTP ${probe.status} ${probe.body}`,
-  ).toBe(200);
+    expect(
+        probe.status,
+        `BFF session probe to /api/v1/users/me did not authenticate: ` +
+            `HTTP ${probe.status} ${probe.body}`,
+    ).toBe(200);
 }
 
 /**
@@ -293,15 +326,18 @@ export async function assertSessionReachesBff(page: Page): Promise<void> {
  * parallel /api/auth/session from the harness would race it and revoke the
  * whole token family.
  */
-export async function waitForWorkspaceSettled(page: Page, email?: string): Promise<void> {
-  await expect(
-    page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
-  ).toBeVisible({ timeout: 20_000 });
-  const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
-  await expect(
-    page.getByText(expected, { exact: true }).first(),
-    "sidebar user menu must render the signed-in user's email after session hydration",
-  ).toBeVisible({ timeout: 20_000 });
+export async function waitForWorkspaceSettled(
+    page: Page,
+    email?: string,
+): Promise<void> {
+    await expect(
+        page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
+    await expect(
+        page.getByText(expected, { exact: true }).first(),
+        "sidebar user menu must render the signed-in user's email after session hydration",
+    ).toBeVisible({ timeout: 20_000 });
 }
 
 /**

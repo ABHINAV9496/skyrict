@@ -188,6 +188,35 @@ export function extractErrorMessage(
 export async function fetchWithSession(path: string, options: RequestInit): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("X-Tenant-Slug", getTenantSlug());
+
+  // Hydrate the in-memory access token BEFORE the first request.
+  //
+  // On a fresh page load the access token exists only in the httpOnly session
+  // cookie, so firing blind guarantees a 401 + full retry on the very first
+  // call of every page load. `ensureSession` is single-flight and memoized, so
+  // this costs nothing after the first call and preserves the "exactly one
+  // server-side rotation per page load" invariant.
+  //
+  // The outcome is recorded so the 401 handler below never repeats a hydration
+  // we already performed:
+  //   "ok"      -> a token was obtained and attached
+  //   "none"    -> hydration resolved and there is no session (redirect below)
+  //   "unknown" -> hydration could not complete (transport error)
+  let hydrated: "ok" | "none" | "unknown" | null = null;
+  if (!getAccessToken()) {
+    try {
+      const session = await ensureSession();
+      hydrated = session ? "ok" : "none";
+      if (session) {
+        headers.set("Authorization", `Bearer ${session.accessToken}`);
+      }
+    } catch {
+      // A hydration transport failure must not mask the request itself: fall
+      // through, let the endpoint answer, and leave the 401 to the caller.
+      hydrated = "unknown";
+    }
+  }
+
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.body != null && !headers.has("Content-Type")) {
@@ -216,7 +245,14 @@ export async function fetchWithSession(path: string, options: RequestInit): Prom
       } else {
         setAccessToken(null);
       }
-    } else {
+    } else if (hydrated === "none") {
+      // Hydration already told us there is no session to recover - go straight
+      // to the lost-session exit instead of repeating the round trip.
+      setAccessToken(null);
+      handleSessionLost();
+    } else if (hydrated === null) {
+      // No hydration was attempted (an access token was present but was
+      // cleared concurrently): hydrate once, then retry.
       const session = await ensureSession();
       if (session) {
         headers.set("Authorization", `Bearer ${session.accessToken}`);
@@ -226,6 +262,9 @@ export async function fetchWithSession(path: string, options: RequestInit): Prom
         handleSessionLost();
       }
     }
+    // hydrated === "unknown": the session could not be checked (transport
+    // failure). Surface the endpoint's own error rather than bouncing a user
+    // with a valid session to the sign-in surface.
   }
 
   return response;

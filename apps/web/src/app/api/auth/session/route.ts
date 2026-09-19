@@ -46,6 +46,13 @@ export async function GET(request: NextRequest) {
         expiresIn,
         user: profile.ok ? mapUser(profile.data) : null,
     });
-    if (profile.ok && rotatedToken) applySessionCookie(response, rotatedToken);
+    // Identity rotates the refresh token unconditionally on /auth/refresh, so
+    // always write the rotated cookie back - even when the /users/me probe
+    // transiently fails. Otherwise the browser keeps presenting an already-
+    // spent value, and a second failed probe leaves it TWO generations behind
+    // the session record, which identity's reuse check treats as a family
+    // revoke - taking down every subsequent authenticated call with the
+    // generic "Missing Authorization header" 401.
+    if (rotatedToken) applySessionCookie(response, rotatedToken);
     return response;
 }

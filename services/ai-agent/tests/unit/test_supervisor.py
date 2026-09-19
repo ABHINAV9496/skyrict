@@ -250,13 +250,14 @@ def tokens_text(events: list[SupervisorEvent], agent: str) -> str:
 
 
 async def test_classify_routes_high_confidence() -> None:
+    """Keyword-miss query: the LLM classifier routes a high-confidence match."""
     router = FakeLlmRouter(
         has_providers=True,
         completion_text=json.dumps({"agents": ["inventory_monitor"], "confidence": 0.9}),
     )
     service = make_service(router=router)
 
-    decision = await service.classify("What stock is below reorder point?")
+    decision = await service.classify("How are product levels trending this week?")
 
     assert decision.agents == ("inventory_monitor",)
     assert decision.abstain is False
@@ -288,8 +289,14 @@ async def test_classify_abstains_unparseable_output() -> None:
     assert router.complete_calls == 2
 
 
-async def test_classify_keyword_fallback_after_unparseable_output() -> None:
-    router = FakeLlmRouter(has_providers=True, completion_text="sorry, I can't")
+async def test_classify_keyword_hit_ignores_classifier_outage() -> None:
+    """A keyword hit routes even when the classifier provider is hard-down.
+
+    The keyword fast path short-circuits BEFORE the LLM, so an outage (or any
+    classifier misbehavior) cannot delay or break routing for explicit module
+    questions - zero provider calls are attempted.
+    """
+    router = FakeLlmRouter(has_providers=True, completion_text=AiUnavailableError("down"))
     service = make_service(router=router)
 
     decision = await service.classify("What stock is below reorder point?")
@@ -297,7 +304,7 @@ async def test_classify_keyword_fallback_after_unparseable_output() -> None:
     assert decision.agents == ("inventory_monitor",)
     assert decision.abstain is False
     assert decision.reason == "keyword_fallback"
-    assert router.complete_calls == 2
+    assert router.complete_calls == 0
 
 
 async def test_classify_recovers_after_truncated_completion() -> None:
@@ -310,7 +317,7 @@ async def test_classify_recovers_after_truncated_completion() -> None:
     )
     service = make_service(router=router)
 
-    decision = await service.classify("What is our net income this quarter?")
+    decision = await service.classify("How did we perform this quarter?")
 
     assert decision.agents == ("finance_assistant",)
     assert decision.abstain is False
@@ -350,7 +357,7 @@ async def test_classify_strips_markdown_fences() -> None:
     )
     service = make_service(router=router)
 
-    decision = await service.classify("How was revenue last quarter?")
+    decision = await service.classify("How was our top line last quarter?")
 
     assert decision.agents == ("finance_assistant",)
     assert decision.abstain is False
@@ -365,7 +372,7 @@ async def test_classify_recovers_fence_and_prose_wrapped_json() -> None:
     )
     service = make_service(router=router)
 
-    decision = await service.classify("What is our net income this quarter?")
+    decision = await service.classify("How did the bottom line look this quarter?")
 
     assert decision.agents == ("finance_assistant",)
     assert decision.abstain is False
@@ -543,6 +550,88 @@ async def test_classify_audit_guardian_keyword_fallback() -> None:
     assert decision.agents == ("audit_guardian",)
     assert decision.abstain is False
     assert decision.reason == "keyword_fallback"
+
+
+# --- keyword-first fast path (latency): keyword hits skip the classifier LLM --
+
+
+async def test_classify_keyword_hit_skips_classifier_llm() -> None:
+    """A keyword hit routes immediately - zero classifier provider calls.
+
+    Regression for the ultra-slow-turn incident: keyword-routable questions
+    used to pay a full LLM classify round trip first (measured 14-19s on the
+    omniroute gateway) before the delegate's own call, roughly doubling
+    routed-turn latency for questions keywords route correctly.
+    """
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=json.dumps({"agents": ["inventory_monitor"], "confidence": 0.9}),
+    )
+    service = make_service(router=router)
+
+    decision = await service.classify("What stock is below reorder point?")
+
+    assert decision.agents == ("inventory_monitor",)
+    assert decision.abstain is False
+    assert decision.reason == "keyword_fallback"
+    assert router.complete_calls == 0
+
+
+async def test_classify_keyword_hit_wins_over_low_confidence_llm() -> None:
+    """A keyword hit is decisive - even a low-confidence LLM never shadows it.
+
+    With keyword-first ordering the classifier is never consulted on a hit,
+    so a flaky low-confidence classifier cannot turn an explicit module
+    question into an abstain (which would cost the user a full LLM round
+    trip and then answer as the generic supervisor).
+    """
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=json.dumps({"agents": ["inventory_monitor"], "confidence": 0.3}),
+    )
+    service = make_service(router=router)
+
+    decision = await service.classify("reserved stock report")
+
+    assert decision.agents == ("inventory_monitor",)
+    assert decision.abstain is False
+    assert decision.reason == "keyword_fallback"
+    assert router.complete_calls == 0
+
+
+async def test_classify_keyword_miss_still_uses_classifier_llm() -> None:
+    """No keyword hit: the LLM classifier stays authoritative for ambiguous asks.
+
+    Guards the tradeoff of the fast path - semantic routing for questions the
+    keyword table cannot match must keep working (one classify call, then the
+    threshold/abstain logic unchanged).
+    """
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=json.dumps({"agents": ["crm_assistant"], "confidence": 0.9}),
+    )
+    service = make_service(router=router)
+
+    decision = await service.classify("How are client relationships trending?")
+
+    assert decision.agents == ("crm_assistant",)
+    assert decision.abstain is False
+    assert decision.reason == "routed"
+    assert router.complete_calls == 1
+
+
+async def test_classify_keyword_miss_low_confidence_still_abstains() -> None:
+    """Keyword miss + low-confidence LLM classify: abstain, exactly as before."""
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=json.dumps({"agents": ["hr_copilot"], "confidence": 0.4}),
+    )
+    service = make_service(router=router)
+
+    decision = await service.classify("something vague")
+
+    assert decision.abstain is True
+    assert decision.reason == "low_confidence"
 
 
 async def test_classify_rejects_unknown_agent_keys() -> None:

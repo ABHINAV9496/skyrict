@@ -10,6 +10,12 @@
  */
 
 import { ApiError } from "@/lib/api/http";
+import type {
+    BillingCurrency,
+    BillingInterval,
+    BillingPlan,
+    BillingPlanId,
+} from "@/lib/api/billing-api";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 export { ApiError };
@@ -326,7 +332,8 @@ export async function checkWorkspaceSlug(input: {
 export interface CreateOrganizationInput {
     email: string;
     verificationToken: string;
-    planId: string;
+    /** Selected plan id; omitted to let the backend default to `starter`. */
+    planId?: string;
     companyName: string;
     industry: string;
     workspaceSlug: string;
@@ -353,10 +360,9 @@ export interface CreateOrganizationResult {
 export async function createOrganization(
     input: CreateOrganizationInput,
 ): Promise<CreateOrganizationResult> {
-    return bffPost<CreateOrganizationResult>("/api/auth/org", {
+    const body: Record<string, unknown> = {
         email: input.email,
         verificationToken: input.verificationToken,
-        planId: input.planId,
         companyName: input.companyName,
         industry: input.industry,
         workspaceSlug: input.workspaceSlug,
@@ -364,6 +370,68 @@ export async function createOrganization(
         phoneCountry: input.phoneCountry,
         phoneNumber: input.phoneNumber,
         address: input.address,
+    };
+    if (input.planId) body.planId = input.planId;
+    return bffPost<CreateOrganizationResult>("/api/auth/org", body);
+}
+
+// ---------------------------------------------------------------------------
+// Signup Plan + Billing steps (pre-login, through the BFF, SKY-36)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the pre-login plan catalog for the wizard Plan step. The server-side
+ * `PLANS` catalog is authoritative - the frontend never hardcodes prices.
+ */
+export async function getSignupPlans(): Promise<BillingPlan[]> {
+    let res: Response;
+    try {
+        res = await fetch("/api/auth/plans", { cache: "no-store" });
+    } catch {
+        throw new ApiError(
+            0,
+            "Network error - check your connection and try again.",
+        );
+    }
+
+    const payload = (await res.json().catch(() => ({}))) as {
+        data?: BillingPlan[];
+        error?: string;
+    };
+    if (!res.ok) {
+        throw new ApiError(
+            res.status,
+            payload.error ?? "Could not load plans.",
+        );
+    }
+    return Array.isArray(payload.data) ? payload.data : [];
+}
+
+export interface SignupCheckoutSessionInput {
+    email: string;
+    verificationToken: string;
+    tenantId: string;
+    planId: BillingPlanId;
+    interval: BillingInterval;
+    currency?: BillingCurrency;
+}
+
+/** Stripe Checkout session for the wizard Billing step; redirect to `url`. */
+export interface SignupCheckoutSession {
+    session_id: string;
+    url: string;
+}
+
+export async function createSignupCheckoutSession(
+    input: SignupCheckoutSessionInput,
+): Promise<SignupCheckoutSession> {
+    return bffPost<SignupCheckoutSession>("/api/auth/billing/checkout", {
+        email: input.email,
+        verificationToken: input.verificationToken,
+        tenantId: input.tenantId,
+        planId: input.planId,
+        interval: input.interval,
+        currency: input.currency ?? "usd",
     });
 }
 

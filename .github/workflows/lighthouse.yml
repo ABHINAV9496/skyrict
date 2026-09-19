@@ -1,0 +1,174 @@
+# =============================================================================
+# CI - Lighthouse Performance Gate (PERF-WEB-001)
+#
+# Boots the same compose cluster as the E2E workflow (fresh, so the seeded
+# admin takes the MFA-enrollment path), builds and starts Next.js, then runs
+# scripts/perf/lighthouse-audit.mjs against the four budgeted ERP routes:
+# /dashboard, /erp/reports, /erp/payroll, /erp/inventory.
+#
+# The audit logs in through the real signin + mandatory-MFA UI (same helpers
+# the e2e suite uses), then runs Lighthouse 3x per URL under mobile emulation
+# + simulated throttling and asserts median LCP / CLS / TBT against CI-measured
+# baseline budgets (LCP <= 5600ms, CLS <= 0.1, TBT < 560ms - see
+# lighthouse-audit.mjs; the aspirational 2.5s/200ms targets are the shared
+# first-load follow-up). Set PERF_RELAX=1 to downgrade a breach to a warning.
+# =============================================================================
+
+name: Lighthouse Performance
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/lighthouse.yml"
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/lighthouse.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: Lighthouse Budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # default.localhost / signin.localhost must resolve to the local Next.js
+      # instance; Chromium (unlike the Docker nginx) has no in-stack DNS.
+      - name: Map *.localhost to 127.0.0.1
+        run: echo "127.0.0.1 localhost default.localhost signin.localhost" | sudo tee -a /etc/hosts
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.7"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---- JWT RSA keys ----------------------------------------------------
+      - name: Generate JWT RSA keys
+        run: |
+          mkdir -p .dev/keys
+          openssl genrsa -out .dev/keys/private.pem 2048 2>/dev/null
+          openssl rsa -in .dev/keys/private.pem -pubout -out .dev/keys/public.pem 2>/dev/null
+
+      # ---- Compose up ------------------------------------------------------
+      - name: Start compose stack
+        run: docker compose -f infra/docker/docker-compose.e2e.yml up -d --build
+        timeout-minutes: 15
+
+      # ---- Seeds -----------------------------------------------------------
+      - name: Wait for identity and seed database
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.e2e.yml exec -T identity \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" \
+              2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/identity identity \
+            python -m identity.seed
+          echo "Seeded identity (default tenant + admin@skyrict.io)"
+
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.e2e.yml exec -T core \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')" \
+              2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            --workdir /app/services/core core \
+            python -m core.cli seed \
+            --tenant-id 00000000-0000-0000-0000-000000000001
+          echo "Seeded core report catalog + HR/Payroll defaults"
+        timeout-minutes: 10
+
+      # ---- Build + start Next.js -------------------------------------------
+      - name: Build web app
+        run: pnpm --filter @skyrict/web build
+        env:
+          SESSION_COOKIE_SECURE: "false"
+
+      - name: Start Next.js (production mode)
+        run: |
+          set -o pipefail
+          pnpm --filter @skyrict/web start > /tmp/next.log 2>&1 &
+          NEXT_PID=$!
+          for i in $(seq 1 90); do
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "Next.js exited unexpectedly" >&2
+              cat /tmp/next.log >&2
+              exit 1
+            fi
+            status=$(curl -sS -o /tmp/health-response -w "%{http_code}" \
+              http://127.0.0.1:3100/api/v1/health || true)
+            if [ "$status" = "200" ]; then
+              echo "HEALTHY http://127.0.0.1:3100/api/v1/health"
+              exit 0
+            fi
+            echo "Waiting for Next.js health endpoint ($i/90), HTTP status: $status"
+            sleep 1
+          done
+          echo "TIMED OUT waiting for http://127.0.0.1:3100/api/v1/health after 90s" >&2
+          cat /tmp/next.log >&2 || true
+          exit 1
+        env:
+          SESSION_COOKIE_SECURE: "false"
+          PORT: "3100"
+
+      # ---- Lighthouse ------------------------------------------------------
+      - name: Install Playwright chromium
+        run: pnpm --filter @skyrict/web exec playwright install --with-deps chromium
+
+      - name: Run Lighthouse audit
+        run: pnpm --filter @skyrict/web run lighthouse:audit
+        env:
+          CI: "true"
+          # nginx maps default.localhost:3000 -> Next.js on 127.0.0.1:3100,
+          # the same origin the e2e workflow drives.
+          E2E_BASE_URL: "http://default.localhost:3000"
+          E2E_ADMIN_EMAIL: "admin@skyrict.io"
+          E2E_ADMIN_PASSWORD: "Admin123!"
+          # Fresh compose volumes every run take the enrollment path, so no
+          # TOTP secret is normally needed; set it when a persistent stack
+          # runs the audit against an already-enrolled admin.
+          E2E_TOTP_SECRET: "${{ secrets.E2E_TOTP_SECRET }}"
+
+      # ---- Artifacts -------------------------------------------------------
+      - name: Upload Lighthouse results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-results
+          path: apps/web/scripts/perf/lighthouse-results/
+          retention-days: 14
+
+      # ---- Teardown --------------------------------------------------------
+      - name: Teardown compose stack
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.e2e.yml down -v --remove-orphans

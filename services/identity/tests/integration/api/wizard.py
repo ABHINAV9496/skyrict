@@ -83,29 +83,28 @@ async def wizard_create_organization(
     password: str,
     org: str,
     slug: str,
-    plan_id: str = "professional",
+    plan_id: str | None = "professional",
 ) -> dict:
-    resp = await client.post(
-        "/api/v1/auth/signup/organization",
-        json={
-            "email": email,
-            "verificationToken": verification_token,
-            "planId": plan_id,
-            "companyName": org,
-            "industry": "Technology",
-            "workspaceSlug": slug,
-            "ownerFullName": "Wizard Owner",
-            "phoneCountry": "US",
-            "phoneNumber": "555-0134",
-            "address": {
-                "country": "US",
-                "addressLine1": "100 Market Street",
-                "city": "San Francisco",
-                "state": "CA",
-                "postalCode": "94103",
-            },
+    payload: dict[str, object] = {
+        "email": email,
+        "verificationToken": verification_token,
+        "companyName": org,
+        "industry": "Technology",
+        "workspaceSlug": slug,
+        "ownerFullName": "Wizard Owner",
+        "phoneCountry": "US",
+        "phoneNumber": "555-0134",
+        "address": {
+            "country": "US",
+            "addressLine1": "100 Market Street",
+            "city": "San Francisco",
+            "state": "CA",
+            "postalCode": "94103",
         },
-    )
+    }
+    if plan_id is not None:
+        payload["planId"] = plan_id
+    resp = await client.post("/api/v1/auth/signup/organization", json=payload)
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["status"] == "ok"
@@ -121,9 +120,14 @@ async def provision_tenant(
     password: str = DEFAULT_PASSWORD,
     org: str | None = None,
     slug: str | None = None,
-    plan_id: str = "professional",
+    plan_id: str | None = "professional",
 ) -> dict:
-    """Run the full 5-step wizard and return the provisioned tenant."""
+    """Run the full 5-step wizard and return the provisioned tenant.
+
+    Pass ``plan_id=None`` to omit ``planId`` from the organization request so
+    the server-side ``starter`` default is exercised (the Plan step runs AFTER
+    provisioning in the new wizard order).
+    """
     email = email or f"wizard-{uuid.uuid4().hex[:8]}@test.com"
     org = org or f"Wizard Corp {uuid.uuid4().hex[:8]}"
     slug = slug or _slugify(org)

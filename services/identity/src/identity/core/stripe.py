@@ -8,11 +8,15 @@ disable Stripe entirely.
 ``webhook_secret`` is injectable for testability: signature verification is
 purely local (HMAC over the raw payload), so tests can construct a signed
 payload with a throwaway ``whsec_...`` secret without network access.
+
+Checkout/portal session creation follows the same boundary: callers get
+plain dicts (``{"id": ..., "url": ...}``), never SDK objects, so the rest
+of the codebase is insulated from the untyped ``stripe`` module.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from identity.core.config import settings
 
@@ -26,6 +30,10 @@ class StripeError(Exception):
 
 class InvalidSignatureError(StripeError):
     """The webhook payload could not be authenticated."""
+
+
+class StripeDisabledError(StripeError):
+    """Stripe is not configured (missing keys) - operations are unavailable."""
 
 
 class StripeClient:
@@ -49,6 +57,28 @@ class StripeClient:
         """True when both keys are configured (Stripe calls are usable)."""
         return bool(self._secret_key and self._webhook_secret)
 
+    def _require_enabled(self) -> None:
+        """Refuse Stripe calls when keys are missing.
+
+        Raises:
+            StripeDisabledError: Stripe is not configured - the API layer
+                maps this to a sanitized 503 (ServiceUnavailableError).
+        """
+        if not self.enabled:
+            raise StripeDisabledError(
+                "Stripe is not configured - set BILLING_STRIPE_SECRET_KEY and "
+                "BILLING_STRIPE_WEBHOOK_SECRET to enable billing operations"
+            )
+
+    @staticmethod
+    def _import_stripe() -> Any:
+        """Import the Stripe SDK lazily (declared dependency, dev/test safe)."""
+        try:
+            import stripe
+        except ImportError as exc:  # pragma: no cover - dep declared in pyproject
+            raise StripeError("Stripe SDK is not installed") from exc
+        return stripe
+
     def construct_event(self, payload: bytes, signature_header: str) -> Event:
         """Verify the webhook signature and return the parsed Stripe Event.
 
@@ -60,18 +90,92 @@ class StripeClient:
             raise InvalidSignatureError(
                 "Stripe webhook secret is not configured - refusing unverified events"
             )
+        stripe = self._import_stripe()
         try:
-            import stripe
-        except ImportError as exc:  # pragma: no cover - dep declared in pyproject
-            raise StripeError("Stripe SDK is not installed") from exc
-
-        try:
-            return stripe.Webhook.construct_event(  # type: ignore[no-any-return,no-untyped-call]
-                payload=payload,
-                sig_header=signature_header,
-                secret=self._webhook_secret,
+            # The SDK module is untyped (Any); pin the strict return type.
+            return cast(
+                "Event",
+                stripe.Webhook.construct_event(
+                    payload=payload,
+                    sig_header=signature_header,
+                    secret=self._webhook_secret,
+                ),
             )
-        except stripe.error.SignatureVerificationError as exc:  # type: ignore[attr-defined]
+        except stripe.error.SignatureVerificationError as exc:
             raise InvalidSignatureError(str(exc)) from exc
         except Exception as exc:  # pragma: no cover - defensive
             raise StripeError(f"Could not construct Stripe event: {exc}") from exc
+
+    def create_customer(
+        self,
+        *,
+        email: str | None,
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a Stripe Customer and return ``{"id": ...}``.
+
+        The customer is created lazily on first checkout so a tenant has a
+        billing identity to reference in later sessions and webhooks.
+        """
+        self._require_enabled()
+        stripe = self._import_stripe()
+        try:
+            customer = stripe.Customer.create(email=email, metadata=metadata or {})
+        except stripe.error.StripeError as exc:
+            raise StripeError(f"Could not create Stripe customer: {exc}") from exc
+        return {"id": customer.id}
+
+    def create_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        client_reference_id: str,
+        metadata: dict[str, str] | None = None,
+        automatic_tax: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create a Stripe Checkout Session and return ``{"id", "url"}``.
+
+        The subscription-mode session redirects the browser to ``url``; the
+        webhook handler matches the completing session back to the tenant via
+        ``client_reference_id`` (the tenant id).
+
+        ``automatic_tax`` opts the session into Stripe Tax: when omitted the
+        session is tax-free (dev/test), and callers pass
+        ``{"enabled": True}`` to itemize location-based tax (e.g. Indian GST)
+        at checkout.
+        """
+        self._require_enabled()
+        stripe = self._import_stripe()
+        try:
+            create_kwargs: dict[str, Any] = {
+                "mode": "subscription",
+                "customer": customer_id,
+                "line_items": [{"price": price_id, "quantity": 1}],
+                "success_url": success_url,
+                "cancel_url": cancel_url,
+                "client_reference_id": client_reference_id,
+                "metadata": metadata or {},
+                "billing_address_collection": "auto",
+            }
+            if automatic_tax is not None:
+                create_kwargs["automatic_tax"] = automatic_tax
+            session = stripe.checkout.Session.create(**create_kwargs)
+        except stripe.error.StripeError as exc:
+            raise StripeError(f"Could not create checkout session: {exc}") from exc
+        return {"id": session.id, "url": session.url}
+
+    def create_portal_session(self, *, customer_id: str, return_url: str) -> dict[str, Any]:
+        """Create a Stripe Customer Portal Session and return ``{"id", "url"}``."""
+        self._require_enabled()
+        stripe = self._import_stripe()
+        try:
+            session = stripe.billing_portal.Session.create(
+                customer=customer_id,
+                return_url=return_url,
+            )
+        except stripe.error.StripeError as exc:
+            raise StripeError(f"Could not create portal session: {exc}") from exc
+        return {"id": session.id, "url": session.url}

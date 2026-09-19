@@ -52,7 +52,9 @@ export async function askAgent(page: Page, question: string): Promise<Locator> {
     await composer.fill(question);
     await page.getByRole("button", { name: "Send message" }).click();
     // New Chat creates the conversation then routes to its stable URL.
-    await page.waitForURL(/\/dashboard\/agents\/c\/[^/]+$/);
+    // The workspace middleware strips the internal `/dashboard` prefix on
+    // navigation, so the browser URL is the public `/agents/c/<id>`.
+    await page.waitForURL(/\/agents\/c\/[^/]+$/);
     return waitForAgentAnswer(page);
 }
 

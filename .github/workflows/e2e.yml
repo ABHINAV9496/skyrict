@@ -212,7 +212,11 @@ jobs:
         # Explicit projects: the security suite must NEVER run on this (loose)
         # stack - it asserts on tightened rate-limit budgets. It has its own
         # phase below after the stack is replaced.
-        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance
+        # --workers=1 mirrors the security phase below: the spec files sign in
+        # the SAME seeded admin, and identity rotates + revokes the refresh
+        # family on reuse. Two parallel workers hydrating that one account race
+        # the rotation chain and get bounced to /signin (or a revoked session).
+        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance --workers=1
         env:
           CI: "true"
           E2E_BASE_URL: "http://default.localhost:3000"

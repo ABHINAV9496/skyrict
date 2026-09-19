@@ -85,8 +85,11 @@ test.describe("AI approval interrupt", () => {
 
         // ---- The human decision released the posting ------------------------
         await page.goto(`/dashboard/erp/finance/journal-entries/${draftId}`);
-        await expect(page.getByText("Posted", { exact: true })).toBeVisible({
-            timeout: 15_000,
-        });
+        // The header status badge is the ``<span class="...bg-emerald...">Posted``
+        // chip; the detail grid's ``<dt>`` label also reads "Posted", so scope the
+        // assertion to the badge span to disambiguate.
+        await expect(
+            page.locator("span").getByText("Posted", { exact: true }),
+        ).toBeVisible({ timeout: 15_000 });
     });
 });

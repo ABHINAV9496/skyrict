@@ -303,8 +303,17 @@ class ApprovalEngine:
         (or ``delegated``) and advances the instance to the next pending step;
         after the final step the instance completes as ``approved`` /
         ``rejected`` / ``request_changes``.
+
+        ``decision`` accepts the API contract's verb forms - ``approve`` /
+        ``reject`` / ``request_changes`` (doc in ``ApprovalDecisionIn``) - and
+        the engine's own participle forms ``approved`` / ``rejected`` /
+        ``request_changes``; both are normalized before validation.
         """
         now = self._now()
+        if decision == "approve":
+            decision = STEP_APPROVED
+        elif decision == "reject":
+            decision = STEP_REJECTED
         instance = await self._repo.get_instance(tenant_id, instance_id)
         if instance is None:
             raise NotFoundError(f"Approval instance {instance_id} not found")

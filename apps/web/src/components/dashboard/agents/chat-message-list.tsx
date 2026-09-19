@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
+    ArrowDown,
     BookOpen,
     Check,
     Copy,
@@ -366,15 +367,51 @@ export function MessageList({
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const messageCountRef = useRef(messages.length);
+    // Ref + state pair: the ref answers "should we stick to the bottom?"
+    // synchronously inside effects, the state only drives the jump-to-latest
+    // button (set exclusively when the boolean flips, so scrolling never
+    // re-renders the list per pixel).
+    const isAtBottomRef = useRef(true);
+    const [isAtBottom, setIsAtBottom] = useState(true);
 
-    // Auto-scroll on new messages (not on content updates during streaming).
+    const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+        const node = scrollRef.current;
+        if (node) node.scrollTo({ top: node.scrollHeight, behavior });
+    }, []);
+
+    // Opening a conversation must land on the NEWEST message, not the first:
+    // this component mounts after the history is already loaded, so the
+    // message-count growth effect below never fires for the initial fill.
+    // The rAF re-pin catches late layout (images, markdown) shifting height
+    // after the first synchronous scroll.
     useEffect(() => {
-        if (messages.length > messageCountRef.current) {
-            const node = scrollRef.current;
-            if (node) node.scrollTop = node.scrollHeight;
+        const node = scrollRef.current;
+        if (node) node.scrollTop = node.scrollHeight;
+        const frame = requestAnimationFrame(() => {
+            const pinned = scrollRef.current;
+            if (pinned) pinned.scrollTop = pinned.scrollHeight;
+        });
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
+    // Stick-to-bottom: follow new messages ONLY while the reader is already
+    // near the bottom - scrolling up to re-read history is never yanked back.
+    useEffect(() => {
+        if (messages.length > messageCountRef.current && isAtBottomRef.current) {
+            scrollToBottom("auto");
         }
         messageCountRef.current = messages.length;
-    }, [messages.length]);
+    }, [messages.length, scrollToBottom]);
+
+    const handleScroll = useCallback(() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 96;
+        if (atBottom !== isAtBottomRef.current) {
+            isAtBottomRef.current = atBottom;
+            setIsAtBottom(atBottom);
+        }
+    }, []);
 
     if (messages.length === 0) {
         return (
@@ -388,30 +425,48 @@ export function MessageList({
     }
 
     return (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4">
-            <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 pb-8 pt-4">
-                {messages.map((message, index) => {
-                    const prev = index > 0 ? messages[index - 1] : null;
-                    const showDateSep =
-                        !prev ||
-                        differentDay(prev.createdAt, message.createdAt);
+        <div className="relative flex min-h-0 flex-1 flex-col">
+            <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto px-4"
+            >
+                <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 pb-8 pt-4">
+                    {messages.map((message, index) => {
+                        const prev = index > 0 ? messages[index - 1] : null;
+                        const showDateSep =
+                            !prev ||
+                            differentDay(prev.createdAt, message.createdAt);
 
-                    return (
-                        <div key={message.id}>
-                            {showDateSep ? (
-                                <DateSeparator
-                                    label={dateGroupLabel(message.createdAt)}
+                        return (
+                            <div key={message.id}>
+                                {showDateSep ? (
+                                    <DateSeparator
+                                        label={dateGroupLabel(message.createdAt)}
+                                    />
+                                ) : null}
+                                <MessageBubble
+                                    message={message}
+                                    onResend={onResend}
                                 />
-                            ) : null}
-                            <MessageBubble
-                                message={message}
-                                onResend={onResend}
-                            />
-                        </div>
-                    );
-                })}
+                            </div>
+                        );
+                    })}
+                </div>
+                <p className="sr-only">{`Chatting as ${userDisplay || "you"}`}</p>
             </div>
-            <p className="sr-only">{`Chatting as ${userDisplay || "you"}`}</p>
+            {/* Jump-to-latest: only visible once the reader scrolled up, the
+                standard AI-chat affordance (ChatGPT-style floating arrow). */}
+            {!isAtBottom ? (
+                <button
+                    type="button"
+                    onClick={() => scrollToBottom("smooth")}
+                    aria-label="Scroll to latest message"
+                    className="absolute bottom-3 left-1/2 z-10 flex size-9 -translate-x-1/2 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-lg backdrop-blur transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                    <ArrowDown aria-hidden="true" className="size-4" />
+                </button>
+            ) : null}
         </div>
     );
 }

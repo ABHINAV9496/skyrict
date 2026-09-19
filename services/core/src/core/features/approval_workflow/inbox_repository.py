@@ -26,6 +26,7 @@ from datetime import datetime
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.db.rbac import grants_permission
 from core.features.approval_workflow.delegation_repository import ApprovalDelegationRepository
 from core.features.approval_workflow.models.delegation import ErpApprovalDelegationModel
 from core.features.approval_workflow.models.instance import ErpApprovalWorkflowInstanceModel
@@ -220,7 +221,9 @@ class ApprovalWorkflowInboxRepository:
         if step.assignee_kind == "role":
             return step.assignee_value in user_roles
         if step.assignee_kind == "permission":
-            return step.assignee_value in user_permissions
+            # ``grants_permission`` honours the owner wildcard ``"*"`` so the
+            # inbox matches decision-time eligibility and ``require_permission``.
+            return grants_permission(user_permissions, step.assignee_value)
         return False
 
     @staticmethod
@@ -250,7 +253,7 @@ class ApprovalWorkflowInboxRepository:
                 continue
             if permission is not None and step.assignee_kind != "permission":
                 continue
-            if permission is not None and permission != step.assignee_value:
+            if permission is not None and not grants_permission([permission], step.assignee_value):
                 continue
             if step.assignee_kind == "users":
                 assignee_ids = [uuid.UUID(part) for part in step.assignee_value.split(",") if part]
@@ -260,7 +263,9 @@ class ApprovalWorkflowInboxRepository:
                 if step.assignee_value not in delegator_roles.get(delegator, set()):
                     continue
             elif step.assignee_kind == "permission":
-                if step.assignee_value not in delegator_permissions.get(delegator, set()):
+                if not grants_permission(
+                    delegator_permissions.get(delegator, set()), step.assignee_value
+                ):
                     continue
             else:
                 continue

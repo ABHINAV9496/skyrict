@@ -20,6 +20,7 @@ from __future__ import annotations
 import enum
 import sys
 from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -141,8 +142,9 @@ class Settings(BaseSettings):
         default=None,
         description=(
             "primary provider key from the registry (openrouter, groq, openai, "
-            "omniroute, agentrouter, generic). None = no provider configured; "
-            "AI requests then return typed 503 ai_unavailable."
+            "omniroute, agentrouter, generic, mock). 'mock' is a deterministic "
+            "in-process provider for tests/E2E only. None = no provider "
+            "configured; AI requests then return typed 503 ai_unavailable."
         ),
     )
     MODEL: str = Field(
@@ -197,6 +199,24 @@ class Settings(BaseSettings):
         default=20.0,
         gt=0,
         description="per-provider total timeout for generation calls",
+    )
+
+    # --- Mock provider (AI_PROVIDER=mock; tests/E2E only) ---
+    MOCK_BEHAVIOR: Literal["ok", "degrade_503", "rate_limit_429"] = Field(
+        default="ok",
+        description=(
+            "scripted failure mode for AI_PROVIDER=mock. 'ok' answers normally; "
+            "'degrade_503' raises ai_unavailable; 'rate_limit_429' raises a rate "
+            "limit. Never used with a real provider."
+        ),
+    )
+    MOCK_FAIL_AFTER: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "for a non-'ok' AI_MOCK_BEHAVIOR: allow this many generations to "
+            "succeed before the scripted failure begins. 0 = fail immediately."
+        ),
     )
 
     # --- Embedding configuration (SKY-58) ---

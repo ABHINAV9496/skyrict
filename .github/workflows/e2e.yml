@@ -131,6 +131,26 @@ jobs:
           echo "Seeded core report catalog + HR/Payroll defaults"
         timeout-minutes: 10
 
+      # ---- Enable the journal-entry approval engine ------------------------
+      # SKY-92: the engine is OFF by default so existing ERP flows are
+      # unchanged. The approval-interrupt AI journey opts this disposable
+      # tenant in; journal entries below the seeded 10,000 threshold still
+      # auto-approve, so every other finance journey is unaffected.
+      - name: Enable journal-entry approval engine
+        run: |
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T \
+            -e PGPASSWORD=skyrict postgres \
+            psql -U skyrict -d skyrict_identity -v ON_ERROR_STOP=1 -c "
+              INSERT INTO erp_tenant_settings (tenant_id, id, key, value)
+              SELECT '00000000-0000-0000-0000-000000000001', gen_random_uuid(), flag_key, 'true'
+              FROM (VALUES ('approval_engine_enabled'), ('je_approval_engine')) AS flags(flag_key)
+              WHERE NOT EXISTS (
+                SELECT 1 FROM erp_tenant_settings s
+                WHERE s.tenant_id = '00000000-0000-0000-0000-000000000001' AND s.key = flags.flag_key
+              );
+            "
+          echo "Enabled approval_engine_enabled + je_approval_engine for default tenant"
+
       # ---- Build + start Next.js -------------------------------------------
       - name: Build web app
         run: pnpm --filter @skyrict/web build

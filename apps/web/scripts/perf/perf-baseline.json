@@ -383,7 +383,8 @@
     {
       "route": "/dashboard/intelligence/results",
       "sizeKb": 7.41,
-      "firstLoadKb": 178
+      "firstLoadKb": 179,
+      "budgetNote": "1 kB drift from route-chunk content (route-local code unchanged at 7.41 kB; no new deps - no chart/markdown/QR libs). Baseline 178 -> 179."
     },
     {
       "route": "/dashboard/intelligence/trending",

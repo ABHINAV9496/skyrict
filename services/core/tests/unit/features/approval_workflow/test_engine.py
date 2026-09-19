@@ -388,6 +388,44 @@ async def test_decide_rejects_and_completes_as_rejected() -> None:
     assert repo.transitions[-1]["new_state"] == "rejected"
 
 
+async def test_decide_accepts_api_verb_decision_approve() -> None:
+    """The API contract sends ``approve``/``reject`` - normalize to the engine statuses."""
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    engine = _engine(repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="approve",
+        reason="looks good",
+    )
+
+    assert result.instance.status == "approved"
+    assert result.instance_completed is True
+    assert repo.decided_step.status == "approved"
+    assert repo.transitions[-1]["new_state"] == "approved"
+
+
+async def test_decide_accepts_api_verb_decision_reject() -> None:
+    """The API contract sends ``reject`` - normalize to the engine's ``rejected``."""
+    repo = FakeApprovalWorkflowInstanceRepository()
+    _single_step_engine(repo)
+    engine = _engine(repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_APPROVER,
+        decision="reject",
+    )
+
+    assert result.instance.status == "rejected"
+    assert result.instance_completed is True
+    assert repo.transitions[-1]["new_state"] == "rejected"
+
+
 async def test_decide_role_membership_checked_at_decision_time() -> None:
     repo = FakeApprovalWorkflowInstanceRepository()
     repo.instance = _instance()
@@ -901,6 +939,40 @@ async def test_decide_delegation_with_matching_permission_scope_decides() -> Non
                 delegator=USER_APPROVER,
                 delegate=USER_STRANGER,
                 permission="erp.finance.approve",
+            )
+        ]
+    )
+    engine = _engine(repo, delegation_repo=delegation_repo)
+
+    result = await engine.decide(
+        tenant_id=TENANT,
+        instance_id=INSTANCE_ID,
+        actor_id=USER_STRANGER,
+        decision="approved",
+    )
+
+    assert result.instance.status == "approved"
+    assert repo.transitions[-1]["actor_type"] == "delegated"
+
+
+async def test_decide_delegation_with_wildcard_permission_scope_decides() -> None:
+    # A grant scoped to the owner wildcard covers any permission-keyed step.
+    repo = FakeApprovalWorkflowInstanceRepository()
+    repo.instance = _instance()
+    repo.steps = [
+        _step_row(
+            index=0,
+            key="approve",
+            kind="permission",
+            value="erp.finance.approve",
+        )
+    ]
+    delegation_repo = FakeApprovalDelegationRepository(
+        grants=[
+            _grant(
+                delegator=USER_APPROVER,
+                delegate=USER_STRANGER,
+                permission="*",
             )
         ]
     )

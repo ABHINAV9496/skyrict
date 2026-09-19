@@ -23,6 +23,10 @@
  *     browser context per worker and never reuses a shared storage-state
  *     snapshot, so the refresh-token rotation chain stays private to the
  *     worker.
+ *   - ai (SKY-107): the AI journeys (chat streaming, NL inventory, report
+ *     builder, finance advisor, degradation/approval). Same `workspace`
+ *     fixture; the stack runs the deterministic in-process MockProvider
+ *     (AI_PROVIDER=mock) so no paid LLM is ever called in CI.
  *
  * Workers and refresh-token rotation
  * ----------------------------------
@@ -115,6 +119,13 @@ export default defineConfig({
             // NOTE: also excluded from the default `playwright test` run in CI -
             // the main phase passes explicit --project flags so the security suite
             // only ever runs on the tight stack.
+        },
+        {
+            name: "ai",
+            testMatch: /ai[\\/][^\\/]+\.spec\.ts$/,
+            dependencies: ["setup"],
+            // Same worker-scoped `workspace` sign-in as crm-finance: no shared
+            // storage state, so each worker advances its own refresh-token chain.
         },
     ],
     ...(webServer ? { webServer } : {}),

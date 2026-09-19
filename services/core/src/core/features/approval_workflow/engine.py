@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from core.db.rbac import grants_permission
 from core.features.approval_workflow.delegation_repository import ApprovalDelegationRepository
 from core.features.approval_workflow.dsl import (
     AmountAtLeastCondition,
@@ -302,8 +303,17 @@ class ApprovalEngine:
         (or ``delegated``) and advances the instance to the next pending step;
         after the final step the instance completes as ``approved`` /
         ``rejected`` / ``request_changes``.
+
+        ``decision`` accepts the API contract's verb forms - ``approve`` /
+        ``reject`` / ``request_changes`` (doc in ``ApprovalDecisionIn``) - and
+        the engine's own participle forms ``approved`` / ``rejected`` /
+        ``request_changes``; both are normalized before validation.
         """
         now = self._now()
+        if decision == "approve":
+            decision = STEP_APPROVED
+        elif decision == "reject":
+            decision = STEP_REJECTED
         instance = await self._repo.get_instance(tenant_id, instance_id)
         if instance is None:
             raise NotFoundError(f"Approval instance {instance_id} not found")
@@ -343,7 +353,9 @@ class ApprovalEngine:
                     continue
                 if grant.permission is not None and target.assignee_kind != "permission":
                     continue
-                if grant.permission is not None and grant.permission != target.assignee_value:
+                if grant.permission is not None and not grants_permission(
+                    [grant.permission], target.assignee_value
+                ):
                     continue
                 if grant.delegate == actor_id:
                     delegated_actor = grant.delegator

@@ -29,7 +29,7 @@ test.describe("AI chat streaming", () => {
         await expect(answer).toContainText(question);
         // The turn completed: the composer is back to its idle send state.
         await expect(
-            page.getByRole("button", { name: "Send message" }),
+            page.getByRole("button", { name: "Send message", exact: true }),
         ).toBeVisible();
     });
 

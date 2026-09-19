@@ -50,7 +50,9 @@ export async function askAgent(page: Page, question: string): Promise<Locator> {
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeVisible();
     await composer.fill(question);
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page
+        .getByRole("button", { name: "Send message", exact: true })
+        .click();
     // New Chat creates the conversation then routes to its stable URL.
     // The workspace middleware strips the internal `/dashboard` prefix on
     // navigation, so the browser URL is the public `/agents/c/<id>`.
@@ -66,6 +68,8 @@ export async function sendFollowUp(
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEditable();
     await composer.fill(question);
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page
+        .getByRole("button", { name: "Send message", exact: true })
+        .click();
     return waitForAgentAnswer(page);
 }

@@ -39,7 +39,9 @@ async function startChat(page: Page, prompt: string): Promise<void> {
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeVisible();
     await composer.fill(prompt);
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page
+        .getByRole("button", { name: "Send message", exact: true })
+        .click();
     // The workspace middleware strips the internal `/dashboard` prefix on
     // navigation, so the browser URL is the public `/agents/c/<id>`.
     await page.waitForURL(/\/agents\/c\/[^/]+$/);
@@ -101,7 +103,7 @@ test.describe("AI supervisor fallbacks and degradation", () => {
             await expect(composer).toBeEditable();
             await composer.fill("Try again");
             await expect(
-                page.getByRole("button", { name: "Send message" }),
+                page.getByRole("button", { name: "Send message", exact: true }),
             ).toBeEnabled();
         } finally {
             await page.unroute(STREAM_ENDPOINT);

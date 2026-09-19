@@ -35,6 +35,13 @@ export async function fillOtp(
     label: string,
     code: string,
 ): Promise<void> {
+    // Under parallel load the MFA form can mount after the challenge heading
+    // resolves; a blind sequential fill then waits on digit 1 while the rest of
+    // the form is mid-render. Wait for the FULL digit form (exact count) to be
+    // attached BEFORE filling so every fill targets a settled, complete form.
+    await expect(
+        page.locator(`input[aria-label^="${label} digit "]`),
+    ).toHaveCount(code.length);
     for (let i = 0; i < code.length; i += 1) {
         await page
             .locator(`input[aria-label="${label} digit ${i + 1}"]`)
@@ -274,24 +281,24 @@ export async function refreshSession(page: Page): Promise<void> {
  * cannot race the app's own single-flight rotation.
  */
 export async function assertSessionReachesBff(page: Page): Promise<void> {
-  const probe = await page.evaluate(async () => {
-    const res = await fetch("/api/v1/users/me", {
-      credentials: "include",
-      cache: "no-store",
+    const probe = await page.evaluate(async () => {
+        const res = await fetch("/api/v1/users/me", {
+            credentials: "include",
+            cache: "no-store",
+        });
+        let body = "";
+        try {
+            body = (await res.text()).slice(0, 240);
+        } catch {
+            // keep the body empty when the stream cannot be read
+        }
+        return { status: res.status, body };
     });
-    let body = "";
-    try {
-      body = (await res.text()).slice(0, 240);
-    } catch {
-      // keep the body empty when the stream cannot be read
-    }
-    return { status: res.status, body };
-  });
-  expect(
-    probe.status,
-    `BFF session probe to /api/v1/users/me did not authenticate: ` +
-      `HTTP ${probe.status} ${probe.body}`,
-  ).toBe(200);
+    expect(
+        probe.status,
+        `BFF session probe to /api/v1/users/me did not authenticate: ` +
+            `HTTP ${probe.status} ${probe.body}`,
+    ).toBe(200);
 }
 
 /**
@@ -319,15 +326,18 @@ export async function assertSessionReachesBff(page: Page): Promise<void> {
  * parallel /api/auth/session from the harness would race it and revoke the
  * whole token family.
  */
-export async function waitForWorkspaceSettled(page: Page, email?: string): Promise<void> {
-  await expect(
-    page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
-  ).toBeVisible({ timeout: 20_000 });
-  const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
-  await expect(
-    page.getByText(expected, { exact: true }).first(),
-    "sidebar user menu must render the signed-in user's email after session hydration",
-  ).toBeVisible({ timeout: 20_000 });
+export async function waitForWorkspaceSettled(
+    page: Page,
+    email?: string,
+): Promise<void> {
+    await expect(
+        page.getByRole("link", { name: "Skyrict dashboard", exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    const expected = email ?? process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
+    await expect(
+        page.getByText(expected, { exact: true }).first(),
+        "sidebar user menu must render the signed-in user's email after session hydration",
+    ).toBeVisible({ timeout: 20_000 });
 }
 
 /**

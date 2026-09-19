@@ -48,7 +48,7 @@ jobs:
         run: uv run mypy services/identity/src/
 
       - name: Import Linter
-        run: uv run lint-imports
+        run: uv run lint-imports --config services/identity/import-linter.toml
 
   test:
     name: Unit Tests

@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import AliasGenerator, BaseModel, ConfigDict, EmailStr, Field
 from pydantic.alias_generators import to_camel
 
+from identity.features.billing.plans import CURRENCY_LITERAL
 from identity.features.users.schemas import UserResponse
 
 
@@ -211,11 +212,19 @@ class BillingAddress(_CamelModel):
 
 
 class CreateOrganizationRequest(_CamelModel):
-    """POST /auth/signup/organization - final wizard step, provisions the tenant."""
+    """POST /auth/signup/organization - provisions the tenant.
+
+    The tenant is created on the Organization step (before the Plan step).
+    ``plan_id`` defaults to ``starter`` because the plan is not known yet -
+    the wizard picks a plan AFTER the tenant exists and a checkout happens on
+    the Billing step. The backend never creates the tenant without a tier.
+    """
 
     email: EmailStr
     verification_token: str
-    plan_id: Literal["starter", "professional", "business", "enterprise"]
+    plan_id: Literal["starter", "professional", "business", "enterprise"] = Field(
+        default="starter", description="Selected plan (defaults to Starter before the Plan step)"
+    )
     company_name: str = Field(..., min_length=1, max_length=256)
     industry: str = Field(..., min_length=1, max_length=120)
     workspace_slug: str = Field(..., min_length=1, max_length=100)
@@ -234,3 +243,31 @@ class CreateOrganizationResponse(_CamelModel):
     tenant_slug: str
     subscription_status: Literal["trialing"] = "trialing"
     trial_ends_at: datetime | None = None
+
+
+class SignupCheckoutSessionRequest(_CamelModel):
+    """POST /auth/signup/checkout-session - create a Checkout session mid-wizard.
+
+    The wizard's Plan/Billing steps run BEFORE the owner has an account (the
+    tenant was provisioned on the Organization step). This request carries the
+    same verification token bound to the owner email at the verify-code step -
+    the token is the credential, so the endpoint is deliberately skipped by
+    the auth middleware. Stripe redirects the owner back to the signup Review
+    step when the checkout completes.
+    """
+
+    email: EmailStr
+    verification_token: str
+    tenant_id: UUID
+    plan_id: Literal["starter", "professional", "business", "enterprise"]
+    interval: Literal["month", "year"] = Field(
+        default="month", description="Billing interval (monthly or annual)"
+    )
+    currency: CURRENCY_LITERAL = Field(
+        default="usd",
+        description=(
+            "Currency for the billed price (beta allowlist). Selects a "
+            "currency-specific Stripe Price; pricing-pending markets are "
+            "rejected by the service layer."
+        ),
+    )

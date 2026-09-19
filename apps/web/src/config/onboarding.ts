@@ -19,90 +19,19 @@ export const onboardingSteps = [
         shortLabel: "Organization",
         href: "/register/organization",
     },
+    {
+        index: 6,
+        label: "Billing",
+        shortLabel: "Billing",
+        href: "/register/billing",
+    },
+    {
+        index: 7,
+        label: "Review",
+        shortLabel: "Review",
+        href: "/register/review",
+    },
 ] as const;
-
-export type PlanId = "starter" | "professional" | "business" | "enterprise";
-
-export interface Plan {
-    id: PlanId;
-    name: string;
-    tagline: string;
-    monthly: number | null;
-    annual: number | null;
-    users: string;
-    aiCredits: string;
-    support: string;
-    modules: string[];
-    highlighted?: boolean;
-}
-
-export const plans: Plan[] = [
-    {
-        id: "starter",
-        name: "Starter",
-        tagline: "For solo operators testing the signal.",
-        monthly: 0,
-        annual: 0,
-        users: "1 user",
-        aiCredits: "500 AI credits / month",
-        support: "Community support",
-        modules: [
-            "Core ERP slice (inventory, sales, cash, orders)",
-            "Market intel - 1 signal source",
-            "1 agent",
-            "Email verification & MFA",
-        ],
-    },
-    {
-        id: "professional",
-        name: "Professional",
-        tagline: "For growing teams running on real demand.",
-        monthly: 29,
-        annual: 24,
-        users: "Up to 5 users",
-        aiCredits: "5,000 AI credits / month",
-        support: "Email support",
-        modules: [
-            "Everything in Starter",
-            "All 5 market signal sources",
-            "5 agents",
-            "API access",
-        ],
-        highlighted: true,
-    },
-    {
-        id: "business",
-        name: "Business",
-        tagline: "For companies with agents in the loop.",
-        monthly: 79,
-        annual: 66,
-        users: "Up to 20 users",
-        aiCredits: "20,000 AI credits / month",
-        support: "Priority support",
-        modules: [
-            "Everything in Professional",
-            "Agent autopilot (auto-actions)",
-            "Unlimited agents",
-            "Advanced permissions",
-        ],
-    },
-    {
-        id: "enterprise",
-        name: "Enterprise",
-        tagline: "For organizations that need control.",
-        monthly: null,
-        annual: null,
-        users: "Unlimited users",
-        aiCredits: "Custom AI credits",
-        support: "Dedicated CSM",
-        modules: [
-            "Everything in Business",
-            "SSO / SAML",
-            "Custom data integrations",
-            "Dedicated infrastructure",
-        ],
-    },
-];
 
 export const industries = [
     "Technology",

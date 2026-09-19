@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from identity.api.deps import (
     get_audit_service,
     get_authn_service,
+    get_billing_service,
     get_captcha_store,
     get_current_user,
     get_mfa_challenge_store,
@@ -48,6 +49,7 @@ from identity.features.auth.schemas import (
     SendCodeResponse,
     SetPasswordRequest,
     SetPasswordResponse,
+    SignupCheckoutSessionRequest,
     SignupStartRequest,
     SignupStartResponse,
     TokenRefreshRequest,
@@ -55,6 +57,8 @@ from identity.features.auth.schemas import (
     VerifyCodeResponse,
 )
 from identity.features.auth.service import AuthenticationService, TokenService
+from identity.features.billing.schemas import CheckoutSessionResponse
+from identity.features.billing.service import BillingService
 from skyrict_common.exceptions import AuthenticationError
 from skyrict_common.schemas import ResponseEnvelope
 
@@ -340,6 +344,38 @@ async def signup_organization(
         data=CreateOrganizationResponse(**result),
         message="Your organization is ready",
     )
+
+
+@router.post("/signup/checkout-session", response_model=ResponseEnvelope[CheckoutSessionResponse])
+async def signup_checkout_session(
+    body: SignupCheckoutSessionRequest,
+    authn: AuthenticationService = Depends(get_authn_service),
+    billing_svc: BillingService = Depends(get_billing_service),
+) -> ResponseEnvelope[CheckoutSessionResponse]:
+    """Create a Stripe Checkout session for a plan picked mid-onboarding.
+
+    The wizard's Plan/Billing steps run before the owner has an account, so
+    this endpoint is guarded by the verification token rather than a session:
+    the caller must still hold the token bound to the owner email AND the
+    email must own a user inside the tenant (see
+    ``AuthenticationService.resolve_signup_checkout_tenant``). Returns the
+    Stripe-hosted ``url`` the browser redirects to; Stripe sends the owner
+    back to the signup Review step on success. Bad token/tenant -> 401,
+    plan without a configured Price -> 422, Stripe disabled -> sanitized 503.
+    """
+    tenant = await authn.resolve_signup_checkout_tenant(
+        email=body.email,
+        verification_token=body.verification_token,
+        tenant_id=body.tenant_id,
+    )
+    assert tenant.id is not None  # resolved tenant is persisted
+    session = await billing_svc.create_signup_checkout_session(
+        tenant_id=str(tenant.id),
+        plan_id=body.plan_id,
+        interval=body.interval,
+        currency=body.currency,
+    )
+    return ResponseEnvelope(data=CheckoutSessionResponse.model_validate(session))
 
 
 @router.post("/refresh", response_model=ResponseEnvelope[AuthResponse])

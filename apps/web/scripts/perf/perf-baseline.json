@@ -413,7 +413,7 @@
     {
       "route": "/dashboard/settings",
       "sizeKb": 10.3,
-      "firstLoadKb": 198
+      "firstLoadKb": 201
     },
     {
       "route": "/dashboard/settings/notifications",
@@ -443,12 +443,12 @@
     {
       "route": "/register/organization",
       "sizeKb": 15.8,
-      "firstLoadKb": 256
+      "firstLoadKb": 257
     },
     {
       "route": "/register/plan",
       "sizeKb": 5.56,
-      "firstLoadKb": 195
+      "firstLoadKb": 200
     },
     {
       "route": "/register/security",

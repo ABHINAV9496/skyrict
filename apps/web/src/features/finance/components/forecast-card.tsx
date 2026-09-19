@@ -1,21 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Info, Loader2, RefreshCw, TrendingUp } from "lucide-react";
-import {
-    Area,
-    Bar,
-    BarChart,
-    CartesianGrid,
-    ComposedChart,
-    Line,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from "recharts";
 
 import { Button } from "@/components/ui/button";
+import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import {
     Dialog,
     DialogContent,
@@ -34,6 +24,8 @@ import { sweepDealHealth } from "@/lib/api/crm-ai-api";
 import { formatMoney } from "@/lib/finance/format";
 import { WidgetCard } from "@/features/finance/components/automation-widgets";
 
+const chartPanel = "rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-4";
+
 type Status =
     | { state: "loading" }
     | { state: "error"; message: string }
@@ -44,7 +36,22 @@ const BAND_COLOR = "#0ea5e9";
 const BASELINE_COLOR = "#64748b";
 const ACTUAL_COLOR = "#f59e0b";
 
-const chartPanel = "rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-4";
+// recharts lives in the dynamically-imported chart chunk; ssr:false keeps it
+// out of this widget's first-load JS and ChartSkeleton reserves the height.
+const LazyForecastChart = dynamic(
+    () =>
+        import("@/features/finance/components/forecast-charts").then(
+            (m) => m.RevenueForecastChart,
+        ),
+    { ssr: false, loading: ChartSkeleton },
+);
+const LazyHistoryChart = dynamic(
+    () =>
+        import("@/features/finance/components/forecast-charts").then(
+            (m) => m.RevenueHistoryChart,
+        ),
+    { ssr: false, loading: ChartSkeleton },
+);
 
 function monthLabel(value: string): string {
     const date = new Date(`${value}T00:00:00`);
@@ -77,23 +84,6 @@ const HEALTH_NEUTRAL = {
 
 function healthOf(health: string | null): { className: string; label: string } {
     return health ? (HEALTH_DOT[health] ?? HEALTH_NEUTRAL) : HEALTH_NEUTRAL;
-}
-
-const axisTick = {
-    fontSize: 11,
-    fill: "var(--muted-foreground)",
-    fontFamily: "var(--font-sans)",
-};
-
-const compactMoneyFormatter = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 1,
-});
-
-function compactMoney(value: number): string {
-    return compactMoneyFormatter.format(value);
 }
 
 function LegendChip({
@@ -130,66 +120,6 @@ function LegendChip({
             )}
             {label}
         </span>
-    );
-}
-
-function ChartTooltipContent({
-    active,
-    payload,
-    label,
-}: {
-    active: boolean;
-    payload?: ReadonlyArray<{
-        name?: string;
-        value?: number | [number, number];
-        color?: string;
-        payload?: { baseline?: number | null; pipeline?: number | null };
-    }>;
-    label?: string;
-}) {
-    if (!active || !payload || payload.length === 0) return null;
-    const datum = payload[0]?.payload;
-    const hasBreakdown = datum?.baseline != null && datum?.pipeline != null;
-    const predictedEntry = payload.find((entry) => entry.name === "Forecast");
-    return (
-        <div className="rounded-lg border border-border bg-popover px-3 py-2 shadow-md">
-            {label ? (
-                <p className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    {label}
-                </p>
-            ) : null}
-            <ul className="space-y-1">
-                {payload.map((entry, index) => (
-                    <li key={index} className="flex items-center gap-2 text-sm">
-                        <span
-                            aria-hidden="true"
-                            className="size-2 shrink-0 rounded-full"
-                            style={{
-                                backgroundColor:
-                                    entry.color ?? "var(--chart-1)",
-                            }}
-                        />
-                        <span className="text-muted-foreground">
-                            {entry.name}
-                        </span>
-                        <span className="ml-auto pl-3 font-semibold tabular-nums text-foreground">
-                            {Array.isArray(entry.value)
-                                ? `${formatMoney(entry.value[0])} – ${formatMoney(entry.value[1])}`
-                                : formatMoney(entry.value ?? 0)}
-                        </span>
-                    </li>
-                ))}
-            </ul>
-            {hasBreakdown ? (
-                <p className="mt-2 border-t border-border/60 pt-1.5 text-xs tabular-nums text-muted-foreground">
-                    {formatMoney(datum!.baseline!)} usual revenue
-                    {datum!.pipeline! > 0 ? (
-                        <> + {formatMoney(datum!.pipeline!)} deals closing</>
-                    ) : null}{" "}
-                    = {formatMoney((predictedEntry?.value as number) ?? 0)}
-                </p>
-            ) : null}
-        </div>
     );
 }
 
@@ -850,123 +780,13 @@ export function RevenueForecastCard({ canRefresh }: { canRefresh: boolean }) {
                                 label="Expected range"
                             />
                         </div>
-                        <div className="h-56">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ComposedChart
-                                    data={data}
-                                    margin={{
-                                        top: 4,
-                                        right: 4,
-                                        left: 0,
-                                        bottom: 0,
-                                    }}
-                                >
-                                    <defs>
-                                        <linearGradient
-                                            id="forecastBand"
-                                            x1="0"
-                                            y1="0"
-                                            x2="0"
-                                            y2="1"
-                                        >
-                                            <stop
-                                                offset="0%"
-                                                stopColor={BAND_COLOR}
-                                                stopOpacity={0.24}
-                                            />
-                                            <stop
-                                                offset="100%"
-                                                stopColor={BAND_COLOR}
-                                                stopOpacity={0.04}
-                                            />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid
-                                        stroke="var(--border)"
-                                        strokeOpacity={0.6}
-                                        vertical={false}
-                                    />
-                                    <XAxis
-                                        dataKey="label"
-                                        tick={axisTick}
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickMargin={8}
-                                        interval="preserveStartEnd"
-                                    />
-                                    <YAxis
-                                        tick={axisTick}
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickFormatter={compactMoney}
-                                        domain={[0, "auto"]}
-                                        width={52}
-                                    />
-                                    <Tooltip
-                                        cursor={{
-                                            stroke: "var(--border)",
-                                            strokeOpacity: 0.9,
-                                        }}
-                                        content={({
-                                            active,
-                                            payload,
-                                            label,
-                                        }) => (
-                                            <ChartTooltipContent
-                                                active={Boolean(active)}
-                                                payload={
-                                                    payload as ReadonlyArray<{
-                                                        name?: string;
-                                                        value?:
-                                                            | number
-                                                            | [number, number];
-                                                        color?: string;
-                                                    }>
-                                                }
-                                                label={
-                                                    label as string | undefined
-                                                }
-                                            />
-                                        )}
-                                    />
-                                    <Area
-                                        dataKey="band"
-                                        name="Expected range"
-                                        stroke="none"
-                                        fill="url(#forecastBand)"
-                                        activeDot={false}
-                                        legendType="none"
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="predicted"
-                                        name="Forecast"
-                                        stroke={PREDICTED_COLOR}
-                                        strokeWidth={2.5}
-                                        dot={false}
-                                        activeDot={{
-                                            r: 4,
-                                            strokeWidth: 2,
-                                            stroke: "var(--card)",
-                                        }}
-                                        legendType="none"
-                                    />
-                                    {hasDecomposition ? (
-                                        <Line
-                                            type="monotone"
-                                            dataKey="baseline"
-                                            name="Usual revenue"
-                                            stroke={BASELINE_COLOR}
-                                            strokeWidth={1.5}
-                                            strokeDasharray="4 4"
-                                            dot={false}
-                                            activeDot={false}
-                                            legendType="none"
-                                        />
-                                    ) : null}
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        </div>
+                        <LazyForecastChart
+                            data={data}
+                            hasDecomposition={hasDecomposition}
+                            predictedColor={PREDICTED_COLOR}
+                            bandColor={BAND_COLOR}
+                            baselineColor={BASELINE_COLOR}
+                        />
                     </div>
                     <p className="mt-3 text-xs text-muted-foreground">
                         Forecast = usual revenue + deals expected to close · the
@@ -993,76 +813,7 @@ export function RevenueForecastCard({ canRefresh }: { canRefresh: boolean }) {
                                 label="Actual revenue"
                             />
                         </div>
-                        <div className="h-48">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={historyData}
-                                    margin={{
-                                        top: 4,
-                                        right: 4,
-                                        left: 0,
-                                        bottom: 0,
-                                    }}
-                                >
-                                    <CartesianGrid
-                                        stroke="var(--border)"
-                                        strokeOpacity={0.6}
-                                        vertical={false}
-                                    />
-                                    <XAxis
-                                        dataKey="label"
-                                        tick={axisTick}
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickMargin={8}
-                                        interval="preserveStartEnd"
-                                    />
-                                    <YAxis
-                                        tick={axisTick}
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tickFormatter={compactMoney}
-                                        domain={[0, "auto"]}
-                                        width={52}
-                                    />
-                                    <Tooltip
-                                        cursor={{
-                                            fill: "var(--card)",
-                                            fillOpacity: 0.55,
-                                        }}
-                                        content={({
-                                            active,
-                                            payload,
-                                            label,
-                                        }) => (
-                                            <ChartTooltipContent
-                                                active={Boolean(active)}
-                                                payload={
-                                                    payload as ReadonlyArray<{
-                                                        name?: string;
-                                                        value?:
-                                                            | number
-                                                            | [number, number];
-                                                        color?: string;
-                                                    }>
-                                                }
-                                                label={
-                                                    label as string | undefined
-                                                }
-                                            />
-                                        )}
-                                    />
-                                    <Bar
-                                        dataKey="actual"
-                                        name="Actual"
-                                        fill={ACTUAL_COLOR}
-                                        fillOpacity={0.9}
-                                        radius={[4, 4, 0, 0]}
-                                        maxBarSize={36}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
+                        <LazyHistoryChart data={historyData} actualColor={ACTUAL_COLOR} />
                     </div>
                 </div>
             ) : null}

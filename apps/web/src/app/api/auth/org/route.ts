@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
         typeof body.verificationToken === "string"
             ? body.verificationToken
             : "";
-    const planId = typeof body.planId === "string" ? body.planId : "";
+    const planId =
+        typeof body.planId === "string" ? body.planId.trim() : "";
     const companyName =
         typeof body.companyName === "string" ? body.companyName.trim() : "";
     const industry =
@@ -38,33 +39,31 @@ export async function POST(request: NextRequest) {
     const ownerFullName =
         typeof body.ownerFullName === "string" ? body.ownerFullName.trim() : "";
 
-    if (
-        !email ||
-        !verificationToken ||
-        !planId ||
-        !companyName ||
-        !workspaceSlug ||
-        !ownerFullName
-    ) {
+    if (!email || !verificationToken || !companyName || !workspaceSlug || !ownerFullName) {
         return NextResponse.json(
             { error: "Missing required organization fields." },
             { status: 400 },
         );
     }
 
+    // The wizard provisions the tenant at the Organization step and selects a
+    // plan AFTERwards, so planId is optional here - the backend defaults to
+    // "starter" (free). The Plan/Billing steps then upgrade via Checkout.
+    const backendBody: Record<string, unknown> = {
+        email,
+        verificationToken,
+        companyName,
+        industry,
+        workspaceSlug,
+        ownerFullName,
+        phoneCountry: body.phoneCountry ?? null,
+        phoneNumber: body.phoneNumber ?? null,
+        address: body.address ?? null,
+    };
+    if (planId) backendBody.planId = planId;
+
     const result = await callBackend("/auth/signup/organization", {
-        body: {
-            email,
-            verificationToken,
-            planId,
-            companyName,
-            industry,
-            workspaceSlug,
-            ownerFullName,
-            phoneCountry: body.phoneCountry ?? null,
-            phoneNumber: body.phoneNumber ?? null,
-            address: body.address ?? null,
-        },
+        body: backendBody,
         userAgent: request.headers.get("user-agent"),
         clientIp: clientIp(request),
     });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import {
     LogOut,
     Monitor,
@@ -320,8 +321,15 @@ export default function SettingsPage() {
                     Integrations
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    Billing and third-party integrations are on the way - check
-                    back soon.
+                    Billing is live -{" "}
+                    <Link
+                        href="/dashboard/settings/billing"
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                        Plans &amp; billing
+                    </Link>{" "}
+                    lets you upgrade and manage payment details. Third-party
+                    integrations are on the way.
                 </p>
             </section>
 

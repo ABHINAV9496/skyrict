@@ -3,20 +3,33 @@ import Link from "next/link";
 
 import { PlanStep } from "@/features/onboarding/plan-step";
 import { AuthButton } from "@/lib/auth/AuthButton";
+import { resolvePricingContext } from "@/lib/server/geo";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
     title: "Choose a plan",
-    description: "Step 4 of 5 - pick the plan that fits your business.",
+    description: "Step 4 of 7 - pick the plan that fits your business.",
 };
 
 export default async function PlanPage({
     searchParams,
 }: {
-    searchParams: Promise<{ email?: string; vt?: string }>;
+    searchParams: Promise<{
+        email?: string;
+        vt?: string;
+        tenantId?: string;
+        slug?: string;
+    }>;
 }) {
-    const params = await searchParams;
+    const [params, pricing] = await Promise.all([
+        searchParams,
+        resolvePricingContext(),
+    ]);
     const email = params.email?.trim();
     const vt = params.vt?.trim();
+    const tenantId = params.tenantId?.trim();
+    const slug = params.slug?.trim();
 
     if (!email || !vt) {
         return (
@@ -26,8 +39,8 @@ export default async function PlanPage({
                         Session expired
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                        Your verification session is missing. Restart the flow
-                        to continue.
+                        Your onboarding session is missing. Restart the flow to
+                        continue.
                     </p>
                 </div>
                 <Link href="/register" className="block">
@@ -38,10 +51,10 @@ export default async function PlanPage({
     }
 
     return (
-        <div className="space-y-6">
-            <div className="space-y-2">
+        <div className="space-y-5">
+            <div className="space-y-1.5 text-center">
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-                    Step 4 of 5 · Plan
+                    Step 4 of 7 · Plan
                 </p>
                 <h1 className="font-display text-2xl font-semibold text-foreground">
                     Choose your plan
@@ -52,7 +65,15 @@ export default async function PlanPage({
                 </p>
             </div>
 
-            <PlanStep email={email} vt={vt} />
+            <PlanStep
+                email={email}
+                vt={vt}
+                tenantId={tenantId}
+                slug={slug}
+                initialCurrency={pricing.currency}
+                initialCountry={pricing.country}
+                marketAvailable={pricing.available}
+            />
         </div>
     );
 }

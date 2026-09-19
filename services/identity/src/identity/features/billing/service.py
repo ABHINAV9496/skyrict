@@ -22,22 +22,33 @@ failure modes:
 
 from __future__ import annotations
 
+import asyncio
 import math
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from identity.core.config import settings
+from identity.core.stripe import StripeError
 from identity.domain.entities import Tenant
-from identity.features.billing.plans import PLANS, resolve_plan_id, resolve_tier
+from identity.features.billing.plans import (
+    PLANS,
+    PRICING_PENDING_CURRENCIES,
+    SUPPORTED_CURRENCIES,
+    resolve_currency,
+    resolve_plan_id,
+    resolve_tier,
+)
 from skyrict_common.exceptions import (
     NotFoundError,
     PaymentRequiredError,
     PermissionDeniedError,
+    ServiceUnavailableError,
     ValidationError,
 )
 
 if TYPE_CHECKING:
+    from identity.core.stripe import StripeClient
     from identity.features.audit.service import AuditService
     from identity.features.organizations.repository import TenantRepository
 
@@ -53,6 +64,7 @@ class BillingService:
         *,
         now: datetime | None = None,
         audit_service: AuditService | None = None,
+        stripe_client: StripeClient | None = None,
     ) -> None:
         self._tenant_repo = tenant_repo
         self._now = now
@@ -62,6 +74,10 @@ class BillingService:
         # missing audit record cannot happen through the DI graph. Do not
         # make this parameter required.
         self._audit_service = audit_service
+        # Same ergonomics for the Stripe boundary: without an injected client
+        # (or with a disabled one) session creation fails with a sanitized 503
+        # instead of crashing on a missing dependency.
+        self._stripe_client = stripe_client
 
     # -- Internal helpers -----------------------------------------------------
 
@@ -164,6 +180,208 @@ class BillingService:
         )
 
         return self._catalog_entry(new_tier)
+
+    # -- Stripe sessions (BILLING-UI-004, SKY-36 signup checkout) -------------
+
+    async def create_checkout_session(
+        self,
+        tenant_id: str | uuid.UUID,
+        plan_id: str,
+        interval: str,
+        currency: str = "usd",
+    ) -> dict[str, Any]:
+        """Create a Stripe Checkout session for a paid plan (workspace flow).
+
+        The owner's browser is redirected to the returned ``url``; Stripe
+        redirects back to the app's billing settings page on completion. The
+        session carries the tenant id as ``client_reference_id`` so the
+        ``checkout.session.completed`` webhook can resolve the tenant.
+
+        ``currency`` selects a currency-specific Stripe Price when one is
+        configured (``BILLING_STRIPE_PRICE_IDS["<plan>:<interval>:<currency>"]``);
+        otherwise the USD Price is the fallback so checkout never blocks on an
+        unpriced locale.
+
+        Raises:
+            ValidationError: unknown plan, interval, or currency, or no Stripe
+                Price is configured for the plan+interval (Starter is free and
+                Enterprise is custom-priced - neither is purchasable via
+                Checkout).
+            ServiceUnavailableError: Stripe is not configured or the app URL
+                for redirects is missing (503, sanitized).
+        """
+        tenant = await self._require_tenant(tenant_id)
+        # Deterministic config check BEFORE any external call: a missing app
+        # URL must never leave a phantom Stripe customer behind.
+        app_url = self._billing_app_url(tenant)
+        return await self._create_checkout_session(
+            tenant=tenant,
+            plan_id=plan_id,
+            interval=interval,
+            currency=currency,
+            success_url=f"{app_url}/dashboard/settings/billing?checkout=success",
+            cancel_url=f"{app_url}/dashboard/settings/billing?checkout=cancelled",
+        )
+
+    async def create_signup_checkout_session(
+        self,
+        tenant_id: str | uuid.UUID,
+        plan_id: str,
+        interval: str,
+        currency: str = "usd",
+    ) -> dict[str, Any]:
+        """Create a Stripe Checkout session for a plan picked mid-onboarding.
+
+        The signup Plan/Billing steps run before the owner has an account, so
+        this method is called from a token-scoped endpoint (the wizard keeps
+        the verification token alive past the Organization step). Stripe
+        redirects the browser back to the signup surface on completion:
+        success lands on the Review step, cancel returns to the Billing step.
+        The currency rides in the redirect query so the wizard keeps the
+        shopper's locale across the Stripe round-trip.
+
+        Raises:
+            ValidationError: unknown plan, interval, or currency, or no Stripe
+                Price is configured for the plan+interval (Starter is free and
+                Enterprise is custom-priced - neither is purchasable via
+                Checkout).
+            ServiceUnavailableError: Stripe is not configured or the signup
+                app URL for redirects is missing (503, sanitized).
+        """
+        tenant = await self._require_tenant(tenant_id)
+        # Same deterministic config check as the workspace flow: a missing
+        # signup URL must never leave a phantom Stripe customer behind.
+        signup_url = self._signup_app_url()
+        query = f"plan={plan_id}&interval={interval}&currency={currency}"
+        return await self._create_checkout_session(
+            tenant=tenant,
+            plan_id=plan_id,
+            interval=interval,
+            currency=currency,
+            success_url=f"{signup_url}/register/review?{query}&checkout=success",
+            cancel_url=f"{signup_url}/register/billing?{query}&checkout=cancelled",
+        )
+
+    async def _create_checkout_session(
+        self,
+        *,
+        tenant: Tenant,
+        plan_id: str,
+        interval: str,
+        currency: str,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict[str, Any]:
+        """Shared Checkout-session core: validate, lazy customer, create session.
+
+        ``tenant`` is already loaded by the public methods (which also resolve
+        the redirect URLs), so the deterministic URL config check happens
+        before ``_create_stripe_customer`` runs.
+        """
+        if plan_id not in PLANS:
+            raise ValidationError(f"Unknown plan: {plan_id}")
+        if interval not in ("month", "year"):
+            raise ValidationError(f"Unknown billing interval: {interval}")
+        normalized_currency = resolve_currency(currency)
+        if normalized_currency is None:
+            raise ValidationError(
+                f"Unsupported currency: {currency!r} (supported: {', '.join(SUPPORTED_CURRENCIES)})"
+            )
+        if normalized_currency in PRICING_PENDING_CURRENCIES:
+            # Hard allowlist, no USD catch-all: pending beta markets resolve
+            # to their local currency for messaging but cannot check out
+            # until business-approved price points land in the catalog.
+            raise ValidationError(f"Checkout in {normalized_currency.upper()} is not available yet")
+        # Currency-specific Price when configured; the USD entry is the
+        # fallback so an unpriced locale never blocks checkout.
+        price_id = settings.BILLING_STRIPE_PRICE_IDS.get(
+            f"{plan_id}:{interval}:{normalized_currency}"
+        ) or settings.BILLING_STRIPE_PRICE_IDS.get(f"{plan_id}:{interval}")
+        if not price_id:
+            raise ValidationError(f"No Stripe price is configured for {plan_id} ({interval})")
+        if self._stripe_client is None or not self._stripe_client.enabled:
+            raise ServiceUnavailableError("Stripe is not configured")
+        assert tenant.id is not None  # loaded from the repo
+        tenant_id = tenant.id
+        if not tenant.stripe_customer_id:
+            tenant = await self._create_stripe_customer(tenant)
+        assert tenant.stripe_customer_id is not None  # set by _create_stripe_customer
+        try:
+            # The Stripe SDK is synchronous; offload so the identity event loop
+            # is not blocked for the ~0.3-1s round trip (repo pattern in
+            # core/email.py, avatars). Failures map to the sanitized 503.
+            session = await asyncio.to_thread(
+                self._stripe_client.create_checkout_session,
+                customer_id=tenant.stripe_customer_id,
+                price_id=price_id,
+                success_url=success_url,
+                cancel_url=cancel_url,
+                client_reference_id=str(tenant_id),
+                metadata={
+                    "tenant_id": str(tenant_id),
+                    "plan_id": plan_id,
+                    "interval": interval,
+                    "currency": normalized_currency,
+                },
+                # Stripe Tax: itemized, location-based tax (e.g. 18% Indian
+                # GST) is calculated by Stripe and shown before the final
+                # charge - the displayed price stays the base price.
+                automatic_tax={"enabled": True},
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
+        await self._emit_audit(
+            action="billing.checkout.created",
+            target=f"tenant:{tenant_id}",
+            details={
+                "plan_id": plan_id,
+                "interval": interval,
+                "currency": normalized_currency,
+                "price_id": price_id,
+                "stripe_session_id": session["id"],
+            },
+            tenant_id=str(tenant_id),
+        )
+        return {"session_id": session["id"], "url": session["url"]}
+
+    async def create_portal_session(self, tenant_id: str | uuid.UUID) -> dict[str, Any]:
+        """Create a Stripe Customer Portal session to manage billing.
+
+        The owner's browser is redirected to the returned ``url``; Stripe
+        returns them to the billing settings page when they close the portal.
+
+        Raises:
+            PaymentRequiredError: the tenant has no Stripe customer yet (no
+                prior checkout), so there is nothing to manage in the portal.
+            ServiceUnavailableError: Stripe is not configured or the app URL
+                for redirects is missing (503, sanitized).
+        """
+        if self._stripe_client is None or not self._stripe_client.enabled:
+            raise ServiceUnavailableError("Stripe is not configured")
+        tenant = await self._require_tenant(tenant_id)
+        customer_id = tenant.stripe_customer_id
+        if not customer_id:
+            raise PaymentRequiredError(
+                "An active subscription is required to manage billing settings"
+            )
+        try:
+            session = await asyncio.to_thread(
+                self._stripe_client.create_portal_session,
+                customer_id=customer_id,
+                return_url=f"{self._billing_app_url(tenant)}/dashboard/settings/billing",
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
+        await self._emit_audit(
+            action="billing.portal.opened",
+            target=f"tenant:{tenant_id}",
+            details={
+                "stripe_customer_id": tenant.stripe_customer_id,
+                "stripe_session_id": session["id"],
+            },
+            tenant_id=str(tenant_id),
+        )
+        return {"session_id": session["id"], "url": session["url"]}
 
     # -- Gate enforcement -----------------------------------------------------
 
@@ -367,6 +585,52 @@ class BillingService:
 
     # -- Private helpers ------------------------------------------------------
 
+    async def _create_stripe_customer(self, tenant: Tenant) -> Tenant:
+        """Lazily create the tenant's Stripe customer and persist its id.
+
+        Called on first checkout so the session has a customer to attach to.
+        The persisted id is then reused by every later session and matched by
+        the ``customer.subscription.*`` webhook handlers.
+        """
+        assert self._stripe_client is not None  # guarded by callers
+        assert tenant.id is not None  # loaded from the repo
+        try:
+            customer = await asyncio.to_thread(
+                self._stripe_client.create_customer,
+                email=tenant.billing_email,
+                metadata={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
+            )
+        except StripeError as exc:
+            raise ServiceUnavailableError("Stripe request failed") from exc
+        return await self._tenant_repo.update_billing(tenant.id, stripe_customer_id=customer["id"])
+
+    def _billing_app_url(self, tenant: Tenant) -> str:
+        """Resolve the app origin for Stripe redirects (BILLING_APP_URL).
+
+        A single ``{slug}`` placeholder is replaced with the tenant slug for
+        workspace subdomains; otherwise the URL is used verbatim.
+        """
+        base = settings.BILLING_APP_URL.strip().rstrip("/")
+        if not base:
+            raise ServiceUnavailableError(
+                "Billing is not configured - set BILLING_APP_URL to enable Stripe redirects"
+            )
+        return base.replace("{slug}", tenant.slug)
+
+    @staticmethod
+    def _signup_app_url() -> str:
+        """Resolve the signup-surface origin for Stripe redirects (SIGNUP_APP_URL).
+
+        The signup wizard runs on the public signup host (no workspace slug
+        exists yet), so the value is a fixed origin used verbatim.
+        """
+        base = settings.SIGNUP_APP_URL.strip().rstrip("/")
+        if not base:
+            raise ServiceUnavailableError(
+                "Billing is not configured - set SIGNUP_APP_URL to enable signup Checkout redirects"
+            )
+        return base
+
     def _effective_tier(self, tenant: Tenant) -> str:
         """Compute effective tier from a loaded tenant entity."""
         if tenant.subscription_status == "trialing":
@@ -408,6 +672,15 @@ class BillingService:
             "display_name": "Free",
             "monthly_price_cents": 0,
             "annual_price_cents": 0,
+            "prices": {
+                code: {
+                    "currency": code,
+                    "monthly_cents": 0,
+                    "annual_cents": 0,
+                    "display_locale": "en-US",
+                }
+                for code in SUPPORTED_CURRENCIES
+            },
             "features": {
                 "max_users": None,
                 "ai_credits_monthly": None,

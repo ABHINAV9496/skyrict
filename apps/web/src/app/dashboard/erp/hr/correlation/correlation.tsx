@@ -1,17 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { ArrowLeftRight } from "lucide-react";
-import {
-    CartesianGrid,
-    ResponsiveContainer,
-    Scatter,
-    ScatterChart,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from "recharts";
 
+import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { L3NarrativeCard } from "@/components/dashboard/erp/hr/l3-narrative-card";
 import { Badge } from "@/components/ui/badge";
@@ -22,12 +15,21 @@ import {
     getLeavePayCorrelation,
     type LeavePayPair,
 } from "@/lib/api/hr-api";
-import { formatMoney } from "@/lib/format";
 
 type PageStatus =
     | { state: "loading" }
     | { state: "error"; message: string }
     | { state: "ready"; pairs: LeavePayPair[] };
+
+// recharts lives in the dynamically-imported chart chunk; ssr:false keeps it
+// out of this route's first-load JS and ChartSkeleton reserves the height.
+const LazyCorrelationChart = dynamic(
+    () =>
+        import(
+            "@/app/dashboard/erp/hr/correlation/leave-pay-correlation-chart"
+        ).then((m) => m.LeavePayCorrelationChart),
+    { ssr: false, loading: ChartSkeleton },
+);
 
 export function CorrelationClient() {
     const [status, setStatus] = useState<PageStatus>({ state: "loading" });
@@ -52,14 +54,17 @@ export function CorrelationClient() {
         void load();
     }, [load]);
 
-    const points =
-        status.state === "ready"
-            ? status.pairs.map((pair) => ({
-                  name: pair.runCode,
-                  leaveDays: pair.leaveDays,
-                  overtime: Number(pair.overtime),
-              }))
-            : [];
+    const points = useMemo(
+        () =>
+            status.state === "ready"
+                ? status.pairs.map((pair) => ({
+                      name: pair.runCode,
+                      leaveDays: pair.leaveDays,
+                      overtime: Number(pair.overtime),
+                  }))
+                : [],
+        [status],
+    );
 
     return (
         <div className="space-y-6">
@@ -112,39 +117,7 @@ export function CorrelationClient() {
                             overtime paid (y).
                         </p>
                         {points.length > 0 ? (
-                            <div className="mt-4 h-72">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart
-                                        margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                        <XAxis
-                                            dataKey="leaveDays"
-                                            name="Leave days"
-                                            tick={{ fontSize: 12 }}
-                                            stroke="var(--muted-foreground)"
-                                        />
-                                        <YAxis
-                                            dataKey="overtime"
-                                            name="Overtime paid"
-                                            tick={{ fontSize: 12 }}
-                                            stroke="var(--muted-foreground)"
-                                        />
-                                        <Tooltip
-                                            cursor={{ strokeDasharray: "3 3" }}
-                                            formatter={(value, name) =>
-                                                name === "Overtime paid"
-                                                    ? formatMoney(Number(value))
-                                                    : value
-                                            }
-                                        />
-                                        <Scatter
-                                            data={points}
-                                            fill="var(--primary)"
-                                        />
-                                    </ScatterChart>
-                                </ResponsiveContainer>
-                            </div>
+                            <LazyCorrelationChart points={points} />
                         ) : (
                             <p className="mt-3 text-sm text-muted-foreground">
                                 No paired leave-pay observations yet.

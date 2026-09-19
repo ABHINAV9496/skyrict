@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
     erpNavGroups,
     isSidebarItemActive,
+    workspaceAccountItems,
+    workspaceNavGroups,
 } from "@/components/dashboard/workspace/sidebar-config";
 
 /* ---------- isSidebarItemActive ---------- */
@@ -106,4 +108,130 @@ describe("Documents sidebar active state (SKY-87 regression)", () => {
             expect(active).toHaveLength(1);
         }
     });
+});
+
+/* ---------- Settings / Billing / Notifications shadowing regression ---------- */
+
+describe("Settings sidebar active state (billing/notifications regression)", () => {
+    function findItem(href: string): { href: string; exact?: boolean } {
+        const item = [
+            ...workspaceNavGroups.flatMap((group) => group.items),
+            ...workspaceAccountItems,
+        ].find((candidate) => candidate.href === href);
+        if (!item) throw new Error(`Sidebar item ${href} not found`);
+        return item;
+    }
+
+    const settings = findItem("/dashboard/settings");
+    const billing = findItem("/dashboard/settings/billing");
+    const notifications = findItem("/dashboard/settings/notifications");
+
+    it("only Settings is active on /dashboard/settings", () => {
+        expect(isSidebarItemActive("/dashboard/settings", settings)).toBe(true);
+        expect(isSidebarItemActive("/dashboard/settings", billing)).toBe(false);
+        expect(isSidebarItemActive("/dashboard/settings", notifications)).toBe(
+            false,
+        );
+    });
+
+    it("only Billing is active on /dashboard/settings/billing", () => {
+        expect(isSidebarItemActive("/dashboard/settings/billing", billing)).toBe(
+            true,
+        );
+        expect(
+            isSidebarItemActive("/dashboard/settings/billing", settings),
+        ).toBe(false);
+        expect(
+            isSidebarItemActive("/dashboard/settings/billing", notifications),
+        ).toBe(false);
+    });
+
+    it("only Notifications is active on /dashboard/settings/notifications", () => {
+        expect(
+            isSidebarItemActive(
+                "/dashboard/settings/notifications",
+                notifications,
+            ),
+        ).toBe(true);
+        expect(
+            isSidebarItemActive("/dashboard/settings/notifications", settings),
+        ).toBe(false);
+        expect(
+            isSidebarItemActive("/dashboard/settings/notifications", billing),
+        ).toBe(false);
+    });
+
+    it("normalises the stripped public route (/settings/billing)", () => {
+        expect(isSidebarItemActive("/settings/billing", billing)).toBe(true);
+        expect(isSidebarItemActive("/settings/billing", settings)).toBe(false);
+    });
+
+    it("never activates more than one settings row on the same route", () => {
+        const rows = [settings, billing, notifications];
+        const routes = [
+            "/dashboard/settings",
+            "/dashboard/settings/billing",
+            "/dashboard/settings/notifications",
+        ];
+
+        for (const route of routes) {
+            const active = rows.filter((row) =>
+                isSidebarItemActive(route, row),
+            );
+            expect(active).toHaveLength(1);
+        }
+    });
+/* ---------- Redirect-alias navigation regression ---------- */
+
+describe("nav destinations are real pages, never redirect aliases", () => {
+    /**
+     * `/dashboard/erp/crm`, `/dashboard/erp/sales` and the finance aliases are
+     * thin `redirect()` stubs. A nav row that links to one makes the browser
+     * fetch the stub, receive an RSC redirect, and fetch again - a full extra
+     * round trip on every click. The CRM parent was the last offender.
+     *
+     * Keep this list in sync with the `redirect()` page files under
+     * `src/app/dashboard/erp/` (currently crm, sales, finance/{assets,budgets,
+     * compliance,expenses}).
+     */
+    const REDIRECT_ALIASES = new Set([
+        "/dashboard/erp/crm",
+        "/dashboard/erp/sales",
+        "/dashboard/erp/finance/assets",
+        "/dashboard/erp/finance/budgets",
+        "/dashboard/erp/finance/compliance",
+        "/dashboard/erp/finance/expenses",
+    ]);
+
+    function allNavHrefs(): string[] {
+        return [
+            ...erpNavGroups.flatMap((group) => group.items),
+            ...workspaceNavGroups.flatMap((group) => group.items),
+            ...workspaceAccountItems,
+        ].flatMap((item) => [
+            item.href,
+            ...(item.children ?? []).map((child) => child.href),
+        ]);
+    }
+
+    it("links no nav row at a redirect alias", () => {
+        const offenders = allNavHrefs().filter((href) =>
+            REDIRECT_ALIASES.has(href),
+        );
+        expect(offenders).toEqual([]);
+    });
+
+    it("points the CRM parent at its overview page", () => {
+        const crm = erpNavGroups
+            .flatMap((group) => group.items)
+            .find((item) => item.label === "CRM");
+
+        expect(crm?.href).toBe("/dashboard/erp/crm/overview");
+        // The destination is one of its own children, so the parent row
+        // highlights exactly like the other module parents.
+        expect(crm?.children?.some((child) => child.href === crm.href)).toBe(
+            true,
+        );
+    });
+});
 });

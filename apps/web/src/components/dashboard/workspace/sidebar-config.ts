@@ -152,6 +152,10 @@ export const workspaceAccountItems: NavItem[] = [
         label: "Settings",
         icon: SlidersHorizontal,
         tour: "nav-settings",
+        // Exact only: Billing and Notifications are separate top-level rows that
+        // live under /dashboard/settings/*. Without this they prefix-match
+        // Settings too, lighting up two rows at once.
+        exact: true,
     },
 ];
 
@@ -166,7 +170,11 @@ export const erpNavGroups: NavGroup[] = [
                 exact: true,
             },
             {
-                href: "/dashboard/erp/crm",
+                // The parent row lands on a REAL page, never a redirect stub:
+                // `/dashboard/erp/crm` is a `redirect()` into `/crm/overview`, so
+                // linking there cost a full extra round trip on every click.
+                // Every other module parent already renders its landing page.
+                href: "/dashboard/erp/crm/overview",
                 label: "CRM",
                 icon: Contact,
                 permission: "erp.crm.read",

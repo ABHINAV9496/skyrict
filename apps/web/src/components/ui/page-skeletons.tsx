@@ -314,59 +314,12 @@ export function AgentsWorldSkeleton() {
 
 /* ---------------------------------------------------------------------------
  * ERP world - conventional operations app
+ *
+ * Content only. The ERP module chrome (sidebar + topbar) is owned by
+ * `ErpShell`, which `ShellRouter` mounts around the `/dashboard/erp` segment -
+ * the segment's `loading.tsx` renders *inside* that shell, so a fallback that
+ * drew its own sidebar/topbar stacked a second chrome over the live one.
  * ------------------------------------------------------------------------- */
-
-/** The ERP sidebar (brand, Operations nav, back link, account footer). */
-function ErpSidebarSkeleton() {
-    return (
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-            <header className="flex items-center justify-between border-b border-sidebar-border px-4 py-4">
-                <Skeleton className="h-7 w-24" />
-                <Skeleton className="size-8 rounded-lg" />
-            </header>
-
-            <nav
-                className="flex-1 space-y-6 overflow-hidden px-3 py-4"
-                aria-hidden="true"
-            >
-                <div className="space-y-1">
-                    <Skeleton className="mb-2 ml-3 h-3 w-20 rounded-full" />
-                    {Array.from({ length: 7 }).map((_, index) => (
-                        <div
-                            key={index}
-                            className="flex h-8 items-center gap-3 rounded-lg px-3"
-                        >
-                            <Skeleton className="size-[18px] shrink-0 rounded" />
-                            <Skeleton
-                                className={
-                                    index % 3 === 2 ? "h-4 w-16" : "h-4 w-24"
-                                }
-                            />
-                        </div>
-                    ))}
-                </div>
-            </nav>
-
-            <div className="border-t border-sidebar-border p-3">
-                <div className="flex h-8 items-center gap-3 rounded-lg px-3">
-                    <Skeleton className="size-[18px] shrink-0 rounded" />
-                    <Skeleton className="h-4 w-28" />
-                </div>
-            </div>
-
-            <footer className="border-t border-sidebar-border p-3">
-                <div className="flex items-center gap-3">
-                    <Skeleton className="size-8 shrink-0 rounded-full" />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                        <Skeleton className="h-3 w-3/4 rounded-full" />
-                        <Skeleton className="h-2.5 w-1/2 rounded-full" />
-                    </div>
-                    <Skeleton className="size-8 shrink-0 rounded-lg" />
-                </div>
-            </footer>
-        </aside>
-    );
-}
 
 /** ERP overview content: header + KPI cards + module cards grid. */
 export function ErpOverviewSkeleton() {
@@ -382,23 +335,6 @@ export function ErpOverviewSkeleton() {
                 {[0, 1, 2, 3, 4, 5].map((index) => (
                     <CardSkeleton key={index} />
                 ))}
-            </div>
-        </div>
-    );
-}
-
-/** Full-page ERP world: sidebar + topbar + overview content. */
-export function ErpWorldSkeleton() {
-    return (
-        <div className="flex h-dvh overflow-hidden bg-background theme-erp">
-            <ErpSidebarSkeleton />
-            <div className="flex min-w-0 flex-1 flex-col">
-                <TopbarSkeleton />
-                <main className="flex-1 overflow-y-auto">
-                    <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-6 lg:py-8">
-                        <ErpOverviewSkeleton />
-                    </div>
-                </main>
             </div>
         </div>
     );

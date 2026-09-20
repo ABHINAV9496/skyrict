@@ -11,7 +11,7 @@
 
 import type { APIRequestContext } from "@playwright/test";
 
-import { BffApi, BffError } from "./api";
+import { BffError } from "./api";
 import { totp } from "./totp";
 
 export const BASE_URL =
@@ -43,6 +43,33 @@ export async function readSessionCookie(
 }
 
 /**
+ * POST a public BFF endpoint (login, MFA verify) straight through the request
+ * context - NOT via BffApi. BffApi.raw() first probes /api/auth/session and
+ * throws when the (still-cookie-less, pre-login) context returns no access
+ * token; these endpoints are unauthenticated by nature and must not flow
+ * through a token-probing helper. Returns the envelope payload.
+ */
+async function bffPost<T>(
+    ctx: APIRequestContext,
+    path: string,
+    body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; payload: T }> {
+    const response = await ctx.post(path, {
+        // match BffApi.raw's CSRF Origin header for state-changing calls
+        headers: { "Content-Type": "application/json", Origin: BASE_URL },
+        data: JSON.stringify(body),
+    });
+    const envelope = (await response.json().catch(() => ({}))) as {
+        data?: T;
+    };
+    return {
+        status: response.status(),
+        ok: response.ok(),
+        payload: (envelope.data ?? envelope) as T,
+    };
+}
+
+/**
  * Sign in through the BFF with the password + MFA challenge path. When the
  * account already has MFA enrolled, `totpSecret` is required to complete the
  * challenge; otherwise the first-sign-in (mfa.setup) path returns an access
@@ -54,11 +81,11 @@ export async function apiSignIn(
     password: string,
     totpSecret?: string,
 ): Promise<ApiSession> {
-    const api = new BffApi(ctx);
-    const login = await api.raw<Record<string, unknown>>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-    });
+    const login = await bffPost<Record<string, unknown>>(
+        ctx,
+        "/api/auth/login",
+        { email, password },
+    );
     if (!login.ok) {
         throw new BffError(login.status, `login failed (${login.status})`);
     }
@@ -77,15 +104,10 @@ export async function apiSignIn(
                 );
             }
             const challenge = login.payload.mfaToken as string | undefined;
-            const verify = await api.raw<Record<string, unknown>>(
+            const verify = await bffPost<Record<string, unknown>>(
+                ctx,
                 "/api/auth/mfa/verify",
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        mfa_token: challenge,
-                        code: totp(totpSecret),
-                    }),
-                },
+                { mfa_token: challenge, code: totp(totpSecret) },
             );
             if (!verify.ok) {
                 throw new BffError(

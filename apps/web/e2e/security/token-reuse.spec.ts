@@ -68,11 +68,13 @@ test("presenting a rotated refresh token revokes the session family", async ({
             });
             expect(reuse.status()).toBe(401);
 
-            // Family kill: the rotated token is dead too.
-            const afterKill = await new BffApi(home).raw("/api/auth/refresh", {
-                method: "POST",
+            // Family kill: the rotated token is dead too. Probe the BFF
+            // refresh surface raw (no BffApi: its /api/auth/session probe
+            // would throw on the now-dead cookie before we can assert 401).
+            const afterKill = await home.post("/api/auth/refresh", {
+                headers: { Origin: BASE_URL },
             });
-            expect(afterKill.status).toBe(401);
+            expect(afterKill.status()).toBe(401);
         } finally {
             await attacker.dispose();
         }

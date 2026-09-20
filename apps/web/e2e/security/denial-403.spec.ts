@@ -8,7 +8,6 @@
 
 import { expect } from "@playwright/test";
 
-import { BffApi } from "../helpers/api";
 import { securityTest as test } from "../helpers/security-fixtures";
 
 test.describe("denial / RBAC", () => {
@@ -39,12 +38,14 @@ test.describe("denial / RBAC", () => {
             baseURL: process.env.E2E_BASE_URL ?? "http://default.localhost:3000",
         });
         try {
-            const api = new BffApi(ctx);
-            const finance = await api.raw("/api/v1/finance/invoices");
-            expect(finance.status).toBe(401);
+            // Raw context GET: BffApi.raw() would probe /api/auth/session first
+            // and throw on a cookie-less context (no access token), but this
+            // test asserts the API rejects an unauthenticated caller outright.
+            const finance = await ctx.get("/api/v1/finance/invoices");
+            expect(finance.status()).toBe(401);
 
-            const payroll = await api.raw("/api/v1/payroll/runs");
-            expect(payroll.status).toBe(401);
+            const payroll = await ctx.get("/api/v1/payroll/runs");
+            expect(payroll.status()).toBe(401);
         } finally {
             await ctx.dispose();
         }

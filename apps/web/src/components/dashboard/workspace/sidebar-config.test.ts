@@ -55,17 +55,17 @@ describe("Documents sidebar active state (SKY-87 regression)", () => {
     } {
         const docs = erpNavGroups
             .flatMap((group) => group.items)
-            .find((item) => item.href === "/dashboard/erp/documents");
+            .find((item) => item.href === "/erp/documents");
         const children = docs?.children?.filter(
             (child) =>
-                child.href === "/dashboard/erp/documents" ||
-                child.href === "/dashboard/erp/documents/list",
+                child.href === "/erp/documents" ||
+                child.href === "/erp/documents/list",
         );
         const overview = children?.find(
-            (child) => child.href === "/dashboard/erp/documents",
+            (child) => child.href === "/erp/documents",
         );
         const allDocuments = children?.find(
-            (child) => child.href === "/dashboard/erp/documents/list",
+            (child) => child.href === "/erp/documents/list",
         );
         if (!overview || !allDocuments) {
             throw new Error("Documents sidebar children not found");
@@ -122,9 +122,9 @@ describe("Settings sidebar active state (billing/notifications regression)", () 
         return item;
     }
 
-    const settings = findItem("/dashboard/settings");
-    const billing = findItem("/dashboard/settings/billing");
-    const notifications = findItem("/dashboard/settings/notifications");
+    const settings = findItem("/settings");
+    const billing = findItem("/settings/billing");
+    const notifications = findItem("/settings/notifications");
 
     it("only Settings is active on /dashboard/settings", () => {
         expect(isSidebarItemActive("/dashboard/settings", settings)).toBe(true);
@@ -185,22 +185,24 @@ describe("Settings sidebar active state (billing/notifications regression)", () 
 
 describe("nav destinations are real pages, never redirect aliases", () => {
     /**
-     * `/dashboard/erp/crm`, `/dashboard/erp/sales` and the finance aliases are
-     * thin `redirect()` stubs. A nav row that links to one makes the browser
-     * fetch the stub, receive an RSC redirect, and fetch again - a full extra
-     * round trip on every click. The CRM parent was the last offender.
+     * `/erp/crm`, `/erp/sales` and the finance aliases are thin `redirect()`
+     * stubs (the page files live under `src/app/dashboard/erp/`, but the
+     * redirect targets are now the canonical public URLs). A nav row that links
+     * to one makes the browser fetch the stub, receive an RSC redirect, and
+     * fetch again - a full extra round trip on every click. The CRM parent was
+     * the last offender.
      *
      * Keep this list in sync with the `redirect()` page files under
      * `src/app/dashboard/erp/` (currently crm, sales, finance/{assets,budgets,
      * compliance,expenses}).
      */
     const REDIRECT_ALIASES = new Set([
-        "/dashboard/erp/crm",
-        "/dashboard/erp/sales",
-        "/dashboard/erp/finance/assets",
-        "/dashboard/erp/finance/budgets",
-        "/dashboard/erp/finance/compliance",
-        "/dashboard/erp/finance/expenses",
+        "/erp/crm",
+        "/erp/sales",
+        "/erp/finance/assets",
+        "/erp/finance/budgets",
+        "/erp/finance/compliance",
+        "/erp/finance/expenses",
     ]);
 
     function allNavHrefs(): string[] {
@@ -226,7 +228,7 @@ describe("nav destinations are real pages, never redirect aliases", () => {
             .flatMap((group) => group.items)
             .find((item) => item.label === "CRM");
 
-        expect(crm?.href).toBe("/dashboard/erp/crm/overview");
+        expect(crm?.href).toBe("/erp/crm/overview");
         // The destination is one of its own children, so the parent row
         // highlights exactly like the other module parents.
         expect(crm?.children?.some((child) => child.href === crm.href)).toBe(

@@ -28,7 +28,7 @@ export function RequirePermission({
 
     useEffect(() => {
         if (status === "loading") return;
-        if (!allowed) router.replace("/dashboard");
+        if (!allowed) router.replace("/");
     }, [status, allowed, router]);
 
     if (status === "loading") return <ListPageSkeleton />;

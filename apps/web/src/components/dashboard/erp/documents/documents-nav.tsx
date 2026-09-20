@@ -8,12 +8,12 @@ import { cn } from "@/lib/utils";
 
 const DOCUMENTS_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
     {
-        href: "/dashboard/erp/documents",
+        href: "/erp/documents",
         label: "Overview",
         icon: LayoutDashboard,
     },
     {
-        href: "/dashboard/erp/documents/list",
+        href: "/erp/documents/list",
         label: "All documents",
         icon: FolderOpen,
     },
@@ -30,7 +30,7 @@ export function DocumentsNav() {
             {DOCUMENTS_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active =
-                    item.href === "/dashboard/erp/documents"
+                    item.href === "/erp/documents"
                         ? pathname === item.href
                         : pathname === item.href ||
                           pathname.startsWith(`${item.href}/`);

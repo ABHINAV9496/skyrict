@@ -151,7 +151,7 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          href="/dashboard/erp/payroll/void-reasons"
+          href="/erp/payroll/void-reasons"
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <ShieldAlert aria-hidden="true" className="size-4" />
@@ -211,7 +211,7 @@ export function RunsClient({ initialStatus }: { initialStatus?: PayrollRunStatus
             total_pages: status.totalPages,
           }}
           onPageChange={setPage}
-          onRowClick={(run) => router.push(`/dashboard/erp/payroll/runs/${run.id}`)}
+          onRowClick={(run) => router.push(`/erp/payroll/runs/${run.id}`)}
         />
       ) : null}
 

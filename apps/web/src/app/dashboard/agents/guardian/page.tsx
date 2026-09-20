@@ -39,7 +39,7 @@ function ReportCard({ report }: { report: GuardianReportItem }) {
 
     return (
         <Link
-            href={`/dashboard/agents/guardian/${report.id}`}
+            href={`/agents/guardian/${report.id}`}
             className="block rounded-xl border border-border bg-card transition-colors hover:border-primary/50 hover:bg-card/70"
         >
             <div className="flex items-start justify-between gap-4 p-4">

@@ -251,7 +251,7 @@ export function AppSidebar({
     onCloseMobile,
     navGroups,
     accountItems,
-    brandHref = "/dashboard",
+    brandHref = "/",
     logoTone = "sky",
     showBackToOverview = false,
 }: AppSidebarProps) {
@@ -503,7 +503,7 @@ export function AppSidebar({
                 {showBackToOverview ? (
                     <div className="border-t border-sidebar-border p-3">
                         <Link
-                            href="/dashboard"
+                            href="/"
                             onClick={onCloseMobile}
                             data-tour="back-to-overview"
                             title={collapsed ? "Back to overview" : undefined}

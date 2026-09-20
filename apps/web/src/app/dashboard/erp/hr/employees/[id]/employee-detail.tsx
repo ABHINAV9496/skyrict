@@ -232,7 +232,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
                         : "Employee not found."}
                 </p>
                 <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link href="/dashboard/erp/hr/employees">
+                    <Link href="/erp/hr/employees">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to employees
                     </Link>
@@ -331,7 +331,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
                     size="sm"
                     className="-ml-2 text-muted-foreground"
                 >
-                    <Link href="/dashboard/erp/hr/employees">
+                    <Link href="/erp/hr/employees">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Employees
                     </Link>
@@ -648,7 +648,7 @@ export function EmployeeDetailClient({ employeeId }: { employeeId: string }) {
                         />
                         <div className="mt-3">
                             <Link
-                                href={`/dashboard/erp/hr/attendance?employee=${employeeId}`}
+                                href={`/erp/hr/attendance?employee=${employeeId}`}
                                 className="text-sm font-medium text-primary hover:underline"
                             >
                                 View all attendance →

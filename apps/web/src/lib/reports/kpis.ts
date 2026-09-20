@@ -38,7 +38,7 @@ export const DASHBOARD_KPI_DEFS: DashboardKpiDef[] = [
     label: "Cash received",
     params: () => ({ from_date: firstDayOfMonthIso(), to_date: todayIso() }),
     declaredParams: ["from_date", "to_date"],
-    href: "/dashboard/erp/reports/cash_received",
+    href: "/erp/reports/cash_received",
   },
   {
     id: "ar_aging",
@@ -46,7 +46,7 @@ export const DASHBOARD_KPI_DEFS: DashboardKpiDef[] = [
     label: "Open receivables",
     params: () => ({ as_of_date: todayIso() }),
     declaredParams: ["as_of_date"],
-    href: "/dashboard/erp/reports/ar_aging",
+    href: "/erp/reports/ar_aging",
   },
   {
     id: "pipeline_value",
@@ -54,7 +54,7 @@ export const DASHBOARD_KPI_DEFS: DashboardKpiDef[] = [
     label: "Pipeline value",
     params: () => ({}),
     declaredParams: [],
-    href: "/dashboard/erp/reports/pipeline_value_by_stage",
+    href: "/erp/reports/pipeline_value_by_stage",
   },
   {
     id: "stock_alerts",
@@ -62,7 +62,7 @@ export const DASHBOARD_KPI_DEFS: DashboardKpiDef[] = [
     label: "Stock alerts",
     params: () => ({}),
     declaredParams: [],
-    href: "/dashboard/erp/reports/stock_on_hand_vs_reorder",
+    href: "/erp/reports/stock_on_hand_vs_reorder",
   },
   {
     id: "headcount",
@@ -70,7 +70,7 @@ export const DASHBOARD_KPI_DEFS: DashboardKpiDef[] = [
     label: "Headcount",
     params: () => ({}),
     declaredParams: [],
-    href: "/dashboard/erp/reports/headcount_by_department",
+    href: "/erp/reports/headcount_by_department",
   },
 ];
 

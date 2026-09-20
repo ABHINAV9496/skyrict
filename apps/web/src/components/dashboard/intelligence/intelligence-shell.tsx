@@ -10,6 +10,7 @@ import { IntelligenceMenu } from "@/components/dashboard/intelligence/intelligen
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
+import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import { cn } from "@/lib/utils";
 
 interface IntelligenceNavItem {
@@ -25,23 +26,22 @@ interface IntelligenceNavItem {
  * the utility routes (helpdesk, feedback, and more).
  */
 const NAV_ITEMS: IntelligenceNavItem[] = [
-    { href: "/dashboard/intelligence", label: "Home", exact: true },
-    { href: "/dashboard/intelligence/explore", label: "Explore" },
-    { href: "/dashboard/intelligence/trending", label: "Trending" },
-    { href: "/dashboard/intelligence/market", label: "Market" },
+    { href: "/intelligence", label: "Home", exact: true },
+    { href: "/intelligence/explore", label: "Explore" },
+    { href: "/intelligence/trending", label: "Trending" },
+    { href: "/intelligence/market", label: "Market" },
 ];
 
-/** The workspace surface strips the `/dashboard` prefix from public URLs. */
-function normalizePath(pathname: string): string {
-    return pathname.startsWith("/dashboard")
-        ? pathname
-        : `/dashboard${pathname}`;
-}
-
+/**
+ * The workspace surface strips the `/dashboard` prefix from public URLs, so
+ * hrefs use the canonical public form and usePathname() reports the same;
+ * normalize both sides before comparing via the internal form.
+ */
 function isActive(pathname: string, item: IntelligenceNavItem): boolean {
-    const normalized = normalizePath(pathname);
-    if (item.exact) return normalized === item.href;
-    return normalized === item.href || normalized.startsWith(`${item.href}/`);
+    const normalized = normalizeDashboardPath(pathname);
+    const href = item.href ? normalizeDashboardPath(item.href) : "";
+    if (item.exact || !href) return normalized === href;
+    return normalized === href || normalized.startsWith(`${href}/`);
 }
 
 function initialsFor(name: string, email: string): string {
@@ -83,7 +83,7 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                         </button>
 
                         <Link
-                            href="/dashboard/intelligence"
+                            href="/intelligence"
                             className="shrink-0 pl-1"
                             aria-label="Skyrict GMIE home"
                         >
@@ -121,7 +121,7 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                         <div className="ml-auto flex shrink-0 items-center gap-2">
                             <IntelligenceCountrySelect />
                             <Link
-                                href="/dashboard/settings"
+                                href="/settings"
                                 aria-label="Account"
                                 title="Account"
                                 className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/25"

@@ -326,7 +326,7 @@ export function DocumentsList() {
                                         >
                                             <td className="px-4 py-3">
                                                 <Link
-                                                    href={`/dashboard/erp/documents/${document.id}`}
+                                                    href={`/erp/documents/${document.id}`}
                                                     className="font-medium text-foreground hover:text-primary"
                                                 >
                                                     {document.filename}

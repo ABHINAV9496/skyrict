@@ -9,5 +9,5 @@ export default function BillingSettingsError({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
-    return <RouteError error={error} reset={reset} backHref="/dashboard/settings" />;
+    return <RouteError error={error} reset={reset} backHref="/settings" />;
 }

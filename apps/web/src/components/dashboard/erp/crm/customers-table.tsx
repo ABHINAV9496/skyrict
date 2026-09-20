@@ -239,7 +239,7 @@ export function CustomersTable() {
                     rowKey={(customer) => customer.id}
                     onRowClick={(customer) =>
                         router.push(
-                            `/dashboard/erp/crm/customers/${customer.id}`,
+                            `/erp/crm/customers/${customer.id}`,
                         )
                     }
                     footer={

@@ -282,7 +282,7 @@ export function CrmOverview() {
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {/* Open Pipeline */}
                 <Link
-                    href="/dashboard/erp/crm/opportunities"
+                    href="/erp/crm/opportunities"
                     className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
                 >
                     <div className="flex items-start gap-3">
@@ -475,7 +475,7 @@ export function CrmOverview() {
 
                 {/* Customers */}
                 <Link
-                    href="/dashboard/erp/crm/customers"
+                    href="/erp/crm/customers"
                     className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
                 >
                     <div className="flex items-start gap-3">
@@ -531,7 +531,7 @@ export function CrmOverview() {
                 <div className="rounded-xl border border-primary/15 bg-card lg:col-span-3">
                     <SectionHeader
                         title="Pipeline"
-                        href="/dashboard/erp/crm/opportunities"
+                        href="/erp/crm/opportunities"
                     />
 
                     <div className="px-4 pb-4">
@@ -628,7 +628,7 @@ export function CrmOverview() {
                 <div className="rounded-lg border border-border bg-card lg:col-span-2">
                     <SectionHeader
                         title="Follow-ups"
-                        href="/dashboard/erp/crm/activities"
+                        href="/erp/crm/activities"
                     />
 
                     <div className="p-4">
@@ -744,7 +744,7 @@ export function CrmOverview() {
                 <div className="rounded-lg border border-border bg-card lg:col-span-2">
                     <SectionHeader
                         title="Top opportunities"
-                        href="/dashboard/erp/crm/opportunities"
+                        href="/erp/crm/opportunities"
                     />
                     <div className="px-4 pb-4">
                         {topOpportunities.length === 0 ? (
@@ -752,7 +752,7 @@ export function CrmOverview() {
                                 icon={Target}
                                 message="No open opportunities yet"
                                 actionLabel="Create opportunity"
-                                actionHref="/dashboard/erp/crm/opportunities"
+                                actionHref="/erp/crm/opportunities"
                             />
                         ) : (
                             <ul className="divide-y divide-border/30">
@@ -768,7 +768,7 @@ export function CrmOverview() {
                 <div className="rounded-lg border border-border bg-card">
                     <SectionHeader
                         title="Recent wins"
-                        href="/dashboard/erp/crm/opportunities"
+                        href="/erp/crm/opportunities"
                     />
                     <div className="px-4 pb-4">
                         {recentWon.length === 0 ? (
@@ -776,7 +776,7 @@ export function CrmOverview() {
                                 icon={CheckCircle2}
                                 message="No won deals yet"
                                 actionLabel="View pipeline"
-                                actionHref="/dashboard/erp/crm/opportunities"
+                                actionHref="/erp/crm/opportunities"
                             />
                         ) : (
                             <ul className="divide-y divide-border/30">
@@ -797,7 +797,7 @@ export function CrmOverview() {
                 <div className="rounded-lg border border-border bg-card">
                     <SectionHeader
                         title="Customers"
-                        href="/dashboard/erp/crm/customers"
+                        href="/erp/crm/customers"
                     />
                     <div className="px-4 pb-4">
                         <div className="flex items-center gap-6">
@@ -823,7 +823,7 @@ export function CrmOverview() {
                                 {customerList.map((c) => (
                                     <li key={c.id}>
                                         <Link
-                                            href={`/dashboard/erp/crm/customers/${c.id}`}
+                                            href={`/erp/crm/customers/${c.id}`}
                                             className="group flex items-center justify-between gap-2 py-2 transition-colors hover:bg-muted/20 -mx-1 px-1 rounded"
                                         >
                                             <span className="truncate text-xs font-medium text-foreground group-hover:text-primary">
@@ -851,7 +851,7 @@ export function CrmOverview() {
                 <div className="rounded-lg border border-border bg-card lg:col-span-2">
                     <SectionHeader
                         title="Recent activity"
-                        href="/dashboard/erp/crm/activities"
+                        href="/erp/crm/activities"
                     />
                     <div className="px-4 pb-4">
                         {timeline.length === 0 ? (
@@ -859,7 +859,7 @@ export function CrmOverview() {
                                 icon={Clock}
                                 message="No recent activity"
                                 actionLabel="Log activity"
-                                actionHref="/dashboard/erp/crm/activities"
+                                actionHref="/erp/crm/activities"
                             />
                         ) : (
                             <ul className="space-y-0.5">
@@ -892,7 +892,7 @@ function OpportunityRow({ opp }: { opp: Opportunity }) {
     return (
         <li>
             <Link
-                href={`/dashboard/erp/crm/opportunities/${opp.id}`}
+                href={`/erp/crm/opportunities/${opp.id}`}
                 className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-muted/20 -mx-1 px-1 rounded"
             >
                 <div className="min-w-0 flex-1">
@@ -930,7 +930,7 @@ function WonRow({ opp }: { opp: Opportunity }) {
     return (
         <li>
             <Link
-                href={`/dashboard/erp/crm/opportunities/${opp.id}`}
+                href={`/erp/crm/opportunities/${opp.id}`}
                 className="group flex items-center gap-3 py-2.5 transition-colors hover:bg-muted/20 -mx-1 px-1 rounded"
             >
                 <div className="min-w-0 flex-1">

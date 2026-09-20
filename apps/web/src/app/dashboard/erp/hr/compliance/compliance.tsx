@@ -210,7 +210,7 @@ function FindingRow({
           <p className="text-xs text-muted-foreground">
             {finding.name && finding.employeeId ? (
               <Link
-                href={`/dashboard/erp/hr/employees/${finding.employeeId}`}
+                href={`/erp/hr/employees/${finding.employeeId}`}
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
                 {finding.name}

@@ -36,7 +36,7 @@ const modules: {
     tour: string;
 }[] = [
     {
-        href: "/dashboard/agents",
+        href: "/agents",
         accessKey: "agents",
         title: "AI Agents",
         oneLine: "Delegate tasks to your AI team.",
@@ -49,7 +49,7 @@ const modules: {
         tour: "card-agents",
     },
     {
-        href: "/dashboard/erp",
+        href: "/erp",
         accessKey: "erp",
         title: "Business Operations",
         oneLine: "Every department, one source of truth.",
@@ -62,7 +62,7 @@ const modules: {
         tour: "card-erp",
     },
     {
-        href: "/dashboard/intelligence",
+        href: "/intelligence",
         accessKey: "intelligence",
         title: "Market Intelligence",
         oneLine: "Competitors, trends, and niches.",
@@ -187,7 +187,7 @@ export default function OverviewClient() {
                             ) : null}
                             {canManageRoles ? (
                                 <Button asChild variant="outline">
-                                    <Link href="/dashboard/roles">
+                                    <Link href="/roles">
                                         <ShieldCheck
                                             aria-hidden="true"
                                             className="size-4"

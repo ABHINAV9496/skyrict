@@ -141,7 +141,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
                 >
                     <Link
                         role="menuitem"
-                        href="/dashboard/settings"
+                        href="/settings"
                         onClick={() => setOpen(false)}
                         className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                     >

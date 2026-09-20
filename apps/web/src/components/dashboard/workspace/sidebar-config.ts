@@ -1,3 +1,4 @@
+import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import {
     Activity,
     AlertTriangle,
@@ -64,26 +65,30 @@ export interface NavGroup {
 }
 
 /**
- * Compare the active path against an internal `/dashboard/*` href. The public
- * workspace URL strips the prefix (e.g. `/settings`), so normalize it before
- * comparing so the active state tracks the page regardless of which form the
- * browser is showing. Non-exact items also match any path nested under their
- * href; module roots and overview children should set `exact: true` so they do
- * not light up for sibling routes (e.g. Documents Overview vs All documents).
+ * Compare the active path against a nav href. Hrefs use the canonical public
+ * workspace URL (no `/dashboard` prefix, e.g. `/settings`), and `usePathname()`
+ * reports the same public form, so normalize both sides before comparing via
+ * the internal `/dashboard/*` form. Non-exact items also match any path nested
+ * under their href; module roots and overview children should set `exact: true`
+ * so they do not light up for sibling routes (e.g. Documents Overview vs All
+ * documents).
  */
 export function isSidebarItemActive(
     pathname: string,
     item: Pick<NavItem, "href" | "exact">,
 ): boolean {
-    const normalized =
-        pathname === "/"
-            ? "/dashboard"
-            : pathname.startsWith("/dashboard")
-              ? pathname
-              : `/dashboard${pathname}`;
-    const { href, exact } = item;
-    if (href === "/dashboard" || exact) return normalized === href;
-    return normalized === href || normalized.startsWith(`${href}/`);
+    // Normalize both sides: the browser path may already be internal
+    // (`/dashboard/...`) in tests or edge flows.
+    const normalizedPath = normalizeDashboardPath(pathname);
+    const normalizedHref = normalizeDashboardPath(item.href);
+    const { exact } = item;
+    if (normalizedHref === "/dashboard" || exact) {
+        return normalizedPath === normalizedHref;
+    }
+    return (
+        normalizedPath === normalizedHref ||
+        normalizedPath.startsWith(`${normalizedHref}/`)
+    );
 }
 
 /** Workspace sidebar (non-module pages). Modules are entered from the Overview launchpad. */
@@ -92,7 +97,7 @@ export const workspaceNavGroups: NavGroup[] = [
         label: "Workspace",
         items: [
             {
-                href: "/dashboard",
+                href: "/",
                 label: "Overview",
                 icon: LayoutDashboard,
                 tour: "nav-overview",
@@ -103,27 +108,27 @@ export const workspaceNavGroups: NavGroup[] = [
         label: "Manage",
         items: [
             {
-                href: "/dashboard/roles",
+                href: "/roles",
                 label: "Roles",
                 icon: ShieldCheck,
                 permission: "roles:read",
                 tour: "nav-roles",
             },
             {
-                href: "/dashboard/integrations",
+                href: "/integrations",
                 label: "Integrations",
                 icon: Plug,
                 soon: true,
                 tour: "nav-integrations",
             },
             {
-                href: "/dashboard/settings/notifications",
+                href: "/settings/notifications",
                 label: "Notifications",
                 icon: BellRing,
                 tour: "nav-notifications",
             },
             {
-                href: "/dashboard/settings/billing",
+                href: "/settings/billing",
                 label: "Billing",
                 icon: CreditCard,
                 tour: "nav-billing",
@@ -141,14 +146,14 @@ export const workspaceAccountItems: NavItem[] = [
         tour: "nav-invite",
     },
     {
-        href: "/dashboard/members",
+        href: "/members",
         label: "Members",
         icon: Users,
         permission: "users:read",
         tour: "nav-members",
     },
     {
-        href: "/dashboard/settings",
+        href: "/settings",
         label: "Settings",
         icon: SlidersHorizontal,
         tour: "nav-settings",
@@ -164,7 +169,7 @@ export const erpNavGroups: NavGroup[] = [
         label: "Operations",
         items: [
             {
-                href: "/dashboard/erp",
+                href: "/erp",
                 label: "Dashboard",
                 icon: LayoutDashboard,
                 exact: true,
@@ -174,56 +179,56 @@ export const erpNavGroups: NavGroup[] = [
                 // `/dashboard/erp/crm` is a `redirect()` into `/crm/overview`, so
                 // linking there cost a full extra round trip on every click.
                 // Every other module parent already renders its landing page.
-                href: "/dashboard/erp/crm/overview",
+                href: "/erp/crm/overview",
                 label: "CRM",
                 icon: Contact,
                 permission: "erp.crm.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/crm/overview",
+                        href: "/erp/crm/overview",
                         label: "Overview",
                         icon: LayoutDashboard,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/leads",
+                        href: "/erp/crm/leads",
                         label: "Leads",
                         icon: Contact,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/opportunities",
+                        href: "/erp/crm/opportunities",
                         label: "Opportunities",
                         icon: TrendingUp,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/customers",
+                        href: "/erp/crm/customers",
                         label: "Customers",
                         icon: Users,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/contacts",
+                        href: "/erp/crm/contacts",
                         label: "Contacts",
                         icon: ContactRound,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/activities",
+                        href: "/erp/crm/activities",
                         label: "Activities",
                         icon: CalendarClock,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/ai",
+                        href: "/erp/crm/ai",
                         label: "AI Insights",
                         icon: Sparkles,
                         permission: "erp.crm.read",
                     },
                     {
-                        href: "/dashboard/erp/crm/search",
+                        href: "/erp/crm/search",
                         label: "Search",
                         icon: Search,
                         permission: "erp.crm.read",
@@ -231,74 +236,74 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/orders",
+                href: "/erp/orders",
                 label: "Orders",
                 icon: ShoppingCart,
                 permission: "erp.sales.read",
             },
             {
-                href: "/dashboard/erp/inventory",
+                href: "/erp/inventory",
                 label: "Inventory",
                 icon: Package,
                 permission: "erp.inventory.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/inventory/products",
+                        href: "/erp/inventory/products",
                         label: "Products",
                         icon: Package,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/warehouses",
+                        href: "/erp/inventory/warehouses",
                         label: "Warehouses",
                         icon: Warehouse,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/stock",
+                        href: "/erp/inventory/stock",
                         label: "Stock",
                         icon: Layers,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/movements",
+                        href: "/erp/inventory/movements",
                         label: "Movements",
                         icon: ArrowLeftRight,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/alerts",
+                        href: "/erp/inventory/alerts",
                         label: "Alerts",
                         icon: BellRing,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/suggestions",
+                        href: "/erp/inventory/suggestions",
                         label: "AI Suggestions",
                         icon: ShoppingCart,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/anomalies",
+                        href: "/erp/inventory/anomalies",
                         label: "Anomalies",
                         icon: AlertTriangle,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/forecast",
+                        href: "/erp/inventory/forecast",
                         label: "Forecast",
                         icon: Calendar,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/abc",
+                        href: "/erp/inventory/abc",
                         label: "ABC Classification",
                         icon: BarChart3,
                         permission: "erp.inventory.read",
                     },
                     {
-                        href: "/dashboard/erp/inventory/health",
+                        href: "/erp/inventory/health",
                         label: "Stock Health",
                         icon: Activity,
                         permission: "erp.inventory.read",
@@ -306,68 +311,68 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/hr",
+                href: "/erp/hr",
                 label: "HR",
                 icon: Blocks,
                 permission: "erp.hr.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/hr/employees",
+                        href: "/erp/hr/employees",
                         label: "Employees",
                         icon: UserRound,
                         permission: "erp.hr.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/departments",
+                        href: "/erp/hr/departments",
                         label: "Departments",
                         icon: Building2,
                         permission: "erp.hr.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/leave",
+                        href: "/erp/hr/leave",
                         label: "Leave",
                         icon: CalendarDays,
                         permission: "erp.hr.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/attendance",
+                        href: "/erp/hr/attendance",
                         label: "Attendance",
                         icon: CalendarClock,
                         permission: "erp.hr.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/data-quality",
+                        href: "/erp/hr/data-quality",
                         label: "Data quality",
                         icon: ClipboardCheck,
                         permission: "erp.hr.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/ai-alerts",
+                        href: "/erp/hr/ai-alerts",
                         label: "AI alerts",
                         icon: ShieldAlert,
                         permission: "erp.hr.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/attrition",
+                        href: "/erp/hr/attrition",
                         label: "Attrition",
                         icon: TrendingDown,
                         permission: "erp.hr.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/planning",
+                        href: "/erp/hr/planning",
                         label: "Planning",
                         icon: TrendingUp,
                         permission: "erp.hr.ai.planning",
                     },
                     {
-                        href: "/dashboard/erp/hr/compliance",
+                        href: "/erp/hr/compliance",
                         label: "Compliance",
                         icon: ShieldCheck,
                         permission: "erp.hr.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/hr/correlation",
+                        href: "/erp/hr/correlation",
                         label: "Leave · pay correlation",
                         icon: Activity,
                         permission: "erp.hr.ai.read",
@@ -375,62 +380,62 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/finance",
+                href: "/erp/finance",
                 label: "Finance",
                 icon: Wallet,
                 permission: "erp.finance.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/finance/accounts",
+                        href: "/erp/finance/accounts",
                         label: "Ledger",
                         icon: BookOpen,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/journal-entries",
+                        href: "/erp/finance/journal-entries",
                         label: "Journal Entries",
                         icon: NotebookPen,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/fiscal-periods",
+                        href: "/erp/finance/fiscal-periods",
                         label: "Fiscal Periods",
                         icon: CalendarDays,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/invoices",
+                        href: "/erp/finance/invoices",
                         label: "Invoices",
                         icon: ReceiptText,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/statements",
+                        href: "/erp/finance/statements",
                         label: "Statements",
                         icon: BarChart3,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/controls",
+                        href: "/erp/finance/controls",
                         label: "Planning & Policy",
                         icon: SlidersHorizontal,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/audit-log",
+                        href: "/erp/finance/audit-log",
                         label: "Audit Log",
                         icon: ScrollText,
                         permission: "erp.finance.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/ai-docs",
+                        href: "/erp/finance/ai-docs",
                         label: "AI Docs",
                         icon: Sparkles,
                         permission: "erp.finance.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/finance/settings",
+                        href: "/erp/finance/settings",
                         label: "Settings",
                         icon: SlidersHorizontal,
                         permission: "erp.finance.read",
@@ -438,44 +443,44 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/payroll",
+                href: "/erp/payroll",
                 label: "Payroll",
                 icon: Receipt,
                 permission: "erp.payroll.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/payroll/runs",
+                        href: "/erp/payroll/runs",
                         label: "Runs",
                         icon: BadgeDollarSign,
                         permission: "erp.payroll.read",
                     },
                     {
-                        href: "/dashboard/erp/payroll/reviews",
+                        href: "/erp/payroll/reviews",
                         label: "Reviews",
                         icon: ClipboardCheck,
                         permission: "erp.payroll.approve",
                     },
                     {
-                        href: "/dashboard/erp/payroll/compensation",
+                        href: "/erp/payroll/compensation",
                         label: "Compensation",
                         icon: Coins,
                         permission: "erp.payroll.read",
                     },
                     {
-                        href: "/dashboard/erp/payroll/settings",
+                        href: "/erp/payroll/settings",
                         label: "Settings",
                         icon: SlidersHorizontal,
                         permission: "erp.payroll.read",
                     },
                     {
-                        href: "/dashboard/erp/payroll/automation",
+                        href: "/erp/payroll/automation",
                         label: "Automation",
                         icon: CalendarClock,
                         permission: "erp.payroll.ai.read",
                     },
                     {
-                        href: "/dashboard/erp/payroll/anomalies",
+                        href: "/erp/payroll/anomalies",
                         label: "Payroll anomalies",
                         icon: AlertTriangle,
                         permission: "erp.payroll.ai.read",
@@ -483,21 +488,21 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/documents",
+                href: "/erp/documents",
                 label: "Documents",
                 icon: FileText,
                 permission: "erp.documents.read",
                 exact: true,
                 children: [
                     {
-                        href: "/dashboard/erp/documents",
+                        href: "/erp/documents",
                         label: "Overview",
                         icon: LayoutDashboard,
                         permission: "erp.documents.read",
                         exact: true,
                     },
                     {
-                        href: "/dashboard/erp/documents/list",
+                        href: "/erp/documents/list",
                         label: "All documents",
                         icon: FolderOpen,
                         permission: "erp.documents.read",
@@ -505,7 +510,7 @@ export const erpNavGroups: NavGroup[] = [
                 ],
             },
             {
-                href: "/dashboard/erp/reports",
+                href: "/erp/reports",
                 label: "Reports",
                 icon: BarChart3,
             },

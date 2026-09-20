@@ -507,7 +507,7 @@ export function NotificationCenter() {
                                     )}
                                     <Button variant="ghost" size="icon-sm" asChild>
                                         <Link
-                                            href="/dashboard/settings/notifications"
+                                            href="/settings/notifications"
                                             aria-label="Notification preferences"
                                             title="Notification preferences"
                                         >
@@ -591,7 +591,7 @@ export function NotificationCenter() {
 
                     <div className="border-t border-border/70 px-4 py-2.5">
                         <Button variant="ghost" size="sm" className="w-full" asChild>
-                            <Link href="/dashboard/settings/notifications">
+                            <Link href="/settings/notifications">
                                 <Settings2 aria-hidden="true" />
                                 Notification preferences
                             </Link>

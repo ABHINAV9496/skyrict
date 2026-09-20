@@ -13,7 +13,7 @@ export default function AgentsError({
         <RouteError
             error={error}
             reset={reset}
-            backHref="/dashboard/agents"
+            backHref="/agents"
         />
     );
 }

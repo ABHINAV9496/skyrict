@@ -75,7 +75,8 @@ describe("suggestLayout", () => {
             json: async () => ({
                 status: "fallback",
                 suggested_layout: layout,
-                reasoning: "AI suggestion unavailable - showing current layout.",
+                reasoning:
+                    "AI suggestion unavailable - showing current layout.",
                 confidence: 0,
             }),
         });
@@ -87,7 +88,10 @@ describe("suggestLayout", () => {
     });
 
     it("throws an ApiError on a failed response", async () => {
-        httpMocks.fetchWithSession.mockResolvedValue({ ok: false, status: 500 });
+        httpMocks.fetchWithSession.mockResolvedValue({
+            ok: false,
+            status: 500,
+        });
 
         await expect(suggestLayout(layout)).rejects.toBeInstanceOf(ApiError);
     });

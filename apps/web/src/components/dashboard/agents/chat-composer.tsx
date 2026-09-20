@@ -50,8 +50,8 @@ function FileIcon({
     mimeType: string;
     className?: string;
 }) {
-    // eslint-disable-next-line jsx-a11y/alt-text -- lucide Image is an SVG icon, not <img>
     if (mimeType.startsWith("image/"))
+        // eslint-disable-next-line jsx-a11y/alt-text -- lucide Image is an SVG icon, not <img>
         return <Image aria-hidden="true" className={className} />;
     if (mimeType === "application/pdf")
         return (

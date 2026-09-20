@@ -494,6 +494,17 @@ export function MessageList({
         }
     }, []);
 
+    // The AI logo attaches only to the newest agent message (keeping the
+    // per-bubble logos off earlier replies) - scan backwards to find it.
+    // Hoisted above the empty-state return so hook order never varies with
+    // message count (Rules of Hooks).
+    const lastAgentIndex = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role !== "user") return i;
+        }
+        return -1;
+    }, [messages]);
+
     if (messages.length === 0) {
         return (
             <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
@@ -504,15 +515,6 @@ export function MessageList({
             </div>
         );
     }
-
-    // The AI logo attaches only to the newest agent message (keeping the
-    // per-bubble logos off earlier replies) - scan backwards to find it.
-    const lastAgentIndex = useMemo(() => {
-        for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role !== "user") return i;
-        }
-        return -1;
-    }, [messages]);
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">

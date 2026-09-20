@@ -35,10 +35,14 @@ class DashboardRead(BaseModel):
 
 
 class UserDashboardLayoutRead(BaseModel):
-    """Response for a user's personal dashboard layout."""
+    """Response for a user's personal dashboard layout.
+
+    ``updated_at`` is None when the tenant has no layout row yet (the empty
+    fallback in ``resolve_layout``) - callers must not treat that as a 500.
+    """
 
     layout: list[WidgetLayoutItem]
-    updated_at: datetime
+    updated_at: datetime | None = Field(default=None)
 
 
 class DashboardUpdate(BaseModel):

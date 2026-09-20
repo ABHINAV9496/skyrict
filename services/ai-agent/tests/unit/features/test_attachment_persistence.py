@@ -16,7 +16,7 @@ import pytest
 from ai_agent import models  # noqa: F401  # registers every model on Base.metadata
 from ai_agent.api.v1.routers.conversations import _store_attachments
 from ai_agent.db.conversation_repository import _message_to_dict
-from ai_agent.features.attachments.storage import LocalAttachmentStorage
+from ai_agent.features.attachments.storage import LocalAttachmentStorage, S3AttachmentStorage
 from ai_agent.models.ai_conversation_message import AiConversationMessage
 
 
@@ -47,10 +47,35 @@ class TestLocalAttachmentStorage:
         await storage.put(key, b"x", None)
         assert await storage.get(key) == b"x"
 
-    async def test_traversal_key_rejected(self, tmp_path) -> None:
+    @pytest.mark.parametrize(
+        "bad_key",
+        [
+            "../escape",
+            "..\\escape",
+            "/etc/passwd",
+            "a/../../b",
+            "a//b",
+            "a/",
+            "a/./b",
+            "  ",
+        ],
+    )
+    async def test_traversal_keys_rejected(self, tmp_path, bad_key: str) -> None:
         storage = LocalAttachmentStorage(tmp_path)
         with pytest.raises(ValueError):
-            await storage.put("../escape", b"x", None)
+            await storage.put(bad_key, b"x", None)
+
+    async def test_s3_key_guards(self) -> None:
+        storage = S3AttachmentStorage(
+            bucket="b",
+            prefix="attachments",
+            region="us-east-1",
+        )
+        with pytest.raises(ValueError):
+            storage._key("../escape")
+        with pytest.raises(ValueError):
+            storage._key("/etc/passwd")
+        assert storage._key("t/c/k") == "attachments/t/c/k"
 
 
 class TestStoreAttachments:

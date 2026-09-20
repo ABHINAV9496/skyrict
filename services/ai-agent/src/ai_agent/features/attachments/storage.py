@@ -13,6 +13,7 @@ escapes their namespace.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,23 @@ from typing import Any
 import anyio
 
 from ai_agent.core.config import settings
+
+# Attachment keys are tenant-scoped relative paths ``{tenant_id}/{conversation_id}/{storage_key}``
+# where every segment is a server-generated UUID (hex + hyphens).  A key is only ever built
+# from UUIDs, so the full-grammar whitelist below is the path-injection sanitizer: it admits
+# exactly word characters, hyphens, underscores, and single slashes, which rules out ``..``/``.``
+# segments, absolute paths, backslashes, and repeated/empty separators before any path math.
+_STORAGE_KEY_RE = re.compile(r"[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*")
+
+
+def _validate_storage_key(key: str) -> None:
+    """Reject any key that does not fit the strict storage grammar.
+
+    Raises ``ValueError`` otherwise; callers may then join the key onto their
+    storage root with no traversal risk.
+    """
+    if _STORAGE_KEY_RE.fullmatch(key) is None:
+        raise ValueError(f"Invalid attachment storage key: {key!r}")
 
 
 class AttachmentStoragePort(ABC):
@@ -49,11 +67,14 @@ class LocalAttachmentStorage(AttachmentStoragePort):
         self.base_dir = Path(base_dir)
 
     def _resolve(self, key: str) -> Path:
-        if not key or key.startswith("/") or ".." in key.replace("\\", "/").split("/"):
-            raise ValueError(f"Invalid attachment storage key: {key!r}")
-        path = self.base_dir / key
+        _validate_storage_key(key)
+        # Normalize, then containment-check the SAME value that will be used:
+        # CodeQL's path-injection flow recognizes resolve() as normalization
+        # and relative_to() as the safe-access check, and requires the checked
+        # normalized path to be the one that reaches filesystem sinks.
+        path = (self.base_dir / key).resolve()
         try:
-            path.resolve().relative_to(self.base_dir.resolve())
+            path.relative_to(self.base_dir.resolve())
         except ValueError as exc:
             raise ValueError(f"Invalid attachment storage key: {key!r}") from exc
         return path
@@ -111,8 +132,7 @@ class S3AttachmentStorage(AttachmentStoragePort):
         self._client: Any | None = None
 
     def _key(self, key: str) -> str:
-        if not key or key.startswith("/") or ".." in key.replace("\\", "/").split("/"):
-            raise ValueError(f"Invalid attachment storage key: {key!r}")
+        _validate_storage_key(key)
         return f"{self.prefix}/{key}"
 
     def _get_client(self) -> Any:

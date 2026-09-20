@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Index, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_agent.models.base import Base
@@ -53,6 +54,18 @@ class AiConversationMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     agent_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True, comment="Module agent that answered"
+    )
+    # Attachment metadata (not blob content). Each entry:
+    #   {id, name, type, size, storage_key}
+    # where `storage_key` is the server-generated object key for the blob in
+    # the attachment storage backend. Blobs never live in Postgres (SKY-60
+    # attachment durability - storage port pattern mirrors documents/avatars).
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=func.jsonb_build_array(),
+        comment="Metadata for files attached to this message (blobs in object storage)",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

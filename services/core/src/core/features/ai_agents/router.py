@@ -248,3 +248,25 @@ async def proxy_delete_conversation(
         client,
         f"/api/v1/ai/agents/conversations/{conversation_id}",
     )
+
+
+@router.get("/conversations/{conversation_id}/attachments/{attachment_id}")
+async def proxy_get_conversation_attachment(
+    request: Request,
+    conversation_id: uuid.UUID,
+    attachment_id: str,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Serve one conversation attachment blob (SKY-60 durability).
+
+    The binary body is relayed as-is (content-type from the upstream) so the
+    frontend can fetch it via ``apiFetchRaw`` and build an object URL - same
+    relay posture as the finance documents download.  The blob itself is in
+    ai-agent's attachment storage backend (local/S3), never in Postgres.
+    """
+    return await _proxy(
+        request,
+        client,
+        f"/api/v1/ai/agents/conversations/{conversation_id}/attachments/{attachment_id}",
+    )

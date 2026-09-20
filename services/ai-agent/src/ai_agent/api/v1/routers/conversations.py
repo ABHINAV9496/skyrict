@@ -6,20 +6,31 @@ conversations survive server restarts (SKY-60 durability fix).
 
 from __future__ import annotations
 
+import base64
+import binascii
 import uuid
 from typing import Annotated, Any
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_agent.api.deps import get_current_user, get_db
+from ai_agent.core.config import settings
 from ai_agent.db.conversation_repository import ConversationRepository
+from ai_agent.features.attachments.storage import (
+    AttachmentStoragePort,
+    build_attachment_storage,
+)
 from ai_agent.features.supervisor.title import (
     TitleStore,
     is_conversation_title_retryable,
     schedule_title_generation,
 )
+
+logger = structlog.get_logger("ai_agent.conversations")
 
 router = APIRouter(prefix="/ai/agents/conversations", tags=["ai-agent-conversations"])
 
@@ -83,15 +94,92 @@ class CreateConversationRequest(BaseModel):
     first_prompt: str | None = Field(default=None, max_length=2000)
 
 
+class AttachmentIn(BaseModel):
+    """One file attachment to persist with a user message.
+
+    ``base64`` is the raw base64-encoded content (no data-URL prefix).  The
+    server assigns the real storage key; ``id`` is the client-generated id
+    used for optimistic UI keys and later lookups through the download
+    endpoint.
+    """
+
+    id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    name: str = Field(min_length=1, max_length=255)
+    type: str = Field(min_length=1, max_length=127)
+    size: int = Field(ge=0)
+    base64: str = Field(min_length=1)
+
+
 class AppendMessageRequest(BaseModel):
     role: str = Field(pattern=r"^(user|agent)$")
     content: str = Field(min_length=1, max_length=50000)
     agent_name: str | None = Field(default=None, max_length=128)
+    attachments: list[AttachmentIn] | None = Field(
+        default=None,
+        max_length=10,
+        description=(
+            "Optional file attachments (user messages only). The server "
+            "decodes each base64 payload, stores the blob in the attachment "
+            "storage backend, and persists only metadata on the message."
+        ),
+    )
 
 
 class UpdateConversationRequest(BaseModel):
     title: str | None = Field(default=None, max_length=500)
     pinned: bool | None = None
+
+
+async def _store_attachments(
+    *,
+    storage: AttachmentStoragePort,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    attachments: list[AttachmentIn],
+) -> list[dict[str, Any]]:
+    """Decode and persist attachment blobs, returning their metadata.
+
+    Each blob is written under the tenant/annotation-scoped key
+    ``{tenant_id}/{conversation_id}/{storage_id}`` where ``storage_id`` is a
+    server-generated UUID - never the client-supplied id, so clients cannot
+    influence object keys.  The returned metadata list (including the storage
+    key) is what gets persisted on the message row.
+    """
+    metadata: list[dict[str, Any]] = []
+    for attachment in attachments:
+        try:
+            data = base64.b64decode(attachment.base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Attachment {attachment.name!r} is not valid base64.",
+            ) from exc
+        if not data:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Attachment {attachment.name!r} decodes to empty content.",
+            )
+        if len(data) > settings.ATTACHMENT_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Attachment {attachment.name!r} exceeds the "
+                    f"{settings.ATTACHMENT_MAX_BYTES} byte limit."
+                ),
+            )
+        storage_id = str(uuid.uuid4())
+        key = f"{tenant_id}/{conversation_id}/{storage_id}"
+        await storage.put(key=key, data=data, content_type=attachment.type)
+        metadata.append(
+            {
+                "id": attachment.id,
+                "name": attachment.name,
+                "type": attachment.type,
+                "size": len(data),
+                "storage_key": storage_id,
+            }
+        )
+    return metadata
 
 
 # ------------------------------------------------------------------
@@ -205,12 +293,26 @@ async def append_message(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Persist attachment blobs BEFORE appending the message: a storage fault
+    # fails the request loudly instead of half-persisting a message whose
+    # attachments are dangling (SKY-60 attachment durability).
+    attachment_metadata: list[dict[str, Any]] = []
+    if body.attachments:
+        storage = build_attachment_storage()
+        attachment_metadata = await _store_attachments(
+            storage=storage,
+            tenant_id=user["tenant_id"],
+            conversation_id=conversation_id,
+            attachments=body.attachments,
+        )
+
     await repo.append_message(
         tenant_id=user["tenant_id"],
         conversation_id=conversation_id,
         role=body.role,
         content=body.content,
         agent_name=body.agent_name,
+        attachments=attachment_metadata,
     )
 
     # Auto-derive title from first user message if title is empty.
@@ -246,6 +348,44 @@ async def append_message(
         conversation_id=conversation_id,
     )
     return {"data": updated}
+
+
+@router.get("/{conversation_id}/attachments/{attachment_id}")
+async def get_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: str,
+    user: Annotated[dict[str, Any], Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Serve one conversation attachment's stored blob (tenant-scoped).
+
+    The caller addresses the attachment by its public id; the server resolves
+    the storage key from the message metadata, so the object-key namespace is
+    never exposed.  A 404 hides whether the conversation, the attachment, or
+    the blob is missing (no existence oracle for other tenants).
+    """
+    repo = ConversationRepository(session)
+    meta = await repo.get_attachment_meta(
+        tenant_id=user["tenant_id"],
+        conversation_id=conversation_id,
+        attachment_id=attachment_id,
+    )
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    storage = build_attachment_storage()
+    data = await storage.get(
+        key=f"{user['tenant_id']}/{conversation_id}/{meta['storage_key']}",
+    )
+    if data is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    safe_name = meta.get("name", "attachment").replace('"', "").replace("\n", "")
+    return Response(
+        content=data,
+        media_type=meta.get("type") or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )
 
 
 @router.patch("/{conversation_id}")
@@ -289,8 +429,30 @@ async def delete_conversation(
     user: Annotated[dict[str, Any], Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    """Delete a conversation and all its messages."""
+    """Delete a conversation and all its messages (and attachment blobs)."""
     repo = ConversationRepository(session)
+
+    # Remove the blob payloads first (best-effort, never blocks the row
+    # delete): the documents service deletes storage before the row, so a
+    # deleted conversation cannot leave orphaned blobs behind.
+    storage_keys = await repo.collect_attachment_storage_keys(
+        tenant_id=user["tenant_id"],
+        conversation_id=conversation_id,
+    )
+    if storage_keys:
+        storage = build_attachment_storage()
+        for storage_key in storage_keys:
+            try:
+                await storage.delete(
+                    key=f"{user['tenant_id']}/{conversation_id}/{storage_key}",
+                )
+            except Exception:
+                logger.exception(
+                    "attachment_blob_delete_failed",
+                    conversation_id=str(conversation_id),
+                    storage_key=storage_key,
+                )
+
     ok = await repo.delete_conversation(
         tenant_id=user["tenant_id"],
         conversation_id=conversation_id,

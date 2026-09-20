@@ -45,6 +45,26 @@ export interface ChatAttachment {
     previewUrl?: string;
     /** Retained File object for reading content as base64 before sending. */
     file?: File;
+    /**
+     * Server-relative fetch path for a *persisted* attachment (set when the
+     * message is loaded back from the store). When present without
+     * ``previewUrl`` the blob is fetched on demand and previewed via an object
+     * URL - the same pattern as document detail previews.
+     */
+    url?: string;
+}
+
+/**
+ * Attachment payload handed to ``onUserMessage`` for persistence. Carries the
+ * client id so the server stores stable metadata and the base64 content the
+ * storage layer writes to the blob backend.
+ */
+export interface PersistAttachment {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    base64: string;
 }
 
 export interface AgentChatMessage {
@@ -128,10 +148,19 @@ export function useAgentChat(
         initialMessagesComplete?: boolean;
         /** Conversation ID for multi-turn context (LLM receives history). */
         conversationId?: string;
-        /** Called when a turn completes with the agent's full response text. */
-        onComplete?: (content: string) => void;
-        /** Called when a user message is appended, so callers can persist it. */
-        onUserMessage?: (content: string) => void;
+        /** Called when a turn completes with the agent's full response text
+         *  and the module agent name that answered it (from `agent_start`). */
+        onComplete?: (
+            content: string,
+            agentName?: string | null,
+        ) => void;
+        /** Called when a user message is appended, so callers can persist it.
+         *  ``attachments`` carries the client ids + base64 content for
+         *  durability when the message has files. */
+        onUserMessage?: (
+            content: string,
+            attachments?: PersistAttachment[],
+        ) => void;
     },
 ): AgentChatState {
     const [messages, setMessages] =
@@ -179,6 +208,9 @@ export function useAgentChat(
             setSending(true);
             setActiveAgent(null);
             lastAgentContentRef.current = "";
+            // Which module agent answered this turn (`agent_start`); passed to
+            // onComplete so callers can persist it with the message content.
+            let turnAgentName: string | null = null;
 
             const now = new Date().toISOString();
             const userMessage: AgentChatMessage = {
@@ -212,8 +244,43 @@ export function useAgentChat(
                     : [...previous, agentMessage],
             );
 
+            // Read attached files as base64 up-front so the same bytes feed
+            // both persistence (onUserMessage -> saveUserMessage) and the SSE
+            // stream.  Best-effort: broken reads are skipped entirely, for
+            // both paths, so a single unreadable file cannot wedge the send.
+            let streamAttachments: StreamAttachment[] | undefined;
+            let persistAttachments: PersistAttachment[] | undefined;
+            if (attachments && attachments.length > 0) {
+                const withFile = attachments.filter((a) => a.file);
+                const results = await Promise.allSettled(
+                    withFile.map(async (a) => ({
+                        id: a.id,
+                        name: a.name,
+                        type: a.type,
+                        size: a.size,
+                        base64: await readFileAsBase64(a.file!),
+                    })),
+                );
+                const successful = results
+                    .filter(
+                        (r): r is PromiseFulfilledResult<PersistAttachment> =>
+                            r.status === "fulfilled",
+                    )
+                    .map((r) => r.value);
+                if (successful.length > 0) {
+                    streamAttachments = successful.map(({ base64, ...rest }) => ({
+                        name: rest.name,
+                        type: rest.type,
+                        size: rest.size,
+                        base64,
+                    }));
+                    persistAttachments = successful;
+                }
+            }
+
             // Persist the user message so it survives navigation away and back.
-            if (shouldAppendUser) onUserMessageRef.current?.(trimmed);
+            if (shouldAppendUser)
+                onUserMessageRef.current?.(trimmed, persistAttachments);
 
             // Yield to the microtask queue so React commits the agent bubble to state
             // *before* we open the SSE stream.  Without this, a fast error (401, 502)
@@ -258,6 +325,7 @@ export function useAgentChat(
                             setActiveAgent(event.agents[0] ?? null);
                         break;
                     case "agent_start":
+                        turnAgentName = event.display_name || event.agent;
                         setActiveAgent(event.agent);
                         setMessages((previous) =>
                             previous.map((message) =>
@@ -303,6 +371,7 @@ export function useAgentChat(
                         if (lastAgentContentRef.current) {
                             onCompleteRef.current?.(
                                 lastAgentContentRef.current,
+                                turnAgentName,
                             );
                         }
                         break;
@@ -333,28 +402,6 @@ export function useAgentChat(
                         break;
                 }
             };
-
-            // Read attached files as base64 for the backend (best-effort; skip broken reads).
-            let streamAttachments: StreamAttachment[] | undefined;
-            if (attachments && attachments.length > 0) {
-                const results = await Promise.allSettled(
-                    attachments
-                        .filter((a) => a.file)
-                        .map(async (a) => ({
-                            name: a.name,
-                            type: a.type,
-                            size: a.size,
-                            base64: await readFileAsBase64(a.file!),
-                        })),
-                );
-                const successful = results
-                    .filter(
-                        (r): r is PromiseFulfilledResult<StreamAttachment> =>
-                            r.status === "fulfilled",
-                    )
-                    .map((r) => r.value);
-                if (successful.length > 0) streamAttachments = successful;
-            }
 
             try {
                 await streamAgentChat({

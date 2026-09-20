@@ -9,6 +9,7 @@ import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { LogoMark } from "@/components/brand/logo";
 import {
     appendAgentMessage,
+    attachmentUrl,
     createConversation,
     saveUserMessage,
 } from "@/lib/api/agents-api";
@@ -25,6 +26,13 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
         agentName: message.agent_name ?? null,
         citations: [],
         failed: false,
+        attachments: (message.attachments ?? []).map((meta) => ({
+            id: meta.id,
+            name: meta.name,
+            type: meta.type,
+            size: meta.size,
+            url: attachmentUrl(message.conversation_id, meta.id),
+        })),
     };
 }
 
@@ -36,11 +44,19 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
         {
             initialMessagesComplete: true,
             conversationId: conversation.id,
-            onUserMessage: (content) => {
-                void saveUserMessage(conversation.id, content);
+            onUserMessage: (content, persistAttachments) => {
+                void saveUserMessage(
+                    conversation.id,
+                    content,
+                    persistAttachments,
+                );
             },
-            onComplete: (content) => {
-                void appendAgentMessage(conversation.id, content);
+            onComplete: (content, agentName) => {
+                void appendAgentMessage(
+                    conversation.id,
+                    content,
+                    agentName ?? undefined,
+                );
             },
         },
     );
@@ -67,13 +83,14 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
                 userDisplay={user?.fullName ?? user?.email ?? ""}
                 onResend={send}
             />
-            <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
+            <div className="shrink-0 px-4 pb-2 pt-2">
                 <ChatComposer
                     onSend={(content, attachments) =>
                         send(content, false, attachments)
                     }
                     onStop={sending ? stop : undefined}
                     placeholder="Continue the conversation…"
+                    singleRow
                 />
             </div>
             {activeAgent ? (
@@ -92,7 +109,7 @@ export default function AgentsHomePage() {
             const conv = await createConversation({ first_prompt: prompt });
             // Navigate to the conversation route so the sidebar picks it up from the
             // pathname change and the [id]/page.tsx takes over rendering.
-            router.push(`/dashboard/agents/c/${conv.id}`);
+            router.push(`/agents/c/${conv.id}`);
         },
         [router],
     );
@@ -122,6 +139,7 @@ export default function AgentsHomePage() {
                 <ChatComposer
                     onSend={startChat}
                     placeholder="Ask your agent anything…"
+                    showHint
                 />
             </div>
         </div>

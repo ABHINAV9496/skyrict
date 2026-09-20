@@ -1,19 +1,18 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useRef, useState } from "react";
 import {
     ArrowUp,
     FileText,
     FolderUp,
     Image,
-    LoaderCircle,
     Paperclip,
     Plus,
     Square,
     X,
 } from "lucide-react";
 
-import { AiGlyph } from "@/components/brand/logo";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -140,11 +139,20 @@ export function ChatComposer({
     onSend,
     onStop,
     placeholder = "Message Skyrict…",
+    showHint = false,
+    singleRow = false,
 }: {
     onSend: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
     /** When provided while a turn is streaming, the send button becomes Stop. */
     onStop?: () => void;
     placeholder?: string;
+    /** Show the "Enter to send" shortcut hint (new-chat welcome screen). */
+    showHint?: boolean;
+    /**
+     * Running-chat compact layout: attach button, input, and send button on a
+     * single row (used inside an existing conversation).
+     */
+    singleRow?: boolean;
 }) {
     const [value, setValue] = useState("");
     const [sending, setSending] = useState(false);
@@ -241,6 +249,63 @@ export function ChatComposer({
         [canStop, submit],
     );
 
+    const attachMenu = (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button
+                    type="button"
+                    aria-label="Attach files"
+                    title="Attach files"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                >
+                    <Plus aria-hidden="true" className="size-4" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" sideOffset={8}>
+                <DropdownMenuItem
+                    onSelect={() => fileInputRef.current?.click()}
+                >
+                    <Paperclip aria-hidden="true" />
+                    <span>Add files or photos</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">
+                        Ctrl+U
+                    </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onSelect={() => folderInputRef.current?.click()}
+                >
+                    <FolderUp aria-hidden="true" />
+                    <span>Upload folder</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+
+    const sendButton = (
+        <button
+            type="button"
+            onClick={() => {
+                if (canStop) onStop();
+                else void submit();
+            }}
+            disabled={
+                canStop
+                    ? false
+                    : (!value.trim() && attachments.length === 0) || sending
+            }
+            aria-label={canStop ? "Stop generating" : "Send message"}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:bg-primary/80 disabled:opacity-40"
+        >
+            {canStop ? (
+                <Square aria-hidden="true" className="size-3.5 fill-current" />
+            ) : sending ? (
+                <Spinner aria-hidden="true" className="size-4" />
+            ) : (
+                <ArrowUp aria-hidden="true" className="size-4" />
+            )}
+        </button>
+    );
+
     return (
         <div
             className="mx-auto w-full max-w-[44rem]"
@@ -300,101 +365,54 @@ export function ChatComposer({
                     </div>
                 ) : null}
 
-                <textarea
-                    ref={textareaRef}
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    onKeyDown={handleKeyDown}
-                    rows={1}
-                    placeholder={placeholder}
-                    aria-label="Message"
-                    className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
-                />
-                <div className="flex items-center justify-between">
+                {singleRow ? (
+                    /* Running-chat composer: attach, input, and send on ONE row. */
                     <div className="flex items-center gap-1">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button
-                                    type="button"
-                                    aria-label="Attach files"
-                                    title="Attach files"
-                                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                                >
-                                    <Plus
-                                        aria-hidden="true"
-                                        className="size-4"
-                                    />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" sideOffset={8}>
-                                <DropdownMenuItem
-                                    onSelect={() =>
-                                        fileInputRef.current?.click()
-                                    }
-                                >
-                                    <Paperclip aria-hidden="true" />
-                                    <span>Add files or photos</span>
-                                    <span className="ml-auto text-[11px] text-muted-foreground">
-                                        Ctrl+U
+                        {attachMenu}
+                        <textarea
+                            ref={textareaRef}
+                            value={value}
+                            onChange={(event) => setValue(event.target.value)}
+                            onKeyDown={handleKeyDown}
+                            rows={1}
+                            placeholder={placeholder}
+                            aria-label="Message"
+                            className="max-h-40 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-base text-foreground outline-none placeholder:text-muted-foreground/80"
+                        />
+                        {sendButton}
+                    </div>
+                ) : (
+                    <>
+                        <textarea
+                            ref={textareaRef}
+                            value={value}
+                            onChange={(event) => setValue(event.target.value)}
+                            onKeyDown={handleKeyDown}
+                            rows={1}
+                            placeholder={placeholder}
+                            aria-label="Message"
+                            className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
+                        />
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                                {attachMenu}
+                                {showHint ? (
+                                    <span className="ml-1 hidden text-[11px] text-muted-foreground sm:inline">
+                                        Enter ↵ to send · Shift+Enter for newline
                                     </span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onSelect={() =>
-                                        folderInputRef.current?.click()
-                                    }
-                                >
-                                    <FolderUp aria-hidden="true" />
-                                    <span>Upload folder</span>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                            <AiGlyph
-                                aria-hidden="true"
-                                className="size-3.5 text-primary"
-                            />
-                            Skyrict Agent
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (canStop) onStop();
-                                else void submit();
-                            }}
-                            disabled={
-                                canStop
-                                    ? false
-                                    : (!value.trim() &&
-                                          attachments.length === 0) ||
-                                      sending
-                            }
-                            aria-label={
-                                canStop ? "Stop generating" : "Send message"
-                            }
-                            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:bg-primary/80 disabled:opacity-40"
-                        >
-                            {canStop ? (
-                                <Square
-                                    aria-hidden="true"
-                                    className="size-3.5 fill-current"
-                                />
-                            ) : sending ? (
-                                <LoaderCircle
-                                    aria-hidden="true"
-                                    className="size-4 animate-spin"
-                                />
-                            ) : (
-                                <ArrowUp
-                                    aria-hidden="true"
-                                    className="size-4"
-                                />
-                            )}
-                        </button>
-                    </div>
-                </div>
+                                ) : null}
+                            </div>
+                            <div className="flex items-center gap-1">
+                                {sendButton}
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
+            <p className="mt-2 text-center text-[11px] leading-snug text-muted-foreground/60">
+                Skyagent is AI and can make mistakes. Please double-check
+                responses.
+            </p>
         </div>
     );
 }

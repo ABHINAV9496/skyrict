@@ -13,11 +13,11 @@ from typing import Any
 
 import pytest
 
+from ai_agent import models  # noqa: F401  # registers every model on Base.metadata
 from ai_agent.api.v1.routers.conversations import _store_attachments
 from ai_agent.db.conversation_repository import _message_to_dict
 from ai_agent.features.attachments.storage import LocalAttachmentStorage
 from ai_agent.models.ai_conversation_message import AiConversationMessage
-from ai_agent import models  # noqa: F401  # registers every model on Base.metadata
 
 
 class TestLocalAttachmentStorage:

@@ -69,6 +69,7 @@ function SidebarLink({
     return (
         <Link
             href={item.href}
+            prefetch={false}
             data-tour={item.tour}
             onClick={onCloseMobile}
             title={collapsed ? item.label : undefined}
@@ -148,6 +149,7 @@ function CollapsibleNavItem({
         return (
             <Link
                 href={item.href}
+                prefetch={false}
                 onClick={onCloseMobile}
                 title={item.label}
                 aria-current={parentActive ? "page" : undefined}
@@ -175,6 +177,7 @@ function CollapsibleNavItem({
             >
                 <Link
                     href={item.href}
+                    prefetch={false}
                     onClick={handleParentClick}
                     aria-current={parentActive ? "page" : undefined}
                     className="relative flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-sm font-semibold transition-colors"
@@ -328,6 +331,7 @@ export function AppSidebar({
                 >
                     <Link
                         href={brandHref}
+                        prefetch={false}
                         onClick={onCloseMobile}
                         aria-label="Skyrict dashboard"
                         className={cn(
@@ -504,6 +508,7 @@ export function AppSidebar({
                     <div className="border-t border-sidebar-border p-3">
                         <Link
                             href="/"
+                            prefetch={false}
                             onClick={onCloseMobile}
                             data-tour="back-to-overview"
                             title={collapsed ? "Back to overview" : undefined}

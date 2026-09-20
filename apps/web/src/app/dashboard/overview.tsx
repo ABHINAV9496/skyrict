@@ -176,7 +176,7 @@ export default function OverviewClient() {
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
                             {canInvite ? (
                                 <Button asChild>
-                                    <Link href="/dashboard/invite">
+                                    <Link href="/dashboard/invite" prefetch={false}>
                                         <UserPlus
                                             aria-hidden="true"
                                             className="size-4"
@@ -187,7 +187,7 @@ export default function OverviewClient() {
                             ) : null}
                             {canManageRoles ? (
                                 <Button asChild variant="outline">
-                                    <Link href="/roles">
+                                    <Link href="/roles" prefetch={false}>
                                         <ShieldCheck
                                             aria-hidden="true"
                                             className="size-4"
@@ -232,6 +232,7 @@ export default function OverviewClient() {
                             <Link
                                 key={module.href}
                                 href={module.href}
+                                prefetch={false}
                                 data-tour={module.tour}
                                 style={{
                                     animationDelay: `${120 + index * 80}ms`,

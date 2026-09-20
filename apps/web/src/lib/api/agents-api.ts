@@ -17,6 +17,15 @@ export interface Conversation {
     messages?: ChatMessage[];
 }
 
+/** Metadata for a file persisted on a message (blobs live in object
+ *  storage; only this metadata round-trips through the API). */
+export interface AttachmentMeta {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+}
+
 /** A single message within a conversation. */
 export interface ChatMessage {
     id: string;
@@ -24,6 +33,7 @@ export interface ChatMessage {
     role: "user" | "agent";
     content: string;
     agent_name?: string | null;
+    attachments?: AttachmentMeta[];
     created_at: string;
 }
 
@@ -51,23 +61,44 @@ export async function sendMessage(
     });
 }
 
+/** Persistable attachment payload sent to the BFF with a user message. */
+export interface PersistAttachmentInput {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    base64: string;
+}
+
 export async function saveUserMessage(
     id: string,
     content: string,
+    attachments?: PersistAttachmentInput[],
 ): Promise<Conversation> {
     return apiPost<Conversation>(`/api/v1/agents/conversations/${id}`, {
         content,
         role: "user",
+        attachments,
     });
+}
+
+/** Server-relative URL for fetching a persisted attachment's blob. */
+export function attachmentUrl(
+    conversationId: string,
+    attachmentId: string,
+): string {
+    return `/api/v1/agents/conversations/${conversationId}/attachments/${attachmentId}`;
 }
 
 export async function appendAgentMessage(
     id: string,
     content: string,
+    agentName?: string,
 ): Promise<Conversation> {
     return apiPost<Conversation>(`/api/v1/agents/conversations/${id}`, {
         content,
         role: "agent",
+        agent_name: agentName,
     });
 }
 

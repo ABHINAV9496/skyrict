@@ -1,12 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     AlertTriangle,
     CheckCircle2,
     Clock,
     FileText,
-    LoaderCircle,
     RefreshCw,
     Sparkles,
 } from "lucide-react";
@@ -101,7 +101,7 @@ export function DocumentsOverview() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" />
+                <Spinner className="size-4" />
                 Loading documents…
             </div>
         );
@@ -134,19 +134,19 @@ export function DocumentsOverview() {
                     icon={CheckCircle2}
                     label="Ready"
                     value={String(counts.ready)}
-                    href="/dashboard/erp/documents/list?status=ready"
+                    href="/erp/documents/list?status=ready"
                 />
                 <StatCard
                     icon={Clock}
                     label="Pending / processing"
                     value={String(counts.pending + counts.processing)}
-                    href="/dashboard/erp/documents/list"
+                    href="/erp/documents/list"
                 />
                 <StatCard
                     icon={AlertTriangle}
                     label="Failed"
                     value={String(failed)}
-                    href="/dashboard/erp/documents/list?status=failed"
+                    href="/erp/documents/list?status=failed"
                 />
             </div>
 
@@ -164,7 +164,7 @@ export function DocumentsOverview() {
                                 disabled={reindexing || failed === 0}
                             >
                                 {reindexing ? (
-                                    <RefreshCw className="size-3.5 animate-spin" />
+                                    <Spinner className="size-3.5" />
                                 ) : (
                                     <RefreshCw aria-hidden="true" className="size-3.5" />
                                 )}
@@ -217,7 +217,7 @@ export function DocumentsOverview() {
                                     >
                                         <td className="px-4 py-3">
                                             <Link
-                                                href={`/dashboard/erp/documents/${doc.id}`}
+                                                href={`/erp/documents/${doc.id}`}
                                                 className="font-medium text-foreground hover:text-primary"
                                             >
                                                 {doc.filename}

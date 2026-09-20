@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LoaderCircle, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import {
@@ -278,9 +279,9 @@ export function PayrollSettingsClient() {
                         <div className="flex justify-end">
                             <Button type="submit" disabled={saving}>
                                 {saving ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Save settings

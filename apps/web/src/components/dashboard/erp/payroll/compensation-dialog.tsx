@@ -1,7 +1,7 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -233,9 +233,9 @@ export function CompensationDialog({
                         </Button>
                         <Button type="submit" disabled={recordSaving}>
                             {recordSaving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Record change

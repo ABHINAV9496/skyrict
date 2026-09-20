@@ -104,7 +104,7 @@ export default function TrendingPage() {
                             type="button"
                             onClick={() =>
                                 router.push(
-                                    `/dashboard/intelligence/results?q=${encodeURIComponent(topic.term)}`,
+                                    `/intelligence/results?q=${encodeURIComponent(topic.term)}`,
                                 )
                             }
                             className="group flex w-full items-center gap-4 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40 sm:items-center"

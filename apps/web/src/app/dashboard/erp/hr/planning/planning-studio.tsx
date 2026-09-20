@@ -1,9 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-    LoaderCircle,
     Plus,
     SlidersHorizontal,
     Trash2,
@@ -449,9 +449,9 @@ const openSeries = useMemo(
 
             {status.state === "loading" ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-4 animate-spin"
+                        className="size-4"
                     />
                     Loading planning base…
                 </div>
@@ -640,9 +640,9 @@ const openSeries = useMemo(
                             <div className="flex flex-wrap items-center gap-3">
                                 <Button type="submit" disabled={saving || !base}>
                                     {saving ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-4 animate-spin"
+                                            className="size-4"
                                         />
                                     ) : (
                                         <TrendingUp
@@ -719,9 +719,9 @@ const openSeries = useMemo(
                                     </p>
                                 </div>
                                 {compareLoading ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin text-muted-foreground"
+                                        className="size-4 text-muted-foreground"
                                     />
                                 ) : null}
                             </div>

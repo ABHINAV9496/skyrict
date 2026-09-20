@@ -323,7 +323,7 @@ export default function SettingsPage() {
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     Billing is live -{" "}
                     <Link
-                        href="/dashboard/settings/billing"
+                        href="/settings/billing"
                         className="font-medium text-primary underline-offset-4 hover:underline"
                     >
                         Plans &amp; billing

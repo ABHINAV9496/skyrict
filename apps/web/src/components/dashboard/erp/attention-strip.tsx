@@ -150,7 +150,7 @@ export function AttentionStrip() {
         {
             label: "Out of Stock SKUs",
             count: data.outOfStock,
-            href: "/dashboard/erp/inventory",
+            href: "/erp/inventory",
             icon: PackageX,
             tone:
                 data.outOfStock > 0
@@ -164,7 +164,7 @@ export function AttentionStrip() {
         {
             label: "Overdue Invoices",
             count: data.overdueInvoices,
-            href: "/dashboard/erp/finance",
+            href: "/erp/finance",
             icon: Receipt,
             tone:
                 data.overdueInvoices > 0
@@ -178,7 +178,7 @@ export function AttentionStrip() {
         {
             label: "Open Opportunities",
             count: data.stalledOpportunities,
-            href: "/dashboard/erp/crm/opportunities",
+            href: "/erp/crm/opportunities",
             icon: Clock,
             tone:
                 data.stalledOpportunities > 0
@@ -192,7 +192,7 @@ export function AttentionStrip() {
         {
             label: "Open Sales Orders",
             count: data.openOrders,
-            href: "/dashboard/erp/orders",
+            href: "/erp/orders",
             icon: ShoppingBag,
             tone:
                 data.openOrders > 0

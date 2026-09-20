@@ -86,7 +86,7 @@ function ConversationRow({
             )}
         >
             <Link
-                href={`/dashboard/agents/c/${conversation.id}`}
+                href={`/agents/c/${conversation.id}`}
                 onClick={onSelect}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? conversation.title : undefined}
@@ -203,7 +203,7 @@ function NewChatButton({
             title={collapsed ? "New chat" : undefined}
             onClick={() => {
                 onNavigate();
-                router.push("/dashboard/agents");
+                router.push("/agents");
             }}
         >
             <SquarePen aria-hidden="true" className="size-4" />
@@ -274,7 +274,7 @@ export function AgentsChatSidebar({
             void deleteConversation(conversation.id).then(() => {
                 // If the deleted conversation is the one we are viewing, leave the page.
                 if (isActive(pathname, conversation.id)) {
-                    router.push("/dashboard/agents");
+                    router.push("/agents");
                 }
                 load();
             });
@@ -335,7 +335,7 @@ export function AgentsChatSidebar({
                     )}
                 >
                     <Link
-                        href="/dashboard/agents"
+                        href="/agents"
                         onClick={onCloseMobile}
                         aria-label="AI Agents home"
                     >
@@ -362,18 +362,18 @@ export function AgentsChatSidebar({
                                 title="Sales Coach"
                                 onClick={() => {
                                     onCloseMobile();
-                                    router.push("/dashboard/agents/coaching");
+                                    router.push("/agents/coaching");
                                 }}
                                 aria-current={
                                     pathname ===
-                                    "/dashboard/agents/coaching"
+                                    "/agents/coaching"
                                         ? "page"
                                         : undefined
                                 }
                                 className={cn(
                                     "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
                                     pathname ===
-                                        "/dashboard/agents/coaching"
+                                        "/agents/coaching"
                                         ? "text-foreground"
                                         : "text-muted-foreground hover:text-foreground",
                                 )}
@@ -388,18 +388,18 @@ export function AgentsChatSidebar({
                                 title="Audit Guardian"
                                 onClick={() => {
                                     onCloseMobile();
-                                    router.push("/dashboard/agents/guardian");
+                                    router.push("/agents/guardian");
                                 }}
                                 aria-current={
                                     pathname ===
-                                    "/dashboard/agents/guardian"
+                                    "/agents/guardian"
                                         ? "page"
                                         : undefined
                                 }
                                 className={cn(
                                     "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
                                     pathname ===
-                                        "/dashboard/agents/guardian"
+                                        "/agents/guardian"
                                         ? "text-foreground"
                                         : "text-muted-foreground hover:text-foreground",
                                 )}
@@ -417,18 +417,18 @@ export function AgentsChatSidebar({
                                 AI features
                             </p>
                             <Link
-                                href="/dashboard/agents/coaching"
+                                href="/agents/coaching"
                                 onClick={onCloseMobile}
                                 aria-current={
                                     pathname ===
-                                    "/dashboard/agents/coaching"
+                                    "/agents/coaching"
                                         ? "page"
                                         : undefined
                                 }
                                 className={cn(
                                     "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
                                     pathname ===
-                                        "/dashboard/agents/coaching" &&
+                                        "/agents/coaching" &&
                                         "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
                                 )}
                             >
@@ -439,18 +439,18 @@ export function AgentsChatSidebar({
                                 Sales Coach
                             </Link>
                             <Link
-                                href="/dashboard/agents/guardian"
+                                href="/agents/guardian"
                                 onClick={onCloseMobile}
                                 aria-current={
                                     pathname ===
-                                    "/dashboard/agents/guardian"
+                                    "/agents/guardian"
                                         ? "page"
                                         : undefined
                                 }
                                 className={cn(
                                     "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
                                     pathname ===
-                                        "/dashboard/agents/guardian" &&
+                                        "/agents/guardian" &&
                                         "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
                                 )}
                             >
@@ -501,7 +501,7 @@ export function AgentsChatSidebar({
                                                     asChild
                                                 >
                                                     <Link
-                                                        href={`/dashboard/agents/c/${conversation.id}`}
+                                                        href={`/agents/c/${conversation.id}`}
                                                         onClick={onCloseMobile}
                                                         className="w-full truncate"
                                                     >
@@ -542,7 +542,7 @@ export function AgentsChatSidebar({
                                                 asChild
                                             >
                                                 <Link
-                                                    href={`/dashboard/agents/c/${conversation.id}`}
+                                                    href={`/agents/c/${conversation.id}`}
                                                     onClick={onCloseMobile}
                                                     className="w-full truncate"
                                                 >
@@ -652,7 +652,7 @@ export function AgentsChatSidebar({
 
                 <div className="border-t border-sidebar-border p-3">
                     <Link
-                        href="/dashboard"
+                        href="/"
                         onClick={onCloseMobile}
                         data-tour="back-to-overview"
                         title={collapsed ? "Back to overview" : undefined}

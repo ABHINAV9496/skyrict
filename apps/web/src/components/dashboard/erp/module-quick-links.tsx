@@ -21,15 +21,15 @@ const quickLinks: {
   description: string;
   icon: LucideIcon;
 }[] = [
-  { href: "/dashboard/erp/crm/overview", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
-  { href: "/dashboard/erp/orders", title: "Orders", description: "Sales orders and the fulfilment flow.", icon: ShoppingCart },
-  { href: "/dashboard/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
-  { href: "/dashboard/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
-  { href: "/dashboard/erp/hr", title: "HR", description: "People and the team.", icon: Users },
-  { href: "/dashboard/erp/documents", title: "Documents", description: "Central document store with AI extraction.", icon: FileText },
-  { href: "/dashboard/erp/payroll", title: "Payroll", description: "Runs, compensation, and pay rules.", icon: Receipt },
-  { href: "/dashboard/erp/approvals", title: "Approvals", description: "AI-routed approvals inbox.", icon: Inbox },
-  { href: "/dashboard/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
+  { href: "/erp/crm/overview", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
+  { href: "/erp/orders", title: "Orders", description: "Sales orders and the fulfilment flow.", icon: ShoppingCart },
+  { href: "/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
+  { href: "/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
+  { href: "/erp/hr", title: "HR", description: "People and the team.", icon: Users },
+  { href: "/erp/documents", title: "Documents", description: "Central document store with AI extraction.", icon: FileText },
+  { href: "/erp/payroll", title: "Payroll", description: "Runs, compensation, and pay rules.", icon: Receipt },
+  { href: "/erp/approvals", title: "Approvals", description: "AI-routed approvals inbox.", icon: Inbox },
+  { href: "/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
 ];
 
 /** Module quick-link cards rendered on the ERP overview page. */

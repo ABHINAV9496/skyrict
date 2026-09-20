@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, SlidersHorizontal, Sparkles } from "lucide-react";
+import { SlidersHorizontal, Sparkles } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -106,9 +107,9 @@ export function FinanceSettings() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center justify-center py-16">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-6 animate-spin text-muted-foreground"
+                    className="size-6 text-muted-foreground"
                 />
             </div>
         );
@@ -189,9 +190,9 @@ export function FinanceSettings() {
                             onClick={() => void recommend()}
                         >
                             {recommending ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Sparkles
@@ -237,9 +238,9 @@ export function FinanceSettings() {
                             onClick={() => void save()}
                         >
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save settings

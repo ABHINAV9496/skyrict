@@ -98,7 +98,7 @@ export function ErpOverviewSummary() {
     return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Link
-                href="/dashboard/erp/crm/opportunities"
+                href="/erp/crm/opportunities"
                 className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-ring/40"
             >
                 <div className="flex items-center justify-between">
@@ -119,7 +119,7 @@ export function ErpOverviewSummary() {
             </Link>
 
             <Link
-                href="/dashboard/erp/orders"
+                href="/erp/orders"
                 className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-ring/40"
             >
                 <div className="flex items-center justify-between">

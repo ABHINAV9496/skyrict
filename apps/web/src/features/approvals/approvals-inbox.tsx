@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     CheckCircle2,
     Clock,
     Inbox,
-    LoaderCircle,
     RefreshCw,
     Sparkles,
     XCircle,
@@ -357,9 +357,8 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
                                 onClick={() => void handleDecide("request_changes")}
                             >
                                 {submitting === "request_changes" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="animate-spin"
                                     />
                                 ) : null}
                                 Request changes
@@ -371,9 +370,8 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
                                 onClick={() => void handleDecide("reject")}
                             >
                                 {submitting === "reject" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="animate-spin"
                                     />
                                 ) : null}
                                 Reject
@@ -384,9 +382,8 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
                                 onClick={() => void handleDecide("approve")}
                             >
                                 {submitting === "approve" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="animate-spin"
                                     />
                                 ) : null}
                                 Approve

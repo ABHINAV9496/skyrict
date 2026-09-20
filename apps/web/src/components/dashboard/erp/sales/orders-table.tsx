@@ -275,7 +275,7 @@ export function OrdersTable() {
                     rows={visibleOrders}
                     rowKey={(order) => order.id}
                     onRowClick={(order) =>
-                        router.push(`/dashboard/erp/orders/${order.id}`)
+                        router.push(`/erp/orders/${order.id}`)
                     }
                     footer={
                         <Pagination
@@ -293,7 +293,7 @@ export function OrdersTable() {
                 onOpenChange={setCreateOpen}
                 onCreated={(order) => {
                     setOffset(0);
-                    router.push(`/dashboard/erp/orders/${order.id}`);
+                    router.push(`/erp/orders/${order.id}`);
                 }}
             />
         </div>

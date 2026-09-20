@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -10,7 +11,6 @@ import {
     Banknote,
     CircleCheck,
     Copy,
-    LoaderCircle,
     Mail,
     ReceiptText,
 } from "lucide-react";
@@ -215,9 +215,9 @@ function ApplyPaymentDialog({
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Banknote
@@ -416,7 +416,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
     return (
         <div className="space-y-6">
             <Link
-                href="/dashboard/erp/finance/invoices"
+                href="/erp/finance/invoices"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
                 <ArrowLeft aria-hidden="true" className="size-4" />
@@ -462,9 +462,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                                 onClick={() => void runAction("issue")}
                             >
                                 {status.busy === "issue" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Issue
@@ -477,9 +477,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                                 onClick={() => void runAction("approve")}
                             >
                                 {status.busy === "approve" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Approve
@@ -504,9 +504,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                                 onClick={() => void loadReminder()}
                             >
                                 {reminderLoading ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : (
                                     <Mail
@@ -525,9 +525,9 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                                 onClick={() => void runAction("void")}
                             >
                                 {status.busy === "void" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Void
@@ -552,7 +552,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
                                     Sales order
                                 </p>
                                 <Link
-                                    href={`/dashboard/erp/sales/orders/${invoice.source_ref}`}
+                                    href={`/erp/sales/orders/${invoice.source_ref}`}
                                     className="mt-1 inline-flex text-sm font-medium text-primary hover:underline"
                                 >
                                     {invoice.source_order_number}

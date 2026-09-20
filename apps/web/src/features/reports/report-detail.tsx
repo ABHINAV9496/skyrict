@@ -134,7 +134,7 @@ export function ReportsDetail({
       if (state.status !== "ready") return;
       const report = state.report;
       setRunState({ status: "running" });
-      router.replace(`/dashboard/erp/reports/${slug}${toQueryString(next, report.params)}`, {
+      router.replace(`/erp/reports/${slug}${toQueryString(next, report.params)}`, {
         scroll: false,
       });
       try {
@@ -213,7 +213,7 @@ export function ReportsDetail({
     <RequirePermission permission={report.permission_key}>
       <div className="space-y-6">
         <Link
-          href="/dashboard/erp/reports"
+          href="/erp/reports"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />

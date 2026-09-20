@@ -84,7 +84,7 @@ export default function ExplorePage() {
                             type="button"
                             onClick={() =>
                                 router.push(
-                                    `/dashboard/intelligence/results?q=${encodeURIComponent(category.query)}`,
+                                    `/intelligence/results?q=${encodeURIComponent(category.query)}`,
                                 )
                             }
                             className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/40"

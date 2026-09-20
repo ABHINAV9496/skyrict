@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
-import { AlertTriangle, Info, Loader2, X } from "lucide-react";
+import { AlertTriangle, Info, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -137,9 +138,9 @@ export function AnomalyCard({ item, onAction }: AnomalyCardProps) {
                     disabled={busy !== null}
                 >
                     {busy === "resolve" ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1 size-3 animate-spin"
+                            className="mr-1 size-3"
                         />
                     ) : (
                         <AlertTriangle

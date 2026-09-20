@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { RefreshCw, ShieldAlert } from "lucide-react";
 
 import { AnomalyCard } from "@/components/dashboard/erp/crm/anomaly-card";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +47,7 @@ export function AnomaliesFeed() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Spinner className="size-6 text-muted-foreground" />
             </div>
         );
     }

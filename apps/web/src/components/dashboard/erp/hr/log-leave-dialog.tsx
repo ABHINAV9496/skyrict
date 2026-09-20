@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -367,9 +368,9 @@ export function LogLeaveDialog({
                         </Button>
                         <Button type="submit" disabled={saving}>
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Create request

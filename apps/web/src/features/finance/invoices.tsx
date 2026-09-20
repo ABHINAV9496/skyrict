@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,7 +16,6 @@ import {
     ArrowRight,
     Check,
     ChevronsUpDown,
-    LoaderCircle,
     Mail,
     Plus,
     ReceiptText,
@@ -649,7 +649,7 @@ function CreateInvoiceDialog() {
             });
             setOpen(false);
             reset();
-            router.push(`/dashboard/erp/finance/invoices/${invoice.id}`);
+            router.push(`/erp/finance/invoices/${invoice.id}`);
         } catch (error) {
             setSubmitError(
                 error instanceof ApiError
@@ -830,9 +830,9 @@ function CreateInvoiceDialog() {
                                         disabled={settingRate}
                                     >
                                         {settingRate ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-4 animate-spin"
+                                                className="size-4"
                                             />
                                         ) : null}
                                         Set rate
@@ -1093,9 +1093,9 @@ function CreateInvoiceDialog() {
                             }
                         >
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save draft
@@ -1140,7 +1140,7 @@ const columns: FinanceColumn<Invoice>[] = [
         align: "right",
         render: (invoice) => (
             <Link
-                href={`/dashboard/erp/finance/invoices/${invoice.id}`}
+                href={`/erp/finance/invoices/${invoice.id}`}
                 className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
                 View <ArrowRight aria-hidden="true" className="size-3.5" />
@@ -1326,9 +1326,9 @@ function FinanceInvoices() {
                                         }
                                     >
                                         {batchRemindersState.loading ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-3.5 animate-spin"
+                                                className="size-3.5"
                                             />
                                         ) : (
                                             <Mail
@@ -1414,9 +1414,9 @@ function FinanceInvoices() {
                     ) : null}
                     {batchRemindersState.loading ? (
                         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                             Generating reminders…
                         </div>

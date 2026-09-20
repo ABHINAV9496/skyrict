@@ -52,7 +52,7 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
                     onCloseMobile={() => setMobileOpen(false)}
                     navGroups={navGroups}
                     accountItems={[]}
-                    brandHref="/dashboard/erp"
+                    brandHref="/erp"
                     logoTone="erp"
                     showBackToOverview
                 />

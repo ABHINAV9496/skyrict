@@ -1,11 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, LoaderCircle, Mail } from "lucide-react";
+import { CheckCircle2, Mail } from "lucide-react";
 
 import { env } from "@/config/env";
 import { RiskChallenge } from "@/components/onboarding/risk-challenge";
@@ -150,9 +151,9 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
         }
         trailing={
           availability === "checking" ? (
-            <LoaderCircle
+            <Spinner
               aria-hidden="true"
-              className="mr-1 size-4 animate-spin text-muted-foreground"
+              className="mr-1 size-4 text-muted-foreground"
             />
           ) : availability === "available" ? (
             <CheckCircle2 aria-hidden="true" className="mr-1 size-4 text-primary" />

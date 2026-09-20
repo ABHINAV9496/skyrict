@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     AlertTriangle,
     ArrowUpRight,
     Check,
-    Loader2,
     RefreshCw,
     X,
 } from "lucide-react";
@@ -91,7 +91,7 @@ export function AnomalyFeed() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Spinner className="size-6 text-muted-foreground" />
             </div>
         );
     }
@@ -129,9 +129,9 @@ export function AnomalyFeed() {
                     disabled={scanning}
                 >
                     {scanning ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1.5 size-4 animate-spin"
+                            className="mr-1.5 size-4"
                         />
                     ) : (
                         <RefreshCw

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { useEffect, useMemo, useState } from "react";
 import {
     CheckCircle2,
-    LoaderCircle,
     Plus,
     Search,
     UserPlus,
@@ -38,8 +38,12 @@ import {
     type Lead,
     type LeadStatus,
 } from "@/lib/api/crm-api";
+import {
+    invalidateResources,
+    resourceKey,
+} from "@/lib/cache/resource-cache";
 import { ApiError } from "@/lib/api/http";
-import { useLatestRequest } from "@/lib/hooks/use-latest-request";
+import { useResource } from "@/lib/hooks/use-resource";
 import { leadActions } from "@/lib/erp/actions";
 import { formatDate } from "@/lib/erp/money";
 import { leadStatusBadgeClass, LEAD_STATUS_LABELS } from "@/lib/erp/labels";
@@ -57,7 +61,7 @@ const STATUS_FILTERS: { value: LeadStatus | "all"; label: string }[] = [
 type PageStatus =
     | { state: "loading" }
     | { state: "error"; message: string }
-    | { state: "ready"; leads: Lead[]; total: number; notice?: string };
+    | { state: "ready"; leads: Lead[]; total: number };
 
 function leadName(lead: Lead): string {
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
@@ -70,7 +74,6 @@ export function LeadsTable() {
     const canWrite =
         permissions.includes("*") || permissions.includes("erp.crm.write");
 
-    const [status, setStatus] = useState<PageStatus>({ state: "loading" });
     const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
     const [query, setQuery] = useState("");
     const [offset, setOffset] = useState(0);
@@ -78,37 +81,52 @@ export function LeadsTable() {
     const [qualifying, setQualifying] = useState<Lead | null>(null);
     const [disqualifying, setDisqualifying] = useState<Lead | null>(null);
     const [pendingId, setPendingId] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
 
-    const requestGuard = useLatestRequest();
-
-    const load = useCallback(async () => {
-        const requestId = requestGuard.next();
-        setStatus({ state: "loading" });
-        try {
+    // Read through the shared cache. A revisit with the same key renders the
+    // previous payload on the FIRST pass (no shimmer); the store revalidates
+    // only when the TTL lapses. Pagination/filter changes form a new key and
+    // keep the current page on screen while the new page loads.
+    const cacheKey = resourceKey("crm.leads", {
+        status: statusFilter === "all" ? undefined : statusFilter,
+        offset,
+        limit: PAGE_SIZE,
+    });
+    const resource = useResource<{ items: Lead[]; total: number }>(
+        cacheKey,
+        async () => {
             const result = await listLeads({
                 status: statusFilter === "all" ? undefined : statusFilter,
                 offset,
                 limit: PAGE_SIZE,
             });
-            if (!requestGuard.isCurrent(requestId)) return;
-            setStatus({
-                state: "ready",
-                leads: result.data,
-                total: result.meta.total,
-            });
-        } catch (error) {
-            if (!requestGuard.isCurrent(requestId)) return;
-            const message =
-                error instanceof ApiError
-                    ? error.message
-                    : "Could not load leads.";
-            setStatus({ state: "error", message });
-        }
-    }, [statusFilter, offset, requestGuard]);
+            return { items: result.data, total: result.meta.total };
+        },
+    );
 
+    const status: PageStatus = useMemo<PageStatus>(() => {
+        if (resource.data !== undefined) {
+            return {
+                state: "ready",
+                leads: resource.data.items,
+                total: resource.data.total,
+            };
+        }
+        if (resource.error !== null) {
+            return { state: "error", message: resource.error };
+        }
+        return { state: "loading" };
+    }, [resource.data, resource.error]);
+
+    // A failed BACKGROUND refresh must stay visible while data is on screen
+    // (the hook keeps the old payload); surface it as a notice instead.
     useEffect(() => {
-        void load();
-    }, [load]);
+        if (resource.data !== undefined && resource.error !== null) {
+            setNotice(resource.error);
+        }
+    }, [resource.data, resource.error]);
+
+    const load = resource.reload;
 
     const visibleLeads = useMemo(() => {
         if (status.state !== "ready") return [];
@@ -131,17 +149,16 @@ export function LeadsTable() {
         setPendingId(leadId);
         try {
             await action();
+            // Same ordering rule as onCreated: stale-mark first, then the
+            // cached entry for the CURRENT key reloads in place.
+            invalidateResources("crm.leads");
             await load();
         } catch (error) {
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "The action could not be completed.";
-            setStatus((current) =>
-                current.state === "ready"
-                    ? { ...current, notice: message }
-                    : current,
-            );
+            setNotice(message);
         } finally {
             setPendingId(null);
         }
@@ -251,9 +268,9 @@ export function LeadsTable() {
                                 onClick={() => setQualifying(lead)}
                             >
                                 {pending ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-3 animate-spin"
+                                        className="size-3"
                                     />
                                 ) : (
                                     <CheckCircle2
@@ -381,12 +398,12 @@ export function LeadsTable() {
                 ) : null}
             </div>
 
-            {status.notice ? (
+            {notice ? (
                 <div
                     role="alert"
                     className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive"
                 >
-                    {status.notice}
+                    {notice}
                 </div>
             ) : null}
 
@@ -422,7 +439,7 @@ export function LeadsTable() {
                     rows={visibleLeads}
                     rowKey={(lead) => lead.id}
                     onRowClick={(lead) =>
-                        router.push(`/dashboard/erp/crm/leads/${lead.id}`)
+                        router.push(`/erp/crm/leads/${lead.id}`)
                     }
                     footer={
                         <Pagination
@@ -439,8 +456,10 @@ export function LeadsTable() {
                 open={createOpen}
                 onOpenChange={setCreateOpen}
                 onCreated={() => {
+                    // Invalidate BEFORE the offset reset: the key change
+                    // triggers the reload, and it must see the stale mark.
+                    invalidateResources("crm.leads");
                     setOffset(0);
-                    void load();
                 }}
             />
 
@@ -502,9 +521,9 @@ export function LeadsTable() {
                             disabled={pendingId !== null}
                         >
                             {pendingId !== null ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <XCircle
@@ -602,9 +621,9 @@ function QualifyForm({
                 </Button>
                 <Button type="submit" form="qualify-form" disabled={busy}>
                     {busy ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                     ) : null}
                     Qualify

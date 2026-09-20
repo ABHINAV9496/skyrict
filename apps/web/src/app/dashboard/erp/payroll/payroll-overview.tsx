@@ -146,7 +146,7 @@ export function PayrollOverview() {
                     label: capitalize(runStatus),
                     value: runsByStatus[runStatus],
                     colorClass: STATUS_BAR[runStatus],
-                    href: `/dashboard/erp/payroll/runs?status=${runStatus}`,
+                    href: `/erp/payroll/runs?status=${runStatus}`,
                 }),
             );
 
@@ -159,7 +159,7 @@ export function PayrollOverview() {
                     meta: `${formatDate(run.periodStart)} – ${formatDate(run.periodEnd)}`,
                     status: run.status,
                     time: formatDateTime(run.createdAt),
-                    href: `/dashboard/erp/payroll/runs/${run.id}`,
+                    href: `/erp/payroll/runs/${run.id}`,
                 }));
 
             setStatus({
@@ -175,7 +175,7 @@ export function PayrollOverview() {
                         ? `${latestRun.runCode} · ${formatDate(latestRun.periodStart)} – ${formatDate(latestRun.periodEnd)}`
                         : "No runs yet",
                     latestHref: latestRun
-                        ? `/dashboard/erp/payroll/runs/${latestRun.id}`
+                        ? `/erp/payroll/runs/${latestRun.id}`
                         : undefined,
                     breakdown,
                     breakdownTotal: STATUS_ORDER.reduce(
@@ -249,21 +249,21 @@ export function PayrollOverview() {
                     label="Payroll runs"
                     value={data.runs}
                     hint="Created in total"
-                    href="/dashboard/erp/payroll/runs"
+                    href="/erp/payroll/runs"
                 />
                 <StatCard
                     icon={PenLine}
                     label="Draft runs"
                     value={data.draft}
                     hint="Awaiting computation"
-                    href="/dashboard/erp/payroll/runs?status=draft"
+                    href="/erp/payroll/runs?status=draft"
                 />
                 <StatCard
                     icon={BadgeCheck}
                     label="Paid runs"
                     value={data.paid}
                     hint="Completed"
-                    href="/dashboard/erp/payroll/runs?status=paid"
+                    href="/erp/payroll/runs?status=paid"
                 />
                 <StatCard
                     icon={Wallet}

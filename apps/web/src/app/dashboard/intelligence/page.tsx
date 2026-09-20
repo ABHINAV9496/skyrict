@@ -25,7 +25,7 @@ function Suggestions() {
                     type="button"
                     onClick={() =>
                         router.push(
-                            `/dashboard/intelligence/results?q=${encodeURIComponent(suggestion)}`,
+                            `/intelligence/results?q=${encodeURIComponent(suggestion)}`,
                         )
                     }
                     className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
@@ -67,7 +67,7 @@ export default function IntelligencePage() {
                     <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         See the{" "}
                         <Link
-                            href="/dashboard/intelligence/trending"
+                            href="/intelligence/trending"
                             className="font-display font-bold text-foreground underline underline-offset-4 transition-colors hover:text-primary"
                         >
                             trending now

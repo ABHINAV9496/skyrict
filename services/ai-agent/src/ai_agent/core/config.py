@@ -624,6 +624,52 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Chat attachment storage (SKY-60 attachment durability) ---
+    ATTACHMENT_STORAGE_BACKEND: str = Field(
+        default="local",
+        description=(
+            "blob storage backend for conversation chat attachments: 'local' "
+            "(dev/test default, files under ATTACHMENT_STORAGE_LOCAL_DIR) or "
+            "'s3' (S3-compatible bucket). Mirrors the documents/avatar storage "
+            "split in the core and identity services."
+        ),
+    )
+    ATTACHMENT_STORAGE_LOCAL_DIR: str = Field(
+        default="storage/chat-attachments",
+        description=(
+            "filesystem root for the local attachment storage backend; "
+            "resolved relative to the ai-agent working directory in dev"
+        ),
+    )
+    ATTACHMENT_S3_BUCKET: str = Field(
+        default="",
+        description="S3 bucket for chat attachments when ATTACHMENT_STORAGE_BACKEND=s3 (required)",
+    )
+    ATTACHMENT_S3_PREFIX: str = Field(
+        default="chat-attachments",
+        description="object-key prefix under which tenant attachment keys are stored",
+    )
+    ATTACHMENT_S3_REGION: str = Field(
+        default="us-east-1",
+        description="region for the S3-compatible bucket (endpoint_url overrides in dev)",
+    )
+    ATTACHMENT_S3_ENDPOINT_URL: str = Field(
+        default="",
+        description=(
+            "optional S3-compatible endpoint (e.g. http://localhost:9000 for "
+            "MinIO in dev); empty means the default AWS region endpoint"
+        ),
+    )
+    ATTACHMENT_MAX_BYTES: int = Field(
+        default=25_000_000,
+        gt=0,
+        description=(
+            "per-file size cap for decoded chat attachments (bytes). The "
+            "client streams the same file to the LLM, so oversized uploads are "
+            "rejected before they reach extraction or persistence."
+        ),
+    )
+
     # --- Derived (loaded from files at validation time) ---
     jwt_public_key: str = ""
 

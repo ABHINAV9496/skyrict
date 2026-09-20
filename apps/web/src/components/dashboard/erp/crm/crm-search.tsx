@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowRight,
     ContactRound,
-    LoaderCircle,
     Search,
     SearchX,
     TrendingUp,
@@ -57,13 +57,13 @@ const TYPE_OPTIONS: { value: SearchType; label: string }[] = [
 function hitDestination(hit: SearchHit): string {
     switch (hit.entityType) {
         case "lead":
-            return `/dashboard/erp/crm/leads/${hit.entityId}`;
+            return `/erp/crm/leads/${hit.entityId}`;
         case "opportunity":
-            return `/dashboard/erp/crm/opportunities/${hit.entityId}`;
+            return `/erp/crm/opportunities/${hit.entityId}`;
         case "customer":
-            return `/dashboard/erp/crm/customers/${hit.entityId}`;
+            return `/erp/crm/customers/${hit.entityId}`;
         case "contact":
-            return "/dashboard/erp/crm/contacts";
+            return "/erp/crm/contacts";
     }
 }
 
@@ -172,9 +172,9 @@ export function CrmSearch() {
 
             {status.state === "loading" ? (
                 <div className="flex items-center justify-center py-16 text-muted-foreground">
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-5 animate-spin"
+                        className="size-5"
                     />
                 </div>
             ) : null}

@@ -441,6 +441,49 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Chat "thinking" sheen
+ *
+ * Streaming indicator for agent replies: plain "Thinking…" text whose glyphs
+ * carry their own animated highlight - a purple band (the agents theme's
+ * --primary) that sweeps left → right INSIDE the letters (background-clip:
+ * text), not an overlay on top of the text. Colors are color-mixed off the
+ * current palette so it reads in every theme.
+ * ------------------------------------------------------------------------- */
+
+@keyframes chat-thinking-sweep {
+  from {
+    background-position: -200% center;
+  }
+  to {
+    background-position: 200% center;
+  }
+}
+
+.chat-thinking {
+  display: inline-block;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--primary) 20%, transparent) 0%,
+    color-mix(in srgb, var(--primary) 95%, var(--muted-foreground)) 50%,
+    color-mix(in srgb, var(--primary) 20%, transparent) 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: chat-thinking-sweep 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking {
+    animation: none;
+    color: color-mix(in srgb, var(--primary) 65%, var(--muted-foreground));
+    -webkit-text-fill-color: color-mix(in srgb, var(--primary) 65%, var(--muted-foreground));
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Themed scrollbar
  *
  * A thin scrollbar drawn from the sidebar's own tokens so it reads as part of

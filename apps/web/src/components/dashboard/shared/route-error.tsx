@@ -23,7 +23,7 @@ interface RouteErrorProps {
 export function RouteError({
     error,
     reset,
-    backHref = "/dashboard",
+    backHref = "/",
 }: RouteErrorProps) {
     useEffect(() => {
         Sentry.captureException(error);

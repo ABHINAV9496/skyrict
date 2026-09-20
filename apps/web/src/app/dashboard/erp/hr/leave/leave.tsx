@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, LoaderCircle, X } from "lucide-react";
+import { CalendarDays, Check, X } from "lucide-react";
 
 import { LogLeaveDialog } from "@/components/dashboard/erp/hr/log-leave-dialog";
 import { LeavePolicyCard } from "@/components/dashboard/erp/hr/leave-policy-card";
@@ -358,9 +359,9 @@ export function LeaveClient({
                                               className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-emerald-500/15 hover:text-emerald-600 disabled:opacity-50"
                                           >
                                               {busyId === request.id ? (
-                                                  <LoaderCircle
+                                                  <Spinner
                                                       aria-hidden="true"
-                                                      className="size-3.5 animate-spin"
+                                                      className="size-3.5"
                                                   />
                                               ) : (
                                                   <Check
@@ -386,9 +387,9 @@ export function LeaveClient({
                                               className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 disabled:opacity-50"
                                           >
                                               {busyId === request.id ? (
-                                                  <LoaderCircle
+                                                  <Spinner
                                                       aria-hidden="true"
-                                                      className="size-3.5 animate-spin"
+                                                      className="size-3.5"
                                                   />
                                               ) : (
                                                   <X
@@ -414,9 +415,9 @@ export function LeaveClient({
                                               className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                                           >
                                               {busyId === request.id ? (
-                                                  <LoaderCircle
+                                                  <Spinner
                                                       aria-hidden="true"
-                                                      className="size-3.5 animate-spin"
+                                                      className="size-3.5"
                                                   />
                                               ) : (
                                                   <X
@@ -652,9 +653,9 @@ export function LeaveClient({
                                     onClick={() => void onAccrue()}
                                 >
                                     {accruing ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-4 animate-spin"
+                                            className="size-4"
                                         />
                                     ) : null}
                                     Accrue
@@ -777,9 +778,9 @@ export function LeaveClient({
                             </Button>
                             <Button type="submit" disabled={adjustSaving}>
                                 {adjustSaving ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Apply adjustment

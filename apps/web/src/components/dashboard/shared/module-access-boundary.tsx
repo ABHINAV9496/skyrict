@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
-import { ArrowLeft, LoaderCircle, Lock, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Lock, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
@@ -16,7 +17,7 @@ const MODULE_LABEL: Record<ModuleKey, string> = {
 export function ModuleLoading() {
     return (
         <div className="flex min-h-dvh items-center justify-center bg-background">
-            <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+            <Spinner className="size-5 text-muted-foreground" />
         </div>
     );
 }
@@ -49,9 +50,9 @@ function ModuleNotice({
                 </p>
                 <div className="mt-6">
                     {action ?? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="mx-auto size-5 animate-spin text-primary"
+                            className="mx-auto size-5 text-primary"
                         />
                     )}
                 </div>
@@ -68,7 +69,7 @@ export function ModuleAccessDenied({ module }: { module: ModuleKey }) {
             icon={Lock}
             action={
                 <Button asChild>
-                    <Link href="/dashboard">
+                    <Link href="/">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to overview
                     </Link>
@@ -97,7 +98,7 @@ export function ModulePermissionDenied({ permission }: { permission: string }) {
             icon={Lock}
             action={
                 <Button asChild>
-                    <Link href="/dashboard/erp">
+                    <Link href="/erp">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to overview
                     </Link>
@@ -115,7 +116,7 @@ export function ModuleAccessError({ module }: { module: ModuleKey }) {
             icon={ShieldAlert}
             action={
                 <Button asChild variant="outline">
-                    <Link href="/dashboard">Back to overview</Link>
+                    <Link href="/">Back to overview</Link>
                 </Button>
             }
         />

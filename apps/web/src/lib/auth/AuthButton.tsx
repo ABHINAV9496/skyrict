@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 import { Button } from "@/components/ui/button";
 
@@ -17,9 +17,9 @@ function AuthButton({
     return (
         <Button disabled={disabled || loading} {...props}>
             {loading ? (
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-4 animate-spin"
+                    className="size-4"
                 />
             ) : null}
             {children}

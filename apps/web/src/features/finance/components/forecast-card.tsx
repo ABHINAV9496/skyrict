@@ -1,8 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Info, Loader2, RefreshCw, TrendingUp } from "lucide-react";
+import { Info, RefreshCw, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
@@ -564,9 +565,9 @@ function DealHealthStrip({
                     aria-label="Check deal health now"
                 >
                     {checking ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1 size-3 animate-spin"
+                            className="mr-1 size-3"
                         />
                     ) : (
                         <RefreshCw aria-hidden="true" className="mr-1 size-3" />
@@ -717,9 +718,9 @@ export function RevenueForecastCard({ canRefresh }: { canRefresh: boolean }) {
                             aria-label="Refresh revenue forecast"
                         >
                             {refreshing ? (
-                                <Loader2
+                                <Spinner
                                     aria-hidden="true"
-                                    className="mr-1.5 size-3.5 animate-spin"
+                                    className="mr-1.5 size-3.5"
                                 />
                             ) : (
                                 <RefreshCw

@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { Check, LoaderCircle } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -65,9 +66,9 @@ function ProvisioningScreen({ onComplete }: { onComplete: () => void }) {
                             className="size-6 text-primary"
                         />
                     ) : (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-6 animate-spin text-primary"
+                            className="size-6 text-primary"
                         />
                     )}
                 </div>
@@ -115,9 +116,9 @@ function ProvisioningScreen({ onComplete }: { onComplete: () => void }) {
                             ) : (
                                 <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-card">
                                     {active ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-3 animate-spin text-primary"
+                                            className="size-3 text-primary"
                                         />
                                     ) : (
                                         <span className="size-1.5 rounded-full bg-muted-foreground/40" />

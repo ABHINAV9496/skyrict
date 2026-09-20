@@ -36,7 +36,7 @@ const modules: {
     tour: string;
 }[] = [
     {
-        href: "/dashboard/agents",
+        href: "/agents",
         accessKey: "agents",
         title: "AI Agents",
         oneLine: "Delegate tasks to your AI team.",
@@ -49,7 +49,7 @@ const modules: {
         tour: "card-agents",
     },
     {
-        href: "/dashboard/erp",
+        href: "/erp",
         accessKey: "erp",
         title: "Business Operations",
         oneLine: "Every department, one source of truth.",
@@ -62,7 +62,7 @@ const modules: {
         tour: "card-erp",
     },
     {
-        href: "/dashboard/intelligence",
+        href: "/intelligence",
         accessKey: "intelligence",
         title: "Market Intelligence",
         oneLine: "Competitors, trends, and niches.",
@@ -176,7 +176,7 @@ export default function OverviewClient() {
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
                             {canInvite ? (
                                 <Button asChild>
-                                    <Link href="/dashboard/invite">
+                                    <Link href="/dashboard/invite" prefetch={false}>
                                         <UserPlus
                                             aria-hidden="true"
                                             className="size-4"
@@ -187,7 +187,7 @@ export default function OverviewClient() {
                             ) : null}
                             {canManageRoles ? (
                                 <Button asChild variant="outline">
-                                    <Link href="/dashboard/roles">
+                                    <Link href="/roles" prefetch={false}>
                                         <ShieldCheck
                                             aria-hidden="true"
                                             className="size-4"
@@ -232,6 +232,7 @@ export default function OverviewClient() {
                             <Link
                                 key={module.href}
                                 href={module.href}
+                                prefetch={false}
                                 data-tour={module.tour}
                                 style={{
                                     animationDelay: `${120 + index * 80}ms`,

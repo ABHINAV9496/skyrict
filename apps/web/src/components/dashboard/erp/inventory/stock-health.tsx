@@ -1,8 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
@@ -103,7 +103,7 @@ export function StockHealthOverview() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Spinner className="size-6 text-muted-foreground" />
             </div>
         );
     }

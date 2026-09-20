@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Check, Inbox, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, Inbox, RefreshCw, X } from "lucide-react";
 
 import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { RequirePermission } from "@/components/dashboard/shared/require-permission";
@@ -131,9 +132,9 @@ function CoachingSuggestionCard({
                         }
                     >
                         {busy ? (
-                            <Loader2
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-3.5 animate-spin"
+                                className="size-3.5"
                             />
                         ) : (
                             <Check aria-hidden="true" className="size-3.5" />

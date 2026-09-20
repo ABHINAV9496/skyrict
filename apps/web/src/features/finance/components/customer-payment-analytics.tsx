@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, RefreshCw } from "lucide-react";
 
@@ -90,7 +91,7 @@ export function CustomerPaymentAnalytics({
     if (loading) {
         return (
             <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-6 py-12 text-sm text-muted-foreground">
-                <RefreshCw aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner aria-hidden="true" className="size-4" />
                 Loading payment analytics…
             </div>
         );

@@ -165,10 +165,10 @@ describe("DASHBOARD_KPI_DEFS", () => {
   it("deep links include the exact params the card ran with", () => {
     const cash = DASHBOARD_KPI_DEFS.find((def) => def.id === "cash_received");
     expect(kpiHref(cash!)).toBe(
-      `/dashboard/erp/reports/cash_received?from_date=${firstDayOfMonthIso()}&to_date=${todayIso()}`,
+      `/erp/reports/cash_received?from_date=${firstDayOfMonthIso()}&to_date=${todayIso()}`,
     );
 
     const pipeline = DASHBOARD_KPI_DEFS.find((def) => def.id === "pipeline_value");
-    expect(kpiHref(pipeline!)).toBe("/dashboard/erp/reports/pipeline_value_by_stage");
+    expect(kpiHref(pipeline!)).toBe("/erp/reports/pipeline_value_by_stage");
   });
 });

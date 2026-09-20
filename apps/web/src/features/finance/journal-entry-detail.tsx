@@ -1,8 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, LoaderCircle, NotebookPen } from "lucide-react";
+import { ArrowLeft, NotebookPen } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -178,7 +179,7 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
     return (
         <div className="space-y-6">
             <Link
-                href="/dashboard/erp/finance/journal-entries"
+                href="/erp/finance/journal-entries"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
                 <ArrowLeft aria-hidden="true" className="size-4" />
@@ -203,9 +204,9 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
                             onClick={() => void runAction("post")}
                         >
                             {status.busy === "post" ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Post
@@ -219,9 +220,9 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
                             onClick={() => void runAction("void")}
                         >
                             {status.busy === "void" ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Void
@@ -235,9 +236,9 @@ export function JournalEntryDetail({ entryId }: { entryId: string }) {
                             onClick={() => void runAction("reverse")}
                         >
                             {status.busy === "reverse" ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Reverse

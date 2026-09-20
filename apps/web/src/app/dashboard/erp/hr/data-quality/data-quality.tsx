@@ -526,7 +526,7 @@ export function DataQualityClient() {
               total_pages: totalPages,
             }}
             onPageChange={setPage}
-            onRowClick={(row) => router.push(`/dashboard/erp/hr/employees/${row.employeeId}`)}
+            onRowClick={(row) => router.push(`/erp/hr/employees/${row.employeeId}`)}
           />
         )}
       </section>

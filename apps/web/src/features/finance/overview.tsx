@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
     ArrowRight,
-    Loader2,
     MessageSquare,
     NotebookPen,
     Package,
@@ -138,7 +138,7 @@ const entryColumns: FinanceColumn<JournalEntry>[] = [
         align: "right",
         render: (entry) => (
             <Link
-                href={`/dashboard/erp/finance/journal-entries/${entry.id}`}
+                href={`/erp/finance/journal-entries/${entry.id}`}
                 className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
                 View <ArrowRight aria-hidden="true" className="size-3.5" />
@@ -164,7 +164,7 @@ const invoiceColumns: FinanceColumn<Invoice>[] = [
         align: "right",
         render: (invoice) => (
             <Link
-                href={`/dashboard/erp/finance/invoices/${invoice.id}`}
+                href={`/erp/finance/invoices/${invoice.id}`}
                 className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
                 View <ArrowRight aria-hidden="true" className="size-3.5" />
@@ -191,7 +191,7 @@ export function FinanceOverview() {
         setChatError(null);
         try {
             const conversation = await createConversation({});
-            router.push(`/dashboard/agents/c/${conversation.id}`);
+            router.push(`/agents/c/${conversation.id}`);
         } catch (error) {
             setChatError(
                 error instanceof ApiError
@@ -377,9 +377,9 @@ export function FinanceOverview() {
                         disabled={startingChat}
                     >
                         {startingChat ? (
-                            <Loader2
+                            <Spinner
                                 aria-hidden="true"
-                                className="mr-1.5 size-4 animate-spin"
+                                className="mr-1.5 size-4"
                             />
                         ) : (
                             <MessageSquare
@@ -443,25 +443,25 @@ export function FinanceOverview() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {[
                         {
-                            href: "/dashboard/erp/finance/controls#budgets",
+                            href: "/erp/finance/controls#budgets",
                             label: "Budgets",
                             description: "Plan spending and track variance",
                             icon: NotebookPen,
                         },
                         {
-                            href: "/dashboard/erp/finance/accounts#assets",
+                            href: "/erp/finance/accounts#assets",
                             label: "Fixed assets",
                             description: "Register assets and run depreciation",
                             icon: Package,
                         },
                         {
-                            href: "/dashboard/erp/finance/controls#expenses",
+                            href: "/erp/finance/controls#expenses",
                             label: "Expense control",
                             description: "Policies, claims, violations",
                             icon: ReceiptText,
                         },
                         {
-                            href: "/dashboard/erp/finance/controls#compliance",
+                            href: "/erp/finance/controls#compliance",
                             label: "Compliance",
                             description: "Obligation due dates and reminders",
                             icon: ShieldCheck,
@@ -573,7 +573,7 @@ export function FinanceOverview() {
                         Recent journal entries
                     </h2>
                     <Link
-                        href="/dashboard/erp/finance/journal-entries"
+                        href="/erp/finance/journal-entries"
                         className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                     >
                         All entries{" "}
@@ -594,7 +594,7 @@ export function FinanceOverview() {
                         Recent invoices
                     </h2>
                     <Link
-                        href="/dashboard/erp/finance/invoices"
+                        href="/erp/finance/invoices"
                         className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                     >
                         All invoices{" "}

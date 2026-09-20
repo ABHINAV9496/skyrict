@@ -9,5 +9,5 @@ export default function ErpError({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
-    return <RouteError error={error} reset={reset} backHref="/dashboard/erp" />;
+    return <RouteError error={error} reset={reset} backHref="/erp" />;
 }

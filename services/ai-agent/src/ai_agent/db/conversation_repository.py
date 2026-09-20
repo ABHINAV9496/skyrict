@@ -194,8 +194,14 @@ class ConversationRepository:
         role: str,
         content: str,
         agent_name: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Append a message to a conversation and touch updated_at."""
+        """Append a message to a conversation and touch updated_at.
+
+        ``attachments`` is the list of persisted attachment metadata
+        ``{id, name, type, size, storage_key}`` (blobs already stored in the
+        attachment storage backend by the API layer).
+        """
         msg = AiConversationMessage(
             tenant_id=tenant_id,
             id=uuid.uuid4(),
@@ -203,6 +209,7 @@ class ConversationRepository:
             role=role,
             content=content,
             agent_name=agent_name,
+            attachments=attachments or [],
         )
         self._session.add(msg)
 
@@ -254,6 +261,73 @@ class ConversationRepository:
             return [_message_to_dict(row) for row in reversed(result.scalars().all())]
         result = await self._session.execute(stmt)
         return [_message_to_dict(row) for row in result.scalars().all()]
+
+    async def get_attachment_meta(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        attachment_id: str,
+    ) -> dict[str, Any] | None:
+        """Resolve one persisted attachment's metadata within a conversation.
+
+        Confirms the conversation exists first (403/404 semantics differ by
+        caller), then scans the conversation's messages for an attachment
+        whose id matches.  Returns the full stored metadata
+        (``{id, name, type, size, storage_key, blob_key}``) or None when the
+        attachment is not part of this conversation.
+        """
+        conversation = await self.get_conversation(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+        )
+        if conversation is None:
+            return None
+        stmt = select(AiConversationMessage).where(
+            AiConversationMessage.tenant_id == tenant_id,
+            AiConversationMessage.conversation_id == conversation_id,
+        )
+        result = await self._session.execute(stmt)
+        for row in result.scalars().all():
+            for attachment in row.attachments or []:
+                if attachment.get("id") == attachment_id:
+                    # The full object key is composed here from DB row values
+                    # only: the caller passes it verbatim to storage, so no
+                    # request-derived identifier can influence object keys.
+                    return {
+                        **dict(attachment),
+                        "blob_key": (
+                            f"{row.tenant_id}/{row.conversation_id}/{attachment.get('storage_key')}"
+                        ),
+                    }
+        return None
+
+    async def collect_attachment_storage_keys(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> list[str]:
+        """Return the full object key of every attachment blob across the
+        conversation's messages, for cleanup when the conversation is
+        deleted.
+
+        Keys are composed from DB row values only (``{tenant_id}/
+        {conversation_id}/{storage_key}``), so no request-derived identifier
+        can influence them.  ``[]`` when the conversation has no messages.
+        """
+        stmt = select(AiConversationMessage).where(
+            AiConversationMessage.tenant_id == tenant_id,
+            AiConversationMessage.conversation_id == conversation_id,
+        )
+        result = await self._session.execute(stmt)
+        keys: list[str] = []
+        for row in result.scalars().all():
+            for attachment in row.attachments or []:
+                storage_key = attachment.get("storage_key")
+                if storage_key:
+                    keys.append(f"{row.tenant_id}/{row.conversation_id}/{storage_key}")
+        return keys
 
     async def auto_title(
         self,
@@ -389,11 +463,23 @@ def _conversation_to_dict(row: AiConversation) -> dict[str, Any]:
 
 
 def _message_to_dict(row: AiConversationMessage) -> dict[str, Any]:
+    # Public attachment metadata.  The internal storage_key object key never
+    # leaves the API - the download endpoint resolves it server-side only.
+    attachments = [
+        {
+            "id": a.get("id"),
+            "name": a.get("name"),
+            "type": a.get("type"),
+            "size": a.get("size"),
+        }
+        for a in (row.attachments or [])
+    ]
     return {
         "id": str(row.id),
         "conversation_id": str(row.conversation_id),
         "role": row.role,
         "content": row.content,
         "agent_name": row.agent_name,
+        "attachments": attachments,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }

@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { LoaderCircle, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -246,9 +247,9 @@ export function LeadFormDialog({
                         disabled={!canSubmit}
                     >
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         Create lead

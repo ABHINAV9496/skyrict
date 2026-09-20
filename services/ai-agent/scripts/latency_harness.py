@@ -79,7 +79,7 @@ _ANONYMOUS_ANSWER = (
     "questions always reflect the latest state."
 )
 
-_INVENTORY_QUERY = "What stock is below reorder point?"
+_INVENTORY_QUERY = "How are product levels trending this week?"
 _SUPERVISOR_QUERY = "tell me a joke about accounting"
 
 

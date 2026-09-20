@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
     CalendarPlus,
     CheckCircle2,
     ClipboardList,
-    LoaderCircle,
     StickyNote,
     Trash2,
 } from "lucide-react";
@@ -149,9 +149,9 @@ export function NotesCard({ entityType, entityId, canWrite }: AnchorCardProps) {
                         onClick={onAdd}
                     >
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         Add note

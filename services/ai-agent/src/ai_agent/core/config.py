@@ -137,6 +137,19 @@ class Settings(BaseSettings):
         description="per-call timeout for core reporting reads",
     )
 
+    # --- Dashboard layout suggestion (BUG-AI-002) ---
+    # Deployment gate for the AI dashboard suggestion endpoint. OFF by default:
+    # until an operator flips it on, /ai/dashboards/suggest answers 501 so the
+    # core proxy and frontend can fail closed instead of getting silent empties.
+    DASHBOARD_SUGGEST_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "whether the AI dashboard layout suggestion endpoint is live. "
+            "False answers 501 (not implemented) even when providers are "
+            "configured. Set AI_DASHBOARD_SUGGEST_ENABLED=true to enable."
+        ),
+    )
+
     # --- Provider configuration (ALL optional - see module docstring) ---
     PROVIDER: str | None = Field(
         default=None,

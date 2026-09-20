@@ -62,6 +62,7 @@ services:
       IDENTITY_EMAIL_SMTP_HOST: mailpit
       IDENTITY_EMAIL_SMTP_PORT: "1025"
       # Security-alert CTAs auto-derive as http://{slug}.localhost:3000 in dev.
+      IDENTITY_BILLING_STRIPE_PRICE_IDS: "{\"professional:month\":\"price_1UH7QFFJwFjKQ5mo12M8yBK9\",\"professional:year\":\"price_1UH7QGFJwFjKQ5moErrD9OHL\",\"business:month\":\"price_1UH7QGFJwFjKQ5moLV3QfRYo\",\"business:year\":\"price_1UH7QGFJwFjKQ5moaCRwGyG8\",\"professional:month:inr\":\"price_1UH7QbFJwFjKQ5moI5G7JWr1\",\"professional:year:inr\":\"price_1UH7QcFJwFjKQ5moCgeLRUAE\",\"business:month:inr\":\"price_1UH7QcFJwFjKQ5modSJWlALr\",\"business:year:inr\":\"price_1UH7QcFJwFjKQ5mo13LWK5tS\"}"
     volumes:
       - ../../services/identity/src:/app/services/identity/src
       - ../../services/identity/alembic:/app/services/identity/alembic
@@ -173,11 +174,17 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
-      # --- Dev LLM chain (in-container contract) ---
-      # Provider/keys come from services/ai-agent/.env (env_file). The local
-      # ollama base URL (http://skyrict-ollama:11434) resolves on the compose
-      # network without a host alias, so no override is needed here. No
-      # fallback configured.
+      # --- Dev LLM chain (in-container contract, see test_compose_llm_chain_contract) ---
+      # Provider/model/keys come from services/ai-agent/.env (env_file). The
+      # host-oriented AI_BASE_URL there (http://localhost:20128/v1) resolves to
+      # THIS container's own loopback and dies with connection refused, killing
+      # every module agent (the supervisor only survives via its keyword
+      # fallback / canned-text paths). host.docker.internal reaches the Windows
+      # host from Docker Desktop containers - same correction pattern as
+      # INVENTORY_SERVICE_URL below.
+      AI_BASE_URL: http://host.docker.internal:20128/v1
+      # The local ollama base URL (http://skyrict-ollama:11434) resolves on the
+      # compose network without a host alias, so no override is needed here.
       # Core data plane for the inventory AI engines - the core container
       # serves on port 8001 internally.
       INVENTORY_SERVICE_URL: http://skyrict-core:8001
@@ -189,10 +196,17 @@ services:
       # container mounts the same keys at /app/services/ai-agent/.dev/keys so
       # the path must be container-relative here.
       AI_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
+      # Chat attachment durability: store blobs on a named volume (survives
+      # container recreation) under the service directory. S3 deployments
+      # override AI_ATTACHMENT_STORAGE_BACKEND=s3 + bucket vars in their
+      # environment instead.
+      AI_ATTACHMENT_STORAGE_BACKEND: local
+      AI_ATTACHMENT_STORAGE_LOCAL_DIR: /app/services/ai-agent/storage/chat-attachments
     volumes:
       - ../../services/ai-agent/src:/app/services/ai-agent/src
       - ../../services/ai-agent/alembic:/app/services/ai-agent/alembic
       - ../../libs/skyrict-common/src:/app/libs/skyrict-common/src
+      - ai-agent-attachments:/app/services/ai-agent/storage/chat-attachments
       # JWT RSA public key (generate with `uv run python -m skyrict_testing.generate_keys`).
       # The dev CMD runs from /app/services/ai-agent, so the relative key path
       # in services/ai-agent/.env resolves to /app/services/ai-agent/.dev/keys.
@@ -272,3 +286,6 @@ services:
 volumes:
   # Persist ollama model downloads across container restarts / rebuilds.
   ollama-data:
+  # Persist chat attachment blobs (local storage backend) across container
+  # recreation - attachment durability for conversation messages (SKY-60).
+  ai-agent-attachments:

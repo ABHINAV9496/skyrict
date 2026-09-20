@@ -102,9 +102,7 @@ async def suggest_layout(
 
     return SuggestionResponse(
         status=result["status"],
-        suggested_layout=[
-            WidgetLayoutItem(**item) for item in result["suggested_layout"]
-        ],
+        suggested_layout=[WidgetLayoutItem(**item) for item in result["suggested_layout"]],
         reasoning=result["reasoning"],
         confidence=result["confidence"],
     )

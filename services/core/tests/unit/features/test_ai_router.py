@@ -974,6 +974,7 @@ class TestCrmAnomalyPermissionGate:
         self._grant(ERP_AI_INVOKE, ERP_CRM_WRITE)
         assert self._dismiss().status_code == 200
 
+
 class TestDashboardSuggestForwarding:
     """BUG-AI-002 proxy: POST /ai/dashboards/suggest must reach ai-agent unchanged."""
 
@@ -983,14 +984,17 @@ class TestDashboardSuggestForwarding:
 
         response = client.post(
             "/api/v1/ai/dashboards/suggest",
-json={"current_layout": [{"id": "ai_digest", "order": 0, "cols": 4, "visible": True}]},
+            json={"current_layout": [{"id": "ai_digest", "order": 0, "cols": 4, "visible": True}]},
             headers={"authorization": "Bearer tok"},
         )
 
         assert response.status_code == 200
         assert len(seen) == 1
         assert seen[0].url.path == "/api/v1/ai/dashboards/suggest"
-        assert seen[0].read() == b'{"current_layout":[{"id":"ai_digest","order":0,"cols":4,"visible":true}]}'
+        assert (
+            seen[0].read()
+            == b'{"current_layout":[{"id":"ai_digest","order":0,"cols":4,"visible":true}]}'
+        )
 
 
 class TestDashboardSuggestPermissionGate:

@@ -606,7 +606,9 @@ class Settings(BaseSettings):
         default=10, ge=1, description="follow-up apply/dismiss actions per minute per user"
     )
     RATE_LIMIT_DASHBOARD_SUGGEST_PER_MIN: int = Field(
-        default=10, ge=1, description="dashboard layout suggestions per minute per user (BUG-AI-002)"
+        default=10,
+        ge=1,
+        description="dashboard layout suggestions per minute per user (BUG-AI-002)",
     )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"

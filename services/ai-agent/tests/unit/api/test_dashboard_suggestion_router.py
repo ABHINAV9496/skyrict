@@ -85,9 +85,7 @@ class TestSuggestLayout:
         assert response.status_code == 501
         assert "not enabled" in response.json()["detail"]
 
-    def test_flag_off_never_enforces_rate_limit(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_flag_off_never_enforces_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         enforce = AsyncMock()
         monkeypatch.setattr(dashboard_router.limiter, "enforce", enforce)
         client = _app(monkeypatch, enabled=False, gateway=_FakeGateway(_SUMMARY))
@@ -128,9 +126,7 @@ class TestSuggestLayout:
         ]
 
     def test_insufficient_data_maps_to_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        gateway = _FakeGateway(
-            EventSummary(items=[], suggestion_ready=False)
-        )
+        gateway = _FakeGateway(EventSummary(items=[], suggestion_ready=False))
         client = _app(monkeypatch, enabled=True, gateway=gateway)
 
         payload = {

@@ -128,9 +128,7 @@ class DashboardService:
         duplicating the number anywhere.
         """
         items = await self._repo.get_widget_event_summary(tenant_id=tenant_id)
-        suggestion_ready = any(
-            item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in items
-        )
+        suggestion_ready = any(item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in items)
         return {
             "items": items,
             "suggestion_ready": suggestion_ready,

@@ -41,9 +41,7 @@ def mock_gateway() -> AsyncMock:
 
 
 @pytest.fixture
-def service(
-    mock_llm_router: MagicMock, mock_gateway: AsyncMock
-) -> DashboardSuggestionService:
+def service(mock_llm_router: MagicMock, mock_gateway: AsyncMock) -> DashboardSuggestionService:
     return DashboardSuggestionService(llm_router=mock_llm_router, gateway=mock_gateway)
 
 

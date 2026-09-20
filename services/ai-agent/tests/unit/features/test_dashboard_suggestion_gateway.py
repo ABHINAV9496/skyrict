@@ -64,7 +64,10 @@ class TestGetEventSummary:
         async def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
-                json={"items": [{"widget_id": "ai_digest", "total_events": 3, "distinct_events": 1}], "suggestion_ready": False},
+                json={
+                    "items": [{"widget_id": "ai_digest", "total_events": 3, "distinct_events": 1}],
+                    "suggestion_ready": False,
+                },
             )
 
         gateway, _ = _make_gateway(handler)

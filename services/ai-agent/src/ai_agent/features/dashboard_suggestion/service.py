@@ -110,11 +110,13 @@ class DashboardSuggestionService:
     ) -> str:
         """Build the user prompt with layout + telemetry context."""
         layout_str = json.dumps(current_layout, indent=2)
-        events_str = "\n".join(
-            f"- {item.widget_id}: {item.total_events} events "
-            f"({item.distinct_events} distinct)"
-            for item in summary.items
-        ) or "No widget telemetry recorded yet."
+        events_str = (
+            "\n".join(
+                f"- {item.widget_id}: {item.total_events} events ({item.distinct_events} distinct)"
+                for item in summary.items
+            )
+            or "No widget telemetry recorded yet."
+        )
 
         return f"Current layout:\n{layout_str}\n\nWidget interaction events:\n{events_str}"
 

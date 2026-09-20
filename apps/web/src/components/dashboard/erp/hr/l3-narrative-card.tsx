@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import { Info, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 
@@ -185,10 +186,11 @@ export function L3NarrativeCard({
                     disabled={busy}
                     onClick={() => void handleRefresh()}
                 >
-                    <RefreshCw
-                        aria-hidden="true"
-                        className={cn("size-3.5", busy && "animate-spin")}
-                    />
+                    {busy ? (
+                        <Spinner aria-hidden="true" className="size-3.5" />
+                    ) : (
+                        <RefreshCw aria-hidden="true" className="size-3.5" />
+                    )}
                     {busy ? "Recomputed" : "Refresh"}
                 </Button>
             </div>

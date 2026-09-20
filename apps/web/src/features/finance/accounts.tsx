@@ -1,10 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BookOpen, ChevronRight, LoaderCircle, Plus } from "lucide-react";
+import { BookOpen, ChevronRight, Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -231,9 +232,9 @@ function CreateAccountDialog({ onCreated }: { onCreated: () => void }) {
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />
@@ -631,9 +632,9 @@ function FinanceAccounts() {
                                                                       >
                                                                           {status.busy ===
                                                                           account.id ? (
-                                                                              <LoaderCircle
+                                                                              <Spinner
                                                                                   aria-hidden="true"
-                                                                                  className="size-3.5 animate-spin"
+                                                                                  className="size-3.5"
                                                                               />
                                                                           ) : null}
                                                                           Deactivate

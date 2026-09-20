@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     ArrowLeft,
     CheckCircle2,
-    LoaderCircle,
     PackageCheck,
     ShoppingCart,
     XCircle,
@@ -232,7 +232,7 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
         <div className="space-y-4">
             <div>
                 <Button type="button" variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/erp/orders">
+                    <Link href="/erp/orders">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to orders
                     </Link>
@@ -354,9 +354,9 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
                                         }
                                     >
                                         {pendingAction === "confirm" ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-4 animate-spin"
+                                                className="size-4"
                                             />
                                         ) : (
                                             <CheckCircle2
@@ -377,9 +377,9 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
                                         }
                                     >
                                         {pendingAction === "fulfil" ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-4 animate-spin"
+                                                className="size-4"
                                             />
                                         ) : (
                                             <PackageCheck
@@ -401,9 +401,9 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
                                         }
                                     >
                                         {pendingAction === "cancel" ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-4 animate-spin"
+                                                className="size-4"
                                             />
                                         ) : (
                                             <XCircle
@@ -467,9 +467,9 @@ export function OrderDetail({ orderId }: OrderDetailProps) {
                                     disabled={pendingAction !== null}
                                 >
                                     {pendingAction !== null ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-4 animate-spin"
+                                            className="size-4"
                                         />
                                     ) : null}
                                     {confirmDialogCopy[confirmAction].button}

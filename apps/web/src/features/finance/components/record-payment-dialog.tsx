@@ -1,10 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CreditCard, FileText, LoaderCircle, Plus } from "lucide-react";
+import { CreditCard, FileText, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -276,9 +277,9 @@ export function RecordPaymentDialog({ onRecorded }: RecordPaymentDialogProps) {
                         </div>
                     ) : vendorRefLoading ? (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-3 animate-spin"
+                                className="size-3"
                             />
                             Extracting vendor ref…
                         </div>
@@ -303,9 +304,9 @@ export function RecordPaymentDialog({ onRecorded }: RecordPaymentDialogProps) {
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />

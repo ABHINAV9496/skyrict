@@ -1,10 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarDays, LoaderCircle, Lock, Plus } from "lucide-react";
+import { CalendarDays, Lock, Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -209,9 +210,9 @@ function CreateFiscalPeriodDialog({ onCreated }: { onCreated: () => void }) {
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />
@@ -376,9 +377,9 @@ export function FinanceFiscalPeriods() {
                     onClick={() => void onClose(period.id)}
                 >
                     {status.busy === period.id ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-3.5 animate-spin"
+                            className="size-3.5"
                         />
                     ) : null}
                     Close

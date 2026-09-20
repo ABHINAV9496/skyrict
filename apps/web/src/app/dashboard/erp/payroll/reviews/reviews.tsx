@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     BadgeCheck,
     CircleX,
     Download,
-    LoaderCircle,
     ReceiptText,
     Stamp,
 } from "lucide-react";
@@ -507,9 +507,9 @@ export function PayslipReviewsClient({ runId }: { runId?: string }) {
                             disabled={rejectSaving}
                         >
                             {rejectSaving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Reject payslip

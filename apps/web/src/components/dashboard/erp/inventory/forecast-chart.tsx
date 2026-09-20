@@ -1,7 +1,7 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,9 +154,9 @@ export function ForecastChart() {
                     disabled={!productId || status.state === "loading"}
                 >
                     {status.state === "loading" ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1.5 size-4 animate-spin"
+                            className="mr-1.5 size-4"
                         />
                     ) : null}
                     Forecast

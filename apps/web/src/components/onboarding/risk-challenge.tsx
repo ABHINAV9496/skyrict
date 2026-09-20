@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
+import { ShieldCheck, Sparkles } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { TurnstileWidget } from "@/components/onboarding/turnstile-widget";
@@ -130,9 +131,9 @@ function RiskChallenge({
                         I&apos;m not a robot
                     </span>
                     {state === "verifying" && (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="ml-auto size-4 animate-spin text-muted-foreground"
+                            className="ml-auto size-4 text-muted-foreground"
                         />
                     )}
                     {state === "verified" && (

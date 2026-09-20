@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     Download,
     FilePlus2,
     FileText,
-    RefreshCw,
     Sparkles,
     Trash2,
 } from "lucide-react";
@@ -192,7 +192,7 @@ export function DocumentDetail({ id }: { id: string }) {
         setDeleteError(null);
         try {
             await deleteDocument(status.document.id);
-            window.location.assign("/dashboard/erp/documents/list");
+            window.location.assign("/erp/documents/list");
         } catch (error) {
             const message =
                 error instanceof ApiError
@@ -249,7 +249,7 @@ export function DocumentDetail({ id }: { id: string }) {
                         disabled={downloading}
                     >
                         {downloading ? (
-                            <RefreshCw className="size-3.5 animate-spin" />
+                            <Spinner className="size-3.5" />
                         ) : (
                             <Download aria-hidden="true" className="size-3.5" />
                         )}

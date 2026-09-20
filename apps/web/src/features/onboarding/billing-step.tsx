@@ -1,12 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     ArrowLeft,
     CheckCircle2,
     CreditCard,
-    LoaderCircle,
 } from "lucide-react";
 
 import {
@@ -248,9 +248,9 @@ function BillingStep({
 
             {loadingPlans ? (
                 <div className="flex items-center justify-center py-10">
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-5 animate-spin text-primary"
+                        className="size-5 text-primary"
                     />
                     <span className="sr-only">Loading plan details</span>
                 </div>

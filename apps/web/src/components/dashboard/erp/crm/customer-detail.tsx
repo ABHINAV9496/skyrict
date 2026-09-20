@@ -1,12 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
     ArrowLeft,
     Building2,
     ClipboardList,
     ContactRound,
-    LoaderCircle,
     Mail,
     Pencil,
     Phone,
@@ -238,7 +238,7 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
         <div className="space-y-4">
             <div>
                 <Button type="button" variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/erp/crm/customers">
+                    <Link href="/erp/crm/customers">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to customers
                     </Link>
@@ -396,10 +396,10 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
                             orders={orders}
                             canWrite={canWrite && customer.isActive}
                             onNewOrder={() =>
-                                router.push("/dashboard/erp/orders")
+                                router.push("/erp/orders")
                             }
                             onOpenOrder={(order) =>
-                                router.push(`/dashboard/erp/orders/${order.id}`)
+                                router.push(`/erp/orders/${order.id}`)
                             }
                             columns={orderColumns}
                         />
@@ -468,9 +468,9 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Deactivate
@@ -535,9 +535,9 @@ export function CustomerDetail({ customerId }: CustomerDetailProps) {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Deactivate

@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,9 +74,9 @@ export function AiScore({ leadId, inline = false }: AiScoreProps) {
 
     if (loading) {
         return (
-            <Loader2
+            <Spinner
                 aria-label="Loading lead score"
-                className="size-4 animate-spin text-muted-foreground"
+                className="size-4 text-muted-foreground"
             />
         );
     }

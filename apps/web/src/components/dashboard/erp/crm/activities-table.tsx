@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
     CalendarClock,
     CheckCircle2,
-    LoaderCircle,
     Pencil,
     Plus,
     Trash2,
@@ -93,11 +93,11 @@ type PageStatus =
 function anchorHref(activity: Activity): string | null {
     switch (activity.entityType) {
         case "lead":
-            return `/dashboard/erp/crm/leads/${activity.entityId}`;
+            return `/erp/crm/leads/${activity.entityId}`;
         case "opportunity":
-            return `/dashboard/erp/crm/opportunities/${activity.entityId}`;
+            return `/erp/crm/opportunities/${activity.entityId}`;
         case "customer":
-            return `/dashboard/erp/crm/customers/${activity.entityId}`;
+            return `/erp/crm/customers/${activity.entityId}`;
         case "contact":
             return null;
     }
@@ -295,9 +295,9 @@ export function ActivitiesTable() {
                                 }}
                             >
                                 {completingId === activity.id ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-3 animate-spin"
+                                        className="size-3"
                                     />
                                 ) : (
                                     <CheckCircle2
@@ -549,9 +549,9 @@ export function ActivitiesTable() {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Delete

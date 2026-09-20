@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -9,7 +10,6 @@ import {
   Calculator,
   Check,
   CircleX,
-  LoaderCircle,
   Receipt,
   SlidersHorizontal,
   UserRound,
@@ -414,7 +414,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
           {status.state === "error" ? status.message : "Payroll run not found."}
         </p>
         <Button asChild variant="outline" size="sm" className="mt-3">
-          <Link href="/dashboard/erp/payroll/runs">
+          <Link href="/erp/payroll/runs">
             <ArrowLeft aria-hidden="true" className="size-4" />
             Back to runs
           </Link>
@@ -573,7 +573,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-          <Link href="/dashboard/erp/payroll/runs">
+          <Link href="/erp/payroll/runs">
             <ArrowLeft aria-hidden="true" className="size-4" />
             Payroll runs
           </Link>
@@ -601,7 +601,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
               onClick={() => void onCompute()}
             >
               {busy ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner aria-hidden="true" className="size-4" />
               ) : (
                 <Calculator aria-hidden="true" className="size-4" />
               )}
@@ -993,7 +993,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
                           {meta.fix === "employee" ? (
                             <Button asChild variant="outline" size="sm" className="shrink-0">
                               <Link
-                                href={`/dashboard/erp/hr/employees/${skipped.employeeId}`}
+                                href={`/erp/hr/employees/${skipped.employeeId}`}
                               >
                                 <UserRound aria-hidden="true" className="size-3.5" />
                                 Edit
@@ -1070,7 +1070,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
               onClick={() => confirmAction && void runAction(confirmAction)}
             >
               {busy ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner aria-hidden="true" className="size-4" />
               ) : null}
               {confirmAction ? confirmMeta[confirmAction].button : ""}
             </Button>
@@ -1115,7 +1115,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
             </Button>
             <Button type="button" onClick={() => void onAdjust()} disabled={adjustSaving}>
               {adjustSaving ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner aria-hidden="true" className="size-4" />
               ) : null}
               Save adjustment
             </Button>
@@ -1191,7 +1191,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
                 disabled={batchSubmitting}
               >
                 {batchSubmitting ? (
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner aria-hidden="true" className="size-4" />
                 ) : (
                   <Zap aria-hidden="true" className="size-4" />
                 )}

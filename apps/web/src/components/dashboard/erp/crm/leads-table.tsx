@@ -1,9 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
 import {
     CheckCircle2,
-    LoaderCircle,
     Plus,
     Search,
     UserPlus,
@@ -268,9 +268,9 @@ export function LeadsTable() {
                                 onClick={() => setQualifying(lead)}
                             >
                                 {pending ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-3 animate-spin"
+                                        className="size-3"
                                     />
                                 ) : (
                                     <CheckCircle2
@@ -439,7 +439,7 @@ export function LeadsTable() {
                     rows={visibleLeads}
                     rowKey={(lead) => lead.id}
                     onRowClick={(lead) =>
-                        router.push(`/dashboard/erp/crm/leads/${lead.id}`)
+                        router.push(`/erp/crm/leads/${lead.id}`)
                     }
                     footer={
                         <Pagination
@@ -521,9 +521,9 @@ export function LeadsTable() {
                             disabled={pendingId !== null}
                         >
                             {pendingId !== null ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <XCircle
@@ -621,9 +621,9 @@ function QualifyForm({
                 </Button>
                 <Button type="submit" form="qualify-form" disabled={busy}>
                     {busy ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                     ) : null}
                     Qualify

@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
-import { LoaderCircle, Sparkles, TriangleAlert } from "lucide-react";
+import { Sparkles, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -122,7 +123,7 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
                                 disabled={loading || !description.trim()}
                             >
                                 {loading ? (
-                                    <LoaderCircle className="size-4 animate-spin" />
+                                    <Spinner className="size-4" />
                                 ) : (
                                     <Sparkles className="size-4" />
                                 )}

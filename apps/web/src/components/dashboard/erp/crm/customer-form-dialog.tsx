@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { Building2, LoaderCircle, UserPlus } from "lucide-react";
+import { Building2, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -274,9 +275,9 @@ export function CustomerFormDialog({
                         disabled={!canSubmit}
                     >
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         {editing ? "Save changes" : "Create customer"}

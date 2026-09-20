@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { InventoryEmpty } from "@/components/dashboard/erp/inventory/inventory-empty";
@@ -72,7 +73,7 @@ export function SupplierRiskTable() {
   if (status.state === "loading") {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        <Spinner className="size-6 text-muted-foreground" />
       </div>
     );
   }

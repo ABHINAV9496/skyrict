@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     ArrowLeft,
@@ -7,7 +8,6 @@ import {
     CalendarDays,
     ClipboardList,
     Contact,
-    LoaderCircle,
     Mail,
     Phone,
     XCircle,
@@ -148,7 +148,7 @@ export function LeadDetail({ leadId }: LeadDetailProps) {
         <div className="space-y-4">
             <div>
                 <Button type="button" variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/erp/crm/leads">
+                    <Link href="/erp/crm/leads">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to leads
                     </Link>
@@ -315,7 +315,7 @@ export function LeadDetail({ leadId }: LeadDetailProps) {
                 onOpenChange={setQualifyOpen}
                 onQualified={(opportunity) => {
                     router.push(
-                        `/dashboard/erp/crm/opportunities/${opportunity.id}`,
+                        `/erp/crm/opportunities/${opportunity.id}`,
                     );
                 }}
             />
@@ -346,9 +346,9 @@ export function LeadDetail({ leadId }: LeadDetailProps) {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Disqualify
@@ -544,9 +544,9 @@ function QualifyDialog({
                     </Button>
                     <Button type="submit" form="qualify-form" disabled={saving}>
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         Qualify

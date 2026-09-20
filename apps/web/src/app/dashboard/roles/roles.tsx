@@ -1,9 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Check,
-    LoaderCircle,
     Lock,
     Plus,
     Search,
@@ -665,9 +665,9 @@ export default function RolesClient() {
                                 }
                             >
                                 {saving ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : editingRole ? (
                                     <Check
@@ -713,9 +713,9 @@ export default function RolesClient() {
                             disabled={saving}
                         >
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Delete

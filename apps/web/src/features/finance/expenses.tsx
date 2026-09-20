@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
     BadgeCheck,
     CircleX,
-    LoaderCircle,
     Plus,
     ReceiptText,
     ShieldCheck,
@@ -250,9 +250,9 @@ function PolicyDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save policy
@@ -458,9 +458,9 @@ function SubmitClaimDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Submit

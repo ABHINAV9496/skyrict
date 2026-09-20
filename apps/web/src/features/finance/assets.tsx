@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
     Calculator,
     CircleCheck,
-    LoaderCircle,
     Package,
     Plus,
     RefreshCw,
@@ -258,9 +258,9 @@ function CreateAssetDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save asset
@@ -354,9 +354,9 @@ function DisposeAssetDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Dispose asset
@@ -626,9 +626,9 @@ export function FinanceAssets() {
                                     onClick={() => void run()}
                                 >
                                     {running ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-3.5 animate-spin"
+                                            className="size-3.5"
                                         />
                                     ) : (
                                         <Calculator

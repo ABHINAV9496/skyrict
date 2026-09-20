@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -7,7 +8,6 @@ import {
     CircleX,
     CreditCard,
     LineChart as LineChartIcon,
-    LoaderCircle,
     PieChart,
     Play,
     Plus,
@@ -373,9 +373,9 @@ export function AnomalyFeed({
                     onClick={onScan}
                 >
                     {scanning ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-3.5 animate-spin"
+                            className="size-3.5"
                         />
                     ) : (
                         <ScanSearch aria-hidden="true" className="size-3.5" />
@@ -443,9 +443,9 @@ export function AnomalyFeed({
                                     }
                                 >
                                     {narrating[anomaly.id] ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-3 animate-spin"
+                                            className="size-3"
                                         />
                                     ) : (
                                         <Sparkles
@@ -848,7 +848,7 @@ export function SuggestAccountCode({
             params.set("draft_side", suggestion.side);
         }
         router.push(
-            `/dashboard/erp/finance/journal-entries?${params.toString()}`,
+            `/erp/finance/journal-entries?${params.toString()}`,
         );
     }
 
@@ -899,9 +899,9 @@ export function SuggestAccountCode({
                     onClick={() => void run()}
                 >
                     {loading ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                     ) : (
                         <Wand2 aria-hidden="true" className="size-4" />
@@ -1692,9 +1692,9 @@ function JournalTemplateDialog({
                             onClick={() => void create()}
                         >
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />
@@ -1762,7 +1762,7 @@ export function JournalTemplatesWidget({ canWrite }: { canWrite: boolean }) {
             const result = await generateJournalTemplate(template.id);
             if (result.entry_id) {
                 router.push(
-                    `/dashboard/erp/finance/journal-entries/${result.entry_id}`,
+                    `/erp/finance/journal-entries/${result.entry_id}`,
                 );
             }
         } catch (err) {
@@ -1815,9 +1815,9 @@ export function JournalTemplatesWidget({ canWrite }: { canWrite: boolean }) {
                             onClick={() => void runDue()}
                         >
                             {runningDue ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-3.5 animate-spin"
+                                    className="size-3.5"
                                 />
                             ) : (
                                 <RefreshCw

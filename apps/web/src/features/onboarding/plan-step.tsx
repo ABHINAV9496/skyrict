@@ -1,8 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCheck, LoaderCircle, X } from "lucide-react";
+import { Check, CheckCheck, X } from "lucide-react";
 
 import {
     Dialog,
@@ -793,9 +794,9 @@ function PlanStep({
     if (loading) {
         return (
             <div className="flex items-center justify-center py-10">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-5 animate-spin text-primary"
+                    className="size-5 text-primary"
                 />
                 <span className="sr-only">Loading plans</span>
             </div>

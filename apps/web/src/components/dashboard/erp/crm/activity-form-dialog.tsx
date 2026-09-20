@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { CalendarPlus, LoaderCircle } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -448,9 +449,9 @@ export function ActivityFormDialog({
                         disabled={!canSubmit}
                     >
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         {editing ? "Save changes" : "Create activity"}

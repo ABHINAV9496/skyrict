@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
 import {
     CalendarClock,
     Check,
-    Loader2,
     Mail,
     Phone,
     StickyNote,
@@ -155,9 +155,9 @@ export function FollowUpCard({ item, onAction }: FollowUpCardProps) {
                     disabled={busy}
                 >
                     {busy ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1 size-3 animate-spin"
+                            className="mr-1 size-3"
                         />
                     ) : (
                         <Check aria-hidden="true" className="mr-1 size-3" />

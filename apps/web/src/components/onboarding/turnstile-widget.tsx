@@ -1,7 +1,7 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle } from "lucide-react";
 
 type TurnstileApi = {
     render: (
@@ -129,9 +129,9 @@ function TurnstileWidget({
         <div className="relative w-fit">
             {loading ? (
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-5 animate-spin text-muted-foreground"
+                        className="size-5 text-muted-foreground"
                     />
                     <span className="text-sm font-medium">
                         Checking your browser...

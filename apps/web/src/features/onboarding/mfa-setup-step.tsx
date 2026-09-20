@@ -1,12 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import {
     Check,
     Copy,
     Download,
     KeyRound,
-    LoaderCircle,
     QrCode,
     RefreshCw,
     ShieldAlert,
@@ -187,9 +187,9 @@ function MfaSetupStep() {
         }
         return (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-4 animate-spin"
+                    className="size-4"
                 />
                 {"Preparing your authenticator enrollment\n"}
             </div>
@@ -397,9 +397,9 @@ function MfaSetupStep() {
                                 )}
                             >
                                 {regenerating ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-3.5 animate-spin"
+                                        className="size-3.5"
                                     />
                                 ) : (
                                     <RefreshCw

@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Check, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, RefreshCw, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export function RestockSuggestions() {
     if (status.state === "loading") {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Spinner className="size-6 text-muted-foreground" />
             </div>
         );
     }
@@ -116,9 +117,9 @@ export function RestockSuggestions() {
                     disabled={scanning}
                 >
                     {scanning ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="mr-1.5 size-4 animate-spin"
+                            className="mr-1.5 size-4"
                         />
                     ) : (
                         <RefreshCw

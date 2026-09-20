@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowRight,
     Columns3,
     GripVertical,
-    LoaderCircle,
     MoreHorizontal,
     TrendingUp,
 } from "lucide-react";
@@ -315,7 +315,7 @@ export function OpportunitiesBoard() {
                                             }}
                                             onOpen={() =>
                                                 router.push(
-                                                    `/dashboard/erp/crm/opportunities/${opportunity.id}`,
+                                                    `/erp/crm/opportunities/${opportunity.id}`,
                                                 )
                                             }
                                         />
@@ -391,9 +391,9 @@ export function OpportunitiesBoard() {
                             disabled={pending !== null}
                         >
                             {pending !== null ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             {confirming?.action === "lost"
@@ -548,9 +548,9 @@ function OpportunityCard({
                             >
                                 {OPPORTUNITY_STAGE_LABELS[stage]}
                                 {isBusy && pending?.stage === stage ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-3 animate-spin"
+                                        className="size-3"
                                     />
                                 ) : null}
                             </button>
@@ -598,9 +598,9 @@ function OpportunityCard({
                             onClick={() => onMove(stage)}
                         >
                             {isBusy && pending?.stage === stage ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-3 animate-spin"
+                                    className="size-3"
                                 />
                             ) : (
                                 <ArrowRight

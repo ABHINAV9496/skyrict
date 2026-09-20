@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getCaptcha } from "@/lib/api/auth-api";
@@ -65,9 +66,9 @@ function CaptchaChallenge({
             <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 shadow-sm">
                 <div className="relative flex min-h-14 flex-1 select-none items-center justify-center overflow-hidden rounded-md border border-border/70 bg-card">
                     {loading ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="size-5 animate-spin text-muted-foreground"
+                            className="size-5 text-muted-foreground"
                         />
                     ) : image ? (
                         // eslint-disable-next-line @next/next/no-img-element

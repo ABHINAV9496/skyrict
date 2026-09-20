@@ -7,107 +7,107 @@
     },
     {
       "route": "/dashboard",
-      "sizeKb": 8.05,
-      "firstLoadKb": 186
+      "sizeKb": 7.32,
+      "firstLoadKb": 188
     },
     {
       "route": "/dashboard/agents",
-      "sizeKb": 1.49,
-      "firstLoadKb": 269
+      "sizeKb": 1.57,
+      "firstLoadKb": 272
     },
     {
       "route": "/dashboard/agents/c/[id]",
-      "sizeKb": 1.91,
-      "firstLoadKb": 269
+      "sizeKb": 1.99,
+      "firstLoadKb": 272
     },
     {
       "route": "/dashboard/agents/coaching",
-      "sizeKb": 4.87,
-      "firstLoadKb": 230
+      "sizeKb": 4.83,
+      "firstLoadKb": 232
     },
     {
       "route": "/dashboard/agents/guardian",
       "sizeKb": 2.14,
-      "firstLoadKb": 230
+      "firstLoadKb": 232
     },
     {
       "route": "/dashboard/agents/guardian/[reportId]",
-      "sizeKb": 2.63,
-      "firstLoadKb": 231
+      "sizeKb": 2.62,
+      "firstLoadKb": 233
     },
     {
       "route": "/dashboard/erp",
-      "sizeKb": 27.3,
+      "sizeKb": 27.4,
       "firstLoadKb": 220
     },
     {
       "route": "/dashboard/erp/approvals",
-      "sizeKb": 8.67,
+      "sizeKb": 8.9,
       "firstLoadKb": 207
     },
     {
       "route": "/dashboard/erp/crm/activities",
-      "sizeKb": 4.46,
+      "sizeKb": 4.4,
       "firstLoadKb": 245
     },
     {
       "route": "/dashboard/erp/crm/ai",
-      "sizeKb": 7.94,
+      "sizeKb": 8.19,
       "firstLoadKb": 183
     },
     {
       "route": "/dashboard/erp/crm/contacts",
-      "sizeKb": 9.35,
+      "sizeKb": 9.29,
       "firstLoadKb": 241
     },
     {
       "route": "/dashboard/erp/crm/customers",
-      "sizeKb": 8.32,
+      "sizeKb": 8.28,
       "firstLoadKb": 240
     },
     {
       "route": "/dashboard/erp/crm/customers/[customerId]",
-      "sizeKb": 10.9,
+      "sizeKb": 10.8,
       "firstLoadKb": 251
     },
     {
       "route": "/dashboard/erp/crm/leads",
-      "sizeKb": 7.18,
-      "firstLoadKb": 217
+      "sizeKb": 8.23,
+      "firstLoadKb": 218
     },
     {
       "route": "/dashboard/erp/crm/leads/[leadId]",
-      "sizeKb": 8.33,
-      "firstLoadKb": 245
+      "sizeKb": 8.53,
+      "firstLoadKb": 246
     },
     {
       "route": "/dashboard/erp/crm/opportunities",
-      "sizeKb": 7.52,
-      "firstLoadKb": 203
+      "sizeKb": 7.74,
+      "firstLoadKb": 204
     },
     {
       "route": "/dashboard/erp/crm/opportunities/[opportunityId]",
-      "sizeKb": 8.03,
+      "sizeKb": 8.26,
       "firstLoadKb": 245
     },
     {
       "route": "/dashboard/erp/crm/overview",
-      "sizeKb": 10.7,
+      "sizeKb": 10.8,
       "firstLoadKb": 194
     },
     {
       "route": "/dashboard/erp/crm/search",
-      "sizeKb": 7.11,
+      "sizeKb": 7.29,
       "firstLoadKb": 225
     },
     {
       "route": "/dashboard/erp/documents",
-      "sizeKb": 2.98,
+      "sizeKb": 3.16,
       "firstLoadKb": 238
     },
     {
       "route": "/dashboard/erp/documents/[id]",
-      "sizeKb": 4.27,
+      "sizeKb": 4.36,
       "firstLoadKb": 199
     },
     {
@@ -118,107 +118,107 @@
     {
       "route": "/dashboard/erp/finance",
       "sizeKb": 12.1,
-      "firstLoadKb": 309
+      "firstLoadKb": 310
     },
     {
       "route": "/dashboard/erp/finance/accounts",
-      "sizeKb": 7.36,
-      "firstLoadKb": 283
+      "sizeKb": 6.66,
+      "firstLoadKb": 284
     },
     {
       "route": "/dashboard/erp/finance/ai-docs",
-      "sizeKb": 10.5,
-      "firstLoadKb": 226
+      "sizeKb": 8.17,
+      "firstLoadKb": 228
     },
     {
       "route": "/dashboard/erp/finance/audit-log",
-      "sizeKb": 8.54,
+      "sizeKb": 8.6,
       "firstLoadKb": 182
     },
     {
       "route": "/dashboard/erp/finance/controls",
-      "sizeKb": 10.7,
-      "firstLoadKb": 221
+      "sizeKb": 9.95,
+      "firstLoadKb": 223
     },
     {
       "route": "/dashboard/erp/finance/fiscal-periods",
-      "sizeKb": 6.06,
-      "firstLoadKb": 277
+      "sizeKb": 5.33,
+      "firstLoadKb": 278
     },
     {
       "route": "/dashboard/erp/finance/invoices",
       "sizeKb": 3.99,
-      "firstLoadKb": 280
+      "firstLoadKb": 281
     },
     {
       "route": "/dashboard/erp/finance/invoices/[id]",
-      "sizeKb": 8.62,
-      "firstLoadKb": 246
+      "sizeKb": 6.21,
+      "firstLoadKb": 247
     },
     {
       "route": "/dashboard/erp/finance/journal-entries",
-      "sizeKb": 4.15,
-      "firstLoadKb": 286
+      "sizeKb": 3.37,
+      "firstLoadKb": 287
     },
     {
       "route": "/dashboard/erp/finance/journal-entries/[id]",
-      "sizeKb": 7.35,
-      "firstLoadKb": 189
+      "sizeKb": 4.73,
+      "firstLoadKb": 190
     },
     {
       "route": "/dashboard/erp/finance/settings",
-      "sizeKb": 7.02,
+      "sizeKb": 7.25,
       "firstLoadKb": 195
     },
     {
       "route": "/dashboard/erp/finance/statements",
-      "sizeKb": 8.86,
-      "firstLoadKb": 247
+      "sizeKb": 10.9,
+      "firstLoadKb": 248
     },
     {
       "route": "/dashboard/erp/hr",
-      "sizeKb": 7.53,
+      "sizeKb": 7.48,
       "firstLoadKb": 193
     },
     {
       "route": "/dashboard/erp/hr/ai-alerts",
-      "sizeKb": 9.62,
-      "firstLoadKb": 193
+      "sizeKb": 9.58,
+      "firstLoadKb": 194
     },
     {
       "route": "/dashboard/erp/hr/attendance",
-      "sizeKb": 8.95,
+      "sizeKb": 8.93,
       "firstLoadKb": 223
     },
     {
       "route": "/dashboard/erp/hr/attrition",
-      "sizeKb": 8.76,
-      "firstLoadKb": 192
+      "sizeKb": 8.73,
+      "firstLoadKb": 193
     },
     {
       "route": "/dashboard/erp/hr/compliance",
       "sizeKb": 8.37,
-      "firstLoadKb": 195
+      "firstLoadKb": 196
     },
     {
       "route": "/dashboard/erp/hr/correlation",
-      "sizeKb": 4.72,
+      "sizeKb": 4.73,
       "firstLoadKb": 193
     },
     {
       "route": "/dashboard/erp/hr/data-quality",
-      "sizeKb": 9.63,
-      "firstLoadKb": 193
+      "sizeKb": 9.58,
+      "firstLoadKb": 194
     },
     {
       "route": "/dashboard/erp/hr/departments",
-      "sizeKb": 8.15,
+      "sizeKb": 8.1,
       "firstLoadKb": 219
     },
     {
       "route": "/dashboard/erp/hr/employees",
-      "sizeKb": 4.19,
-      "firstLoadKb": 233
+      "sizeKb": 4.18,
+      "firstLoadKb": 234
     },
     {
       "route": "/dashboard/erp/hr/employees/[id]",
@@ -232,17 +232,17 @@
     },
     {
       "route": "/dashboard/erp/hr/planning",
-      "sizeKb": 14.3,
-      "firstLoadKb": 194
+      "sizeKb": 14.5,
+      "firstLoadKb": 195
     },
     {
       "route": "/dashboard/erp/inventory",
-      "sizeKb": 9.76,
-      "firstLoadKb": 187
+      "sizeKb": 9.98,
+      "firstLoadKb": 188
     },
     {
       "route": "/dashboard/erp/inventory/abc",
-      "sizeKb": 6.8,
+      "sizeKb": 7,
       "firstLoadKb": 177
     },
     {
@@ -252,28 +252,28 @@
     },
     {
       "route": "/dashboard/erp/inventory/anomalies",
-      "sizeKb": 8.04,
+      "sizeKb": 8.28,
       "firstLoadKb": 178
     },
     {
       "route": "/dashboard/erp/inventory/forecast",
-      "sizeKb": 7.66,
+      "sizeKb": 7.84,
       "firstLoadKb": 215
     },
     {
       "route": "/dashboard/erp/inventory/health",
-      "sizeKb": 7.49,
+      "sizeKb": 7.75,
       "firstLoadKb": 184
     },
     {
       "route": "/dashboard/erp/inventory/movements",
-      "sizeKb": 8.2,
+      "sizeKb": 8.26,
       "firstLoadKb": 216
     },
     {
       "route": "/dashboard/erp/inventory/products",
-      "sizeKb": 12,
-      "firstLoadKb": 215
+      "sizeKb": 12.2,
+      "firstLoadKb": 216
     },
     {
       "route": "/dashboard/erp/inventory/stock",
@@ -282,57 +282,57 @@
     },
     {
       "route": "/dashboard/erp/inventory/suggestions",
-      "sizeKb": 8.01,
+      "sizeKb": 8.24,
       "firstLoadKb": 178
     },
     {
       "route": "/dashboard/erp/inventory/suppliers",
-      "sizeKb": 7.04,
+      "sizeKb": 7.23,
       "firstLoadKb": 180
     },
     {
       "route": "/dashboard/erp/inventory/warehouses",
-      "sizeKb": 9.86,
+      "sizeKb": 9.92,
       "firstLoadKb": 213
     },
     {
       "route": "/dashboard/erp/orders",
-      "sizeKb": 7.44,
+      "sizeKb": 7.38,
       "firstLoadKb": 239
     },
     {
       "route": "/dashboard/erp/orders/[orderId]",
-      "sizeKb": 4.62,
+      "sizeKb": 4.57,
       "firstLoadKb": 218
     },
     {
       "route": "/dashboard/erp/payroll",
-      "sizeKb": 6.99,
+      "sizeKb": 7,
       "firstLoadKb": 198
     },
     {
       "route": "/dashboard/erp/payroll/anomalies",
-      "sizeKb": 6.08,
+      "sizeKb": 6.03,
       "firstLoadKb": 190
     },
     {
       "route": "/dashboard/erp/payroll/automation",
-      "sizeKb": 12.4,
+      "sizeKb": 12.6,
       "firstLoadKb": 198
     },
     {
       "route": "/dashboard/erp/payroll/compensation",
-      "sizeKb": 9,
+      "sizeKb": 8.96,
       "firstLoadKb": 226
     },
     {
       "route": "/dashboard/erp/payroll/reviews",
-      "sizeKb": 8.59,
+      "sizeKb": 8.77,
       "firstLoadKb": 205
     },
     {
       "route": "/dashboard/erp/payroll/runs",
-      "sizeKb": 9.11,
+      "sizeKb": 9.29,
       "firstLoadKb": 219
     },
     {
@@ -342,32 +342,32 @@
     },
     {
       "route": "/dashboard/erp/payroll/settings",
-      "sizeKb": 9.9,
+      "sizeKb": 10.1,
       "firstLoadKb": 194
     },
     {
       "route": "/dashboard/erp/payroll/void-reasons",
-      "sizeKb": 7.71,
+      "sizeKb": 7.95,
       "firstLoadKb": 189
     },
     {
       "route": "/dashboard/erp/reports",
-      "sizeKb": 6.35,
+      "sizeKb": 6.56,
       "firstLoadKb": 192
     },
     {
       "route": "/dashboard/erp/reports/[reportId]",
-      "sizeKb": 11.7,
+      "sizeKb": 11.9,
       "firstLoadKb": 190
     },
     {
       "route": "/dashboard/intelligence",
-      "sizeKb": 3.69,
+      "sizeKb": 3.81,
       "firstLoadKb": 177
     },
     {
       "route": "/dashboard/intelligence/explore",
-      "sizeKb": 2.92,
+      "sizeKb": 2.91,
       "firstLoadKb": 164
     },
     {
@@ -377,53 +377,53 @@
     },
     {
       "route": "/dashboard/intelligence/market",
-      "sizeKb": 3.29,
+      "sizeKb": 3.28,
       "firstLoadKb": 164
     },
     {
       "route": "/dashboard/intelligence/results",
-      "sizeKb": 7.41,
+      "sizeKb": 7.61,
       "firstLoadKb": 179,
       "budgetNote": "1 kB drift from route-chunk content (route-local code unchanged at 7.41 kB; no new deps - no chart/markdown/QR libs). Baseline 178 -> 179."
     },
     {
       "route": "/dashboard/intelligence/trending",
-      "sizeKb": 2.75,
+      "sizeKb": 2.74,
       "firstLoadKb": 164
     },
     {
       "route": "/dashboard/invite",
-      "sizeKb": 7.82,
+      "sizeKb": 8,
       "firstLoadKb": 217
     },
     {
       "route": "/dashboard/leave",
-      "sizeKb": 9.56,
+      "sizeKb": 9.73,
       "firstLoadKb": 217
     },
     {
       "route": "/dashboard/members",
-      "sizeKb": 7.84,
-      "firstLoadKb": 220
+      "sizeKb": 8.06,
+      "firstLoadKb": 221
     },
     {
       "route": "/dashboard/roles",
-      "sizeKb": 9.29,
-      "firstLoadKb": 200
-    },
-    {
-      "route": "/dashboard/settings",
-      "sizeKb": 10.3,
+      "sizeKb": 9.5,
       "firstLoadKb": 201
     },
     {
+      "route": "/dashboard/settings",
+      "sizeKb": 8.61,
+      "firstLoadKb": 205
+    },
+    {
       "route": "/dashboard/settings/notifications",
-      "sizeKb": 7.87,
+      "sizeKb": 7.94,
       "firstLoadKb": 178
     },
     {
       "route": "/invite",
-      "sizeKb": 7.47,
+      "sizeKb": 7.67,
       "firstLoadKb": 210
     },
     {
@@ -433,117 +433,38 @@
     },
     {
       "route": "/mfa/verify",
-      "sizeKb": 4.1,
-      "firstLoadKb": 181
+      "sizeKb": 4.05,
+      "firstLoadKb": 182
     },
     {
       "route": "/register",
-      "sizeKb": 11.7,
+      "sizeKb": 12.1,
       "firstLoadKb": 215
     },
     {
       "route": "/register/organization",
-      "sizeKb": 15.8,
+      "sizeKb": 11.6,
       "firstLoadKb": 257
     },
     {
       "route": "/register/plan",
-      "sizeKb": 5.56,
-      "firstLoadKb": 200
+      "sizeKb": 11,
+      "firstLoadKb": 201
     },
     {
       "route": "/register/security",
-      "sizeKb": 10.7,
+      "sizeKb": 11.1,
       "firstLoadKb": 213
     },
     {
       "route": "/register/verify",
-      "sizeKb": 6.06,
+      "sizeKb": 6.07,
       "firstLoadKb": 183
     },
     {
       "route": "/setup-mfa",
-      "sizeKb": 12.2,
-      "firstLoadKb": 189
+      "sizeKb": 12.1,
+      "firstLoadKb": 190
     }
-  ],
-  "sharedFirstLoadKb": 161,
-  "topChunks": [
-    {
-      "label": "static/chunks/7543-e2ba7afff10f9ff8.js",
-      "gzip": 103000,
-      "parsed": 346807
-    },
-    {
-      "label": "static/chunks/9867-006efd5e1f2f4d22.js",
-      "gzip": 102509,
-      "parsed": 339835
-    },
-    {
-      "label": "static/chunks/framework-d61c2e59fbde7661.js",
-      "gzip": 59816,
-      "parsed": 190167
-    },
-    {
-      "label": "static/chunks/7be59ca9-c25671d35b808af5.js",
-      "gzip": 54387,
-      "parsed": 173408
-    },
-    {
-      "label": "static/chunks/pages/_app-24926e39eb296963.js",
-      "gzip": 51754,
-      "parsed": 157224
-    },
-    {
-      "label": "static/chunks/5311-0aea1e9f5e26f0b8.js",
-      "gzip": 37548,
-      "parsed": 137446
-    },
-    {
-      "label": "static/chunks/5916-3dff8b9c37ca6543.js",
-      "gzip": 37125,
-      "parsed": 122251
-    },
-    {
-      "label": "static/chunks/main-b593a79d04c3e94a.js",
-      "gzip": 36698,
-      "parsed": 128537
-    },
-    {
-      "label": "static/chunks/8648-8c529a4f5aa6614b.js",
-      "gzip": 29054,
-      "parsed": 97945
-    },
-    {
-      "label": "static/chunks/1960-013311ce259d1a00.js",
-      "gzip": 17533,
-      "parsed": 52769
-    },
-    {
-      "label": "static/chunks/6570-811a6d712382a7f3.js",
-      "gzip": 15002,
-      "parsed": 57125
-    },
-    {
-      "label": "static/chunks/6111-7c1dda2e54eaa00d.js",
-      "gzip": 11044,
-      "parsed": 28994
-    },
-    {
-      "label": "static/chunks/799-dda5fcae446b31ce.js",
-      "gzip": 10923,
-      "parsed": 39781
-    },
-    {
-      "label": "static/chunks/548-7c8b41134386ae72.js",
-      "gzip": 10815,
-      "parsed": 38640
-    },
-    {
-      "label": "static/chunks/3751-9ddf3c4b2f88e5bf.js",
-      "gzip": 9782,
-      "parsed": 44135
-    }
-  ],
-  "sourceLog": "build.log"
+  ]
 }

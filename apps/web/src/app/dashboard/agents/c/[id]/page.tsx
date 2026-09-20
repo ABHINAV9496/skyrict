@@ -7,8 +7,10 @@ import { AgentsHeader } from "@/components/dashboard/agents/agents-header";
 import { ChatComposer } from "@/components/dashboard/agents/chat-composer";
 import { MessageList } from "@/components/dashboard/agents/chat-message-list";
 import { ErrorState } from "@/components/dashboard/erp/error-state";
+import { Spinner } from "@/components/ui/spinner";
 import {
     appendAgentMessage,
+    attachmentUrl,
     getConversation,
     saveUserMessage,
 } from "@/lib/api/agents-api";
@@ -38,6 +40,13 @@ function toAgentMessage(message: ChatMessage): AgentChatMessage {
         agentName: message.agent_name ?? null,
         citations: [],
         failed: false,
+        attachments: (message.attachments ?? []).map((meta) => ({
+            id: meta.id,
+            name: meta.name,
+            type: meta.type,
+            size: meta.size,
+            url: attachmentUrl(message.conversation_id, meta.id),
+        })),
     };
 }
 
@@ -56,11 +65,19 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
         {
             initialMessagesComplete: true,
             conversationId: conversation.id,
-            onUserMessage: (content) => {
-                void saveUserMessage(conversation.id, content);
+            onUserMessage: (content, persistAttachments) => {
+                void saveUserMessage(
+                    conversation.id,
+                    content,
+                    persistAttachments,
+                );
             },
-            onComplete: (content) => {
-                void appendAgentMessage(conversation.id, content).then(() => {
+            onComplete: (content, agentName) => {
+                void appendAgentMessage(
+                    conversation.id,
+                    content,
+                    agentName ?? undefined,
+                ).then(() => {
                     notifyConversationListChanged();
                 });
                 // The AI title lands a moment later; broadcast again so the sidebar
@@ -116,13 +133,14 @@ function ConversationView({ conversation }: { conversation: Conversation }) {
                 userDisplay={user?.fullName ?? user?.email ?? ""}
                 onResend={send}
             />
-            <div className="shrink-0 px-4 pb-4 pt-2 md:pb-6">
+            <div className="shrink-0 px-4 pb-2 pt-2">
                 <ChatComposer
                     onSend={(content, attachments) =>
                         send(content, false, attachments)
                     }
                     onStop={sending ? stop : undefined}
                     placeholder="Continue the conversation…"
+                    singleRow
                 />
             </div>
             {activeAgent ? (
@@ -209,9 +227,14 @@ export default function ConversationPage({
     }, [params]);
 
     if (loading) {
+        // Keep the chat chrome (header) visible while the conversation loads -
+        // a normal spinner in the message area, not a full-page loader.
         return (
-            <div className="flex h-full flex-1 items-center justify-center">
-                <div className="size-6 animate-spin rounded-full border-2 border-border border-t-primary" />
+            <div className="flex h-full flex-col overflow-hidden">
+                <AgentsHeader title="…" />
+                <div className="flex flex-1 items-center justify-center">
+                    <Spinner className="size-5 text-muted-foreground" />
+                </div>
             </div>
         );
     }

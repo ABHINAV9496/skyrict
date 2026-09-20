@@ -283,6 +283,23 @@ jobs:
             --workdir /app/services/core core \
             python -m core.cli seed --tenant-id 00000000-0000-0000-0000-000000000001
           echo "Seeded core (security)"
+
+          # The tightened stack boots a FRESH ai-agent (down -v wiped the
+          # volumes, so it must re-run alembic + uvicorn). The rate-limiting
+          # spec answers the AI inventory search BEFORE asserting the budget
+          # exhausts: an agent that is still starting answers 503, which the
+          # first expect(result.status).toBe(200) rejects. Wait for it like
+          # identity/core above so the run lands on a ready agent.
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.e2e.yml \
+              -f infra/docker/docker-compose.e2e.security.yml exec -T ai-agent \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" \
+              2>/dev/null; then
+              break
+            fi
+            echo "Waiting for ai-agent (security)... ($i/60)"
+            sleep 2
+          done
         timeout-minutes: 10
 
       - name: Run E2E security tests

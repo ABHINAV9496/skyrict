@@ -291,7 +291,13 @@ class ConversationRepository:
         for row in result.scalars().all():
             for attachment in row.attachments or []:
                 if attachment.get("id") == attachment_id:
-                    return dict(attachment)
+                    # Include the canonical conversation id from the message
+                    # row so callers can rebuild blob keys from DB-derived
+                    # values instead of request path params.
+                    return {
+                        **dict(attachment),
+                        "conversation_id": str(row.conversation_id),
+                    }
         return None
 
     async def collect_attachment_storage_keys(
@@ -299,21 +305,29 @@ class ConversationRepository:
         *,
         tenant_id: uuid.UUID,
         conversation_id: uuid.UUID,
-    ) -> list[str]:
-        """Return every attachment storage key across the conversation's
-        messages, for blob cleanup when the conversation is deleted."""
+    ) -> tuple[str | None, list[str]]:
+        """Return the conversation's canonical id and every attachment
+        storage key across its messages, for blob cleanup when the
+        conversation is deleted.
+
+        The id is read back from the message rows (server-derived), so the
+        caller can rebuild blob keys without trusting the request path param.
+        ``(None, [])`` when the conversation has no messages.
+        """
         stmt = select(AiConversationMessage).where(
             AiConversationMessage.tenant_id == tenant_id,
             AiConversationMessage.conversation_id == conversation_id,
         )
         result = await self._session.execute(stmt)
+        rows = list(result.scalars().all())
         keys: list[str] = []
-        for row in result.scalars().all():
+        for row in rows:
             for attachment in row.attachments or []:
                 storage_key = attachment.get("storage_key")
                 if storage_key:
                     keys.append(str(storage_key))
-        return keys
+        conversation_id_from_db = str(rows[0].conversation_id) if rows else None
+        return conversation_id_from_db, keys
 
     async def auto_title(
         self,

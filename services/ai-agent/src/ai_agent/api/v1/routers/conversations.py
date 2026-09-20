@@ -302,7 +302,10 @@ async def append_message(
         attachment_metadata = await _store_attachments(
             storage=storage,
             tenant_id=user["tenant_id"],
-            conversation_id=conversation_id,
+            # Canonical id from the fetched record, never the request path
+            # param: storage keys are composed solely of server-derived
+            # values (mirrors the documents storage pattern).
+            conversation_id=uuid.UUID(conversation["id"]),
             attachments=body.attachments,
         )
 
@@ -374,8 +377,11 @@ async def get_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     storage = build_attachment_storage()
+    # The blob key is rebuilt from the persisted metadata (canonical
+    # conversation id + storage key from the DB record), never the request
+    # path params, so client-supplied identifiers cannot influence object keys.
     data = await storage.get(
-        key=f"{user['tenant_id']}/{conversation_id}/{meta['storage_key']}",
+        key=(f"{user['tenant_id']}/{meta['conversation_id']}/{meta['storage_key']}"),
     )
     if data is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
@@ -434,17 +440,19 @@ async def delete_conversation(
 
     # Remove the blob payloads first (best-effort, never blocks the row
     # delete): the documents service deletes storage before the row, so a
-    # deleted conversation cannot leave orphaned blobs behind.
-    storage_keys = await repo.collect_attachment_storage_keys(
+    # deleted conversation cannot leave orphaned blobs behind.  The blob keys
+    # reuse the canonical conversation id read back from the message rows so
+    # no client-supplied identifier ever composes a storage key.
+    db_conversation_id, storage_keys = await repo.collect_attachment_storage_keys(
         tenant_id=user["tenant_id"],
         conversation_id=conversation_id,
     )
-    if storage_keys:
+    if storage_keys and db_conversation_id is not None:
         storage = build_attachment_storage()
         for storage_key in storage_keys:
             try:
                 await storage.delete(
-                    key=f"{user['tenant_id']}/{conversation_id}/{storage_key}",
+                    key=(f"{user['tenant_id']}/{db_conversation_id}/{storage_key}"),
                 )
             except Exception:
                 logger.exception(

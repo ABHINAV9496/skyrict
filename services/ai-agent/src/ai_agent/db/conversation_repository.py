@@ -274,8 +274,8 @@ class ConversationRepository:
         Confirms the conversation exists first (403/404 semantics differ by
         caller), then scans the conversation's messages for an attachment
         whose id matches.  Returns the full stored metadata
-        (``{id, name, type, size, storage_key}``) or None when the attachment
-        is not part of this conversation.
+        (``{id, name, type, size, storage_key, blob_key}``) or None when the
+        attachment is not part of this conversation.
         """
         conversation = await self.get_conversation(
             tenant_id=tenant_id,
@@ -291,12 +291,14 @@ class ConversationRepository:
         for row in result.scalars().all():
             for attachment in row.attachments or []:
                 if attachment.get("id") == attachment_id:
-                    # Include the canonical conversation id from the message
-                    # row so callers can rebuild blob keys from DB-derived
-                    # values instead of request path params.
+                    # The full object key is composed here from DB row values
+                    # only: the caller passes it verbatim to storage, so no
+                    # request-derived identifier can influence object keys.
                     return {
                         **dict(attachment),
-                        "conversation_id": str(row.conversation_id),
+                        "blob_key": (
+                            f"{row.tenant_id}/{row.conversation_id}/{attachment.get('storage_key')}"
+                        ),
                     }
         return None
 
@@ -305,29 +307,27 @@ class ConversationRepository:
         *,
         tenant_id: uuid.UUID,
         conversation_id: uuid.UUID,
-    ) -> tuple[str | None, list[str]]:
-        """Return the conversation's canonical id and every attachment
-        storage key across its messages, for blob cleanup when the
-        conversation is deleted.
+    ) -> list[str]:
+        """Return the full object key of every attachment blob across the
+        conversation's messages, for cleanup when the conversation is
+        deleted.
 
-        The id is read back from the message rows (server-derived), so the
-        caller can rebuild blob keys without trusting the request path param.
-        ``(None, [])`` when the conversation has no messages.
+        Keys are composed from DB row values only (``{tenant_id}/
+        {conversation_id}/{storage_key}``), so no request-derived identifier
+        can influence them.  ``[]`` when the conversation has no messages.
         """
         stmt = select(AiConversationMessage).where(
             AiConversationMessage.tenant_id == tenant_id,
             AiConversationMessage.conversation_id == conversation_id,
         )
         result = await self._session.execute(stmt)
-        rows = list(result.scalars().all())
         keys: list[str] = []
-        for row in rows:
+        for row in result.scalars().all():
             for attachment in row.attachments or []:
                 storage_key = attachment.get("storage_key")
                 if storage_key:
-                    keys.append(str(storage_key))
-        conversation_id_from_db = str(rows[0].conversation_id) if rows else None
-        return conversation_id_from_db, keys
+                    keys.append(f"{row.tenant_id}/{row.conversation_id}/{storage_key}")
+        return keys
 
     async def auto_title(
         self,

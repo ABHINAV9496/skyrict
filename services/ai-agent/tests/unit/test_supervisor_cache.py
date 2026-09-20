@@ -289,9 +289,7 @@ async def test_cached_classification_still_obeys_threshold() -> None:
     cache = MemoryResponseCache()
     service = make_service(router=router, classification_cache=cache)
     await cache.set(
-        classification_cache_key(
-            tenant_id=TENANT_A, query="How are product levels trending?"
-        ),
+        classification_cache_key(tenant_id=TENANT_A, query="How are product levels trending?"),
         json.dumps({"agents": ["inventory_monitor"], "confidence": 0.5}),
         ttl_seconds=300,
     )
@@ -308,9 +306,7 @@ async def test_corrupt_classification_entry_falls_back_to_provider() -> None:
     cache = MemoryResponseCache()
     service = make_service(router=router, classification_cache=cache)
     await cache.set(
-        classification_cache_key(
-            tenant_id=TENANT_A, query="How are product levels trending?"
-        ),
+        classification_cache_key(tenant_id=TENANT_A, query="How are product levels trending?"),
         "not-json",
         ttl_seconds=300,
     )

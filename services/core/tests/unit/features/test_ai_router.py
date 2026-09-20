@@ -973,3 +973,70 @@ class TestCrmAnomalyPermissionGate:
     def test_dismiss_requires_invoke_and_crm_write(self) -> None:
         self._grant(ERP_AI_INVOKE, ERP_CRM_WRITE)
         assert self._dismiss().status_code == 200
+
+class TestDashboardSuggestForwarding:
+    """BUG-AI-002 proxy: POST /ai/dashboards/suggest must reach ai-agent unchanged."""
+
+    def test_suggest_forwards_path_and_body(self) -> None:
+        seen: list[httpx.Request] = []
+        client = _app_with_recorder(seen)
+
+        response = client.post(
+            "/api/v1/ai/dashboards/suggest",
+json={"current_layout": [{"id": "ai_digest", "order": 0, "cols": 4, "visible": True}]},
+            headers={"authorization": "Bearer tok"},
+        )
+
+        assert response.status_code == 200
+        assert len(seen) == 1
+        assert seen[0].url.path == "/api/v1/ai/dashboards/suggest"
+        assert seen[0].read() == b'{"current_layout":[{"id":"ai_digest","order":0,"cols":4,"visible":true}]}'
+
+
+class TestDashboardSuggestPermissionGate:
+    """Suggest is a pure AI invoke: erp.ai.invoke is the only gate."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rbac(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        grants: list[str] = []
+        self._grants_box = grants
+
+        class _FakeRbac:
+            def __init__(self, session: object) -> None:
+                self.session = session
+
+            async def resolve_user_permissions(
+                self, *, user_id: object, tenant_id: object
+            ) -> list[str]:
+                return grants
+
+        monkeypatch.setattr(api_deps, "RbacRepository", _FakeRbac)
+
+    def _app(self) -> TestClient:
+        app = FastAPI()
+        app.add_exception_handler(SkyrictError, skyrict_error_handler)
+        app.include_router(ai_router.router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: {
+            "user_id": uuid.uuid4(),
+            "tenant_id": uuid.uuid4(),
+        }
+        app.dependency_overrides[get_db] = lambda: object()
+        app.dependency_overrides[ai_router.get_ai_client] = lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})),
+            base_url="http://ai.test",
+        )
+        return TestClient(app)
+
+    def _grant(self, *keys: str) -> None:
+        self._grants_box[:] = list(keys)
+
+    def _suggest(self) -> httpx.Response:
+        return self._app().post("/api/v1/ai/dashboards/suggest")
+
+    def test_suggest_with_invoke(self) -> None:
+        self._grant(ERP_AI_INVOKE)
+        assert self._suggest().status_code == 200
+
+    def test_suggest_without_invoke_denied(self) -> None:
+        self._grant()
+        assert self._suggest().status_code == 403

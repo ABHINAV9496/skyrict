@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, call
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -83,6 +84,48 @@ class TestSuggestLayout:
 
         assert response.status_code == 501
         assert "not enabled" in response.json()["detail"]
+
+    def test_flag_off_never_enforces_rate_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        enforce = AsyncMock()
+        monkeypatch.setattr(dashboard_router.limiter, "enforce", enforce)
+        client = _app(monkeypatch, enabled=False, gateway=_FakeGateway(_SUMMARY))
+
+        client.post(
+            "/api/v1/ai/dashboards/suggest",
+            json={"current_layout": []},
+            headers={"authorization": "Bearer t"},
+        )
+
+        enforce.assert_not_called()
+
+    def test_flag_on_enforces_per_user_and_tenant_limits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        enforce = AsyncMock()
+        monkeypatch.setattr(dashboard_router.limiter, "enforce", enforce)
+        gateway = _FakeGateway(EventSummary(items=[], suggestion_ready=False))
+        client = _app(monkeypatch, enabled=True, gateway=gateway)
+
+        client.post(
+            "/api/v1/ai/dashboards/suggest",
+            json={"current_layout": []},
+            headers={"authorization": "Bearer t"},
+        )
+
+        assert enforce.await_args_list == [
+            call(
+                key=f"ai:dashboard_suggest:{_CALLER['user_id']}",
+                limit=settings.RATE_LIMIT_DASHBOARD_SUGGEST_PER_MIN,
+                window_seconds=60,
+            ),
+            call(
+                key=f"ai:tenant_total:{_TENANT_ID}",
+                limit=settings.RATE_LIMIT_TENANT_PER_MIN,
+                window_seconds=60,
+            ),
+        ]
 
     def test_insufficient_data_maps_to_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         gateway = _FakeGateway(

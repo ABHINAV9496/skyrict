@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ai_agent.api.deps import get_current_user
 from ai_agent.core.config import settings
+from ai_agent.core.rate_limit import limiter
 from ai_agent.core.tenant_context import TenantContext
 from ai_agent.features.dashboard_suggestion.gateway import (
     HttpDashboardGateway,
@@ -81,6 +82,17 @@ async def suggest_layout(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Dashboard suggestions are not enabled on this service",
         )
+
+    await limiter.enforce(
+        key=f"ai:dashboard_suggest:{user['user_id']}",
+        limit=settings.RATE_LIMIT_DASHBOARD_SUGGEST_PER_MIN,
+        window_seconds=60,
+    )
+    await limiter.enforce(
+        key=f"ai:tenant_total:{user['tenant_id']}",
+        limit=settings.RATE_LIMIT_TENANT_PER_MIN,
+        window_seconds=60,
+    )
 
     service = _build_service(request)
     result = await service.suggest(

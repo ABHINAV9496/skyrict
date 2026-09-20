@@ -703,3 +703,22 @@ async def proxy_review_guardian_report(
 ) -> Response:
     """Mark a guardian report reviewed -> ai-agent /api/v1/ai/guardian/reports/{id}/review."""
     return await _proxy(request, client, f"/api/v1/ai/guardian/reports/{report_id}/review")
+
+
+# --- Dashboard layout suggestion (BUG-AI-002) ---------------------------------
+
+# The telemetry is read by Core on ai-agent's behalf (invoke gate only; the
+# layout routes themselves use plain get_current_user and there is no
+# erp.dashboards.* key). The raw body is forwarded verbatim for ai-agent to
+# validate at its own door (standard proxy behavior); the SKY-57 proxy rule
+# still applies (JWT + tenant slug forwarded for ai-agent to re-verify Core).
+
+
+@router.post("/dashboards/suggest")
+async def proxy_dashboard_suggest(
+    request: Request,
+    _invoke: _InvokeDep,
+    client: _ClientDep,
+) -> Response:
+    """Dashboard layout suggestion -> ai-agent /api/v1/ai/dashboards/suggest."""
+    return await _proxy(request, client, "/api/v1/ai/dashboards/suggest")

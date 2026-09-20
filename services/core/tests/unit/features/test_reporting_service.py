@@ -134,26 +134,32 @@ async def test_record_events(service: DashboardService, mock_repo: AsyncMock) ->
 
 
 @pytest.mark.asyncio
-async def test_has_enough_events_true(service: DashboardService, mock_repo: AsyncMock) -> None:
+async def test_get_event_summary_suggestion_ready(
+    service: DashboardService, mock_repo: AsyncMock
+) -> None:
     tenant_id = uuid.uuid4()
 
     mock_repo.get_widget_event_summary.return_value = [
         {"widget_id": "ai_digest", "total_events": 55, "distinct_events": 2},
     ]
 
-    result = await service.has_enough_events(tenant_id=tenant_id)
+    result = await service.get_event_summary(tenant_id=tenant_id)
 
-    assert result is True
+    assert result["suggestion_ready"] is True
+    assert result["items"][0]["widget_id"] == "ai_digest"
 
 
 @pytest.mark.asyncio
-async def test_has_enough_events_false(service: DashboardService, mock_repo: AsyncMock) -> None:
+async def test_get_event_summary_not_enough_events(
+    service: DashboardService, mock_repo: AsyncMock
+) -> None:
     tenant_id = uuid.uuid4()
 
     mock_repo.get_widget_event_summary.return_value = [
         {"widget_id": "ai_digest", "total_events": 10, "distinct_events": 2},
     ]
 
-    result = await service.has_enough_events(tenant_id=tenant_id)
+    result = await service.get_event_summary(tenant_id=tenant_id)
 
-    assert result is False
+    assert result["suggestion_ready"] is False
+    assert result["items"][0]["widget_id"] == "ai_digest"

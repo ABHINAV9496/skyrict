@@ -1,10 +1,11 @@
 """Dashboard layout CRUD router.
 
 Endpoints:
-    GET    /api/v1/dashboards/me          - read effective layout
-    PUT    /api/v1/dashboards/me          - save user layout
-    POST   /api/v1/dashboards/me/reset    - reset to tenant default
-    POST   /api/v1/dashboards/me/events   - record widget interaction events
+    GET    /api/v1/dashboards/me                 - read effective layout
+    PUT    /api/v1/dashboards/me                 - save user layout
+    POST   /api/v1/dashboards/me/reset           - reset to tenant default
+    POST   /api/v1/dashboards/me/events          - record widget interaction events
+    GET    /api/v1/dashboards/me/events/summary  - read telemetry + suggestion readiness
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from core.features.reporting.schemas import (
     DashboardUpdate,
     UserDashboardLayoutRead,
     WidgetEventBatchCreate,
+    WidgetEventSummaryItem,
+    WidgetEventSummaryRead,
 )
 from core.features.reporting.service import DashboardService
 
@@ -98,3 +101,20 @@ async def record_my_events(
         events=[ev.model_dump() for ev in body.events],
     )
     return {"recorded": count}
+
+
+@router.get("/me/events/summary", response_model=WidgetEventSummaryRead)
+async def get_my_event_summary(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    service: DashboardService = Depends(_get_service),
+) -> WidgetEventSummaryRead:
+    """Return per-widget telemetry counts and AI-suggestion readiness.
+
+    ``suggestion_ready`` is driven by Core's minimum-event threshold, so the
+    AI agent never re-implements the bar - it gates on Core's own signal.
+    """
+    result = await service.get_event_summary(tenant_id=_tenant_id(current_user))
+    return WidgetEventSummaryRead(
+        items=[WidgetEventSummaryItem(**item) for item in result["items"]],
+        suggestion_ready=result["suggestion_ready"],
+    )

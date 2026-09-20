@@ -2,10 +2,11 @@
  * API client for the dashboard layout CRUD endpoints.
  *
  * Endpoints (core service):
- *   GET    /api/v1/dashboards/me          - read effective layout
- *   PUT    /api/v1/dashboards/me          - save user layout
- *   POST   /api/v1/dashboards/me/reset    - reset to tenant default
- *   POST   /api/v1/dashboards/me/events   - record widget interaction events
+ *   GET    /api/v1/dashboards/me            - read effective layout
+ *   PUT    /api/v1/dashboards/me            - save user layout
+ *   POST   /api/v1/dashboards/me/reset      - reset to tenant default
+ *   POST   /api/v1/dashboards/me/events     - record widget interaction events
+ *   POST   /api/v1/ai/dashboards/suggest    - AI layout suggestion (core proxy)
  */
 
 import type { LayoutItem } from "@/components/dashboard/erp/widget-grid";
@@ -19,6 +20,15 @@ export interface DashboardLayoutResponse {
 export interface EventPayload {
     widget_id: string;
     event: "open" | "hide";
+}
+
+export type SuggestionStatus = "suggested" | "insufficient_data" | "fallback";
+
+export interface SuggestionResponse {
+    status: SuggestionStatus;
+    suggested_layout: LayoutItem[];
+    reasoning: string;
+    confidence: number;
 }
 
 /**
@@ -90,4 +100,29 @@ export async function recordEvents(events: EventPayload[]): Promise<void> {
         // Fire-and-forget: telemetry failure is non-fatal
         console.warn("Failed to record widget events:", response.status);
     }
+}
+
+/**
+ * Request an AI layout suggestion based on widget telemetry.
+ *
+ * Routes through the core proxy (`/api/v1/ai/dashboards/suggest`), which
+ * forwards to ai-agent. Returns an explicit status - never a silent success:
+ * `suggested` (a new layout), `insufficient_data` (not enough telemetry), or
+ * `fallback` (AI unavailable; keep the current layout).
+ */
+export async function suggestLayout(
+    currentLayout: LayoutItem[],
+): Promise<SuggestionResponse> {
+    const response = await fetchWithSession("/api/v1/ai/dashboards/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_layout: currentLayout }),
+    });
+    if (!response.ok) {
+        throw new ApiError(
+            response.status,
+            `Failed to suggest layout: ${response.status}`,
+        );
+    }
+    return response.json();
 }

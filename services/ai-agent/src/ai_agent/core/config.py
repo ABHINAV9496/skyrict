@@ -137,6 +137,19 @@ class Settings(BaseSettings):
         description="per-call timeout for core reporting reads",
     )
 
+    # --- Dashboard layout suggestion (BUG-AI-002) ---
+    # Deployment gate for the AI dashboard suggestion endpoint. OFF by default:
+    # until an operator flips it on, /ai/dashboards/suggest answers 501 so the
+    # core proxy and frontend can fail closed instead of getting silent empties.
+    DASHBOARD_SUGGEST_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "whether the AI dashboard layout suggestion endpoint is live. "
+            "False answers 501 (not implemented) even when providers are "
+            "configured. Set AI_DASHBOARD_SUGGEST_ENABLED=true to enable."
+        ),
+    )
+
     # --- Provider configuration (ALL optional - see module docstring) ---
     PROVIDER: str | None = Field(
         default=None,
@@ -591,6 +604,11 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_CRM_APPLY_PER_MIN: int = Field(
         default=10, ge=1, description="follow-up apply/dismiss actions per minute per user"
+    )
+    RATE_LIMIT_DASHBOARD_SUGGEST_PER_MIN: int = Field(
+        default=10,
+        ge=1,
+        description="dashboard layout suggestions per minute per user (BUG-AI-002)",
     )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"

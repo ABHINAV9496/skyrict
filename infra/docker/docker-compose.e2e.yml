@@ -246,6 +246,10 @@ services:
       AI_MODEL: ${AI_MODEL:-mock-e2e}
       AI_MOCK_BEHAVIOR: ${AI_MOCK_BEHAVIOR:-ok}
       AI_MOCK_FAIL_AFTER: ${AI_MOCK_FAIL_AFTER:-0}
+      # BUG-AI-002: the dashboard layout suggestion endpoint is exercised in
+      # the e2e stack so the honest-status contract (suggested /
+      # insufficient_data / fallback - never a silent empty 200) is covered.
+      AI_DASHBOARD_SUGGEST_ENABLED: ${AI_DASHBOARD_SUGGEST_ENABLED:-true}
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-e2e-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-e2e-redis:6379/0
       AI_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem

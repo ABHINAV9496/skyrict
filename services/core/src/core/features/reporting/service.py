@@ -120,15 +120,21 @@ class DashboardService:
             )
         return count
 
-    async def has_enough_events(self, *, tenant_id: uuid.UUID) -> bool:
-        """Check whether the tenant has enough telemetry for an AI suggestion."""
-        # Check across all widgets - if any widget hits the threshold, we suggest.
-        summary = await self._repo.get_widget_event_summary(tenant_id=tenant_id)
-        return any(item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in summary)
+    async def get_event_summary(self, *, tenant_id: uuid.UUID) -> dict[str, Any]:
+        """Return per-widget event counts plus the AI-suggestion readiness flag.
 
-    async def get_event_summary(self, *, tenant_id: uuid.UUID) -> list[dict[str, Any]]:
-        """Return per-widget event counts."""
-        return await self._repo.get_widget_event_summary(tenant_id=tenant_id)
+        One query serves both signals so the AI agent can gate its suggestion
+        on Core's own threshold (``_MIN_EVENTS_FOR_SUGGESTION``) without
+        duplicating the number anywhere.
+        """
+        items = await self._repo.get_widget_event_summary(tenant_id=tenant_id)
+        suggestion_ready = any(
+            item["total_events"] >= _MIN_EVENTS_FOR_SUGGESTION for item in items
+        )
+        return {
+            "items": items,
+            "suggestion_ready": suggestion_ready,
+        }
 
 
 class ReportService:

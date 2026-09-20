@@ -61,15 +61,21 @@ class WidgetEventBatchCreate(BaseModel):
     events: list[WidgetEventCreate] = Field(default_factory=list, max_length=100)
 
 
-class AiSuggestionRequest(BaseModel):
-    """Request for an AI-powered layout suggestion."""
+class WidgetEventSummaryItem(BaseModel):
+    """Per-widget telemetry counts for the dashboard suggestion engine."""
 
-    pass
+    widget_id: str = Field(..., max_length=64)
+    total_events: int = Field(..., ge=0)
+    distinct_events: int = Field(..., ge=0)
 
 
-class AiSuggestionResponse(BaseModel):
-    """AI-suggested layout changes with reasoning."""
+class WidgetEventSummaryRead(BaseModel):
+    """Widget-interaction telemetry for the AI dashboard suggestion engine.
 
-    suggested_layout: list[WidgetLayoutItem]
-    reasoning: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    ``suggestion_ready`` is Core's honest readiness signal (threshold owned
+    here, never duplicated in the AI agent): True once any widget passes the
+    minimum-event bar.
+    """
+
+    items: list[WidgetEventSummaryItem] = Field(default_factory=list)
+    suggestion_ready: bool

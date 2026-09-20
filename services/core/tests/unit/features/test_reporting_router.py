@@ -41,6 +41,16 @@ def _app_with_mocks() -> TestClient:
     }
     mock_service.reset_user_layout.return_value = True
     mock_service.record_events.return_value = 1
+    mock_service.get_event_summary.return_value = {
+        "items": [
+            {
+                "widget_id": "attention_strip",
+                "total_events": 60,
+                "distinct_events": 2,
+            }
+        ],
+        "suggestion_ready": True,
+    }
 
     app.dependency_overrides[reporting_router._get_service] = lambda: mock_service
 
@@ -82,3 +92,13 @@ def test_record_my_events_route_201() -> None:
     response = client.post("/api/v1/dashboards/me/events", json=payload)
     assert response.status_code == 201
     assert response.json() == {"recorded": 1}
+
+
+def test_get_my_event_summary_route_200() -> None:
+    client = _app_with_mocks()
+    response = client.get("/api/v1/dashboards/me/events/summary")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["suggestion_ready"] is True
+    assert len(data["items"]) == 1
+    assert data["items"][0]["widget_id"] == "attention_strip"

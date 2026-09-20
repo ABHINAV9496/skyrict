@@ -161,8 +161,7 @@ async def _assert_roundtripped(url: str, tenant_id: str) -> None:
             assert len(rows) == 1, f"expected one role, got {len(rows)}"
             name, system, perms = rows[0]
             assert name == _CANONICAL_EMPLOYEE_ROLE_NAME, (
-                f"0032 must rename system role to {_CANONICAL_EMPLOYEE_ROLE_NAME!r}, "
-                f"got {name!r}"
+                f"0032 must rename system role to {_CANONICAL_EMPLOYEE_ROLE_NAME!r}, got {name!r}"
             )
             assert system, "0032 must keep the role a system role"
             assert not set(_LEGACY_LEAVE_GRANT_KEYS) & set(perms), (
@@ -236,8 +235,7 @@ def test_0032_heritage_roundtrip() -> None:
             asyncio.run(_create_scratch_db(maint_dsn, dbname))
         except asyncpg.exceptions.InsufficientPrivilegeError:
             pytest.skip(
-                "skyrict role lacks CREATEDB; run on CI or grant with: "
-                "ALTER ROLE skyrict CREATEDB;"
+                "skyrict role lacks CREATEDB; run on CI or grant with: ALTER ROLE skyrict CREATEDB;"
             )
 
         overrides = {"IDENTITY_DATABASE_URL": scratch_url}

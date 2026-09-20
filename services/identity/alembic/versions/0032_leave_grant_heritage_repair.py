@@ -63,7 +63,9 @@ def _rewrite_grant_keys() -> None:
     ``array_replace`` is NULL-safe and a no-op when the legacy key is absent,
     so the statement is idempotent by construction.
     """
-    for legacy, canonical in zip(_LEGACY_LEAVE_GRANT_KEYS, _CANONICAL_LEAVE_GRANT_KEYS):
+    for legacy, canonical in zip(
+        _LEGACY_LEAVE_GRANT_KEYS, _CANONICAL_LEAVE_GRANT_KEYS, strict=True
+    ):
         if legacy == canonical:
             continue
         op.execute(

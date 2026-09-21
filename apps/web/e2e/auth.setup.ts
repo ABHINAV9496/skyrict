@@ -65,6 +65,13 @@ async function saveAuthState(page: Page) {
     return state;
 }
 
+// The enrollment arm signs in, verifies TOTP, then waits for the handoff to
+// navigate off the signin host; on a cold CI stack (the security phase rebuilds
+// the cluster and wipes Postgres) that consistently takes ~15-20s and the
+// global 30s test timeout is not enough with the 45s handoff poll. Mirrors the
+// 120s budget the sibling auth specs use.
+setup.setTimeout(120_000);
+
 setup("authenticate as the seeded admin", async ({ page }) => {
     // e2e/.auth is gitignored (holds the TOTP secret + storage state), so it
     // does not exist on a fresh CI checkout - create it before the first write.

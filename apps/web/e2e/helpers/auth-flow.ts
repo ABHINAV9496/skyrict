@@ -12,7 +12,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 
 import { totp } from "./totp";
 
@@ -239,13 +239,16 @@ export async function enrollMfaAndFinish(
 }
 
 /** Wait for the login/MFA handoff to land on the workspace host. */
-export async function waitForWorkspace(page: Page): Promise<void> {
+export async function waitForWorkspace(
+    page: Page,
+    options: { timeout?: number } = {},
+): Promise<void> {
     // A successful handoff navigates off the signin host. A rejected MFA code
     // ("That code didn't match") or a bounced redirect (the login page renders
     // the API error / stripped `?error=` into a role=alert) keeps the URL on
-    // the signin host - previously waitForURL just sat out its full 20s and the
-    // worker fixture then died with a generic 30s timeout, hiding the actual
-    // cause. Fail fast with the URL + visible copy instead.
+    // the signin host - previously waitForURL just sat out its full timeout and
+    // the worker fixture then died with a generic 30s timeout, hiding the
+    // actual cause. Fail fast with the URL + visible copy instead.
     //
     // IMPORTANT: the auth pages carry a permanent screen-reader live region
     // (role=alert) that echoes the document <title> (e.g. "Set up two-factor
@@ -253,46 +256,83 @@ export async function waitForWorkspace(page: Page): Promise<void> {
     // Only an alert whose text diverges from the current page title signals a
     // bounced handoff - plus the plain (non-alert) "That code didn't match"
     // copy from the MFA verify form.
-    await expect
-        .poll(
-            async (): Promise<string | null> => {
-                if (!new URL(page.url()).hostname.includes(".signin.")) {
-                    return null; // handoff landed
-                }
-                const title = (await page.title()).trim();
-                const alerts = page.locator('[role="alert"]');
-                const alertCount = await alerts.count();
-                let copy: string | null = null;
-                for (let i = 0; i < alertCount; i++) {
-                    const text =
-                        (await alerts
-                            .nth(i)
-                            .textContent()
-                            .catch(() => null)) ?? "";
-                    if (title && text.trim() && text.trim() !== title) {
-                        copy = text;
-                        break;
+    //
+    // The default budget is generous (45s): on a freshly booted CI stack the
+    // handoff's mint + form-POST can take ~15-20s before the workspace
+    // navigation commits (observed on the tight security stack), and the old
+    // 20s poll expired a tick before its URL check saw the new host. Callers
+    // with a tighter budget (e.g. the worker fixture's own timeout) can pass
+    // an explicit `timeout`.
+    const timeout = options.timeout ?? 45_000;
+    const failedRequests: string[] = [];
+    const onRequestFailed = (request: Request) => {
+        failedRequests.push(
+            `${request.method()} ${request.url()} - ${request.failure()?.errorText ?? "unknown error"}`,
+        );
+    };
+    page.on("requestfailed", onRequestFailed);
+    try {
+        await expect
+            .poll(
+                async (): Promise<string | null> => {
+                    if (!new URL(page.url()).hostname.includes(".signin.")) {
+                        return null; // handoff landed
                     }
-                }
-                copy ??=
-                    (await page
-                        .getByText(/That code didn'?t match/i)
-                        .first()
-                        .textContent()
-                        .catch(() => null)) ?? null;
-                if (copy) {
-                    throw new Error(
-                        `MFA handoff failed at ${page.url()}: ${copy.trim()}`,
-                    );
-                }
-                return "pending";
-            },
-            {
-                timeout: 20_000,
-                message: "MFA handoff did not reach the workspace",
-            },
-        )
-        .toBe(null);
+                    const title = (await page.title()).trim();
+                    const alerts = page.locator('[role="alert"]');
+                    const alertCount = await alerts.count();
+                    let copy: string | null = null;
+                    for (let i = 0; i < alertCount; i++) {
+                        const text =
+                            (await alerts
+                                .nth(i)
+                                .textContent()
+                                .catch(() => null)) ?? "";
+                        if (title && text.trim() && text.trim() !== title) {
+                            copy = text;
+                            break;
+                        }
+                    }
+                    copy ??=
+                        (await page
+                            .getByText(/That code didn'?t match/i)
+                            .first()
+                            .textContent()
+                            .catch(() => null)) ?? null;
+                    if (copy) {
+                        throw new Error(
+                            `MFA handoff failed at ${page.url()}: ${copy.trim()}`,
+                        );
+                    }
+                    return "pending";
+                },
+                {
+                    timeout,
+                    message: "MFA handoff did not reach the workspace",
+                },
+            )
+            .toBe(null);
+    } catch (err) {
+        if (
+            err instanceof Error &&
+            err.message.startsWith("MFA handoff failed at")
+        ) {
+            throw err; // bounced handoff - the copy above is specific enough
+        }
+        throw new Error(
+            [
+                "MFA handoff did not reach the workspace.",
+                `Final URL: ${page.url()}`,
+                `Page title: ${await page.title().catch(() => "<unavailable>")}`,
+                failedRequests.length
+                    ? `Failed browser requests:\n${failedRequests.join("\n")}`
+                    : "No failed browser requests were recorded.",
+            ].join("\n"),
+            { cause: err },
+        );
+    } finally {
+        page.off("requestfailed", onRequestFailed);
+    }
 }
 
 /**

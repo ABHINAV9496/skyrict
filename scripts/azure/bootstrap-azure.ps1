@@ -1,0 +1,288 @@
+<#
+.SYNOPSIS
+    Bootstraps the Skyrict Azure beta (SKY-114): Azure login, resource group,
+    GitHub Actions OIDC federated identity, RBAC, and all GitHub environment
+    secrets that cd-azure-beta.yml needs.
+
+.DESCRIPTION
+    Creates (idempotently) everything that must exist BEFORE the first Bicep
+    deployment can run, and generates the operational secrets that the CD
+    workflow seeds into Key Vault (the vault itself is created by Bicep).
+
+    The service principal gets:
+      - Contributor on the RESOURCE GROUP  - control-plane deployments
+      - Key Vault Administrator on the RG  - data-plane secret seeding (KV
+        RBAC role, assigned at RG scope so it covers the vault once Bicep
+        creates it)
+      - Contributor at SUBSCRIPTION scope - the observability module deploys
+        Microsoft.Consumption/budgets at subscription scope; a nested
+        subscription deployment requires deployments/write there
+
+    ACR data-plane push (AcrPush) is NOT granted here: registry.bicep grants
+    it to the deploy principal during phase 1 using the AZURE_DEPLOY_PRINCIPAL_ID
+    secret, keeping the whole registry grant inside the IaC.
+
+    Secrets are never written to the repository or printed to the console.
+    Re-running this script reuses the existing app registration and rotates
+    the secrets (documented in docs/runbooks/azure-iac.md).
+
+.PARAMETER EnvironmentName
+    GitHub Actions environment for the CD secrets/variables. Default azure-beta.
+
+.PARAMETER ResourceGroupName
+    Azure resource group for the deployment. Default skyrict-beta.
+
+.PARAMETER Location
+    Azure region. Default eastus.
+
+.PARAMETER GitHubRepo
+    Owner/repo that owns the environment (gh must be authenticated). Default
+    nkswalih/skyrict.
+
+.PARAMETER AppDisplayName
+    Display name of the Azure AD app registration used for OIDC. If an app
+    with this name exists it is reused; otherwise it is created.
+
+.EXAMPLE
+    ./scripts/azure/bootstrap-azure.ps1
+
+.EXAMPLE
+    ./scripts/azure/bootstrap-azure.ps1 -Location westeurope -ResourceGroupName skyrict-beta
+#>
+[CmdletBinding()]
+param(
+    [string]$EnvironmentName = 'azure-beta',
+    [string]$ResourceGroupName = 'skyrict-beta',
+    [string]$Location = 'eastus',
+    [string]$GitHubRepo = 'nkswalih/skyrict',
+    [string]$AppDisplayName = 'skyrict-azure-cd',
+    [string]$Prefix = 'skyrict'
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Assert-Command {
+    param([string]$Name)
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Required CLI '$Name' not found on PATH. Install it and retry."
+    }
+}
+
+function New-UrlSafeToken {
+    param([int]$Bytes = 32)
+    # URL-safe base64 (RFC 4648) with no '=' padding - safe in connection
+    # strings and env vars, and in az CLI --parameters key=value syntax.
+    $bytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes($Bytes)
+    $b64 = [Convert]::ToBase64String($bytes)
+    return ($b64 -replace '\+', '-' -replace '/', '_' -replace '=', '')
+}
+
+function New-FernetKey {
+    # Fernet.generate_key() = urlsafe_b64encode(32 random bytes). Prefer the
+    # repo's uv environment (guarantees the cryptography version the services
+    # import), falling back to a system python.
+    $code = "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        $key = (uv run python -c $code 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $key) { return $key.Trim() }
+    }
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        $key = (python -c $code 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $key) { return $key.Trim() }
+    }
+    throw "Could not generate a Fernet key: run 'uv sync --group dev' first so cryptography is available, then retry."
+}
+
+function New-RsaKeypair {
+    # PKCS#8 private ("BEGIN PRIVATE KEY") + SPKI public ("BEGIN PUBLIC KEY")
+    # PEMs, 2048-bit - exactly what identity's verify_jwt_keys_usable() loads
+    # (load_pem_private_key / load_pem_public_key, >= 2048 bits enforced).
+    $rsa = [System.Security.Cryptography.RSA]::Create(2048)
+    try {
+        return @{
+            PrivatePem = $rsa.ExportPkcs8PrivateKeyPem()
+            PublicPem  = $rsa.ExportSubjectPublicKeyInfoPem()
+        }
+    }
+    finally {
+        $rsa.Dispose()
+    }
+}
+
+Write-Host "== Skyrict Azure beta bootstrap ==" -ForegroundColor Cyan
+
+# ---------------------------------------------------------------------------
+# Prerequisites
+# ---------------------------------------------------------------------------
+Assert-Command 'az'
+Assert-Command 'gh'
+
+Write-Host "Checking Azure CLI login..."
+az account show --output none 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "No active Azure login - launching interactive login..."
+    az login
+    if ($LASTEXITCODE -ne 0) { throw "az login failed" }
+}
+
+Write-Host "Checking GitHub CLI login..."
+gh auth status --hostname github.com *> $null
+if ($LASTEXITCODE -ne 0) { throw "gh is not authenticated to github.com - run 'gh auth login' first" }
+
+$subscriptionId = (az account show --query id -o tsv)
+$tenantId = (az account show --query tenantId -o tsv)
+Write-Host "Subscription: $subscriptionId"
+Write-Host "Tenant:       $tenantId"
+
+# ---------------------------------------------------------------------------
+# Resource group
+# ---------------------------------------------------------------------------
+if (az group exists --name $ResourceGroupName) {
+    Write-Host "Resource group '$ResourceGroupName' already exists (reusing)."
+}
+else {
+    Write-Host "Creating resource group '$ResourceGroupName' in $Location..."
+    az group create --name $ResourceGroupName --location $Location --tags environment=beta managedBy=bicep
+    if ($LASTEXITCODE -ne 0) { throw "az group create failed" }
+}
+
+# ---------------------------------------------------------------------------
+# App registration + service principal + OIDC federated credential
+# ---------------------------------------------------------------------------
+Write-Host "Ensuring app registration '$AppDisplayName'..."
+$apps = az ad app list --display-name $AppDisplayName --query "[?displayName=='$AppDisplayName']" -o json | ConvertFrom-Json
+if ($apps.Count -gt 0) {
+    $appId = $apps[0].appId
+    Write-Host "Reusing existing app registration (appId $appId)."
+}
+else {
+    $app = az ad app create --display-name $AppDisplayName --sign-in-audience AzureADMyOrg -o json | ConvertFrom-Json
+    $appId = $app.appId
+    Write-Host "Created app registration (appId $appId)."
+}
+
+Write-Host "Ensuring service principal..."
+$sp = az ad sp show --id $appId -o json 2>$null | ConvertFrom-Json
+if (-not $sp) {
+    $sp = az ad sp create --id $appId -o json | ConvertFrom-Json
+    Write-Host "Created service principal."
+}
+$spObjectId = $sp.id
+
+Write-Host "Ensuring OIDC federated credential for environment '$EnvironmentName'..."
+$credName = "cd-${EnvironmentName}"
+$creds = az ad app federated-credential list --id $appId --query "[?name=='$credName']" -o json | ConvertFrom-Json
+if ($creds.Count -eq 0) {
+    $subject = "repo:${GitHubRepo}:environment:${EnvironmentName}"
+    $body = @{
+        name = $credName
+        issuer = 'https://token.actions.githubusercontent.com'
+        subject = $subject
+        description = "GitHub Actions OIDC for $GitHubRepo environment $EnvironmentName"
+        audiences = @('api://AzureADTokenExchange')
+    } | ConvertTo-Json -Depth 5
+    az ad app federated-credential create --id $appId --parameters $body | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "federated-credential create failed" }
+    Write-Host "Created federated credential with subject '$subject'."
+}
+else {
+    Write-Host "Federated credential '$credName' already exists (reusing)."
+}
+
+# ---------------------------------------------------------------------------
+# RBAC
+# ---------------------------------------------------------------------------
+Write-Host "Assigning RBAC (idempotent)..."
+$rgId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroupName"
+
+$rgContributor = az role assignment list --assignee $spObjectId --scope $rgId --role Contributor --query "[?principalId=='$spObjectId']" -o json | ConvertFrom-Json
+if ($rgContributor.Count -eq 0) {
+    az role assignment create --assignee-object-id $spObjectId --role Contributor --scope $rgId | Out-Null
+    Write-Host "  Contributor on $ResourceGroupName assigned."
+}
+
+$kvAdmin = az role assignment list --assignee $spObjectId --scope $rgId --role "Key Vault Administrator" --query "[?principalId=='$spObjectId']" -o json | ConvertFrom-Json
+if ($kvAdmin.Count -eq 0) {
+    az role assignment create --assignee-object-id $spObjectId --role "Key Vault Administrator" --scope $rgId | Out-Null
+    Write-Host "  Key Vault Administrator on $ResourceGroupName assigned."
+}
+
+$subContributor = az role assignment list --assignee $spObjectId --scope "/subscriptions/$subscriptionId" --role Contributor --query "[?principalId=='$spObjectId' && scope=='/subscriptions/$subscriptionId']" -o json | ConvertFrom-Json
+if ($subContributor.Count -eq 0) {
+    az role assignment create --assignee-object-id $spObjectId --role Contributor --scope "/subscriptions/$subscriptionId" | Out-Null
+    Write-Host "  Contributor on the subscription assigned (required for subscription-scoped budgets)."
+}
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+Write-Host "Generating operational secrets..."
+$keys = New-RsaKeypair
+$jwtPrivate = $keys.PrivatePem
+$jwtPublic = $keys.PublicPem
+$mfaKey = New-FernetKey
+$syncToken = New-UrlSafeToken 48
+$ingestToken = New-UrlSafeToken 48
+$postgresPassword = New-UrlSafeToken 24
+
+Write-Host "Ensuring GitHub environment '$EnvironmentName'..."
+gh api -X PUT "repos/$GitHubRepo/environments/$EnvironmentName" --silent
+if ($LASTEXITCODE -ne 0) { throw "could not create GitHub environment $EnvironmentName" }
+
+$secrets = [ordered]@{
+    AZURE_SUBSCRIPTION_ID        = $subscriptionId
+    AZURE_TENANT_ID              = $tenantId
+    AZURE_CLIENT_ID              = $appId
+    AZURE_DEPLOY_PRINCIPAL_ID    = $spObjectId
+    AZURE_POSTGRES_ADMIN_PASSWORD = $postgresPassword
+    AZURE_JWT_PRIVATE_KEY        = $jwtPrivate
+    AZURE_JWT_PUBLIC_KEY         = $jwtPublic
+    AZURE_MFA_ENCRYPTION_KEY     = $mfaKey
+    AZURE_SYNC_TOKEN             = $syncToken
+    AZURE_INGEST_TOKEN           = $ingestToken
+    # Optional; set later when swapping Azure Cache for Redis -> Upstash.
+    AZURE_REDIS_URL_OVERRIDE     = ''
+}
+foreach ($entry in $secrets.GetEnumerator()) {
+    # --body "$env:gh_secret_value" preserves multi-line PEM newlines; a
+    # multiline string cannot be passed directly on a PowerShell command line.
+    $env:gh_secret_value = $entry.Value
+    gh secret set $entry.Key --env $EnvironmentName --body $env:gh_secret_value
+    if ($LASTEXITCODE -ne 0) { throw "gh secret set failed for $($entry.Key)" }
+    Remove-Item env:gh_secret_value
+    Write-Host "  set $($entry.Key) (value hidden)"
+}
+
+# CD gate: pushing to dev only deploys when the variable is true.
+gh variable set CD_AZURE_BETA_ENABLED --env $EnvironmentName --body "true"
+if ($LASTEXITCODE -ne 0) { throw "could not set CD_AZURE_BETA_ENABLED variable" }
+Write-Host "  set CD_AZURE_BETA_ENABLED=true on environment $EnvironmentName"
+
+# ---------------------------------------------------------------------------
+# Seed Key Vault if the vault already exists (manual/local deploys)
+# ---------------------------------------------------------------------------
+$vaultName = "kv-${Prefix}-beta"  # matches the security module naming (envName=beta)
+if (az keyvault show --name $vaultName --query name -o tsv 2>$null) {
+    Write-Host "Key Vault '$vaultName' exists - seeding secrets (idempotent, rotates values)."
+    az keyvault secret set --vault-name $vaultName --name jwt-private-key --value $jwtPrivate | Out-Null
+    az keyvault secret set --vault-name $vaultName --name jwt-public-key --value $jwtPublic | Out-Null
+    az keyvault secret set --vault-name $vaultName --name mfa-encryption-key --value $mfaKey | Out-Null
+    az keyvault secret set --vault-name $vaultName --name sync-token --value $syncToken | Out-Null
+    az keyvault secret set --vault-name $vaultName --name ingest-token --value $ingestToken | Out-Null
+    Write-Host "  KV secrets seeded."
+}
+
+Write-Host ""
+Write-Host "Bootstrap complete." -ForegroundColor Green
+Write-Host @"
+
+Next steps:
+  1. (CD) Push to dev - cd-azure-beta.yml runs phase 1 + phase 2 and verifies.
+     Or deploy manually: see docs/runbooks/azure-iac.md.
+  2. After the first deploy, the apps are reachable at the external FQDNs
+     printed by the CD (identity/app-core external, ai-agent internal-only).
+  3. Set budget alert emails: pass budgetContactEmails to main.bicep or edit
+     infra/azure/parameters/beta.parameters.json (do not commit secrets).
+  4. Re-running this script ROTATES all secrets. The running services keep
+     working until the next phase-2 apply picks up the new Key Vault values.
+"@

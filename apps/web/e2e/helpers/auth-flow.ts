@@ -242,41 +242,50 @@ export async function enrollMfaAndFinish(
 export async function waitForWorkspace(page: Page): Promise<void> {
     // A successful handoff navigates off the signin host. A rejected MFA code
     // ("That code didn't match") or a bounced redirect (the login page renders
-    // stripped `?error=` into a role=alert) keeps the URL on the signin host -
-    // previously waitForURL just sat out its full 20s and the worker fixture
-    // then died with a generic 30s timeout, hiding the actual cause. Fail fast
-    // with the URL + visible copy instead.
+    // the API error / stripped `?error=` into a role=alert) keeps the URL on
+    // the signin host - previously waitForURL just sat out its full 20s and the
+    // worker fixture then died with a generic 30s timeout, hiding the actual
+    // cause. Fail fast with the URL + visible copy instead.
+    //
+    // IMPORTANT: the auth pages carry a permanent screen-reader live region
+    // (role=alert) that echoes the document <title> (e.g. "Set up two-factor
+    // authentication · Skyrict"), so PRESENCE of a role=alert is NOT a failure.
+    // Only an alert whose text diverges from the current page title signals a
+    // bounced handoff - plus the plain (non-alert) "That code didn't match"
+    // copy from the MFA verify form.
     await expect
         .poll(
             async (): Promise<string | null> => {
                 if (!new URL(page.url()).hostname.includes(".signin.")) {
                     return null; // handoff landed
                 }
-                const alertCount = await page.locator('[role="alert"]').count();
-                const mfaCopyCount = await page
-                    .getByText(/That code didn'?t match/i)
-                    .count();
-                if (alertCount === 0 && mfaCopyCount === 0) {
-                    return "pending";
+                const title = (await page.title()).trim();
+                const alerts = page.locator('[role="alert"]');
+                const alertCount = await alerts.count();
+                let copy: string | null = null;
+                for (let i = 0; i < alertCount; i++) {
+                    const text =
+                        (await alerts
+                            .nth(i)
+                            .textContent()
+                            .catch(() => null)) ?? "";
+                    if (title && text.trim() && text.trim() !== title) {
+                        copy = text;
+                        break;
+                    }
                 }
-                const copy =
-                    (alertCount > 0
-                        ? await page
-                              .locator('[role="alert"]')
-                              .first()
-                              .textContent()
-                              .catch(() => null)
-                        : null) ??
-                    (mfaCopyCount > 0
-                        ? await page
-                              .getByText(/That code didn'?t match/i)
-                              .first()
-                              .textContent()
-                              .catch(() => null)
-                        : null);
-                throw new Error(
-                    `MFA handoff failed at ${page.url()}: ${(copy ?? "unknown error").trim()}`,
-                );
+                copy ??=
+                    (await page
+                        .getByText(/That code didn'?t match/i)
+                        .first()
+                        .textContent()
+                        .catch(() => null)) ?? null;
+                if (copy) {
+                    throw new Error(
+                        `MFA handoff failed at ${page.url()}: ${copy.trim()}`,
+                    );
+                }
+                return "pending";
             },
             {
                 timeout: 20_000,

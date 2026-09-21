@@ -127,6 +127,14 @@ export default defineConfig({
             // Same worker-scoped `workspace` sign-in as crm-finance: no shared
             // storage state, so each worker advances its own refresh-token chain.
         },
+        {
+            name: "perf",
+            testMatch: /perf[\\/][^\\/]+\.spec\.ts$/,
+            dependencies: ["setup"],
+            // Cold-start trace (PERF-WEB-002): worker-scoped `workspace` fixture
+            // signs in through the real surface; the spec opens a fresh page so
+            // the cookie-rotation chain stays private to the worker (see header).
+        },
     ],
     ...(webServer ? { webServer } : {}),
 });

@@ -216,7 +216,7 @@ jobs:
         # the SAME seeded admin, and identity rotates + revokes the refresh
         # family on reuse. Two parallel workers hydrating that one account race
         # the rotation chain and get bounced to /signin (or a revoked session).
-        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance --workers=1
+        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance --project=perf --workers=1
         env:
           CI: "true"
           E2E_BASE_URL: "http://default.localhost:3000"

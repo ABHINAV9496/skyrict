@@ -84,9 +84,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Azure/bicep-setup-action@v2
-        with:
-          version: v0.47.16
+      - name: Install pinned Bicep CLI (v0.47.16)
+        # No official composite action exists for Bicep; download the exact
+        # release binary from Azure/bicep so format/build output is
+        # reproducible with the local .dev/tools/bicep.exe.
+        run: |
+          curl -sSfL -o /usr/local/bin/bicep \
+            https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
+          chmod +x /usr/local/bin/bicep
+          bicep --version
 
       - name: Format check
         # `bicep format` has no --check flag; format to a temp file and diff

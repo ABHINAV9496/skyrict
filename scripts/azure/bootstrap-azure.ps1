@@ -61,6 +61,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# ExportPkcs8PrivateKeyPem()/ExportSubjectPublicKeyInfoPem() require .NET 5+
+# (PowerShell 7). Fail fast instead of an obscure member-not-found error.
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw "This script requires PowerShell 7 (.NET 5+). Current: $($PSVersionTable.PSVersion) - run it with pwsh instead."
+}
+
 function Assert-Command {
     param([string]$Name)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -244,6 +250,13 @@ $secrets = [ordered]@{
     AZURE_REDIS_URL_OVERRIDE     = ''
 }
 foreach ($entry in $secrets.GetEnumerator()) {
+    # Skip empty values: unset GitHub secrets already expand to '' in the
+    # workflow, and gh secret set --body '' can 422. AZURE_REDIS_URL_OVERRIDE
+    # stays unset until the Upstash swap.
+    if ([string]::IsNullOrWhiteSpace($entry.Value)) {
+        Write-Host "  skipped $($entry.Key) (empty value)"
+        continue
+    }
     # --body "$env:gh_secret_value" preserves multi-line PEM newlines; a
     # multiline string cannot be passed directly on a PowerShell command line.
     $env:gh_secret_value = $entry.Value

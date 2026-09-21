@@ -107,7 +107,7 @@ This is idempotent for identity/RBAC and:
 | `AZURE_MFA_ENCRYPTION_KEY` | TOTP-at-rest encryption | Fernet key (`Fernet.generate_key()`) |
 | `AZURE_SYNC_TOKEN` | Shared sync token (core ↔ ai-agent) | URL-safe token |
 | `AZURE_INGEST_TOKEN` | Shared ingest token (core → ai-agent) | URL-safe token |
-| `AZURE_REDIS_URL_OVERRIDE` | Upstash `rediss://` URL for month 2+ | `rediss://…:6379` (empty in month 1) |
+| `AZURE_REDIS_URL_OVERRIDE` | Upstash `rediss://` URL for month 2+ | `rediss://…:6379` (**unset** in month 1 — a missing secret expands to `''` in the workflow) |
 
 ### 4.2 Key Vault secrets (seeded by CD / bootstrap)
 

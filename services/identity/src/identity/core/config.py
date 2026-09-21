@@ -344,6 +344,26 @@ class Settings(BaseSettings):
         description="max backup-code regenerations per user per window",
     )
 
+    # --- Bridgeon demo-tenant seed credentials (SEC-CLEAN-001) ---
+    # Consumed only by ``python -m identity.seed_bridgeon`` (dev toolbox).
+    # The seeder CONVERGES the two bridgeon-solutions accounts to these values
+    # on every run, so rotating credentials is: edit the gitignored
+    # services/identity/.env and re-run. Empty values make the seeder refuse
+    # to start - there is deliberately NO hardcoded fallback, so a known
+    # plaintext secret can never re-enter the repo.
+    SEED_BRIDGEON_OWNER_PASSWORD: str = Field(
+        default="",
+        description="bridgeon-solutions tenant_owner password (SEED_BRIDGEON_* - never committed)",
+    )
+    SEED_BRIDGEON_ORG_ADMIN_PASSWORD: str = Field(
+        default="",
+        description="bridgeon-solutions organization_admin password (SEED_BRIDGEON_* - never committed)",
+    )
+    SEED_BRIDGEON_MFA_SECRET: str = Field(
+        default="",
+        description="TOTP secret enrolled on both bridgeon-solutions seed accounts (never committed)",
+    )
+
     # --- Billing (SKY-33, ADR-009) ---
     BILLING_STRIPE_SECRET_KEY: str = Field(
         default="",

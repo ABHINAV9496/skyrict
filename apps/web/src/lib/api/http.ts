@@ -179,6 +179,37 @@ export function extractErrorMessage(
 }
 
 /**
+ * In-flight GET coalescing for the JSON client (see PERF-WEB-002).
+ *
+ * Identical concurrent GETs share ONE network request and the same parsed
+ * result. In-flight only: a settled request is never reused (freshness is
+ * owned by resource-cache/modules TTLs), and failures are not cached so the
+ * next caller retries. Raw-Response consumers (apiFetchRaw, fetchWithSession,
+ * SSE streams) are intentionally excluded: a Response body is
+ * single-consumption and streams may carry their own AbortSignal.
+ */
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function getDedupeKey(path: string, options: RequestInit): string | null {
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method !== "GET") return null; // mutations are never coalesced
+  if (options.signal) return null; // abort-capable callers own their request
+  return `GET ${path}`;
+}
+
+function dedupeGet<T>(path: string, options: RequestInit, run: () => Promise<T>): Promise<T> {
+  const key = getDedupeKey(path, options);
+  if (!key) return run();
+  const pending = inFlightGets.get(key);
+  if (pending) return pending as Promise<T>;
+  const promise = run().finally(() => {
+    if (inFlightGets.get(key) === promise) inFlightGets.delete(key);
+  });
+  inFlightGets.set(key, promise);
+  return promise;
+}
+
+/**
  * Fetch a `/api/v1` endpoint with session hydration/refresh, returning the
  * full (unparsed) `Response`.
  *
@@ -271,7 +302,9 @@ export async function fetchWithSession(path: string, options: RequestInit): Prom
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return toResult<T>(await fetchWithSession(path, options));
+  return dedupeGet(path, options, () =>
+    fetchWithSession(path, options).then((response) => toResult<T>(response)),
+  );
 }
 
 /**
@@ -287,7 +320,9 @@ export async function apiFetchWithMeta<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<Envelope<T>> {
-  return readPayload<T>(await fetchWithSession(path, options));
+  return dedupeGet(path, options, () =>
+    fetchWithSession(path, options).then((response) => readPayload<T>(response)),
+  );
 }
 
 export { apiFetchWithMeta as apiFetchEnvelope };
@@ -311,7 +346,9 @@ async function readBody<T>(response: Response): Promise<T> {
 
 /** Fetch a `/api/v1` endpoint and return the FULL response body (no envelope unwrap). */
 export async function apiFetchBody<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return readBody<T>(await fetchWithSession(path, options));
+  return dedupeGet(path, options, () =>
+    fetchWithSession(path, options).then((response) => readBody<T>(response)),
+  );
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {

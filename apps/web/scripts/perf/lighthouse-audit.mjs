@@ -33,7 +33,7 @@ import lighthouse, { generateReport } from "lighthouse";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "lighthouse-results");
-const TOTP_SECRET_FILE = path.join(__dirname, "..", "e2e", ".auth", "totp-secret");
+const TOTP_SECRET_FILE = path.join(__dirname, "..", "..", "e2e", ".auth", "totp-secret");
 
 const BASE = process.env.E2E_BASE_URL ?? "http://default.localhost:3000";
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
@@ -171,19 +171,39 @@ async function login(page) {
     if (!secret) {
       throw new Error("MFA challenge requires E2E_TOTP_SECRET (no persisted secret found).");
     }
-    // Try the current, previous, and next 30s windows to dodge clock
-    // boundaries (mirrors the enrollment arm below). A rejected code keeps the
-    // page on the signin host; the workspace handoff proves acceptance.
+    // Try the current, previous, and next 30s TOTP windows (mirrors the
+    // enrollment arm below). The landing budget must cover the real handoff
+    // chain - TOTP verify, mint + form-POST, 303 -> workspace GET - which
+    // takes ~6s warm and 15-20s on a freshly booted runner (see auth-flow.ts
+    // waitForWorkspace notes). The old 8s sub-budget made the first offset
+    // "fail" while its navigation was still committing, burned the remaining
+    // windows into a mid-handoff page, and then waited 20s for a workspace
+    // shell on the still-signin host (the CI harvest-2 timeout). Only a
+    // genuinely rejected code (the verify form's "That code didn't match"
+    // copy) consumes an offset - a slow-but-correct landing must not.
     for (const offset of [0, -1, 1]) {
       await fillOtp(page, "Two-factor code", totp(secret, offset));
-      const landed = await page
-        .waitForURL((url) => !url.hostname.includes(".signin."), { timeout: 8_000 })
+      const landed = page
+        .waitForURL((url) => !url.hostname.includes(".signin."), { timeout: 30_000 })
         .then(() => true)
         .catch(() => false);
-      if (landed) break;
+      const rejected = page
+        .getByText("That code didn't match")
+        .waitFor({ timeout: 30_000 })
+        .then(() => false)
+        .catch(() => false);
+      if (await Promise.race([landed, rejected])) {
+        await waitForWorkspaceSettled(page);
+        return;
+      }
     }
-    await waitForWorkspaceSettled(page);
-    return;
+    // Every window failed to land and was rejected: a misconfigured secret,
+    // not a slow handoff. Fail fast with the URL instead of running
+    // waitForWorkspaceSettled (20s) against a page that never left the signin
+    // host and reporting a misleading "workspace did not settle" timeout.
+    throw new Error(
+      `MFA challenge rejected every TOTP window at ${page.url()} - E2E_TOTP_SECRET does not match the enrolled secret`,
+    );
   }
 
   // Enrollment: poll for the server-generated secret, verify a TOTP code
@@ -220,6 +240,16 @@ async function login(page) {
 }
 
 async function harvestCookieHeader() {
+  // Each harvest must sign in from a CLEAN cookie jar. The shared persistent
+  // profile retains the previous harvest's session cookie plus the rotations
+  // the prior Lighthouse runs applied; re-logging-in on a jar that still
+  // carries the old family presents a pre-rotation token during the MFA
+  // handoff, and the backend's reuse detector revokes the whole session
+  // family and bounces /signin - the "Skyrict dashboard" shell then never
+  // renders and waitForWorkspaceSettled times out (see auth-flow.ts
+  // waitForWorkspaceSettled; CI hit this on the 3rd of 4 URL harvests).
+  // Wipe the jar so every URL is measured under one fresh session family.
+  await browser.clearCookies();
   const page = await browser.newPage({ locale: "en-US" });
   try {
     await login(page);

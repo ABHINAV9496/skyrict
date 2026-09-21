@@ -1,0 +1,65 @@
+{
+  "capturedAt": "2026-09-21T04:49:29.290Z",
+  "routes": {
+    "/": {
+      "firstApiMs": 325,
+      "apiCalls": [
+        {
+          "url": "/api/auth/session",
+          "status": 200,
+          "ms": 325
+        },
+        {
+          "url": "/api/v1/notifications/counts",
+          "status": 200,
+          "ms": 354
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 380
+        },
+        {
+          "url": "/api/v1/billing/subscription",
+          "status": 200,
+          "ms": 400
+        }
+      ]
+    },
+    "/roles": {
+      "firstApiMs": 220,
+      "apiCalls": [
+        {
+          "url": "/api/auth/session",
+          "status": 200,
+          "ms": 220
+        },
+        {
+          "url": "/api/v1/notifications/counts",
+          "status": 200,
+          "ms": 242
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 277
+        },
+        {
+          "url": "/api/v1/billing/subscription",
+          "status": 200,
+          "ms": 309
+        },
+        {
+          "url": "/api/v1/permissions",
+          "status": 200,
+          "ms": 334
+        },
+        {
+          "url": "/api/v1/roles",
+          "status": 200,
+          "ms": 344
+        }
+      ]
+    }
+  }
+}

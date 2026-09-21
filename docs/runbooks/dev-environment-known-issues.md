@@ -252,3 +252,63 @@ load/guard/`useLatestRequest` boilerplate, but every variant differs slightly
 in its extra states, so it lands as a large mechanical diff. Deferred off
 `fix/BUG-WEB-001` to keep that branch reviewable; do it as its own change with
 the page-by-page behavior diff checked.
+
+---
+
+## Entry J — bridgeon-solutions demo tenant provisioned by a local-only script
+
+**Status: fixed, repeatable — on machines that carry the maintenance script.**
+
+The `bridgeon-solutions` demo tenant was previously created ad hoc in the dev
+DB (Entries A/C/D) — nothing in the repo or the E2E compose stack reproduced
+it, so a fresh stack came up with only the `default` tenant. Provisioning now
+lives in `services/identity/src/identity/seed_bridgeon.py` — an idempotent
+script that is **untracked and gitignored** on purpose. It runs from the
+bind-mounted host source of the running compose stack, so it works locally but
+is NOT part of the repo tree, is not shipped by CI, and is missing from fresh
+clones. The identity container sees it because compose mounts
+`../../services/identity/src` into `/app/services/identity/src`.
+
+```
+docker exec skyrict-e2e-identity \
+  uv run --directory services/identity python -m identity.seed_bridgeon
+```
+
+It creates the tenant (fixed UUID `00000000-0000-0000-0000-000000000002`,
+slug `bridgeon-solutions`), the six `SYSTEM_ROLE_DEFINITIONS` roles, the
+`abhikrishna616@gmail.com` (`tenant_owner`) and `admin@bridgeon.io`
+(`organization_admin`) users, and their active membership + tenant-scoped
+grants. MFA is seeded **enrolled** on both with the fixed dev TOTP secret
+`JBSWY3DPEHPK3PXP` (same posture as Entry A, so headless gate logins can pass
+the mandatory `mfa.verify` challenge). Rotate the secret and passwords before
+real use.
+
+Then seed core data for that tenant (dashes, not underscores):
+
+```
+docker exec skyrict-e2e-core uv run --directory services/core \
+  python -m core.cli seed --tenant-id 00000000-0000-0000-0000-000000000002
+docker exec skyrict-e2e-core uv run --directory services/core \
+  python -m core.cli seed-demo --tenant-id 00000000-0000-0000-0000-000000000002 --force --employees 30
+docker exec skyrict-e2e-core uv run --directory services/core \
+  python -m core.cli seed-crm --tenant-id 00000000-0000-0000-0000-000000000002 --force
+docker exec skyrict-e2e-core uv run --directory services/core \
+  python -m core.cli seed-revenue-history --tenant-id 00000000-0000-0000-0000-000000000002
+docker exec skyrict-e2e-core uv run --directory services/core \
+  python -m core.cli seed-overdue-invoices --tenant-id 00000000-0000-0000-0000-000000000002
+```
+
+Two post-seed steps the seeders do **not** encode (same caveats as Entry D):
+
+1. Flip payroll currency to INR:
+   `UPDATE erp_payroll_settings SET default_currency = 'INR' WHERE tenant_id = '00000000-0000-0000-0000-000000000002';`
+2. Restart core (`docker restart skyrict-e2e-core`) so the boot-time
+   `sync_rbac_from_identity` copies the new identity grants into
+   `core_user_roles` — without it the tenant owner authenticates but
+   `require_permission` denies in core.
+
+Verified live: login as `abhikrishna616@gmail.com` / `Abhikrishna61@`
+(`X-Tenant-Slug: bridgeon-solutions`) → `mfa.verify` challenge → TOTP from
+`JBSWY3DPEHPK3PXP` → 200 with a tenant-scoped token;
+`GET /api/v1/hr/employees` → 200 with the 30-employee Indian roster; 18
+payroll runs, 85 journal entries, INR payroll settings.

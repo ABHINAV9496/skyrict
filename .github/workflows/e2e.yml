@@ -204,6 +204,27 @@ jobs:
           SESSION_COOKIE_SECURE: "false"
           PORT: "3100"
 
+      - name: Pre-warm Next.js surfaces (PERF-WEB-002)
+        # The FIRST enrollment handoff on a freshly booted CI stack can stall
+        # ~45s past the signin surface before the workspace lands: the setup
+        # poll times out with the dashboard hydrating right at the budget, and
+        # the retry 48s later completes in ~6s. Exercise the one-shot cost
+        # (first-render of the workspace shell / warm-up of the BFF->identity
+        # connection pool) OUTSIDE the test so the setup spec never races it.
+        # curl cannot resolve *.localhost, so probe the Next server directly on
+        # 127.0.0.1:3100 with the real Host headers (identical to what nginx
+        # forwards). Sessionless 307s/302s are expected and still warm the
+        # routes + middleware + BFF->identity calls.
+        run: |
+          for host in default.localhost default.signin.localhost; do
+            for path in / /signin /setup-mfa; do
+              code=$(curl -sS -o /dev/null -w "%{http_code}" \
+                -H "Host: $host" "http://127.0.0.1:3100$path" || true)
+              echo "Pre-warmed http://$host$path -> $code"
+            done
+          done
+        timeout-minutes: 5
+
       # ---- Playwright ------------------------------------------------------
       - name: Install Playwright browser
         run: pnpm --filter @skyrict/web exec playwright install --with-deps chromium
@@ -216,7 +237,7 @@ jobs:
         # the SAME seeded admin, and identity rotates + revokes the refresh
         # family on reuse. Two parallel workers hydrating that one account race
         # the rotation chain and get bounced to /signin (or a revoked session).
-        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance --workers=1
+        run: pnpm --filter @skyrict/web exec playwright test --project=setup --project=reports-smoke --project=crm-finance --project=perf --workers=1
         env:
           CI: "true"
           E2E_BASE_URL: "http://default.localhost:3000"
@@ -231,6 +252,44 @@ jobs:
           # (A key without a provider stays disabled in ai-agent boot, so
           # gating on the pair keeps the assertion honest.)
           E2E_SEMANTIC_SEARCH: "${{ secrets.AI_EMBEDDING_PROVIDER != '' && secrets.AI_EMBEDDING_API_KEY != '' }}"
+
+      - name: Capture main-phase stack diagnostics
+        # PERF-WEB-002: the refresh-token chain and MFA handoff can fail fast
+        # (identity rejecting TOTP codes, or a ~100ms-after-mint 303 bounce to
+        # /signin?error=...) with NO Playwright trace (the failing attempt's
+        # context files came back empty). The security phase below `down -v`s
+        # this stack, so capture the evidence BEFORE it: identity/core logs,
+        # the nginx stream (which IS the access log: /var/log/nginx/access.log
+        # -> /dev/stdout), the Next.js log, and a Postgres dump of the auth
+        # tables. audit_logs records AUTH_REFRESH_SUCCESS /
+        # AUTH_REFRESH_REUSE_DETECTED / auth.login.mfa.verify_failed; sessions
+        # holds the token-family hashes; handoff_tokens shows whether the
+        # handoff redeem consumed its token - together they name the exact 303
+        # branch (redeem-fail / refresh-fail / missing access_token) and the
+        # TOTP rejection path.
+        if: always()
+        run: |
+          set +e
+          mkdir -p /tmp/e2e-main-diagnostics
+          for svc in identity core ai-agent nginx postgres; do
+            docker compose -f infra/docker/docker-compose.e2e.yml logs --no-color --timestamps "$svc" \
+              > "/tmp/e2e-main-diagnostics/$svc.log" 2>&1
+          done
+          cp /tmp/next.log /tmp/e2e-main-diagnostics/next.log 2>/dev/null
+          docker compose -f infra/docker/docker-compose.e2e.yml exec -T postgres sh -lc \
+            'PGPASSWORD=skyrict pg_dump -U skyrict -d skyrict_identity --data-only --no-owner \
+             --table=audit_logs --table=sessions --table=handoff_tokens --table=users' \
+            > /tmp/e2e-main-diagnostics/auth-state.sql 2>&1
+          du -sh /tmp/e2e-main-diagnostics/* 2>/dev/null
+        timeout-minutes: 5
+
+      - name: Upload main-phase diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-main-diagnostics
+          path: /tmp/e2e-main-diagnostics/
+          retention-days: 14
 
       # ---- Security phase (SKY-108) ---------------------------------------
       # Rebuilds the stack with tightened limits (docker-compose.e2e.security.yml)
@@ -301,6 +360,24 @@ jobs:
             sleep 2
           done
         timeout-minutes: 10
+
+      - name: Verify security configuration (identity grace window disabled)
+        # The token-reuse spec asserts a rotated refresh token replay gets 401,
+        # which only holds while the identity container actually runs with
+        # IDENTITY_REFRESH_REUSE_GRACE_SECONDS=0. If the override ever stops
+        # reaching the container (env-merge or service-rename regression), this
+        # step fails with the real value instead of a confusing "Expected 401,
+        # Received 200" deep inside the security suite.
+        run: |
+          value=$(docker compose -f infra/docker/docker-compose.e2e.yml \
+            -f infra/docker/docker-compose.e2e.security.yml exec -T identity \
+            sh -lc 'printf "%s" "$IDENTITY_REFRESH_REUSE_GRACE_SECONDS"')
+          echo "IDENTITY_REFRESH_REUSE_GRACE_SECONDS=$value"
+          if [ "$value" != "0" ]; then
+            echo "::error::identity must run with IDENTITY_REFRESH_REUSE_GRACE_SECONDS=0, got '$value'" >&2
+            exit 1
+          fi
+        timeout-minutes: 5
 
       - name: Run E2E security tests
         # --workers=1 keeps the whole suite on ONE authenticated session and

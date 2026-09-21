@@ -12,7 +12,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 
 import { totp } from "./totp";
 
@@ -234,15 +234,123 @@ export async function enrollMfaAndFinish(
         })
         .click();
     await page.getByRole("button", { name: "Finish setup" }).click();
-    await waitForWorkspace(page);
+    // Generous 100s budget: the poll's FIRST invocation starts while the
+    // handoff's form-POST 303 -> GET / navigation is still in flight, so the
+    // URL check still sees the signin host. The predicate probes are all
+    // explicitly bounded (1.5s), so the invocation cannot hang - it returns
+    // "pending", the poll re-invokes, and the next iteration's URL check
+    // catches the workspace commit. The budget is a backstop, not the normal
+    // path: the whole enrollment chain (login -> enroll -> mint -> redeem ->
+    // first rotations) completes server-side in ~6s.
+    await waitForWorkspace(page, { timeout: 100_000 });
     return secret;
 }
 
 /** Wait for the login/MFA handoff to land on the workspace host. */
-export async function waitForWorkspace(page: Page): Promise<void> {
-    await page.waitForURL((url) => !url.hostname.includes(".signin."), {
-        timeout: 20_000,
-    });
+export async function waitForWorkspace(
+    page: Page,
+    options: { timeout?: number } = {},
+): Promise<void> {
+    // A successful handoff navigates off the signin host. A rejected MFA code
+    // ("That code didn't match") or a bounced redirect (the login page renders
+    // the API error / stripped `?error=` into a role=alert) keeps the URL on
+    // the signin host - previously waitForURL just sat out its full timeout and
+    // the worker fixture then died with a generic 30s timeout, hiding the
+    // actual cause. Fail fast with the URL + visible copy instead.
+    //
+    // IMPORTANT: the auth pages carry a permanent screen-reader live region
+    // (role=alert) that echoes the document <title> (e.g. "Set up two-factor
+    // authentication · Skyrict"), so PRESENCE of a role=alert is NOT a failure.
+    // Only an alert whose text diverges from the current page title signals a
+    // bounced handoff - plus the plain (non-alert) "That code didn't match"
+    // copy from the MFA verify form.
+    //
+    // Every probe inside the predicate is explicitly bounded so a single
+    // invocation can never outlive the poll budget: the auto-waiting
+    // textContent() probes carry a 1.5s deadline (see the note above - an
+    // unbounded probe racing the handoff navigation hung the first poll
+    // invocation for the full 100s in CI). The default budget stays generous
+    // (45s) as a backstop for genuinely cold stacks; callers with a tighter
+    // budget (e.g. the worker fixture's own timeout) pass an explicit
+    // `timeout`.
+    const timeout = options.timeout ?? 45_000;
+    const failedRequests: string[] = [];
+    const onRequestFailed = (request: Request) => {
+        failedRequests.push(
+            `${request.method()} ${request.url()} - ${request.failure()?.errorText ?? "unknown error"}`,
+        );
+    };
+    page.on("requestfailed", onRequestFailed);
+    try {
+        await expect
+            .poll(
+                async (): Promise<string | null> => {
+                    if (!new URL(page.url()).hostname.includes(".signin.")) {
+                        return null; // handoff landed
+                    }
+                    const title = (await page.title()).trim();
+                    const alerts = page.locator('[role="alert"]');
+                    const alertCount = await alerts.count();
+                    let copy: string | null = null;
+                    for (let i = 0; i < alertCount; i++) {
+                        // BOUNDED probe: auto-waiting textContent() without a
+                        // timeout can hang a whole poll invocation when the
+                        // page is mid-handoff navigation (the first invocation
+                        // races the form-POST 303 -> GET / commit; the wait then
+                        // polls the post-navigation document forever). With a
+                        // deadline the predicate always returns and the poll
+                        // re-invokes, catching the flipped URL on the next
+                        // iteration instead of blocking the full budget.
+                        const text =
+                            (await alerts
+                                .nth(i)
+                                .textContent({ timeout: 1_500 })
+                                .catch(() => null)) ?? "";
+                        if (title && text.trim() && text.trim() !== title) {
+                            copy = text;
+                            break;
+                        }
+                    }
+                    copy ??=
+                        (await page
+                            .getByText(/That code didn'?t match/i)
+                            .first()
+                            .textContent({ timeout: 1_500 })
+                            .catch(() => null)) ?? null;
+                    if (copy) {
+                        throw new Error(
+                            `MFA handoff failed at ${page.url()}: ${copy.trim()}`,
+                        );
+                    }
+                    return "pending";
+                },
+                {
+                    timeout,
+                    message: "MFA handoff did not reach the workspace",
+                },
+            )
+            .toBe(null);
+    } catch (err) {
+        if (
+            err instanceof Error &&
+            err.message.startsWith("MFA handoff failed at")
+        ) {
+            throw err; // bounced handoff - the copy above is specific enough
+        }
+        throw new Error(
+            [
+                "MFA handoff did not reach the workspace.",
+                `Final URL: ${page.url()}`,
+                `Page title: ${await page.title().catch(() => "<unavailable>")}`,
+                failedRequests.length
+                    ? `Failed browser requests:\n${failedRequests.join("\n")}`
+                    : "No failed browser requests were recorded.",
+            ].join("\n"),
+            { cause: err },
+        );
+    } finally {
+        page.off("requestfailed", onRequestFailed);
+    }
 }
 
 /**

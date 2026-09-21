@@ -26,10 +26,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/http";
+import { getModuleAccess, hasPermission } from "@/lib/access/modules";
 import {
     createRole,
     deleteRole,
-    getMyRoles,
     isSystemRoleName,
     listPermissions,
     listRoles,
@@ -75,18 +75,23 @@ export default function RolesClient() {
     const load = useCallback(async () => {
         setStatus({ state: "loading" });
         try {
-            const [roles, modules, myRoles] = await Promise.all([
+            const [roles, modules, access] = await Promise.all([
                 listRoles(),
                 listPermissions(),
-                getMyRoles(),
+                getModuleAccess(),
             ]);
             setCatalog(modules);
             setStatus({
                 state: "ready",
                 roles,
+                // canManage comes from the shared module-access resolver
+                // (single-flight + 5-min TTL) instead of a second /roles/me
+                // fetch, so a cold /roles load issues exactly one roles/me call
+                // no matter how many consumers mount. On resolver failure the
+                // page still renders the roles table read-only.
                 canManage:
-                    myRoles.permissions.includes("roles:write") ||
-                    myRoles.permissions.includes("*"),
+                    access.status === "ready" &&
+                    hasPermission(access.permissions, "roles:write"),
             });
         } catch (error) {
             const message =
@@ -273,7 +278,7 @@ export default function RolesClient() {
                 icon={ShieldCheck}
             />
 
-            <div className="grid min-h-0 flex-1 gap-6 [grid-auto-rows:minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)]">
+            <div className="grid min-h-0 flex-1 auto-rows-fr gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
                     <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5">
                         <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">

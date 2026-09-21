@@ -65,6 +65,15 @@ async function saveAuthState(page: Page) {
     return state;
 }
 
+// The enrollment arm signs in, verifies TOTP, then waits for the handoff to
+// navigate off the signin host; on a cold CI stack (the security phase rebuilds
+// the cluster and wipes Postgres) that consistently takes ~15-20s and the
+// global 30s test timeout is not enough with the handoff poll. The poll is
+// 100s (enrollMfaAndFinish) to absorb the first-attempt ~45s stall on the
+// freshly started stack (PERF-WEB-002), so the test budget must clear
+// signin + enrollment + poll + settled + storage-state write.
+setup.setTimeout(180_000);
+
 setup("authenticate as the seeded admin", async ({ page }) => {
     // e2e/.auth is gitignored (holds the TOTP secret + storage state), so it
     // does not exist on a fresh CI checkout - create it before the first write.

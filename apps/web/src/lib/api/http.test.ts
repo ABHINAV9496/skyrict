@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiFetch } from "@/lib/api/http";
+import { ApiError, apiFetch, apiPost } from "@/lib/api/http";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 interface RecordedRequest {
@@ -136,5 +136,103 @@ describe("fetchWithSession hydration", () => {
         ]);
         expect(requests[1].method).toBe("POST");
         expect(getAccessToken()).toBe("fresh-token");
+    });
+});
+
+describe("in-flight GET deduplication", () => {
+    it("coalesces concurrent identical GETs into one network request", async () => {
+        setAccessToken("tok-1");
+        respond = () => json({ data: { ok: true } });
+
+        await expect(
+            Promise.all([
+                apiFetch("/api/v1/roles"),
+                apiFetch("/api/v1/roles"),
+            ]),
+        ).resolves.toEqual([{ ok: true }, { ok: true }]);
+
+        expect(
+            requests.filter((request) => request.url === "/api/v1/roles"),
+        ).toHaveLength(1);
+    });
+
+    it("keeps distinct query strings distinct", async () => {
+        setAccessToken("tok-1");
+        respond = () => json({ data: [] });
+
+        await Promise.all([
+            apiFetch("/api/v1/roles?limit=10"),
+            apiFetch("/api/v1/roles?limit=20"),
+        ]);
+
+        expect(
+            requests.filter((request) => request.url.startsWith("/api/v1/roles?")),
+        ).toHaveLength(2);
+    });
+
+    it("never dedupes POSTs", async () => {
+        setAccessToken("tok-1");
+        respond = () => json({ data: { ok: true } });
+
+        await Promise.all([
+            apiPost("/api/v1/roles", {}),
+            apiPost("/api/v1/roles", {}),
+        ]);
+
+        expect(
+            requests.filter((request) => request.url === "/api/v1/roles"),
+        ).toHaveLength(2);
+    });
+
+    it("does not reuse a settled GET", async () => {
+        setAccessToken("tok-1");
+        respond = () => json({ data: { ok: true } });
+
+        await apiFetch("/api/v1/roles");
+        await apiFetch("/api/v1/roles");
+
+        expect(
+            requests.filter((request) => request.url === "/api/v1/roles"),
+        ).toHaveLength(2);
+    });
+
+    it("hydrates once when coalescing concurrent calls on a cold token", async () => {
+        respond = (url) =>
+            url === "/api/auth/session"
+                ? json({
+                      authenticated: true,
+                      accessToken: "tok-1",
+                      user: { id: "u1" },
+                  })
+                : json({ data: { ok: true } });
+
+        await expect(
+            Promise.all([
+                apiFetch("/api/v1/roles/me"),
+                apiFetch("/api/v1/roles/me"),
+            ]),
+        ).resolves.toEqual([{ ok: true }, { ok: true }]);
+
+        // One hydration round trip and ONE data request - no 401-retry storm.
+        expect(sessionCalls()).toHaveLength(1);
+        expect(
+            requests.filter((request) => request.url === "/api/v1/roles/me"),
+        ).toHaveLength(1);
+    });
+
+    it("does not poison retries after a rejection", async () => {
+        setAccessToken("tok-1");
+        let failing = true;
+        respond = () =>
+            failing ? json({ detail: "boom" }, 500) : json({ data: { ok: true } });
+
+        await expect(apiFetch("/api/v1/roles")).rejects.toThrow(ApiError);
+
+        failing = false;
+        await expect(apiFetch("/api/v1/roles")).resolves.toEqual({ ok: true });
+
+        expect(
+            requests.filter((request) => request.url === "/api/v1/roles"),
+        ).toHaveLength(2);
     });
 });

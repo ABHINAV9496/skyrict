@@ -81,7 +81,12 @@ export default defineConfig({
     reporter: process.env.CI ? "html" : "list",
     use: {
         baseURL,
-        trace: "on-first-retry",
+        // CI: keep the trace for EVERY attempt on failure (retain-on-failure),
+        // not just the first retry. The failing first attempt of a flake
+        // otherwise ships with an empty context file and zero network data,
+        // leaving the refresh-chain / handoff failure unforensiable
+        // (PERF-WEB-002).
+        trace: process.env.CI ? "retain-on-failure" : "on-first-retry",
         viewport: { width: 1280, height: 800 },
     },
     projects: [
@@ -126,6 +131,14 @@ export default defineConfig({
             dependencies: ["setup"],
             // Same worker-scoped `workspace` sign-in as crm-finance: no shared
             // storage state, so each worker advances its own refresh-token chain.
+        },
+        {
+            name: "perf",
+            testMatch: /perf[\\/][^\\/]+\.spec\.ts$/,
+            dependencies: ["setup"],
+            // Cold-start trace (PERF-WEB-002): worker-scoped `workspace` fixture
+            // signs in through the real surface; the spec opens a fresh page so
+            // the cookie-rotation chain stays private to the worker (see header).
         },
     ],
     ...(webServer ? { webServer } : {}),

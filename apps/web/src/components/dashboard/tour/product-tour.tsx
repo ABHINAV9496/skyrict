@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { SpotlightOverlay } from "@/components/dashboard/tour/spotlight-overlay";
 import { TourTooltip } from "@/components/dashboard/tour/tour-tooltip";
 import { tourSteps } from "@/components/dashboard/tour/tour-steps";
-import { getMyRoles } from "@/lib/api/identity-api";
+import { getModuleAccess } from "@/lib/access/modules";
 import { useSession } from "@/lib/auth/session";
 
 const SEEN_KEY = "skyrict:product-tour-seen";
@@ -67,12 +67,14 @@ export function ProductTour() {
     const total = allowedSteps.length;
 
     // Resolve the user's roles once so owner-only steps are shown correctly.
+    // Routed through the shared module-access resolver (single-flight + TTL)
+    // so this joins the shell's in-flight /roles/me instead of firing its own.
     useEffect(() => {
         if (status !== "authenticated" || roles !== null) return;
         let cancelled = false;
-        getMyRoles()
-            .then((data) => {
-                if (!cancelled) setRoles(data.roles);
+        getModuleAccess()
+            .then((access) => {
+                if (!cancelled) setRoles(access.roles);
             })
             .catch(() => {
                 if (!cancelled) setRoles([]);

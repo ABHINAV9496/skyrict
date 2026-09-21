@@ -234,11 +234,14 @@ export async function enrollMfaAndFinish(
         })
         .click();
     await page.getByRole("button", { name: "Finish setup" }).click();
-    // Generous 100s budget: on a freshly booted CI stack the FIRST enrollment
-    // handoff can stall ~45s past the signin surface before the workspace
-    // lands (dashboard hydrates right at the default 45s poll; the retry 48s
-    // later completes in ~6s). The one-shot cost is exercised outside the test
-    // by the workflow's pre-warm step, but the budget absorbs it regardless.
+    // Generous 100s budget: the poll's FIRST invocation starts while the
+    // handoff's form-POST 303 -> GET / navigation is still in flight, so the
+    // URL check still sees the signin host. The predicate probes are all
+    // explicitly bounded (1.5s), so the invocation cannot hang - it returns
+    // "pending", the poll re-invokes, and the next iteration's URL check
+    // catches the workspace commit. The budget is a backstop, not the normal
+    // path: the whole enrollment chain (login -> enroll -> mint -> redeem ->
+    // first rotations) completes server-side in ~6s.
     await waitForWorkspace(page, { timeout: 100_000 });
     return secret;
 }
@@ -262,12 +265,14 @@ export async function waitForWorkspace(
     // bounced handoff - plus the plain (non-alert) "That code didn't match"
     // copy from the MFA verify form.
     //
-    // The default budget is generous (45s): on a freshly booted CI stack the
-    // handoff's mint + form-POST can take ~15-20s before the workspace
-    // navigation commits (observed on the tight security stack), and the old
-    // 20s poll expired a tick before its URL check saw the new host. Callers
-    // with a tighter budget (e.g. the worker fixture's own timeout) can pass
-    // an explicit `timeout`.
+    // Every probe inside the predicate is explicitly bounded so a single
+    // invocation can never outlive the poll budget: the auto-waiting
+    // textContent() probes carry a 1.5s deadline (see the note above - an
+    // unbounded probe racing the handoff navigation hung the first poll
+    // invocation for the full 100s in CI). The default budget stays generous
+    // (45s) as a backstop for genuinely cold stacks; callers with a tighter
+    // budget (e.g. the worker fixture's own timeout) pass an explicit
+    // `timeout`.
     const timeout = options.timeout ?? 45_000;
     const failedRequests: string[] = [];
     const onRequestFailed = (request: Request) => {
@@ -288,10 +293,18 @@ export async function waitForWorkspace(
                     const alertCount = await alerts.count();
                     let copy: string | null = null;
                     for (let i = 0; i < alertCount; i++) {
+                        // BOUNDED probe: auto-waiting textContent() without a
+                        // timeout can hang a whole poll invocation when the
+                        // page is mid-handoff navigation (the first invocation
+                        // races the form-POST 303 -> GET / commit; the wait then
+                        // polls the post-navigation document forever). With a
+                        // deadline the predicate always returns and the poll
+                        // re-invokes, catching the flipped URL on the next
+                        // iteration instead of blocking the full budget.
                         const text =
                             (await alerts
                                 .nth(i)
-                                .textContent()
+                                .textContent({ timeout: 1_500 })
                                 .catch(() => null)) ?? "";
                         if (title && text.trim() && text.trim() !== title) {
                             copy = text;
@@ -302,7 +315,7 @@ export async function waitForWorkspace(
                         (await page
                             .getByText(/That code didn'?t match/i)
                             .first()
-                            .textContent()
+                            .textContent({ timeout: 1_500 })
                             .catch(() => null)) ?? null;
                     if (copy) {
                         throw new Error(

@@ -171,19 +171,39 @@ async function login(page) {
     if (!secret) {
       throw new Error("MFA challenge requires E2E_TOTP_SECRET (no persisted secret found).");
     }
-    // Try the current, previous, and next 30s windows to dodge clock
-    // boundaries (mirrors the enrollment arm below). A rejected code keeps the
-    // page on the signin host; the workspace handoff proves acceptance.
+    // Try the current, previous, and next 30s TOTP windows (mirrors the
+    // enrollment arm below). The landing budget must cover the real handoff
+    // chain - TOTP verify, mint + form-POST, 303 -> workspace GET - which
+    // takes ~6s warm and 15-20s on a freshly booted runner (see auth-flow.ts
+    // waitForWorkspace notes). The old 8s sub-budget made the first offset
+    // "fail" while its navigation was still committing, burned the remaining
+    // windows into a mid-handoff page, and then waited 20s for a workspace
+    // shell on the still-signin host (the CI harvest-2 timeout). Only a
+    // genuinely rejected code (the verify form's "That code didn't match"
+    // copy) consumes an offset - a slow-but-correct landing must not.
     for (const offset of [0, -1, 1]) {
       await fillOtp(page, "Two-factor code", totp(secret, offset));
-      const landed = await page
-        .waitForURL((url) => !url.hostname.includes(".signin."), { timeout: 8_000 })
+      const landed = page
+        .waitForURL((url) => !url.hostname.includes(".signin."), { timeout: 30_000 })
         .then(() => true)
         .catch(() => false);
-      if (landed) break;
+      const rejected = page
+        .getByText("That code didn't match")
+        .waitFor({ timeout: 30_000 })
+        .then(() => false)
+        .catch(() => false);
+      if (await Promise.race([landed, rejected])) {
+        await waitForWorkspaceSettled(page);
+        return;
+      }
     }
-    await waitForWorkspaceSettled(page);
-    return;
+    // Every window failed to land and was rejected: a misconfigured secret,
+    // not a slow handoff. Fail fast with the URL instead of running
+    // waitForWorkspaceSettled (20s) against a page that never left the signin
+    // host and reporting a misleading "workspace did not settle" timeout.
+    throw new Error(
+      `MFA challenge rejected every TOTP window at ${page.url()} - E2E_TOTP_SECRET does not match the enrolled secret`,
+    );
   }
 
   // Enrollment: poll for the server-generated secret, verify a TOTP code

@@ -278,7 +278,7 @@ export default function RolesClient() {
                 icon={ShieldCheck}
             />
 
-            <div className="grid min-h-0 flex-1 gap-6 [grid-auto-rows:minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)]">
+            <div className="grid min-h-0 flex-1 auto-rows-fr gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
                     <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5">
                         <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">

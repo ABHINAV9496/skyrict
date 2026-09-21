@@ -78,6 +78,8 @@ def advance_watermark(
     ):
         return WatermarkState(hwm=stored.hwm, hwm_pk=candidate_pk)
 
+    return stored
+
 
 def build_incremental_clause(watermark_col: str, pk_col: str) -> str:
     """Return the parameterized incremental predicate for one source table.

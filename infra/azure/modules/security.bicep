@@ -79,3 +79,4 @@ output kvName string = kv.name
 output kvUri string = kv.properties.vaultUri
 output uamiId string = uami.id
 output uamiPrincipalId string = uami.properties.principalId
+output uamiClientId string = uami.properties.clientId

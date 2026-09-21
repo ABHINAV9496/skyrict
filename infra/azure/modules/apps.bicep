@@ -1106,6 +1106,7 @@ resource aiAgentMigrateJob 'Microsoft.App/jobs@2026-01-01' = if (deployWorkloads
 output identityFqdn string = deployWorkloads ? identityApp!.properties.configuration.ingress.fqdn : ''
 output coreFqdn string = deployWorkloads ? coreApp!.properties.configuration.ingress.fqdn : ''
 output aiAgentFqdn string = deployWorkloads ? aiAgentApp!.properties.configuration.ingress.fqdn : ''
+output aiAgentAppName string = 'app-ai-agent-${resourceName}'
 output dbInitJobName string = 'job-db-init-${resourceName}'
 output identityMigrateJobName string = 'job-identity-${resourceName}'
 output coreMigrateJobName string = 'job-core-${resourceName}'

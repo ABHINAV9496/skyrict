@@ -363,6 +363,8 @@ output identityFqdn string = apps.outputs.identityFqdn
 output coreFqdn string = apps.outputs.coreFqdn
 output aiAgentFqdn string = apps.outputs.aiAgentFqdn
 
+output aiAgentAppName string = apps.outputs.aiAgentAppName
+
 output dbInitJobName string = apps.outputs.dbInitJobName
 output identityMigrateJobName string = apps.outputs.identityMigrateJobName
 output coreMigrateJobName string = apps.outputs.coreMigrateJobName

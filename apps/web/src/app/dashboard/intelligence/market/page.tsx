@@ -146,7 +146,7 @@ export default function MarketPage() {
                             type="button"
                             onClick={() =>
                                 router.push(
-                                    `/dashboard/intelligence/results?q=${encodeURIComponent(region.query)}`,
+                                    `/intelligence/results?q=${encodeURIComponent(region.query)}`,
                                 )
                             }
                             className="group rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/40"

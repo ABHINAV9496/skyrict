@@ -18,7 +18,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { hostSurface } from "@/lib/server/auth";
+import { SESSION_COOKIE, hostSurface } from "@/lib/server/auth";
 
 const AUTH_PATHS = [
     "/login",
@@ -68,9 +68,14 @@ function signupOrigin(request: NextRequest): string {
     return `${protocol}//signup.${apex}${port}/signup`;
 }
 
-function signinOrigin(request: NextRequest, slug: string): string {
+function signinOrigin(
+    request: NextRequest,
+    slug: string,
+    error?: string,
+): string {
     const { protocol, port, apex } = baseParts(request);
-    return `${protocol}//${slug}.signin.${apex}${port}/signin`;
+    const signin = `${protocol}//${slug}.signin.${apex}${port}/signin`;
+    return error ? `${signin}?error=${encodeURIComponent(error)}` : signin;
 }
 
 function notFound(): NextResponse {
@@ -138,6 +143,26 @@ export function middleware(request: NextRequest) {
             if (isAuthPath(pathname)) {
                 return NextResponse.redirect(
                     new URL(signinOrigin(request, slug), request.url),
+                );
+            }
+
+            // Every page on the workspace surface lives inside the authenticated
+            // dashboard app, so a request without the session cookie has nothing
+            // to render. Coarse presence check only - cookie validity is
+            // enforced by the BFF on the next API call, and an invalid-but-
+            // present cookie is handled by the client session restore. This
+            // mirrors the former dashboard-layout check but keeps the whole
+            // /dashboard tree statically prerenderable.
+            if (!request.cookies.has(SESSION_COOKIE)) {
+                return NextResponse.redirect(
+                    new URL(
+                        signinOrigin(
+                            request,
+                            slug,
+                            "Your session could not be established. Please sign in again.",
+                        ),
+                        request.url,
+                    ),
                 );
             }
 

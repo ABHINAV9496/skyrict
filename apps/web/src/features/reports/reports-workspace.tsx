@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,7 +8,6 @@ import {
   ArrowUpRight,
   BarChart3,
   ChevronRight,
-  Loader2,
   PencilLine,
   Save,
   Search,
@@ -144,7 +144,7 @@ export function ReportsWorkspace() {
       });
       // The saved definition is live in Core; land on its detail page so the
       // user sees the persisted report (and can run/export it) immediately.
-      router.push(`/dashboard/erp/reports/${slug}`);
+      router.push(`/erp/reports/${slug}`);
     } catch (error) {
       setSaveState("error");
       setSaveError(error instanceof ApiError ? error.message : "Could not save the report.");
@@ -263,7 +263,7 @@ export function ReportsWorkspace() {
                   className="h-9"
                 >
                   {builderState.status === "generating" ? (
-                    <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                    <Spinner aria-hidden="true" className="size-4" />
                   ) : (
                     <Send aria-hidden="true" className="size-4" />
                   )}
@@ -301,7 +301,7 @@ export function ReportsWorkspace() {
             {builderState.status === "generating" ? (
               <div role="status" className="mt-4 space-y-2">
                 <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+                  <Spinner aria-hidden="true" className="size-3.5" />
                   Building your report
                 </p>
                 <div className="overflow-hidden rounded-lg border border-border/70">
@@ -391,7 +391,7 @@ export function ReportsWorkspace() {
                         disabled={saveState === "saving"}
                       >
                         {saveState === "saving" ? (
-                          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                          <Spinner aria-hidden="true" className="size-4" />
                         ) : (
                           <Save aria-hidden="true" className="size-4" />
                         )}
@@ -501,7 +501,7 @@ export function ReportsWorkspace() {
                   {reports.map((report) => (
                     <Link
                       key={report.id}
-                      href={`/dashboard/erp/reports/${report.slug}`}
+                      href={`/erp/reports/${report.slug}`}
                       className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-ring/70 hover:bg-muted/40"
                     >
                       <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

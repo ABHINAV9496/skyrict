@@ -25,9 +25,10 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.core.permissions import WILDCARD
 from core.features.approval_workflow.models.instance import ErpApprovalWorkflowInstanceModel
 from core.features.approval_workflow.models.step import ErpApprovalWorkflowStepModel
 from core.features.approval_workflow.models.transition import ErpApprovalTransitionModel
@@ -355,9 +356,16 @@ class ApprovalWorkflowInstanceRepository:
             )
             .where(
                 CoreUserRoleModel.tenant_id == tenant_id,
-                # MyPy cannot type SQLAlchemy's ARRAY ``any()`` operator; the
-                # repo uses this ignore on the identical payroll_automation query.
-                CoreRoleModel.permissions.any(permission),  # type: ignore[arg-type]
+                # The owner wildcard ``"*"`` grants every catalogued permission
+                # (``core.db.rbac.grants_permission``); a permission-keyed step
+                # must resolve wildcard holders too, or the tenant owner can
+                # never be an approver. MyPy cannot type SQLAlchemy's ARRAY
+                # ``any()`` operator; the repo uses this ignore on the identical
+                # payroll_automation query.
+                or_(
+                    CoreRoleModel.permissions.any(permission),  # type: ignore[arg-type]
+                    CoreRoleModel.permissions.any(WILDCARD),  # type: ignore[arg-type]
+                ),
             )
             .distinct()
         )

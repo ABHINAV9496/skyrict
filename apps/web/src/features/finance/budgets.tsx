@@ -1,9 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     CircleCheck,
-    LoaderCircle,
     Lock,
     NotebookPen,
     Play,
@@ -293,9 +293,9 @@ function CreateBudgetDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />
@@ -748,9 +748,9 @@ function BudgetLinesDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save lines

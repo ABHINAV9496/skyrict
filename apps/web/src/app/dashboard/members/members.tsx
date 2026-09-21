@@ -1,8 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
-    LoaderCircle,
     Monitor,
     ShieldCheck,
     Smartphone,
@@ -412,9 +412,9 @@ export default function MembersClient() {
                                                     </span>
                                                 ) : null}
                                                 {busy ? (
-                                                    <LoaderCircle
+                                                    <Spinner
                                                         aria-hidden="true"
-                                                        className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                                                        className="size-3.5 shrink-0 text-muted-foreground"
                                                     />
                                                 ) : null}
                                             </div>
@@ -586,9 +586,9 @@ export default function MembersClient() {
                             disabled={removing}
                         >
                             {removing ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Remove member
@@ -710,9 +710,9 @@ export default function MembersClient() {
                                                     }
                                                 >
                                                     {busy ? (
-                                                        <LoaderCircle
+                                                        <Spinner
                                                             aria-hidden="true"
-                                                            className="size-3.5 animate-spin"
+                                                            className="size-3.5"
                                                         />
                                                     ) : null}
                                                     Log out
@@ -734,9 +734,9 @@ export default function MembersClient() {
                                 onClick={() => void onRevokeAllSessions()}
                             >
                                 {sessionBusy === "__all__" ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Log out all devices

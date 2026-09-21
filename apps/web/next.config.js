@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep recently-visited dynamic pages (the HR / Payroll / Reports
+  // searchParams pages that cannot be statically prerendered) in the client
+  // router cache so back/forward and tab-switch navigation reuse the cached
+  // payload instead of re-rendering from the server and re-flashing loading.
+  // `experimental` is the schema key in Next 15.5 (read by the server as
+  // `nextConfig.experimental.staleTimes`); the top-level form is unrecognized.
+  experimental: {
+    staleTimes: { dynamic: 60, static: 300 },
+  },
   transpilePackages: ["@skyrict/api-client", "@skyrict/auth", "@skyrict/ui"],
   // Allow tenant subdomains (acme.localhost:3000, tester.signin.localhost:3000)
   // to reach the dev server. `**` covers multi-label subdomains that the single
@@ -46,7 +55,7 @@ const nextConfig = {
 // sentry.client.config.ts / sentry.server.config.ts is what decides whether
 // the SDK actually captures anything. `silent` keeps build logs quiet when
 // the upload credentials are not configured.
-const { withSentryConfig } = require("@sentry/nextjs"); // eslint-disable-line @typescript-eslint/no-require-imports -- CommonJS config file per Next.js convention
+const { withSentryConfig } = require("@sentry/nextjs/config"); // eslint-disable-line @typescript-eslint/no-require-imports -- CommonJS config file per Next.js convention
 
 // Bundle analyzer runs only when ANALYZE=true (size baseline + CI budget gate).
 // It sits OUTSIDE Sentry and chains the inner webpack hook, so an analyzer

@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     Check,
     Copy,
-    LoaderCircle,
     MailPlus,
     Plus,
     UserPlus,
@@ -287,7 +287,7 @@ export default function InviteClient() {
                                 value={roleName}
                                 onValueChange={(value) => {
                                     if (value === "__create_custom_role__") {
-                                        router.push("/dashboard/roles");
+                                        router.push("/roles");
                                         return;
                                     }
                                     setRoleName(value);
@@ -338,9 +338,9 @@ export default function InviteClient() {
                             disabled={submitting || !roleName}
                         >
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <UserPlus
@@ -494,9 +494,9 @@ export default function InviteClient() {
                                                     }
                                                 >
                                                     {status.busy === item.id ? (
-                                                        <LoaderCircle
+                                                        <Spinner
                                                             aria-hidden="true"
-                                                            className="size-3.5 animate-spin"
+                                                            className="size-3.5"
                                                         />
                                                     ) : null}
                                                     Expire

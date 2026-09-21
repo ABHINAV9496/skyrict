@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { CalendarDays, Send, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -213,9 +214,9 @@ export function LeavePortal() {
     if (load.state === "loading") {
         return (
             <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-4 animate-spin"
+                    className="size-4"
                 />
                 Loading your leave portal…
             </div>
@@ -343,9 +344,9 @@ export function LeavePortal() {
                                     >
                                         {savingSuggestion ===
                                         suggestion.suggestionId ? (
-                                            <LoaderCircle
+                                            <Spinner
                                                 aria-hidden="true"
-                                                className="size-3.5 animate-spin"
+                                                className="size-3.5"
                                             />
                                         ) : null}
                                         Fill form
@@ -500,9 +501,9 @@ export function LeavePortal() {
                             disabled={!canSubmit || submitting}
                         >
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Send aria-hidden="true" className="size-4" />
@@ -522,9 +523,9 @@ export function LeavePortal() {
                 </h2>
                 {requestsLoading ? (
                     <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                         Loading requests…
                     </div>

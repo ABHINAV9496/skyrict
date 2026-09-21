@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useState } from "react";
-import { LoaderCircle, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -222,9 +223,9 @@ export function LeavePolicyCard({
                             </Button>
                             <Button type="submit" disabled={saving}>
                                 {saving ? (
-                                    <LoaderCircle
+                                    <Spinner
                                         aria-hidden="true"
-                                        className="size-4 animate-spin"
+                                        className="size-4"
                                     />
                                 ) : null}
                                 Save Policy

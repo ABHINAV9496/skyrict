@@ -1,0 +1,187 @@
+"""Chat attachment blob storage - filesystem (local) and S3 backends behind one port.
+
+Stores the raw bytes of files attached to conversation messages.  Following
+the document/avatar storage precedent (``storage.py`` in the core documents
+and identity avatars features), keys are tenant-scoped relative paths:
+
+    ``{tenant_id}/{conversation_id}/{storage_key}``
+
+where ``storage_key`` is the server-generated UUID persisted in the message's
+``attachments`` metadata (never the client-supplied attachment id).  Implementations reject any key that
+escapes their namespace.
+"""
+
+from __future__ import annotations
+
+import re
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any
+
+import anyio
+
+from ai_agent.core.config import settings
+
+# Attachment keys are tenant-scoped relative paths ``{tenant_id}/{conversation_id}/{storage_key}``
+# where every segment is a server-generated UUID (hex + hyphens).  A key is only ever built
+# from UUIDs, so the full-grammar whitelist below is the path-injection sanitizer: it admits
+# exactly word characters, hyphens, underscores, and single slashes, which rules out ``..``/``.``
+# segments, absolute paths, backslashes, and repeated/empty separators before any path math.
+_STORAGE_KEY_RE = re.compile(r"[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*")
+
+
+def _validate_storage_key(key: str) -> None:
+    """Reject any key that does not fit the strict storage grammar.
+
+    Raises ``ValueError`` otherwise; callers may then join the key onto their
+    storage root with no traversal risk.
+    """
+    if _STORAGE_KEY_RE.fullmatch(key) is None:
+        raise ValueError(f"Invalid attachment storage key: {key!r}")
+
+
+class AttachmentStoragePort(ABC):
+    """Blob storage contract for chat attachment payloads."""
+
+    name: str = ""
+
+    @abstractmethod
+    async def put(self, key: str, data: bytes, content_type: str | None) -> None:
+        """Store ``data`` at ``key``."""
+
+    @abstractmethod
+    async def get(self, key: str) -> bytes | None:
+        """Return the bytes at ``key``, or None when absent."""
+
+    @abstractmethod
+    async def delete(self, key: str) -> None:
+        """Remove the object at ``key`` (no-op when absent)."""
+
+
+class LocalAttachmentStorage(AttachmentStoragePort):
+    """Filesystem-backed attachment storage rooted at ``base_dir``."""
+
+    name = "local"
+
+    def __init__(self, base_dir: str | Path) -> None:
+        self.base_dir = Path(base_dir)
+
+    def _resolve(self, key: str) -> Path:
+        _validate_storage_key(key)
+        # Normalize, then containment-check the SAME value that will be used:
+        # CodeQL's path-injection flow recognizes resolve() as normalization
+        # and relative_to() as the safe-access check, and requires the checked
+        # normalized path to be the one that reaches filesystem sinks.
+        path = (self.base_dir / key).resolve()
+        try:
+            path.relative_to(self.base_dir.resolve())
+        except ValueError as exc:
+            raise ValueError(f"Invalid attachment storage key: {key!r}") from exc
+        return path
+
+    async def put(self, key: str, data: bytes, content_type: str | None) -> None:
+        del content_type  # local backend keeps no content-type metadata
+        path = self._resolve(key)
+        await anyio.to_thread.run_sync(self._write, path, data)
+
+    async def get(self, key: str) -> bytes | None:
+        path = self._resolve(key)
+        return await anyio.to_thread.run_sync(self._read, path)
+
+    async def delete(self, key: str) -> None:
+        path = self._resolve(key)
+        await anyio.to_thread.run_sync(self._unlink, path)
+
+    def _write(self, path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+    def _read(self, path: Path) -> bytes | None:
+        if not path.is_file():
+            return None
+        return path.read_bytes()
+
+    def _unlink(self, path: Path) -> None:
+        if path.is_file():
+            path.unlink()
+
+
+class S3AttachmentStorage(AttachmentStoragePort):
+    """S3-compatible attachment storage under ``prefix`` in ``bucket``.
+
+    ``boto3`` is imported lazily inside the methods so the ai-agent service
+    runs without it unless the S3 backend is selected (mirrors documents and
+    avatars).  When ``endpoint_url`` is set (e.g. MinIO in dev) it is used
+    verbatim; otherwise the default AWS region endpoint serves the bucket.
+    """
+
+    name = "s3"
+
+    def __init__(
+        self,
+        *,
+        bucket: str,
+        prefix: str,
+        region: str,
+        endpoint_url: str | None = None,
+    ) -> None:
+        self.bucket = bucket
+        self.prefix = prefix.strip("/")
+        self.region = region
+        self.endpoint_url = endpoint_url or None
+        self._client: Any | None = None
+
+    def _key(self, key: str) -> str:
+        _validate_storage_key(key)
+        return f"{self.prefix}/{key}"
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            import boto3
+
+            kwargs: dict[str, Any] = {"region_name": self.region or None}
+            if self.endpoint_url:
+                kwargs["endpoint_url"] = self.endpoint_url
+            self._client = boto3.client("s3", **kwargs)
+        return self._client
+
+    async def put(self, key: str, data: bytes, content_type: str | None) -> None:
+        client = self._get_client()
+        put_kwargs: dict[str, Any] = {"Bucket": self.bucket, "Key": self._key(key), "Body": data}
+        if content_type:
+            put_kwargs["ContentType"] = content_type
+        await anyio.to_thread.run_sync(lambda: client.put_object(**put_kwargs))
+
+    async def get(self, key: str) -> bytes | None:
+        client = self._get_client()
+        try:
+            response = await anyio.to_thread.run_sync(
+                lambda: client.get_object(Bucket=self.bucket, Key=self._key(key))
+            )
+        except Exception:  # missing object -> None
+            return None
+        body = response["Body"]
+        return await anyio.to_thread.run_sync(body.read)
+
+    async def delete(self, key: str) -> None:
+        client = self._get_client()
+        await anyio.to_thread.run_sync(
+            lambda: client.delete_object(Bucket=self.bucket, Key=self._key(key))
+        )
+
+
+def build_attachment_storage() -> AttachmentStoragePort:
+    """Construct the attachment storage backend selected by configuration."""
+    backend = settings.ATTACHMENT_STORAGE_BACKEND.strip().lower()
+    if backend == "s3":
+        if not settings.ATTACHMENT_S3_BUCKET.strip():
+            raise RuntimeError(
+                "AI_ATTACHMENT_STORAGE_BACKEND=s3 requires AI_ATTACHMENT_S3_BUCKET to be set"
+            )
+        return S3AttachmentStorage(
+            bucket=settings.ATTACHMENT_S3_BUCKET,
+            prefix=settings.ATTACHMENT_S3_PREFIX,
+            region=settings.ATTACHMENT_S3_REGION,
+            endpoint_url=settings.ATTACHMENT_S3_ENDPOINT_URL or None,
+        )
+    return LocalAttachmentStorage(settings.ATTACHMENT_STORAGE_LOCAL_DIR)

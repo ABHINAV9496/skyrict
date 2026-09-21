@@ -133,7 +133,7 @@ export function HrOverview() {
                     meta: `${request.leaveType} · ${formatDate(request.startDate)} – ${formatDate(request.endDate)}`,
                     status: request.status,
                     time: formatDateTime(request.createdAt),
-                    href: "/dashboard/erp/hr/leave",
+                    href: "/erp/hr/leave",
                 }),
             );
 
@@ -142,25 +142,25 @@ export function HrOverview() {
                     label: "Pending",
                     value: pendingResult.meta.total,
                     colorClass: STATUS_BAR.pending,
-                    href: "/dashboard/erp/hr/leave?status=pending",
+                    href: "/erp/hr/leave?status=pending",
                 },
                 {
                     label: "Approved",
                     value: approvedResult.meta.total,
                     colorClass: STATUS_BAR.approved,
-                    href: "/dashboard/erp/hr/leave?status=approved",
+                    href: "/erp/hr/leave?status=approved",
                 },
                 {
                     label: "Rejected",
                     value: rejectedResult.meta.total,
                     colorClass: STATUS_BAR.rejected,
-                    href: "/dashboard/erp/hr/leave?status=rejected",
+                    href: "/erp/hr/leave?status=rejected",
                 },
                 {
                     label: "Cancelled",
                     value: cancelledResult.meta.total,
                     colorClass: STATUS_BAR.cancelled,
-                    href: "/dashboard/erp/hr/leave?status=cancelled",
+                    href: "/erp/hr/leave?status=cancelled",
                 },
             ];
 
@@ -246,28 +246,28 @@ export function HrOverview() {
                     label="Active employees"
                     value={data.activeEmployees}
                     hint="Currently on the team"
-                    href="/dashboard/erp/hr/employees"
+                    href="/erp/hr/employees"
                 />
                 <StatCard
                     icon={CalendarCheck2}
                     label="Open leave requests"
                     value={data.openLeave}
                     hint="Awaiting approval"
-                    href="/dashboard/erp/hr/leave?status=pending"
+                    href="/erp/hr/leave?status=pending"
                 />
                 <StatCard
                     icon={UserRound}
                     label="On leave now"
                     value={data.onLeaveNow}
                     hint="Approved leave today"
-                    href="/dashboard/erp/hr/leave?status=approved"
+                    href="/erp/hr/leave?status=approved"
                 />
                 <StatCard
                     icon={Building2}
                     label="Departments"
                     value={String(data.departmentCount)}
                     hint="Across the company"
-                    href="/dashboard/erp/hr/departments"
+                    href="/erp/hr/departments"
                 />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">

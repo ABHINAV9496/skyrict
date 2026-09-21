@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LoaderCircle, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { completeHandoff, verifyMfa } from "@/lib/api/auth-api";
 import { resolveHandoffDestination } from "@/lib/auth/handoff";
@@ -64,9 +65,9 @@ function MfaVerifyForm({ mfaToken }: { mfaToken?: string }) {
     if (handingOff) {
         return (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-4 animate-spin"
+                    className="size-4"
                 />
                 {"Opening your workspace\n"}
             </div>

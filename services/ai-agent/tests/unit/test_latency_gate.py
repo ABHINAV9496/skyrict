@@ -21,7 +21,12 @@ from latency_harness import (
 from ai_agent.core.config import Settings
 from ai_agent.features.supervisor import service as supervisor_service
 
-_GATE_QUERY = "tell me about multi-turn accounting"
+_GATE_QUERY = "tell me about the multi-turn roadmap"
+# Keyword-routable variants for the keyword-first fast-path gates below:
+# the inventory query routes to a PROVISIONED agent (delegate LLM call only),
+# the accounting query routes to an UNPROVISIONED agent (zero calls at all).
+_KEYWORD_QUERY = "What stock is below reorder point?"
+_UNPROVISIONED_KEYWORD_QUERY = "tell me about multi-turn accounting"
 
 
 def _warm_router() -> StubRouter:
@@ -67,7 +72,48 @@ async def test_baseline_turn_still_streams_with_caches_off() -> None:
     summary = summarize(results, target_ms=1000, provider_calls=measured_calls)
 
     assert summary["verdict"] == "PASS"
+    # Keyword-free gate query: the cold abstain path still makes both provider
+    # calls (classify + supervisor answer); the keyword fast path is gated
+    # separately below.
     assert measured_calls == 42
+
+
+async def test_keyword_hit_turn_makes_one_cold_provider_call() -> None:
+    """Keyword-first fast path: a keyword hit routes with NO classifier call.
+
+    Regression gate for the keyword-first routing fix: a keyword hit must
+    short-circuit BEFORE the classifier LLM, so a cold turn to a provisioned
+    agent costs only the delegate's own provider call (was two: classify +
+    delegate).
+    """
+    router = StubRouter(delay_ms=0)
+    service = build_service(router=router, caches=False)
+
+    results = [await run_turn(service, query=_KEYWORD_QUERY, router=router) for _ in range(21)]
+
+    measured_calls = sum(result.provider_calls for result in results)
+    summary = summarize(results, target_ms=1000, provider_calls=measured_calls)
+
+    assert summary["verdict"] == "PASS"
+    # 21 turns x 1 call (delegate only) - the classifier call is gone.
+    assert measured_calls == 21
+
+
+async def test_keyword_hit_to_unprovisioned_agent_makes_zero_provider_calls() -> None:
+    """A keyword hit on a disabled module streams its abstention for free.
+
+    The routing decision, the provisioned check, and the abstention text are
+    all deterministic - no provider call is ever attempted.
+    """
+    router = StubRouter(delay_ms=0)
+    service = build_service(router=router, caches=False)
+
+    results = [
+        await run_turn(service, query=_UNPROVISIONED_KEYWORD_QUERY, router=router)
+        for _ in range(21)
+    ]
+
+    assert sum(result.provider_calls for result in results) == 0
 
 
 async def test_turn_completed_telemetry_cold_then_warm(monkeypatch) -> None:

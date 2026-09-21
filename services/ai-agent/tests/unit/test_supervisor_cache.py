@@ -254,8 +254,10 @@ async def test_classification_cache_hit_skips_provider() -> None:
     cache = MemoryResponseCache()
     service = make_service(router=router, classification_cache=cache)
 
-    first = await service.classify("What stock is below reorder point?", tenant_id=TENANT_A)
-    second = await service.classify("What stock is below reorder point?", tenant_id=TENANT_A)
+    first = await service.classify("How are product levels trending this week?", tenant_id=TENANT_A)
+    second = await service.classify(
+        "How are product levels trending this week?", tenant_id=TENANT_A
+    )
 
     assert first.agents == ("inventory_monitor",)
     assert second == first
@@ -266,8 +268,8 @@ async def test_classification_cache_is_tenant_scoped() -> None:
     router = FakeLlmRouter()
     service = make_service(router=router, classification_cache=MemoryResponseCache())
 
-    await service.classify("What stock is below reorder point?", tenant_id=TENANT_A)
-    await service.classify("What stock is below reorder point?", tenant_id=TENANT_B)
+    await service.classify("How are product levels trending this week?", tenant_id=TENANT_A)
+    await service.classify("How are product levels trending this week?", tenant_id=TENANT_B)
 
     assert router.complete_calls == 2
 
@@ -276,8 +278,8 @@ async def test_classification_without_tenant_is_never_cached() -> None:
     router = FakeLlmRouter()
     service = make_service(router=router, classification_cache=MemoryResponseCache())
 
-    await service.classify("What stock is below reorder point?")
-    await service.classify("What stock is below reorder point?")
+    await service.classify("How are product levels trending this week?")
+    await service.classify("How are product levels trending this week?")
 
     assert router.complete_calls == 2
 
@@ -287,12 +289,12 @@ async def test_cached_classification_still_obeys_threshold() -> None:
     cache = MemoryResponseCache()
     service = make_service(router=router, classification_cache=cache)
     await cache.set(
-        classification_cache_key(tenant_id=TENANT_A, query="What stock is low?"),
+        classification_cache_key(tenant_id=TENANT_A, query="How are product levels trending?"),
         json.dumps({"agents": ["inventory_monitor"], "confidence": 0.5}),
         ttl_seconds=300,
     )
 
-    decision = await service.classify("What stock is low?", tenant_id=TENANT_A)
+    decision = await service.classify("How are product levels trending?", tenant_id=TENANT_A)
 
     assert decision.abstain is True
     assert decision.reason == "low_confidence"
@@ -304,12 +306,12 @@ async def test_corrupt_classification_entry_falls_back_to_provider() -> None:
     cache = MemoryResponseCache()
     service = make_service(router=router, classification_cache=cache)
     await cache.set(
-        classification_cache_key(tenant_id=TENANT_A, query="What stock is low?"),
+        classification_cache_key(tenant_id=TENANT_A, query="How are product levels trending?"),
         "not-json",
         ttl_seconds=300,
     )
 
-    decision = await service.classify("What stock is low?", tenant_id=TENANT_A)
+    decision = await service.classify("How are product levels trending?", tenant_id=TENANT_A)
 
     assert decision.agents == ("inventory_monitor",)
     assert router.complete_calls == 1
@@ -326,8 +328,8 @@ async def test_response_cache_skips_provider_on_repeat() -> None:
         response_cache=MemoryResponseCache(),
     )
 
-    first = await collect(service, "tell me about multi-turn accounting")
-    second = await collect(service, "tell me about multi-turn accounting")
+    first = await collect(service, "tell me about multi-turn planning")
+    second = await collect(service, "tell me about multi-turn planning")
 
     assert tokens_text(first) == _SUPERVISOR_ANSWER
     assert tokens_text(second) == _SUPERVISOR_ANSWER
@@ -343,13 +345,13 @@ async def test_response_cache_is_tenant_scoped() -> None:
         response_cache=MemoryResponseCache(),
     )
 
-    await collect(service, "tell me about accounting history")
-    await collect(service, "tell me about accounting history")
+    await collect(service, "tell me about planning history")
+    await collect(service, "tell me about planning history")
 
     first = [
         event
         async for event in service.stream_answer(
-            query="tell me about accounting history", tenant_id=TENANT_B, user_id=USER_ID
+            query="tell me about planning history", tenant_id=TENANT_B, user_id=USER_ID
         )
     ]
 
@@ -411,7 +413,7 @@ async def test_routed_path_never_loads_conversation_history() -> None:
     events = [
         event
         async for event in service.stream_answer(
-            query="What stock is below reorder point?",
+            query="How are product levels trending this week?",
             conversation_id=uuid.uuid4(),
             tenant_id=TENANT_A,
             user_id=USER_ID,
@@ -431,7 +433,7 @@ async def test_abstain_path_loads_conversation_history() -> None:
     events = [
         event
         async for event in service.stream_answer(
-            query="tell me about multi-turn accounting",
+            query="tell me about multi-turn planning",
             conversation_id=uuid.uuid4(),
             tenant_id=TENANT_A,
             user_id=USER_ID,
@@ -456,7 +458,7 @@ async def test_abstain_history_is_bounded_to_recent_window() -> None:
     events = [
         event
         async for event in service.stream_answer(
-            query="tell me about multi-turn accounting",
+            query="tell me about multi-turn planning",
             conversation_id=uuid.uuid4(),
             tenant_id=TENANT_A,
             user_id=USER_ID,

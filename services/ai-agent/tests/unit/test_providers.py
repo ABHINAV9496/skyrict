@@ -364,7 +364,7 @@ class TestRegistryFactory:
         exists, and an openrouter model on groq's URL is a 400).
         """
         monkeypatch.setenv("AI_PROVIDER", "omniroute")
-        monkeypatch.setenv("AI_MODEL", "openlad")
+        monkeypatch.setenv("AI_MODEL", "auto/fast")
         monkeypatch.setenv("AI_BASE_URL", "http://host.docker.internal:20128/v1")
         monkeypatch.setenv("AI_FALLBACK_PROVIDER", "groq")
         monkeypatch.setenv("AI_FALLBACK_MODEL", "qwen/qwen3.8-27b")
@@ -376,7 +376,7 @@ class TestRegistryFactory:
         providers = build_providers_from_settings(config)
 
         assert [p.name for p in providers] == ["omniroute", "groq"]
-        assert providers[0].model == "openlad"
+        assert providers[0].model == "auto/fast"
         # Omniroute has no preset - the bare override IS the effective URL.
         assert resolve_base_url("omniroute", "http://host.docker.internal:20128/v1") == (
             "http://host.docker.internal:20128/v1"

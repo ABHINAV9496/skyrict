@@ -21,6 +21,7 @@ import {
 
 import type { AuthUser } from "@/lib/api/auth-api";
 import { useSession } from "@/lib/auth/session";
+import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import { cn } from "@/lib/utils";
 
 interface MenuItem {
@@ -37,23 +38,23 @@ const MENU_GROUPS: { label: string; items: MenuItem[] }[] = [
         items: [
             {
                 label: "Home",
-                href: "/dashboard/intelligence",
+                href: "/intelligence",
                 icon: House,
                 exact: true,
             },
             {
                 label: "Explore",
-                href: "/dashboard/intelligence/explore",
+                href: "/intelligence/explore",
                 icon: Compass,
             },
             {
                 label: "Trending",
-                href: "/dashboard/intelligence/trending",
+                href: "/intelligence/trending",
                 icon: TrendingUp,
             },
             {
                 label: "Market",
-                href: "/dashboard/intelligence/market",
+                href: "/intelligence/market",
                 icon: CandlestickChart,
             },
         ],
@@ -63,12 +64,12 @@ const MENU_GROUPS: { label: string; items: MenuItem[] }[] = [
         items: [
             {
                 label: "Helpdesk",
-                href: "/dashboard/intelligence/helpdesk",
+                href: "/intelligence/helpdesk",
                 icon: CircleHelp,
             },
             {
                 label: "Send feedback",
-                href: "/dashboard/intelligence/feedback",
+                href: "/intelligence/feedback",
                 icon: MessageSquareText,
             },
         ],
@@ -83,13 +84,15 @@ const MENU_GROUPS: { label: string; items: MenuItem[] }[] = [
     },
 ];
 
-/** The workspace surface strips the `/dashboard` prefix from public URLs. */
+/**
+ * The workspace surface strips the `/dashboard` prefix from public URLs, so
+ * hrefs use the canonical public form and usePathname() reports the same;
+ * normalize both sides before comparing via the internal form.
+ */
 function isActive(pathname: string, item: MenuItem): boolean {
-    const normalized = pathname.startsWith("/dashboard")
-        ? pathname
-        : `/dashboard${pathname}`;
-    const href = item.href ?? "";
-    if (item.exact) return normalized === href;
+    const normalized = normalizeDashboardPath(pathname);
+    const href = item.href ? normalizeDashboardPath(item.href) : "";
+    if (item.exact || !href) return normalized === href;
     return normalized === href || normalized.startsWith(`${href}/`);
 }
 

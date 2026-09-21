@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     ArrowLeft,
     Banknote,
     CalendarDays,
-    LoaderCircle,
     Target,
     TrendingUp,
 } from "lucide-react";
@@ -152,7 +152,7 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
         <div className="space-y-4">
             <div>
                 <Button type="button" variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/erp/crm/opportunities">
+                    <Link href="/erp/crm/opportunities">
                         <ArrowLeft aria-hidden="true" className="size-4" />
                         Back to pipeline
                     </Link>
@@ -447,9 +447,9 @@ export function OpportunityDetail({ opportunityId }: OpportunityDetailProps) {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Confirm

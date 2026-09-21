@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, LoaderCircle } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -105,9 +106,9 @@ function ReportToolbar({
             ))}
             <Button type="button" onClick={onRun} disabled={running}>
                 {running ? (
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-4 animate-spin"
+                        className="size-4"
                     />
                 ) : null}
                 Run

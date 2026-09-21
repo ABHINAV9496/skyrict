@@ -1,8 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LoaderCircle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -27,7 +28,7 @@ export function IntelligenceSearch({
         if (!value || pending) return;
         setPending(true);
         router.push(
-            `/dashboard/intelligence/results?q=${encodeURIComponent(value)}`,
+            `/intelligence/results?q=${encodeURIComponent(value)}`,
         );
     };
 
@@ -72,9 +73,9 @@ export function IntelligenceSearch({
                     )}
                 >
                     {pending ? (
-                        <LoaderCircle
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                     ) : (
                         <Search aria-hidden="true" className="size-4" />
@@ -82,9 +83,9 @@ export function IntelligenceSearch({
                     Search
                 </button>
             ) : pending ? (
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-primary"
+                    className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-primary"
                 />
             ) : null}
         </form>

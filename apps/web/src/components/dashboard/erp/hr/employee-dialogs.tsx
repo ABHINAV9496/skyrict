@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Leaf, LoaderCircle, Trash2, UserCheck } from "lucide-react";
+import { Leaf, Trash2, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -521,9 +522,9 @@ export function EmployeeFormDialog({
                         </Button>
                         <Button type="submit" disabled={saving}>
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             {employee ? "Save changes" : "Hire employee"}
@@ -621,9 +622,9 @@ export function ChangeStatusDialog({
                         </Button>
                         <Button type="submit" disabled={saving}>
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : leaving ? (
                                 <Leaf aria-hidden="true" className="size-4" />
@@ -758,9 +759,9 @@ export function TerminateEmployeeDialog({
                             disabled={saving}
                         >
                             {saving ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Trash2 aria-hidden="true" className="size-4" />

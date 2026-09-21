@@ -1,10 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
     ContactRound,
-    LoaderCircle,
     Pencil,
     Plus,
     Search,
@@ -412,7 +412,7 @@ export function ContactsTable() {
                     rowKey={(contact) => contact.id}
                     onRowClick={(contact) =>
                         router.push(
-                            `/dashboard/erp/crm/customers/${contact.customerId}`,
+                            `/erp/crm/customers/${contact.customerId}`,
                         )
                     }
                     footer={
@@ -479,9 +479,9 @@ export function ContactsTable() {
                             disabled={busy}
                         >
                             {busy ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Deactivate

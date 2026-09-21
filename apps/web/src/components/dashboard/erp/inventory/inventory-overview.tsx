@@ -42,31 +42,31 @@ const QUICK_LINKS: {
     icon: LucideIcon;
 }[] = [
     {
-        href: "/dashboard/erp/inventory/products",
+        href: "/erp/inventory/products",
         title: "Products",
         description: "Catalog of what you track stock for.",
         icon: Package,
     },
     {
-        href: "/dashboard/erp/inventory/warehouses",
+        href: "/erp/inventory/warehouses",
         title: "Warehouses",
         description: "Where stock lives.",
         icon: Warehouse,
     },
     {
-        href: "/dashboard/erp/inventory/stock",
+        href: "/erp/inventory/stock",
         title: "Stock levels",
         description: "Current on-hand and reserved counts.",
         icon: Layers,
     },
     {
-        href: "/dashboard/erp/inventory/movements",
+        href: "/erp/inventory/movements",
         title: "Movements",
         description: "The immutable stock ledger.",
         icon: ArrowLeftRight,
     },
     {
-        href: "/dashboard/erp/inventory/alerts",
+        href: "/erp/inventory/alerts",
         title: "Reorder alerts",
         description: "Products at or below their reorder point.",
         icon: BellRing,
@@ -176,7 +176,7 @@ export function InventoryOverview() {
                             Needs attention
                         </h2>
                         <Link
-                            href="/dashboard/erp/inventory/alerts"
+                            href="/erp/inventory/alerts"
                             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                         >
                             View all

@@ -1,10 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoaderCircle, Lock, Mail, ShieldCheck } from "lucide-react";
+import { Lock, Mail, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -241,9 +242,9 @@ function LoginForm({
     if (handingOff) {
         return (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-4 animate-spin"
+                    className="size-4"
                 />
                 {"Opening your workspace\n"}
             </div>

@@ -1,12 +1,12 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
     BookOpen,
     Download,
     FileCheck2,
     FileText,
-    LoaderCircle,
     MessageCircleQuestion,
     Plus,
     Search,
@@ -152,9 +152,9 @@ function ActionButton({
             onClick={onClick}
         >
             {busy ? (
-                <LoaderCircle
+                <Spinner
                     aria-hidden="true"
-                    className="size-3.5 animate-spin"
+                    className="size-3.5"
                 />
             ) : (
                 <Icon aria-hidden="true" className="size-3.5" />

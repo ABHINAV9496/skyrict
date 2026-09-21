@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     AlertTriangle,
     CheckCircle,
     Info,
-    Loader2,
     RefreshCw,
 } from "lucide-react";
 
@@ -82,9 +82,9 @@ export function DealHealthBadge({
 
     if (loading) {
         return (
-            <Loader2
+            <Spinner
                 aria-label="Loading deal health"
-                className="size-4 animate-spin text-muted-foreground"
+                className="size-4 text-muted-foreground"
             />
         );
     }

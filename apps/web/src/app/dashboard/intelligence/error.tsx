@@ -13,7 +13,7 @@ export default function IntelligenceError({
         <RouteError
             error={error}
             reset={reset}
-            backHref="/dashboard/intelligence"
+            backHref="/intelligence"
         />
     );
 }

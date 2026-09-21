@@ -11,6 +11,8 @@ import {
 
 import type { AuthUser } from "@/lib/api/auth-api";
 import { ensureSession } from "@/lib/api/http";
+import { clearModuleAccess } from "@/lib/access/modules";
+import { clearResourceCache } from "@/lib/cache/resource-cache";
 import { browserSigninUrl } from "@/lib/auth/client-urls";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
@@ -46,11 +48,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
                 setAccessToken(null);
                 setUser(null);
                 setStatus("unauthenticated");
+                // No session: any cached permission set AND any cached payload
+                // belongs to a previous identity and must not be served to
+                // the next one.
+                clearModuleAccess();
+                clearResourceCache();
             }
         } catch {
             setAccessToken(null);
             setUser(null);
             setStatus("unauthenticated");
+            clearModuleAccess();
+            clearResourceCache();
         }
     }, []);
 
@@ -71,6 +80,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setAccessToken(null);
         setUser(null);
         setStatus("unauthenticated");
+        // Drop the permission + payload caches so the next user never
+        // inherits either.
+        clearModuleAccess();
+        clearResourceCache();
         // Leave the workspace origin immediately so the user lands on the tenant's
         // signin surface instead of lingering on a page with no session.
         window.location.assign(browserSigninUrl());

@@ -46,7 +46,8 @@ export function BillingTrialBanner() {
                 </span>
             </p>
             <Link
-                href="/dashboard/settings/billing"
+                href="/settings/billing"
+                prefetch={false}
                 className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
                 Choose a plan

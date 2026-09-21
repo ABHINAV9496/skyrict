@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
-import { Bot, Loader2, Send } from "lucide-react";
+import { Bot, Send } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,9 +64,9 @@ export function AiChatPanel() {
                     size="icon"
                 >
                     {loading ? (
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="size-4 animate-spin"
+                            className="size-4"
                         />
                     ) : (
                         <Send aria-hidden="true" className="size-4" />

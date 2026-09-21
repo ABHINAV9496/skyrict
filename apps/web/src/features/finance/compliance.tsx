@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import {
     BellRing,
     CircleCheck,
     CircleDot,
-    LoaderCircle,
     Plus,
     ShieldAlert,
 } from "lucide-react";
@@ -231,9 +231,9 @@ function CreateComplianceDialog({
                         </Button>
                         <Button type="submit" disabled={submitting}>
                             {submitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : null}
                             Save item
@@ -282,9 +282,9 @@ function CompleteAction({
                 onClick={() => void complete()}
             >
                 {busy ? (
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-3.5 animate-spin"
+                        className="size-3.5"
                     />
                 ) : (
                     <CircleDot aria-hidden="true" className="size-3.5" />

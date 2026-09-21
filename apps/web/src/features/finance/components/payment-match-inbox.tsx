@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Check, LoaderCircle, Mail, Undo2, XCircle } from "lucide-react";
+import { Check, Mail, Undo2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useModuleAccess, hasPermission } from "@/lib/access/modules";
@@ -133,9 +134,9 @@ export function PaymentMatchInbox() {
         return (
             <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle
+                    <Spinner
                         aria-hidden="true"
-                        className="size-4 animate-spin"
+                        className="size-4"
                     />
                     Loading payment inbox…
                 </div>

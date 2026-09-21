@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { ShellRouter } from "@/components/dashboard/shared/shell-router";
 import { Toaster } from "@/components/ui/sonner";
-import { SESSION_COOKIE } from "@/lib/server/auth";
-import { signinUrl } from "@/lib/server/urls";
 
 export const metadata: Metadata = {
     robots: {
@@ -14,20 +10,20 @@ export const metadata: Metadata = {
     },
 };
 
-export default async function DashboardLayout({
+/**
+ * The dashboard subtree is fully static so `<Link>` prefetch + the client
+ * router cache hold the real page payload instead of only the loading state.
+ *
+ * Session gating moved to `middleware.ts` (host-surface cookie presence check):
+ * the previous `cookies()` read here forced every `/dashboard` route dynamic,
+ * which is why prefetches cached only `loading.tsx` and each route switch
+ * re-rendered from the server and re-flashed the shimmer.
+ */
+export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const hasSession = Boolean((await cookies()).get(SESSION_COOKIE)?.value);
-    if (!hasSession) {
-        redirect(
-            await signinUrl(
-                "Your session could not be established. Please sign in again.",
-            ),
-        );
-    }
-
     return (
         <>
             <ShellRouter>{children}</ShellRouter>

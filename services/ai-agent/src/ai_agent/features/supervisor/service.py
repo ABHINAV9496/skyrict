@@ -7,9 +7,11 @@ layer - unlike the checkpointed :class:`AgentRuntime` (SKY-59) there is no
 HITL pause; every segment streams and the shell renders tokens live.
 
 Routing contract:
-  * ``classify()`` → :class:`RouteDecision` - LLM intent classification (strict
-    JSON) with a deterministic keyword fallback when no provider is configured
-    or unavailable. Low confidence abstains (a normal explicit answer, never an
+  * ``classify()`` → :class:`RouteDecision` - KEYWORD-FIRST routing: the
+    deterministic keyword matcher routes confident matches with zero provider
+    calls (latency fast path); the LLM intent classifier (strict JSON, with
+    the keyword matcher as its deterministic fallback) handles keyword misses.
+    Low confidence abstains (a normal explicit answer, never an
     error), mirroring the nl_query abstention pattern.
   * ``stream_answer()`` → :class:`SupervisorEvent` stream - classification,
     then per agent: ``AgentStartEvent``, ``TokenEvent``*d, ``CitationsEvent``.
@@ -299,6 +301,15 @@ class SupervisorService:
     ) -> RouteDecision:
         """Route one question; never raises - falls back to keywords.
 
+        KEYWORD-FIRST fast path (latency): a confident keyword match routes
+        immediately with ZERO provider calls. The previous LLM-first order
+        paid a full classify round trip before every routed turn - measured
+        at 14-19s on the omniroute gateway, roughly doubling turn latency
+        for questions a 0.1ms keyword match routes correctly ("stock level",
+        "leave balance", "net income"...). The LLM classifier remains the
+        authority for keyword MISSES - ambiguous phrasing still gets
+        semantic routing, and every prior failure fallback is preserved.
+
         The classifier LLM occasionally truncates its output (a one-token
         prefix like ``{"`` instead of full JSON). We retry once and, on a
         repeated failure, fall back to keyword routing rather than abstaining:
@@ -308,8 +319,12 @@ class SupervisorService:
 
         When a classification cache is wired AND ``tenant_id`` is provided,
         a repeated identical question is routed from the cache (SKY-100) -
-        the first provider call of the turn is skipped on cache hit.
+        relevant only on the LLM path, since keyword hits never call out.
         """
+        keyword = _keyword_route(query)
+        if keyword.agents:
+            self._classification_cache_hit = False
+            return keyword
         if self._classification_cache is not None and tenant_id is not None:
             cached = await self._classification_cache.get(
                 classification_cache_key(tenant_id=tenant_id, query=query)
@@ -527,6 +542,7 @@ class SupervisorService:
                 continue
 
             citations: list[Citation] = []
+            delegate_started = time.perf_counter()
             try:
                 async for delta in delegator.stream(
                     query=enhanced_query.strip(),
@@ -539,6 +555,16 @@ class SupervisorService:
                 logger.warning("supervisor.delegate_unavailable", agent=agent, error=str(exc))
                 for event in _yield_text(agent=agent, text=DEGRADED):
                     yield event
+            # Per-segment latency span (SKY-100 follow-up): with the keyword
+            # fast path the delegate is the only LLM call on a routed turn -
+            # this span attributes any residual first-token/total gap to the
+            # delegate's context-gathering vs the provider itself.
+            logger.info(
+                "supervisor.delegate_completed",
+                agent=agent,
+                duration_ms=_round_ms((time.perf_counter() - delegate_started) * 1000),
+                citation_count=len(citations),
+            )
             yield CitationsEvent(agent=agent, citations=tuple(citations))
 
         yield DoneEvent(agents=tuple(handled))

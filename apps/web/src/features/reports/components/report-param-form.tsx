@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, Loader2, Play } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { Download, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +64,7 @@ export function ReportParamForm({
       <div className="mt-4 flex flex-wrap gap-2">
         <Button type="submit" disabled={busy}>
           {running ? (
-            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            <Spinner aria-hidden="true" className="size-4" />
           ) : (
             <Play aria-hidden="true" className="size-4" />
           )}

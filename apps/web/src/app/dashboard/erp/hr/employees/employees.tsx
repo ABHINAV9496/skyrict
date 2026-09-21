@@ -155,8 +155,8 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
     setInvitingEmployee(null);
     router.replace(
       next === "terminated"
-        ? "/dashboard/erp/hr/employees?view=terminated"
-        : "/dashboard/erp/hr/employees",
+        ? "/erp/hr/employees?view=terminated"
+        : "/erp/hr/employees",
       { scroll: false },
     );
   }
@@ -553,7 +553,7 @@ export function EmployeesClient({ initialView = "active" }: { initialView?: Empl
           }}
           onPageChange={setPage}
           onRowClick={(employee) =>
-            router.push(`/dashboard/erp/hr/employees/${employee.id}`)
+            router.push(`/erp/hr/employees/${employee.id}`)
           }
         />
       ) : null}

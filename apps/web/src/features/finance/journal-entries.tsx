@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,7 +15,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
     ArrowRight,
     CircleCheck,
-    LoaderCircle,
     NotebookPen,
     Plus,
     Sparkles,
@@ -483,7 +483,7 @@ function CreateJournalEntryDialog({
             });
             setOpen(false);
             reset();
-            router.push(`/dashboard/erp/finance/journal-entries/${entry.id}`);
+            router.push(`/erp/finance/journal-entries/${entry.id}`);
         } catch (error) {
             setSubmitError(
                 error instanceof ApiError
@@ -573,9 +573,9 @@ function CreateJournalEntryDialog({
                                     onClick={() => void fetchMemoSuggestion()}
                                 >
                                     {memoSuggestionLoading ? (
-                                        <LoaderCircle
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-3.5 animate-spin"
+                                            className="size-3.5"
                                         />
                                     ) : (
                                         <Sparkles
@@ -855,9 +855,9 @@ function CreateJournalEntryDialog({
                             disabled={isSubmitting || !balanced}
                         >
                             {isSubmitting ? (
-                                <LoaderCircle
+                                <Spinner
                                     aria-hidden="true"
-                                    className="size-4 animate-spin"
+                                    className="size-4"
                                 />
                             ) : (
                                 <Plus aria-hidden="true" className="size-4" />
@@ -908,7 +908,7 @@ const columns: FinanceColumn<JournalEntry>[] = [
         align: "right",
         render: (entry) => (
             <Link
-                href={`/dashboard/erp/finance/journal-entries/${entry.id}`}
+                href={`/erp/finance/journal-entries/${entry.id}`}
                 className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
                 View <ArrowRight aria-hidden="true" className="size-3.5" />
@@ -975,7 +975,7 @@ function FinanceJournalEntries() {
             params.delete("draft_contra_account");
             const qs = params.toString();
             router.replace(
-                `/dashboard/erp/finance/journal-entries${qs ? `?${qs}` : ""}`,
+                `/erp/finance/journal-entries${qs ? `?${qs}` : ""}`,
                 { scroll: false },
             );
         }

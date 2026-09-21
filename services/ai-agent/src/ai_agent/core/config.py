@@ -20,6 +20,7 @@ from __future__ import annotations
 import enum
 import sys
 from pathlib import Path  # noqa: TC003  # pydantic resolves annotations at runtime
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -136,13 +137,27 @@ class Settings(BaseSettings):
         description="per-call timeout for core reporting reads",
     )
 
+    # --- Dashboard layout suggestion (BUG-AI-002) ---
+    # Deployment gate for the AI dashboard suggestion endpoint. OFF by default:
+    # until an operator flips it on, /ai/dashboards/suggest answers 501 so the
+    # core proxy and frontend can fail closed instead of getting silent empties.
+    DASHBOARD_SUGGEST_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "whether the AI dashboard layout suggestion endpoint is live. "
+            "False answers 501 (not implemented) even when providers are "
+            "configured. Set AI_DASHBOARD_SUGGEST_ENABLED=true to enable."
+        ),
+    )
+
     # --- Provider configuration (ALL optional - see module docstring) ---
     PROVIDER: str | None = Field(
         default=None,
         description=(
             "primary provider key from the registry (openrouter, groq, openai, "
-            "omniroute, agentrouter, generic). None = no provider configured; "
-            "AI requests then return typed 503 ai_unavailable."
+            "omniroute, agentrouter, generic, mock). 'mock' is a deterministic "
+            "in-process provider for tests/E2E only. None = no provider "
+            "configured; AI requests then return typed 503 ai_unavailable."
         ),
     )
     MODEL: str = Field(
@@ -197,6 +212,24 @@ class Settings(BaseSettings):
         default=20.0,
         gt=0,
         description="per-provider total timeout for generation calls",
+    )
+
+    # --- Mock provider (AI_PROVIDER=mock; tests/E2E only) ---
+    MOCK_BEHAVIOR: Literal["ok", "degrade_503", "rate_limit_429"] = Field(
+        default="ok",
+        description=(
+            "scripted failure mode for AI_PROVIDER=mock. 'ok' answers normally; "
+            "'degrade_503' raises ai_unavailable; 'rate_limit_429' raises a rate "
+            "limit. Never used with a real provider."
+        ),
+    )
+    MOCK_FAIL_AFTER: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "for a non-'ok' AI_MOCK_BEHAVIOR: allow this many generations to "
+            "succeed before the scripted failure begins. 0 = fail immediately."
+        ),
     )
 
     # --- Embedding configuration (SKY-58) ---
@@ -572,6 +605,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_CRM_APPLY_PER_MIN: int = Field(
         default=10, ge=1, description="follow-up apply/dismiss actions per minute per user"
     )
+    RATE_LIMIT_DASHBOARD_SUGGEST_PER_MIN: int = Field(
+        default=10,
+        ge=1,
+        description="dashboard layout suggestions per minute per user (BUG-AI-002)",
+    )
     RATE_LIMIT_TENANT_PER_MIN: int = Field(
         default=100, ge=1, description="total AI calls per minute per tenant"
     )
@@ -583,6 +621,52 @@ class Settings(BaseSettings):
         description=(
             "when True, Redis unavailability blocks AI requests instead of "
             "failing open (platform posture is fail-open with a warning)"
+        ),
+    )
+
+    # --- Chat attachment storage (SKY-60 attachment durability) ---
+    ATTACHMENT_STORAGE_BACKEND: str = Field(
+        default="local",
+        description=(
+            "blob storage backend for conversation chat attachments: 'local' "
+            "(dev/test default, files under ATTACHMENT_STORAGE_LOCAL_DIR) or "
+            "'s3' (S3-compatible bucket). Mirrors the documents/avatar storage "
+            "split in the core and identity services."
+        ),
+    )
+    ATTACHMENT_STORAGE_LOCAL_DIR: str = Field(
+        default="storage/chat-attachments",
+        description=(
+            "filesystem root for the local attachment storage backend; "
+            "resolved relative to the ai-agent working directory in dev"
+        ),
+    )
+    ATTACHMENT_S3_BUCKET: str = Field(
+        default="",
+        description="S3 bucket for chat attachments when ATTACHMENT_STORAGE_BACKEND=s3 (required)",
+    )
+    ATTACHMENT_S3_PREFIX: str = Field(
+        default="chat-attachments",
+        description="object-key prefix under which tenant attachment keys are stored",
+    )
+    ATTACHMENT_S3_REGION: str = Field(
+        default="us-east-1",
+        description="region for the S3-compatible bucket (endpoint_url overrides in dev)",
+    )
+    ATTACHMENT_S3_ENDPOINT_URL: str = Field(
+        default="",
+        description=(
+            "optional S3-compatible endpoint (e.g. http://localhost:9000 for "
+            "MinIO in dev); empty means the default AWS region endpoint"
+        ),
+    )
+    ATTACHMENT_MAX_BYTES: int = Field(
+        default=25_000_000,
+        gt=0,
+        description=(
+            "per-file size cap for decoded chat attachments (bytes). The "
+            "client streams the same file to the LLM, so oversized uploads are "
+            "rejected before they reach extraction or persistence."
         ),
     )
 

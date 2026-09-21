@@ -1,11 +1,11 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
     ArrowLeft,
     CheckCircle2,
-    Loader2,
     ShieldAlert,
 } from "lucide-react";
 
@@ -221,7 +221,7 @@ function GuardianReportDetail({
                         Report not found
                     </p>
                     <Button className="mt-4" size="sm" asChild>
-                        <Link href="/dashboard/agents/guardian">
+                        <Link href="/agents/guardian">
                             <ArrowLeft aria-hidden="true" className="size-3.5" />
                             Back to reports
                         </Link>
@@ -235,9 +235,9 @@ function GuardianReportDetail({
         <GuardianHeader>
             {loading ? (
                 <div className="flex items-center justify-center py-24">
-                    <Loader2
+                    <Spinner
                         aria-hidden="true"
-                        className="size-6 animate-spin text-muted-foreground"
+                        className="size-6 text-muted-foreground"
                     />
                 </div>
             ) : loadError ? (
@@ -300,9 +300,9 @@ function GuardianReportDetail({
                                     disabled={reviewing || !canReview}
                                 >
                                     {reviewing ? (
-                                        <Loader2
+                                        <Spinner
                                             aria-hidden="true"
-                                            className="size-3.5 animate-spin"
+                                            className="size-3.5"
                                         />
                                     ) : (
                                         <CheckCircle2
@@ -363,7 +363,7 @@ function GuardianHeader({
             <AgentsHeader title="Audit Guardian" />
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
                 <Link
-                    href="/dashboard/agents/guardian"
+                    href="/agents/guardian"
                     className="mb-4 flex w-fit items-center gap-2 rounded-lg text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                     <ArrowLeft aria-hidden="true" className="size-4" />
@@ -397,9 +397,9 @@ export default function GuardianReportPage({
             <RequirePermission permission="erp.ai.guardian.read">
                 <GuardianHeader>
                     <div className="flex items-center justify-center py-24">
-                        <Loader2
+                        <Spinner
                             aria-hidden="true"
-                            className="size-6 animate-spin text-muted-foreground"
+                            className="size-6 text-muted-foreground"
                         />
                     </div>
                 </GuardianHeader>

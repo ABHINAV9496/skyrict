@@ -1,9 +1,10 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LoaderCircle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { requestVerificationCode, verifyEmailCode } from "@/lib/api/auth-api";
 import { AuthButton } from "@/lib/auth/AuthButton";
@@ -138,9 +139,9 @@ function VerifyStep({ email }: { email: string }) {
         />
         {verifying ? (
           <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-            <LoaderCircle
+            <Spinner
               aria-hidden="true"
-              className="size-3.5 animate-spin"
+              className="size-3.5"
             />
             {"Verifying code\n"}
           </p>

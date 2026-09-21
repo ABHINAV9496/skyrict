@@ -100,7 +100,7 @@ async def _collect(service: SupervisorService) -> list[SupervisorEvent]:
     return [
         event
         async for event in service.stream_answer(
-            query="tell me about multi-turn accounting",
+            query="tell me about multi-turn planning",
             conversation_id=_CONVERSATION_ID,
             tenant_id=TENANT_A,
             user_id=USER_ID,

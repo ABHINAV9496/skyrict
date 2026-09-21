@@ -1,7 +1,8 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { ContactRound, LoaderCircle, UserPlus } from "lucide-react";
+import { ContactRound, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -316,9 +317,9 @@ export function ContactFormDialog({
                         disabled={!canSubmit}
                     >
                         {saving ? (
-                            <LoaderCircle
+                            <Spinner
                                 aria-hidden="true"
-                                className="size-4 animate-spin"
+                                className="size-4"
                             />
                         ) : null}
                         {editing ? "Save changes" : "Create contact"}

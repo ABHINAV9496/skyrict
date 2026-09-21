@@ -31,7 +31,7 @@ export function FinanceControls() {
     useEffect(() => {
         if (typeof window === "undefined") return;
         if (window.location.hash.replace("#", "") === "assets") {
-            router.replace("/dashboard/erp/finance/accounts#assets");
+            router.replace("/erp/finance/accounts#assets");
         }
     }, [router]);
 

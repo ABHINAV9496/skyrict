@@ -21,53 +21,53 @@ import { cn } from "@/lib/utils";
 
 const INVENTORY_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
     {
-        href: "/dashboard/erp/inventory",
+        href: "/erp/inventory",
         label: "Overview",
         icon: LayoutDashboard,
     },
     {
-        href: "/dashboard/erp/inventory/products",
+        href: "/erp/inventory/products",
         label: "Products",
         icon: Package,
     },
     {
-        href: "/dashboard/erp/inventory/warehouses",
+        href: "/erp/inventory/warehouses",
         label: "Warehouses",
         icon: Warehouse,
     },
-    { href: "/dashboard/erp/inventory/stock", label: "Stock", icon: Layers },
+    { href: "/erp/inventory/stock", label: "Stock", icon: Layers },
     {
-        href: "/dashboard/erp/inventory/movements",
+        href: "/erp/inventory/movements",
         label: "Movements",
         icon: ArrowLeftRight,
     },
     {
-        href: "/dashboard/erp/inventory/alerts",
+        href: "/erp/inventory/alerts",
         label: "Alerts",
         icon: BellRing,
     },
     {
-        href: "/dashboard/erp/inventory/suggestions",
+        href: "/erp/inventory/suggestions",
         label: "AI Suggestions",
         icon: ShoppingCart,
     },
     {
-        href: "/dashboard/erp/inventory/anomalies",
+        href: "/erp/inventory/anomalies",
         label: "Anomalies",
         icon: AlertTriangle,
     },
     {
-        href: "/dashboard/erp/inventory/forecast",
+        href: "/erp/inventory/forecast",
         label: "Forecast",
         icon: Calendar,
     },
     {
-        href: "/dashboard/erp/inventory/abc",
+        href: "/erp/inventory/abc",
         label: "ABC",
         icon: BarChart3,
     },
     {
-        href: "/dashboard/erp/inventory/health",
+        href: "/erp/inventory/health",
         label: "Health",
         icon: Activity,
     },
@@ -84,7 +84,7 @@ export function InventoryNav() {
             {INVENTORY_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active =
-                    item.href === "/dashboard/erp/inventory"
+                    item.href === "/erp/inventory"
                         ? pathname === item.href
                         : pathname === item.href ||
                           pathname.startsWith(`${item.href}/`);

@@ -1,0 +1,80 @@
+{
+  "capturedAt": "2026-09-21T04:03:16.790Z",
+  "routes": {
+    "/": {
+      "firstApiMs": 332,
+      "apiCalls": [
+        {
+          "url": "/api/auth/session",
+          "status": 200,
+          "ms": 332
+        },
+        {
+          "url": "/api/v1/notifications/counts",
+          "status": 200,
+          "ms": 354
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 477
+        },
+        {
+          "url": "/api/v1/billing/subscription",
+          "status": 200,
+          "ms": 527
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 552
+        }
+      ]
+    },
+    "/roles": {
+      "firstApiMs": 224,
+      "apiCalls": [
+        {
+          "url": "/api/auth/session",
+          "status": 200,
+          "ms": 224
+        },
+        {
+          "url": "/api/v1/notifications/counts",
+          "status": 200,
+          "ms": 250
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 365
+        },
+        {
+          "url": "/api/v1/billing/subscription",
+          "status": 200,
+          "ms": 486
+        },
+        {
+          "url": "/api/v1/permissions",
+          "status": 200,
+          "ms": 491
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 498
+        },
+        {
+          "url": "/api/v1/roles",
+          "status": 200,
+          "ms": 513
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 549
+        }
+      ]
+    }
+  }
+}

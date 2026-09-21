@@ -17,9 +17,7 @@ from skyrict_fabric.watermark import (
 def test_build_incremental_clause_uses_bound_params_only() -> None:
     """The predicate pins an equal HWM row by exact PK — values never inline."""
     clause = build_incremental_clause("updated_at", "id")
-    assert clause == (
-        "(updated_at > :hwm) OR (updated_at = :hwm AND id > :hwm_pk)"
-    )
+    assert clause == ("(updated_at > :hwm) OR (updated_at = :hwm AND id > :hwm_pk)")
 
 
 def test_advance_from_none_starts_full() -> None:

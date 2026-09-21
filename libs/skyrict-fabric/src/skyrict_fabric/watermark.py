@@ -71,8 +71,10 @@ def advance_watermark(
         return WatermarkState(hwm=candidate, hwm_pk=candidate_pk)
     if candidate > stored.hwm:
         return WatermarkState(hwm=candidate, hwm_pk=candidate_pk)
-    if candidate == stored.hwm and candidate_pk is not None and (
-        stored.hwm_pk is None or candidate_pk > stored.hwm_pk
+    if (
+        candidate == stored.hwm
+        and candidate_pk is not None
+        and (stored.hwm_pk is None or candidate_pk > stored.hwm_pk)
     ):
         return WatermarkState(hwm=stored.hwm, hwm_pk=candidate_pk)
 
@@ -84,7 +86,4 @@ def build_incremental_clause(watermark_col: str, pk_col: str) -> str:
     pipeline spec (trusted, never user input); all boundary values are bound
     parameters (``:hwm``, ``:hwm_pk``).
     """
-    return (
-        f"({watermark_col} > :hwm) "
-        f"OR ({watermark_col} = :hwm AND {pk_col} > :hwm_pk)"
-    )
+    return f"({watermark_col} > :hwm) OR ({watermark_col} = :hwm AND {pk_col} > :hwm_pk)"

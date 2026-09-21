@@ -84,15 +84,6 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Install pinned Bicep CLI (v0.47.16)
-        # Matches ci-infra.yml; must be the same version as the local
-        # .dev/tools/bicep.exe that generated the committed templates.
-        run: |
-          curl -sSfL -o /usr/local/bin/bicep \
-            https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
-          chmod +x /usr/local/bin/bicep
-          bicep --version
-
       - name: Register resource providers (idempotent)
         run: |
           az provider register --namespace Microsoft.App
@@ -250,15 +241,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Install pinned Bicep CLI (v0.47.16)
-        # Matches ci-infra.yml; must be the same version as the local
-        # .dev/tools/bicep.exe that generated the committed templates.
-        run: |
-          curl -sSfL -o /usr/local/bin/bicep \
-            https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
-          chmod +x /usr/local/bin/bicep
-          bicep --version
 
       - name: Validate (phase 2)
         run: |

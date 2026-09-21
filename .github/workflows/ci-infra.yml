@@ -85,13 +85,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install pinned Bicep CLI (v0.47.16)
-        # No official composite action exists for Bicep; download the exact
-        # release binary from Azure/bicep so format/build output is
-        # reproducible with the local .dev/tools/bicep.exe.
+        # /usr/local/bin is root-owned on the runner - a non-root step cannot
+        # chmod there. $HOME/.local/bin is writable and already on PATH for
+        # ubuntu images; exporting it via $GITHUB_PATH keeps it available to
+        # the format/build steps that follow in this job.
         run: |
-          curl -sSfL -o /usr/local/bin/bicep \
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL -o "$HOME/.local/bin/bicep" \
             https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
-          chmod +x /usr/local/bin/bicep
+          chmod +x "$HOME/.local/bin/bicep"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           bicep --version
 
       - name: Format check

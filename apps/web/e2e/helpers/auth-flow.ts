@@ -240,9 +240,50 @@ export async function enrollMfaAndFinish(
 
 /** Wait for the login/MFA handoff to land on the workspace host. */
 export async function waitForWorkspace(page: Page): Promise<void> {
-    await page.waitForURL((url) => !url.hostname.includes(".signin."), {
-        timeout: 20_000,
-    });
+    // A successful handoff navigates off the signin host. A rejected MFA code
+    // ("That code didn't match") or a bounced redirect (the login page renders
+    // stripped `?error=` into a role=alert) keeps the URL on the signin host -
+    // previously waitForURL just sat out its full 20s and the worker fixture
+    // then died with a generic 30s timeout, hiding the actual cause. Fail fast
+    // with the URL + visible copy instead.
+    await expect
+        .poll(
+            async (): Promise<string | null> => {
+                if (!new URL(page.url()).hostname.includes(".signin.")) {
+                    return null; // handoff landed
+                }
+                const alertCount = await page.locator('[role="alert"]').count();
+                const mfaCopyCount = await page
+                    .getByText(/That code didn'?t match/i)
+                    .count();
+                if (alertCount === 0 && mfaCopyCount === 0) {
+                    return "pending";
+                }
+                const copy =
+                    (alertCount > 0
+                        ? await page
+                              .locator('[role="alert"]')
+                              .first()
+                              .textContent()
+                              .catch(() => null)
+                        : null) ??
+                    (mfaCopyCount > 0
+                        ? await page
+                              .getByText(/That code didn'?t match/i)
+                              .first()
+                              .textContent()
+                              .catch(() => null)
+                        : null);
+                throw new Error(
+                    `MFA handoff failed at ${page.url()}: ${(copy ?? "unknown error").trim()}`,
+                );
+            },
+            {
+                timeout: 20_000,
+                message: "MFA handoff did not reach the workspace",
+            },
+        )
+        .toBe(null);
 }
 
 /**

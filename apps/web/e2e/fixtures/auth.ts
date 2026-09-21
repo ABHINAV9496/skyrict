@@ -107,6 +107,10 @@ export const test = base.extend<{}, { workspace: AuthSession }>({
       await use(session);
       await context.close();
     },
-    { scope: "worker" },
+    // CI boots a fresh stack per phase: sign-in + MFA + session hydration can
+    // legitimately exceed the 30s test timeout on cold containers, and a full
+    // minute gives the fixture room to fail with the improved waitForWorkspace
+    // diagnostics instead of a generic "fixture timeout" mask.
+    { scope: "worker", timeout: 60_000 },
   ],
 });

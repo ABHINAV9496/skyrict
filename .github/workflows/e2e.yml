@@ -302,6 +302,24 @@ jobs:
           done
         timeout-minutes: 10
 
+      - name: Verify security configuration (identity grace window disabled)
+        # The token-reuse spec asserts a rotated refresh token replay gets 401,
+        # which only holds while the identity container actually runs with
+        # IDENTITY_REFRESH_REUSE_GRACE_SECONDS=0. If the override ever stops
+        # reaching the container (env-merge or service-rename regression), this
+        # step fails with the real value instead of a confusing "Expected 401,
+        # Received 200" deep inside the security suite.
+        run: |
+          value=$(docker compose -f infra/docker/docker-compose.e2e.yml \
+            -f infra/docker/docker-compose.e2e.security.yml exec -T identity \
+            sh -lc 'printf "%s" "$IDENTITY_REFRESH_REUSE_GRACE_SECONDS"')
+          echo "IDENTITY_REFRESH_REUSE_GRACE_SECONDS=$value"
+          if [ "$value" != "0" ]; then
+            echo "::error::identity must run with IDENTITY_REFRESH_REUSE_GRACE_SECONDS=0, got '$value'" >&2
+            exit 1
+          fi
+        timeout-minutes: 5
+
       - name: Run E2E security tests
         # --workers=1 keeps the whole suite on ONE authenticated session and
         # --retries=0 (project-level retries already 0) prevents a replay landing

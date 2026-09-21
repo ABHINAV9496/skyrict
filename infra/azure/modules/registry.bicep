@@ -31,6 +31,9 @@ param tags object = {}
 @description('Principal ID of the user-assigned identity granted AcrPull (from the security module).')
 param uamiPrincipalId string
 
+@description('Optional principal ID of the deployment principal (OIDC GitHub Actions service principal) granted AcrPush so CI/CD can push images. Empty disables the assignment.')
+param deployPrincipalId string = ''
+
 @description('Optional globally-unique ACR name (lowercase alphanumeric, no dashes). Defaults to <prefix><envName>.')
 param registryNameOverride string = ''
 
@@ -77,6 +80,20 @@ resource acrUamiPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleDefinitionId)
     description: 'Grants the Container Apps user-assigned identity pull access to this registry.'
+  }
+}
+
+// AcrPush (built-in): 8311e382-0749-4cb8-b61a-304f252e45ec
+var acrPushRoleDefinitionId = '8311e382-0749-4cb8-b61a-304f252e45ec'
+
+resource acrDeployPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrincipalId != '') {
+  name: guid(acr.id, deployPrincipalId, acrPushRoleDefinitionId)
+  scope: acr
+  properties: {
+    principalId: deployPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPushRoleDefinitionId)
+    description: 'Grants the deployment principal (GitHub Actions OIDC) push access to this registry.'
   }
 }
 

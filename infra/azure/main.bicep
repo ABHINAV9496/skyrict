@@ -83,6 +83,9 @@ param registrySku string = 'Standard'
 @description('Optional globally-unique ACR name (lowercase alphanumeric, no dashes). Defaults to <prefix><envName>.')
 param registryNameOverride string = ''
 
+@description('Principal ID of the deployment principal (GitHub Actions OIDC service principal) that pushes images - granted AcrPush at registry scope.')
+param deployPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Data
 // ---------------------------------------------------------------------------
@@ -256,6 +259,7 @@ module registry 'modules/registry.bicep' = {
     uamiPrincipalId: security.outputs.uamiPrincipalId
     registryNameOverride: registryNameOverride
     registrySku: registrySku
+    deployPrincipalId: deployPrincipalId
   }
 }
 

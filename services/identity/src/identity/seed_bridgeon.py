@@ -23,8 +23,12 @@ run: existing users get their password hash and MFA secret re-applied, so
 rotating credentials is simply *edit ``.env``, re-run this module*. Missing
 values fail fast at startup - there is no fallback and no default.
 
-Idempotent - safe to re-run; a tenant that already exists is left alone and
-its roles/memberships/grants are preserved.
+Atomic (SEC-CLEAN-001): the whole run is ONE transaction with a single commit
+at the end. Roles, memberships and grants are created together with users and
+a completeness check runs before the commit - any missing role/membership/
+grant raises and rolls back EVERYTHING, so the Entry C shape (users with no
+RBAC rows) can never be committed. Idempotent - safe to re-run; a tenant that
+already exists is left alone and re-runs simply converge + verify.
 
 Usage:
     python -m identity.seed_bridgeon
@@ -35,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -54,6 +59,9 @@ from identity.features.memberships.repository import MembershipRepository
 from identity.features.organizations.repository import TenantRepository
 from identity.features.roles.repository import RoleRepository
 from identity.features.users.repository import UserRepository
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger("identity.seed.bridgeon")
 
@@ -97,48 +105,44 @@ def credentials() -> tuple[dict[str, str], str]:
     if missing:
         raise RuntimeError(
             "seed_bridgeon requires the following env vars (set them in the "
-            "gitignored services/identity/.env - never in the repo): "
-            + ", ".join(missing)
+            "gitignored services/identity/.env - never in the repo): " + ", ".join(missing)
         )
     return passwords, mfa_secret
 
 
-async def seed_bridgeon_tenant() -> uuid.UUID:
+async def seed_bridgeon_tenant(session: AsyncSession) -> uuid.UUID:
     """Create the bridgeon-solutions tenant if absent; return its id."""
     tenant_id = uuid.UUID(BRIDGEON_TENANT_ID)
-    async with async_session_factory() as session:
-        repo = TenantRepository(session)
-        existing = await repo.get_by_slug(BRIDGEON_SLUG)
-        if existing is not None and existing.id is not None:
-            logger.info("seed.bridgeon.tenant.exists", slug=BRIDGEON_SLUG, id=str(existing.id))
-            return existing.id
+    repo = TenantRepository(session)
+    existing = await repo.get_by_slug(BRIDGEON_SLUG)
+    if existing is not None and existing.id is not None:
+        logger.info("seed.bridgeon.tenant.exists", slug=BRIDGEON_SLUG, id=str(existing.id))
+        return existing.id
 
-        tenant = Tenant(
-            name=BRIDGEON_NAME,
-            slug=BRIDGEON_SLUG,
-            is_active=True,
-            plan_tier="free",
-            id=tenant_id,
-        )
-        await repo.create(tenant)
-        await repo.commit()
-        logger.info("seed.bridgeon.tenant.created", slug=BRIDGEON_SLUG, id=str(tenant_id))
-        return tenant_id
+    tenant = Tenant(
+        name=BRIDGEON_NAME,
+        slug=BRIDGEON_SLUG,
+        is_active=True,
+        plan_tier="free",
+        id=tenant_id,
+    )
+    await repo.create(tenant)
+    logger.info("seed.bridgeon.tenant.created", slug=BRIDGEON_SLUG, id=str(tenant_id))
+    return tenant_id
 
 
-async def seed_bridgeon_roles(tenant_id: uuid.UUID) -> dict[str, Role]:
-    """Create missing system roles for the tenant; return a name -> role map."""
-    async with async_session_factory() as session:
-        repo = RoleRepository(session)
-        existing = {
-            role.name: role
-            for role in await repo.list_by_tenant(tenant_id, limit=1000)
-            if role.name is not None
-        }
-        created: dict[str, Role] = {}
-        for name, permissions in SYSTEM_ROLE_DEFINITIONS:
-            if name in existing:
-                continue
+async def seed_bridgeon_roles(session: AsyncSession, tenant_id: uuid.UUID) -> dict[str, Role]:
+    """Create missing system roles for the tenant; return a name -> role map.
+
+    Per-name lookup: a tenant with a partial role set gets the missing roles
+    added instead of being skipped. The caller verifies all six are present
+    before committing.
+    """
+    repo = RoleRepository(session)
+    roles_by_name: dict[str, Role] = {}
+    for name, permissions in SYSTEM_ROLE_DEFINITIONS:
+        role = await repo.get_by_name(tenant_id, name)
+        if role is None:
             role = await repo.create(
                 Role(
                     tenant_id=tenant_id,
@@ -147,13 +151,15 @@ async def seed_bridgeon_roles(tenant_id: uuid.UUID) -> dict[str, Role]:
                     is_system_role=True,
                 )
             )
-            created[name] = role
             logger.info("seed.bridgeon.role.created", role=name, tenant_id=str(tenant_id))
-        await session.commit()
-        return {**existing, **created}
+        if role.id is None:
+            raise RuntimeError(f"seeded role {name} has no id")
+        roles_by_name[name] = role
+    return roles_by_name
 
 
 async def seed_bridgeon_users(
+    session: AsyncSession,
     tenant_id: uuid.UUID,
     roles_by_name: dict[str, Role],
     *,
@@ -165,107 +171,176 @@ async def seed_bridgeon_users(
     Idempotent, and **converging**: existing users get the configured
     password hash and MFA secret applied again, so re-running this after a
     ``.env`` change rotates the two accounts in place (SEC-CLEAN-001).
+
+    Raises instead of silently skipping when a role or password is missing,
+    so a partial run fails loudly and (inside :func:`seed_bridgeon`) rolls
+    back the entire transaction.
     """
-    async with async_session_factory() as session:
-        user_repo = UserRepository(session)
-        membership_repo = MembershipRepository(session)
-        role_repo = RoleRepository(session)
+    user_repo = UserRepository(session)
+    membership_repo = MembershipRepository(session)
+    role_repo = RoleRepository(session)
 
-        for email, full_name, role_name in BRIDGEON_USERS:
-            role = roles_by_name.get(role_name)
-            if role is None or role.id is None:
-                logger.warning(
-                    "seed.bridgeon.role.missing",
+    for email, full_name, role_name in BRIDGEON_USERS:
+        role = roles_by_name.get(role_name)
+        if role is None or role.id is None:
+            raise RuntimeError(
+                f"seed_bridgeon: role {role_name!r} missing for {email}; "
+                "refusing to create the account without its RBAC target"
+            )
+
+        password = passwords_by_role.get(role_name)
+        if not password:
+            raise RuntimeError(
+                f"seed_bridgeon: no configured password for role {role_name!r}; "
+                "refusing to create/update the account with an unknown password"
+            )
+
+        user = await user_repo.get_by_email(tenant_id, email)
+        if user is None:
+            user = await user_repo.create(
+                User(
+                    tenant_id=tenant_id,
                     email=email,
-                    role=role_name,
-                    tenant_id=str(tenant_id),
+                    password_hash=hash_password(password),
+                    full_name=full_name,
+                    is_active=True,
+                    is_verified=True,
                 )
-                continue
-
-            password = passwords_by_role.get(role_name)
-            if not password:
-                raise RuntimeError(
-                    f"seed_bridgeon: no configured password for role {role_name!r}; "
-                    "refusing to create/update the account with an unknown password"
-                )
-
-            user = await user_repo.get_by_email(tenant_id, email)
-            if user is None:
-                user = await user_repo.create(
-                    User(
-                        tenant_id=tenant_id,
-                        email=email,
-                        password_hash=hash_password(password),
-                        full_name=full_name,
-                        is_active=True,
-                        is_verified=True,
-                    )
-                )
-                logger.info("seed.bridgeon.user.created", email=email, role=role_name)
-            else:
-                # Rotation: converge the in-DB hash to the configured password.
-                await user_repo.update_password_hash(user.id, hash_password(password))
-                logger.info("seed.bridgeon.user.password.rotated", email=email, role=role_name)
+            )
+            logger.info("seed.bridgeon.user.created", email=email, role=role_name)
+        else:
             if user.id is None:
                 raise RuntimeError(f"seeded user {email} has no id")
+            # Rotation: converge the in-DB hash to the configured password.
+            await user_repo.update_password_hash(user.id, hash_password(password))
+            logger.info("seed.bridgeon.user.password.rotated", email=email, role=role_name)
+        if user.id is None:
+            raise RuntimeError(f"seeded user {email} has no id")
 
-            # Enroll/refresh MFA with the configured dev TOTP secret. MFA is
-            # mandatory in-app, so an unenrolled account would be routed to
-            # forced /setup-mfa instead of the headless gate flow.
-            await user_repo.update_mfa(
-                user.id,
-                mfa_enabled=True,
-                mfa_secret=encrypt_mfa_secret(mfa_secret),
-            )
-            logger.info(
-                "seed.bridgeon.mfa.enrolled",
-                email=email,
-                secret_configured=True,
-            )
+        # Enroll/refresh MFA with the configured dev TOTP secret. MFA is
+        # mandatory in-app, so an unenrolled account would be routed to
+        # forced /setup-mfa instead of the headless gate flow.
+        await user_repo.update_mfa(
+            user.id,
+            mfa_enabled=True,
+            mfa_secret=encrypt_mfa_secret(mfa_secret),
+        )
+        logger.info("seed.bridgeon.mfa.enrolled", email=email, secret_configured=True)
 
-            membership = await membership_repo.get_by_user(user.id, tenant_id)
-            if membership is None:
-                await membership_repo.create(
-                    Membership(
-                        tenant_id=tenant_id,
-                        user_id=user.id,
-                        invited_email=user.email,
-                        status=MembershipStatus.ACTIVE,
-                        role_id=role.id,
-                        joined_at=datetime.now(UTC),
-                    )
-                )
-                logger.info("seed.bridgeon.membership.created", email=email)
-
-            granted = await role_repo.grant_exists(user.id, role.id, ScopeType.TENANT, tenant_id)
-            if not granted:
-                await role_repo.grant_to_user(
-                    user_id=user.id,
-                    role_id=role.id,
+        membership = await membership_repo.get_by_user(user.id, tenant_id)
+        if membership is None:
+            await membership_repo.create(
+                Membership(
                     tenant_id=tenant_id,
-                    scope_id=tenant_id,
+                    user_id=user.id,
+                    invited_email=user.email,
+                    status=MembershipStatus.ACTIVE,
+                    role_id=role.id,
+                    joined_at=datetime.now(UTC),
                 )
-                logger.info("seed.bridgeon.granted", role=role_name, email=email)
+            )
+            logger.info("seed.bridgeon.membership.created", email=email)
 
-        await session.commit()
+        granted = await role_repo.grant_exists(user.id, role.id, ScopeType.TENANT, tenant_id)
+        if not granted:
+            await role_repo.grant_to_user(
+                user_id=user.id,
+                role_id=role.id,
+                tenant_id=tenant_id,
+                scope_id=tenant_id,
+            )
+            logger.info("seed.bridgeon.granted", role=role_name, email=email)
 
 
-async def run_seed_bridgeon() -> None:
-    """Run all bridgeon-solutions identity provisioning steps."""
-    logger.info("seed.bridgeon.start")
-    passwords_by_role, mfa_secret = credentials()
-    tenant_id = await seed_bridgeon_tenant()
-    roles = await seed_bridgeon_roles(tenant_id)
-    await seed_bridgeon_users(
-        tenant_id,
-        roles,
-        passwords_by_role=passwords_by_role,
-        mfa_secret=mfa_secret,
+async def _verify_bridgeon_rbac(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Completeness check: every seeded account must resolve to its RBAC row.
+
+    Runs BEFORE the single commit in :func:`seed_bridgeon` - any violation
+    raises and rolls the whole transaction back, so the "users but no RBAC
+    rows" shape (Entry C) cannot be persisted.
+    """
+    user_repo = UserRepository(session)
+    membership_repo = MembershipRepository(session)
+    role_repo = RoleRepository(session)
+
+    violations: list[str] = []
+    for email, _full_name, role_name in BRIDGEON_USERS:
+        user = await user_repo.get_by_email(tenant_id, email)
+        if user is None or user.id is None:
+            violations.append(f"user {email} missing")
+            continue
+
+        role = await role_repo.get_by_name(tenant_id, role_name)
+        if role is None or role.id is None:
+            violations.append(f"role {role_name} missing")
+            continue
+
+        membership = await membership_repo.get_by_user(user.id, tenant_id)
+        if membership is None:
+            violations.append(f"membership missing for {email}")
+        elif membership.status != MembershipStatus.ACTIVE:
+            violations.append(f"membership not active for {email}")
+        elif membership.role_id != role.id:
+            violations.append(f"membership role mismatch for {email}")
+
+        if not await role_repo.grant_exists(user.id, role.id, ScopeType.TENANT, tenant_id):
+            violations.append(f"tenant-scoped grant missing for {email} ({role_name})")
+
+    if violations:
+        raise RuntimeError(
+            "seed_bridgeon completeness check failed - rolling back: " + "; ".join(violations)
+        )
+    logger.info(
+        "seed.bridgeon.verified",
+        tenant_id=str(tenant_id),
+        users=len(BRIDGEON_USERS),
+        roles=len(SYSTEM_ROLE_DEFINITIONS),
     )
+
+
+async def seed_bridgeon(*, owner_password: str, org_admin_password: str, mfa_secret: str) -> None:
+    """Seed/repair the bridgeon-solutions tenant in ONE atomic transaction.
+
+    Tenants, roles, users, memberships, grants, and MFA enrollment are created
+    (or converged) on a single session and committed once at the end; any
+    failure (including a failed completeness check) rolls back everything.
+    """
+    passwords_by_role = {
+        "tenant_owner": owner_password,
+        "organization_admin": org_admin_password,
+    }
+    async with async_session_factory() as session:
+        tenant_id = await seed_bridgeon_tenant(session)
+        roles_by_name = await seed_bridgeon_roles(session, tenant_id)
+        if len(roles_by_name) != len(SYSTEM_ROLE_DEFINITIONS):
+            raise RuntimeError(
+                f"seed_bridgeon: expected {len(SYSTEM_ROLE_DEFINITIONS)} roles, "
+                f"got {len(roles_by_name)}"
+            )
+        await seed_bridgeon_users(
+            session,
+            tenant_id,
+            roles_by_name,
+            passwords_by_role=passwords_by_role,
+            mfa_secret=mfa_secret,
+        )
+        await _verify_bridgeon_rbac(session, tenant_id)
+        await session.commit()
     logger.info(
         "seed.bridgeon.complete",
         tenant_id=str(tenant_id),
-        roles=list(roles.keys()),
+        roles=list(roles_by_name.keys()),
+    )
+
+
+async def run_seed_bridgeon() -> None:
+    """Load credentials from settings, then run the atomic seed."""
+    logger.info("seed.bridgeon.start")
+    passwords_by_role, mfa_secret = credentials()
+    await seed_bridgeon(
+        owner_password=passwords_by_role["tenant_owner"],
+        org_admin_password=passwords_by_role["organization_admin"],
+        mfa_secret=mfa_secret,
     )
 
 

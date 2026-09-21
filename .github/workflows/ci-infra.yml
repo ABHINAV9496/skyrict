@@ -1,10 +1,14 @@
 # =============================================================================
 # CI - Infrastructure
 #
-# Validates Terraform configuration and Kubernetes manifests on every PR that
-# touches infra/. No cloud credentials or cluster access are required - the
-# terraform steps init without a backend, and kubeconform validates the
-# rendered overlay against Kubernetes + CRD schemas offline.
+# Validates Terraform configuration, Kubernetes manifests, and the Azure
+# Bicep templates on every PR that touches infra/. No cloud credentials or
+# cluster access are required - the terraform steps init without a backend,
+# kubeconform validates the rendered overlay against Kubernetes + CRD
+# schemas offline, and the bicep job pins the v0.47.16 CLI to enforce
+# formatting + a clean build/compile of every module in the dependency
+# graph (main.bicep composes them all). Real validate/what-if for Azure
+# runs in cd-azure-beta.yml with OIDC.
 # =============================================================================
 
 name: CI - Infrastructure
@@ -15,12 +19,14 @@ on:
     paths:
       - "infra/terraform/**"
       - "infra/k8s/**"
+      - "infra/azure/**"
       - ".github/workflows/ci-infra.yml"
   push:
     branches: [main, dev]
     paths:
       - "infra/terraform/**"
       - "infra/k8s/**"
+      - "infra/azure/**"
       - ".github/workflows/ci-infra.yml"
 
 concurrency:
@@ -71,3 +77,49 @@ jobs:
         # Certificate/ClusterIssuer are cert-manager CRDs with no entry in the
         # default kubeconform schema set; built-in kinds are still validated.
         run: kubeconform -summary -ignore-missing-schemas /tmp/staging-rendered.yaml
+
+  bicep:
+    name: Bicep (format + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Bicep CLI (v0.47.16)
+        # /usr/local/bin is root-owned on the runner - a non-root step cannot
+        # chmod there. $HOME/.local/bin is writable and already on PATH for
+        # ubuntu images; exporting it via $GITHUB_PATH keeps it available to
+        # the format/build steps that follow in this job.
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL -o "$HOME/.local/bin/bicep" \
+            https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
+          chmod +x "$HOME/.local/bin/bicep"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          bicep --version
+
+      - name: Format check
+        # `bicep format` has no --check flag; format to a temp file and diff
+        # it against the committed file. The pinned CLI version makes this
+        # reproducible in CI.
+        run: |
+          exit_code=0
+          while IFS= read -r file; do
+            tmp="$(mktemp)"
+            bicep format --stdout "$file" > "$tmp"
+            if ! diff -u "$file" "$tmp" > /dev/null; then
+              echo "::error ::$file is not bicep-formatted. Run: bicep format $file"
+              diff -u "$file" "$tmp" || true
+              exit_code=1
+            fi
+          done < <(find infra/azure -name '*.bicep' -not -path '*/.*' | sort)
+          exit $exit_code
+
+      - name: Build + lint (compiles the whole module graph)
+        # Info-level linter notes for intentionally pinned API versions are
+        # allowed; any Error fails the build (exit code non-zero).
+        run: bicep build infra/azure/main.bicep --stdout > /dev/null
+
+      - name: Validate parameters file shape
+        run: |
+          jq -e '.parameters.postgresPassword.value == ""' infra/azure/parameters/beta.parameters.json > /dev/null
+          jq -e '.parameters.deployWorkloads.value == false' infra/azure/parameters/beta.parameters.json > /dev/null

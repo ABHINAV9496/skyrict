@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "envName": {
+      "value": "beta"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "appEnvironment": {
+      "value": "staging"
+    },
+    "deployWorkloads": {
+      "value": false
+    },
+    "imageTag": {
+      "value": ""
+    },
+    "baseDomain": {
+      "value": "skyrict.io"
+    },
+    "jwksIssuer": {
+      "value": "https://auth.skyrict.io"
+    },
+    "jwksAudience": {
+      "value": "api.skyrict.io"
+    },
+    "corsOrigins": {
+      "value": [
+        "https://skyrict.vercel.app"
+      ]
+    },
+    "registrySku": {
+      "value": "Standard"
+    },
+    "postgresLogin": {
+      "value": "skyrict"
+    },
+    "postgresPassword": {
+      "value": ""
+    },
+    "postgresSku": {
+      "value": "Standard_B1ms"
+    },
+    "postgresVersion": {
+      "value": "16"
+    },
+    "postgresStorageGB": {
+      "value": 32
+    },
+    "postgresDbName": {
+      "value": "skyrict_identity"
+    },
+    "deployManagedRedis": {
+      "value": true
+    },
+    "redisUrlOverride": {
+      "value": ""
+    },
+    "logRetentionDays": {
+      "value": 30
+    },
+    "budgetAmount": {
+      "value": 10
+    },
+    "budgetThresholds": {
+      "value": [
+        50,
+        80,
+        90
+      ]
+    },
+    "budgetContactEmails": {
+      "value": []
+    }
+  }
+}

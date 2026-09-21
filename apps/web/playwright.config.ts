@@ -81,7 +81,12 @@ export default defineConfig({
     reporter: process.env.CI ? "html" : "list",
     use: {
         baseURL,
-        trace: "on-first-retry",
+        // CI: keep the trace for EVERY attempt on failure (retain-on-failure),
+        // not just the first retry. The failing first attempt of a flake
+        // otherwise ships with an empty context file and zero network data,
+        // leaving the refresh-chain / handoff failure unforensiable
+        // (PERF-WEB-002).
+        trace: process.env.CI ? "retain-on-failure" : "on-first-retry",
         viewport: { width: 1280, height: 800 },
     },
     projects: [

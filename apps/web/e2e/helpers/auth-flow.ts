@@ -234,7 +234,12 @@ export async function enrollMfaAndFinish(
         })
         .click();
     await page.getByRole("button", { name: "Finish setup" }).click();
-    await waitForWorkspace(page);
+    // Generous 100s budget: on a freshly booted CI stack the FIRST enrollment
+    // handoff can stall ~45s past the signin surface before the workspace
+    // lands (dashboard hydrates right at the default 45s poll; the retry 48s
+    // later completes in ~6s). The one-shot cost is exercised outside the test
+    // by the workflow's pre-warm step, but the budget absorbs it regardless.
+    await waitForWorkspace(page, { timeout: 100_000 });
     return secret;
 }
 

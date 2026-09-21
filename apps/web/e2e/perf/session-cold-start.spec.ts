@@ -14,17 +14,19 @@
  *
  * Proof vs guard: this spec is a REGRESSION GUARD. The zero-401 assertion is
  * the P0 requirement (a stale-token retry storm would surface here as 401s or
- * as role fetches above the bounded ceilings); the PROOF of coalescing is the
- * vitest suite in src/lib/api/http.test.ts, and the trace JSON below is the
- * manual ground truth for the before/after comparison.
+ * as role fetches above the ceilings); the PROOF of single-call behavior is
+ * the vitest suites in src/lib/api/http.test.ts (concurrent GET coalescing)
+ * and src/lib/access/modules.test.ts (module-access single-flight + TTL), and
+ * the trace JSON below is the manual ground truth for the before/after
+ * comparison.
  *
- * Why the roles/me ceilings differ per route: on `/` only the shell's
- * useModuleAccess() (src/lib/access/modules.ts) calls getMyRoles(), so one
- * request is expected. On `/roles` the roles page's own load() (its
- * Promise.all of listRoles + listPermissions + getMyRoles in roles.tsx) is a
- * second, independent consumer; on this stack the two fire sequentially and
- * the in-flight dedup (correctly) does not merge them, so two requests are
- * expected. Any count above the ceiling means retries or a lost dedup.
+ * Every /roles/me consumer on a dashboard page - the shell's useModuleAccess,
+ * the product tour, and the roles page's own canManage gate - routes through
+ * the shared module-access resolver (src/lib/access/modules.ts: single-flight
+ * + 5-min TTL), so a cold load issues exactly ONE /roles/me request no matter
+ * how many consumers mount. /roles is the only route that calls /roles
+ * (listRoles on the roles page). Any count above the at-most-once ceiling
+ * means retries or a lost dedup.
  *
  * Trace: run with PERF_TRACE_DIR=apps/web/scripts/perf/traces to dump the
  * request/status/timing record for the committed before/after .json files.
@@ -80,7 +82,7 @@ function counts(apiCalls: ApiCall[]): { byUrl: Map<string, number>; api401s: Api
   return { byUrl, api401s };
 }
 
-test("cold start: zero 401s; roles + roles/me fetched within per-route ceilings", async ({
+test("cold start: zero 401s; roles + roles/me fetched at most once", async ({
   workspace,
 }) => {
   const { context } = workspace;
@@ -118,9 +120,9 @@ test("cold start: zero 401s; roles + roles/me fetched within per-route ceilings"
       byUrl.get("/api/v1/roles") ?? 0,
       `roles fetched at most ${rolesCeiling} time(s) on ${route}`,
     ).toBeLessThanOrEqual(rolesCeiling);
-    // roles/me consumers: shell useModuleAccess everywhere; the roles page's
-    // own load() adds a second only on /roles (see route comments above).
-    const rolesMeCeiling = route === "/roles" ? 2 : 1;
+    // roles/me consumers all route through the shared module-access resolver
+    // (single-flight + TTL), so exactly one request is expected on every route.
+    const rolesMeCeiling = 1;
     expect(
       byUrl.get("/api/v1/roles/me") ?? 0,
       `roles/me fetched at most ${rolesMeCeiling} time(s) on ${route}`,

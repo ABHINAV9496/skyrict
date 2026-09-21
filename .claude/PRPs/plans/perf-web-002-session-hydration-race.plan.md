@@ -222,7 +222,7 @@ const context = await browser.newContext({ baseURL: workspaceUrl(slug), viewport
 - **No dedup of raw-Response callers.** `fetchWithSession` (public), `apiFetchRaw` (binary), SSE streaming (`/api/v1/ai/agents/chat/stream`, POST + `signal`), and `layout-api.fetchLayout` (reads `response.json()` off the raw Response) stay undeduped — a raw `Response` body is single-consumption, so dedup lives at the JSON parse layer only.
 - **No persistent/`sessionStorage` GET caching at the transport layer.** Dedup is in-flight-only; TTL/freshness stays owned by `resource-cache.ts` and `modules.ts`. A settled request is never reused.
 - **No changes to `modules.ts`, `resource-cache.ts`, `middleware.ts`, `/api/auth/session/route.ts`, or the dashboard layout.** They degrade no further.
-- **No `roles.tsx` refactor required.** The transport dedup makes the direct `getMyRoles()` call coalesce with the shell's; rewriting the page to reuse `useModuleAccess` is out of scope (may be a follow-up).
+- **~No `roles.tsx` refactor required~ → DELIVERED.** The transport dedup was expected to make the direct `getMyRoles()` call coalesce with the shell's. Live traces proved the two fire sequentially (`/roles` AFTER: `roles/me` ×2, 315/526 ms), so in-flight dedup structurally cannot merge them. The roles page's `canManage` now reads the shared module-access resolver (`getModuleAccess()` in `modules.ts`), and the product tour routes its role gate through it too — every `/roles/me` consumer on a dashboard page shares ONE request per cold load by construction (single-flight + 5-min TTL), making the spec's at-most-once ceiling deterministic instead of timing-dependent.
 
 ---
 
@@ -494,7 +494,7 @@ EXPECT: Production build succeeds (ci-web.yml build gate).
 - [ ] Tests follow the `http.test.ts` fetch-stub harness and the `workspace` fixture
 - [ ] Token-family / rotation semantics untouched (no changes to refresh or session flows)
 - [ ] Documentation: trace artifacts + spec header comments suffice; no README changes required
-- [ ] No unnecessary scope additions (roles.tsx refactor, raw-Response dedup, session prefetch all explicitly out of scope)
+- [ ] Scope additions reviewed: the `roles.tsx`/product-tour consolidation was originally deferred ("may be a follow-up"); it was delivered after BEFORE/AFTER traces proved the transport dedup could not merge the sequential second consumer (see NOT Building)
 
 ## Risks
 | Risk | Likelihood | Impact | Mitigation |

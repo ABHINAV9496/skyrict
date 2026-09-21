@@ -1,78 +1,78 @@
 {
-  "capturedAt": "2026-09-21T04:03:16.790Z",
+  "capturedAt": "2026-09-21T04:47:17.463Z",
   "routes": {
     "/": {
-      "firstApiMs": 332,
+      "firstApiMs": 321,
       "apiCalls": [
         {
           "url": "/api/auth/session",
           "status": 200,
-          "ms": 332
+          "ms": 321
         },
         {
           "url": "/api/v1/notifications/counts",
           "status": 200,
-          "ms": 354
+          "ms": 350
         },
         {
           "url": "/api/v1/roles/me",
           "status": 200,
-          "ms": 477
+          "ms": 388
         },
         {
           "url": "/api/v1/billing/subscription",
           "status": 200,
-          "ms": 527
+          "ms": 421
         },
         {
           "url": "/api/v1/roles/me",
           "status": 200,
-          "ms": 552
+          "ms": 448
         }
       ]
     },
     "/roles": {
-      "firstApiMs": 224,
+      "firstApiMs": 271,
       "apiCalls": [
         {
           "url": "/api/auth/session",
           "status": 200,
-          "ms": 224
+          "ms": 271
         },
         {
           "url": "/api/v1/notifications/counts",
           "status": 200,
-          "ms": 250
+          "ms": 326
         },
         {
           "url": "/api/v1/roles/me",
           "status": 200,
-          "ms": 365
+          "ms": 373
         },
         {
           "url": "/api/v1/billing/subscription",
           "status": 200,
-          "ms": 486
+          "ms": 466
+        },
+        {
+          "url": "/api/v1/roles/me",
+          "status": 200,
+          "ms": 495
         },
         {
           "url": "/api/v1/permissions",
           "status": 200,
-          "ms": 491
+          "ms": 551
         },
         {
           "url": "/api/v1/roles/me",
           "status": 200,
-          "ms": 498
+          "ms": 571
         },
         {
           "url": "/api/v1/roles",
           "status": 200,
-          "ms": 513
-        },
-        {
-          "url": "/api/v1/roles/me",
-          "status": 200,
-          "ms": 549
+          "ms": 584
         }
       ]
     }

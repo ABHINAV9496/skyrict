@@ -26,10 +26,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/http";
+import { getModuleAccess, hasPermission } from "@/lib/access/modules";
 import {
     createRole,
     deleteRole,
-    getMyRoles,
     isSystemRoleName,
     listPermissions,
     listRoles,
@@ -75,18 +75,23 @@ export default function RolesClient() {
     const load = useCallback(async () => {
         setStatus({ state: "loading" });
         try {
-            const [roles, modules, myRoles] = await Promise.all([
+            const [roles, modules, access] = await Promise.all([
                 listRoles(),
                 listPermissions(),
-                getMyRoles(),
+                getModuleAccess(),
             ]);
             setCatalog(modules);
             setStatus({
                 state: "ready",
                 roles,
+                // canManage comes from the shared module-access resolver
+                // (single-flight + 5-min TTL) instead of a second /roles/me
+                // fetch, so a cold /roles load issues exactly one roles/me call
+                // no matter how many consumers mount. On resolver failure the
+                // page still renders the roles table read-only.
                 canManage:
-                    myRoles.permissions.includes("roles:write") ||
-                    myRoles.permissions.includes("*"),
+                    access.status === "ready" &&
+                    hasPermission(access.permissions, "roles:write"),
             });
         } catch (error) {
             const message =

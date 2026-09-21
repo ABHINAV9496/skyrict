@@ -71,6 +71,10 @@ jobs:
       login_server: ${{ steps.apply.outputs.login_server }}
       kv_name: ${{ steps.apply.outputs.kv_name }}
       postgres_name: ${{ steps.apply.outputs.postgres_name }}
+      db_init_job: ${{ steps.apply.outputs.db_init_job }}
+      identity_job: ${{ steps.apply.outputs.identity_job }}
+      core_job: ${{ steps.apply.outputs.core_job }}
+      ai_job: ${{ steps.apply.outputs.ai_job }}
     steps:
       - uses: actions/checkout@v4
 
@@ -140,6 +144,12 @@ jobs:
           echo "login_server=$(jq -r '.acrLoginServer.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "kv_name=$(jq -r '.kvName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "postgres_name=$(jq -r '.postgresName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          # Job names are emitted unconditionally by the modules even when
+          # deployWorkloads=false, so the migrate job needs no hardcoding.
+          echo "db_init_job=$(jq -r '.dbInitJobName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "identity_job=$(jq -r '.identityMigrateJobName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "core_job=$(jq -r '.coreMigrateJobName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "ai_job=$(jq -r '.aiAgentMigrateJobName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Enable Postgres extensions (vector + pg_trgm)
         # Must precede db-init (CREATE EXTENSION) and only requires control
@@ -311,7 +321,7 @@ jobs:
 
   migrate:
     name: Run db-init + alembic migrations in order
-    needs: deploy-workloads
+    needs: [provision-infra, deploy-workloads]
     runs-on: ubuntu-latest
     environment: azure-beta
     steps:
@@ -325,14 +335,15 @@ jobs:
 
       - name: Start and wait for db-init job
         run: |
+          job_name="${{ needs.provision-infra.outputs.db_init_job }}"
           exec_name=$(az containerapp job start \
-            --name job-db-init-skyrict-beta \
+            --name "$job_name" \
             --resource-group "${{ env.RG }}" \
             --output json | jq -r '.name // .properties.name')
           echo "db-init execution: $exec_name"
           for i in $(seq 1 60); do
             status=$(az containerapp job execution show \
-              --job-name job-db-init-skyrict-beta \
+              --job-name "$job_name" \
               --execution-name "$exec_name" \
               --resource-group "${{ env.RG }}" \
               --query properties.status -o tsv) || true
@@ -346,7 +357,10 @@ jobs:
       - name: Migrate identity -> core -> ai-agent (dependency order)
         run: |
           set -euo pipefail
-          for job in job-identity-skyrict-beta job-core-skyrict-beta job-ai-agent-skyrict-beta; do
+          for job in \
+            "${{ needs.provision-infra.outputs.identity_job }}" \
+            "${{ needs.provision-infra.outputs.core_job }}" \
+            "${{ needs.provision-infra.outputs.ai_job }}"; do
             echo "=== $job ==="
             exec_name=$(az containerapp job start \
               --name "$job" \

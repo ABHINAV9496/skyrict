@@ -1,0 +1,420 @@
+# =============================================================================
+# CD - Azure Beta (SKY-114)
+#
+# Deploys the Skyrict beta to Azure Container Apps with a two-phase Bicep
+# rollout driven entirely by OIDC - no Azure credentials ever live in the
+# repository:
+#
+#   1. provision-infra (phase 1, deployWorkloads=false): validate + what-if
+#      + apply environment/security/registry/data + budgets, then set
+#      postgres azure.extensions=vector,pg_trgm and seed the Key Vault
+#      secrets (JWT keypair, MFA key, sync/ingest tokens) that the apps'
+#      Key Vault secret references need before their revisions are created.
+#   2. build-push-images: docker-login with the OIDC token (AcrPush was
+#      granted to the deploy principal by the phase-1 Bicep) and push the
+#      identity/core/ai-agent images tagged with the immutable git SHA.
+#   3. deploy-workloads (phase 2, deployWorkloads=true): validate + what-if
+#      + apply the apps and jobs pinned to that SHA, then apply again and
+#      assert a no-op (idempotency gate: same params, zero real changes).
+#   4. migrate: run the one-shot jobs in dependency order under the VNet -
+#      db-init (creates skyrict_identity + vector/pg_trgm), then alembic
+#      upgrade head per service in identity -> core -> ai-agent order
+#      (identity owns tenants + current_tenant_id() the others reference),
+#      polling each execution to completion.
+#   5. verify: HTTP 200 + "healthy" on identity and core external FQDNs;
+#      ai-agent is internal-only, so it is verified via its revision
+#      provisioning state + running replica instead of an HTTP probe.
+#
+# The rollout is inert until the beta environment is bootstrapped: secrets
+# on the `azure-beta` environment + repository variable
+# CD_AZURE_BETA_ENABLED=true (see docs/runbooks/azure-iac.md). Until then,
+# pushes only run the enabled gate check; workflow_dispatch always runs.
+# =============================================================================
+
+name: CD - Azure Beta
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "services/**"
+      - "libs/**"
+      - "infra/azure/**"
+      - ".github/workflows/cd-azure-beta.yml"
+      - ".github/workflows/ci-infra.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cd-azure-beta
+  cancel-in-progress: false
+
+env:
+  ENV: beta
+  RG: skyrict-beta
+  BICEP_FILE: infra/azure/main.bicep
+  PARAMS_FILE: infra/azure/parameters/beta.parameters.json
+  IMAGE_TAG: ${{ github.sha }}
+  # Never expand steps' debug output (protects secrets on every future run).
+  ACTIONS_STEP_DEBUG: "false"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  provision-infra:
+    name: Provision Azure infrastructure (phase 1)
+    if: github.event_name == 'workflow_dispatch' || vars.CD_AZURE_BETA_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: azure-beta
+    outputs:
+      login_server: ${{ steps.apply.outputs.login_server }}
+      kv_name: ${{ steps.apply.outputs.kv_name }}
+      postgres_name: ${{ steps.apply.outputs.postgres_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: Azure/bicep-setup-action@v2
+        with:
+          version: v0.47.16
+
+      - name: Register resource providers (idempotent)
+        run: |
+          az provider register --namespace Microsoft.App
+          az provider register --namespace Microsoft.DBforPostgreSQL
+          az provider register --namespace Microsoft.Cache
+          az provider register --namespace Microsoft.ContainerRegistry
+          az provider register --namespace Microsoft.KeyVault
+          az provider register --namespace Microsoft.OperationalInsights
+          az provider register --namespace Microsoft.ManagedIdentity
+          az provider register --namespace Microsoft.Network
+          az provider register --namespace Microsoft.Insights
+          az provider register --namespace Microsoft.Consumption
+
+      - name: Validate (phase 1)
+        run: |
+          az deployment group validate \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=false \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --query properties.provisioningState -o tsv
+
+      - name: What-if (phase 1)
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=false \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --no-pretty-print | tee /tmp/whatif-phase1.json
+          jq -e '([.changes[] | select(.changeType == "Error")] | length) == 0' /tmp/whatif-phase1.json > /dev/null
+
+      - name: Apply (phase 1)
+        id: apply
+        run: |
+          az deployment group create \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=false \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --query "properties.outputs" -o json | tee /tmp/phase1-outputs.json
+          echo "login_server=$(jq -r '.acrLoginServer.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "kv_name=$(jq -r '.kvName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "postgres_name=$(jq -r '.postgresName.value' /tmp/phase1-outputs.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Enable Postgres extensions (vector + pg_trgm)
+        # Must precede db-init (CREATE EXTENSION) and only requires control
+        # plane changes, so it is done after phase 1 and before phase 2.
+        run: |
+          az postgres flexible-server parameter set \
+            --resource-group "${{ env.RG }}" \
+            --server-name "${{ steps.apply.outputs.postgres_name }}" \
+            --name azure.extensions \
+            --value "vector,pg_trgm"
+
+      - name: Seed Key Vault secrets (idempotent)
+        # The apps reference these secrets by name via Key Vault references
+        # resolved with the UAMI; values exist only here and in the GitHub
+        # environment, never in the repository or Bicep.
+        run: |
+          vault="${{ steps.apply.outputs.kv_name }}"
+          az keyvault secret set --vault-name "$vault" --name jwt-private-key --value "${{ secrets.AZURE_JWT_PRIVATE_KEY }}"
+          az keyvault secret set --vault-name "$vault" --name jwt-public-key --value "${{ secrets.AZURE_JWT_PUBLIC_KEY }}"
+          az keyvault secret set --vault-name "$vault" --name mfa-encryption-key --value "${{ secrets.AZURE_MFA_ENCRYPTION_KEY }}"
+          az keyvault secret set --vault-name "$vault" --name sync-token --value "${{ secrets.AZURE_SYNC_TOKEN }}"
+          az keyvault secret set --vault-name "$vault" --name ingest-token --value "${{ secrets.AZURE_INGEST_TOKEN }}"
+
+  build-push-images:
+    name: Build and push service images
+    needs: provision-infra
+    runs-on: ubuntu-latest
+    environment: azure-beta
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR with OIDC token
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ needs.provision-infra.outputs.login_server }}
+
+      - name: Build and push identity image
+        uses: docker/build-push-action@v6
+        with:
+          # The Dockerfile copies pyproject.toml/uv.lock and libs/* from the
+          # workspace root, so the build context is the repo root.
+          context: .
+          file: services/identity/Dockerfile
+          push: true
+          tags: "${{ needs.provision-infra.outputs.login_server }}/identity:${{ env.IMAGE_TAG }}"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push core image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/core/Dockerfile
+          push: true
+          tags: "${{ needs.provision-infra.outputs.login_server }}/core:${{ env.IMAGE_TAG }}"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push ai-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/ai-agent/Dockerfile
+          push: true
+          tags: "${{ needs.provision-infra.outputs.login_server }}/ai-agent:${{ env.IMAGE_TAG }}"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-workloads:
+    name: Deploy Container Apps and jobs (phase 2)
+    needs: [provision-infra, build-push-images]
+    runs-on: ubuntu-latest
+    environment: azure-beta
+    outputs:
+      identity_fqdn: ${{ steps.apply.outputs.identity_fqdn }}
+      core_fqdn: ${{ steps.apply.outputs.core_fqdn }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: Azure/bicep-setup-action@v2
+        with:
+          version: v0.47.16
+
+      - name: Validate (phase 2)
+        run: |
+          az deployment group validate \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=true \
+            imageTag="${{ env.IMAGE_TAG }}" \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --query properties.provisioningState -o tsv
+
+      - name: What-if (phase 2)
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=true \
+            imageTag="${{ env.IMAGE_TAG }}" \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --no-pretty-print | tee /tmp/whatif-phase2.json
+          jq -e '([.changes[] | select(.changeType == "Error")] | length) == 0' /tmp/whatif-phase2.json > /dev/null
+
+      - name: Apply (phase 2)
+        id: apply
+        run: |
+          az deployment group create \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=true \
+            imageTag="${{ env.IMAGE_TAG }}" \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --query "properties.outputs" -o json | tee /tmp/phase2-outputs.json
+          echo "identity_fqdn=$(jq -r '.identityFqdn.value' /tmp/phase2-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "core_fqdn=$(jq -r '.coreFqdn.value' /tmp/phase2-outputs.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Apply again and assert no-op (idempotency gate)
+        run: |
+          az deployment group create \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=true \
+            imageTag="${{ env.IMAGE_TAG }}" \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --query properties.provisioningState -o tsv | grep -q Succeeded
+          az deployment group what-if \
+            --resource-group "${{ env.RG }}" \
+            --template-file "${{ env.BICEP_FILE }}" \
+            --parameters "${{ env.PARAMS_FILE }}" \
+            deployWorkloads=true \
+            imageTag="${{ env.IMAGE_TAG }}" \
+            deployPrincipalId="${{ secrets.AZURE_DEPLOY_PRINCIPAL_ID }}" \
+            postgresPassword="${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}" \
+            redisUrlOverride="${{ secrets.AZURE_REDIS_URL_OVERRIDE }}" \
+            budgetStartDate="$(date -u +%Y-%m-01)" \
+            --no-pretty-print | tee /tmp/whatif-noop.json
+          real_changes=$(jq '[.changes[] | select(.changeType != "NoChange" and .changeType != "Ignore")] | length' /tmp/whatif-noop.json)
+          echo "real_changes_after_reapply=$real_changes"
+          [ "$real_changes" -eq 0 ] || { echo "::error::Re-apply is not a no-op ($real_changes real changes)"; exit 1; }
+
+  migrate:
+    name: Run db-init + alembic migrations in order
+    needs: deploy-workloads
+    runs-on: ubuntu-latest
+    environment: azure-beta
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start and wait for db-init job
+        run: |
+          exec_name=$(az containerapp job start \
+            --name job-db-init-skyrict-beta \
+            --resource-group "${{ env.RG }}" \
+            --output json | jq -r '.name // .properties.name')
+          echo "db-init execution: $exec_name"
+          for i in $(seq 1 60); do
+            status=$(az containerapp job execution show \
+              --job-name job-db-init-skyrict-beta \
+              --execution-name "$exec_name" \
+              --resource-group "${{ env.RG }}" \
+              --query properties.status -o tsv) || true
+            echo "  status: $status"
+            [ "$status" = "Succeeded" ] && break
+            [ "$status" = "Failed" ] && { echo "::error::db-init job failed"; exit 1; }
+            sleep 15
+          done
+          [ "$status" = "Succeeded" ] || { echo "::error::db-init job timed out"; exit 1; }
+
+      - name: Migrate identity -> core -> ai-agent (dependency order)
+        run: |
+          set -euo pipefail
+          for job in job-identity-skyrict-beta job-core-skyrict-beta job-ai-agent-skyrict-beta; do
+            echo "=== $job ==="
+            exec_name=$(az containerapp job start \
+              --name "$job" \
+              --resource-group "${{ env.RG }}" \
+              --output json | jq -r '.name // .properties.name')
+            echo "  execution: $exec_name"
+            for i in $(seq 1 60); do
+              status=$(az containerapp job execution show \
+                --job-name "$job" \
+                --execution-name "$exec_name" \
+                --resource-group "${{ env.RG }}" \
+                --query properties.status -o tsv) || true
+              echo "  status: $status"
+              [ "$status" = "Succeeded" ] && break
+              [ "$status" = "Failed" ] && { echo "::error::$job migration failed"; exit 1; }
+              sleep 15
+            done
+            [ "$status" = "Succeeded" ] || { echo "::error::$job migration timed out"; exit 1; }
+          done
+
+  verify:
+    name: Verify deployed services
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: azure-beta
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Smoke test identity health (external FQDN)
+        run: |
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 10 --retry-all-errors \
+            "https://${{ needs.deploy-workloads.outputs.identity_fqdn }}/api/v1/health" \
+            | tee /dev/stderr | grep -q '"status":"healthy"'
+
+      - name: Smoke test core health (external FQDN)
+        run: |
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 10 --retry-all-errors \
+            "https://${{ needs.deploy-workloads.outputs.core_fqdn }}/api/v1/health" \
+            | tee /dev/stderr | grep -q '"status":"healthy"'
+
+      - name: Verify ai-agent revision (internal-only app)
+        # ai-agent has ingress internal-only, so it has no externally
+        # resolvable FQDN; verify liveness via revision provisioning state
+        # and at least one running replica instead of an HTTP probe.
+        run: |
+          rev=$(az containerapp show \
+            --name app-ai-agent-skyrict-beta \
+            --resource-group "${{ env.RG }}" \
+            --query properties.latestRevisionName -o tsv)
+          echo "ai-agent revision: $rev"
+          state=$(az containerapp revision show \
+            --resource-group "${{ env.RG }}" \
+            --name app-ai-agent-skyrict-beta \
+            --revision "$rev" \
+            --query properties.provisioningState -o tsv)
+          [ "$state" = "Succeeded" ] || { echo "::error::ai-agent revision not ready ($state)"; exit 1; }
+          replicas=$(az containerapp replica list \
+            --resource-group "${{ env.RG }}" \
+            --name app-ai-agent-skyrict-beta \
+            --revision "$rev" \
+            --query "[?properties.runningState=='Running'] | length" -o tsv)
+          [ "$replicas" -ge 1 ] || { echo "::error::ai-agent has no running replica"; exit 1; }
+          echo "ai-agent running replicas: $replicas"

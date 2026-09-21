@@ -73,7 +73,8 @@
     {
       "route": "/dashboard/erp/crm/leads",
       "sizeKb": 8.23,
-      "firstLoadKb": 218
+      "firstLoadKb": 219,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 8.23 kB). Baseline 218 -> 219."
     },
     {
       "route": "/dashboard/erp/crm/leads/[leadId]",
@@ -203,7 +204,8 @@
     {
       "route": "/dashboard/erp/hr/correlation",
       "sizeKb": 4.73,
-      "firstLoadKb": 193
+      "firstLoadKb": 194,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 4.73 kB). Baseline 193 -> 194."
     },
     {
       "route": "/dashboard/erp/hr/data-quality",
@@ -228,7 +230,8 @@
     {
       "route": "/dashboard/erp/hr/leave",
       "sizeKb": 11.1,
-      "firstLoadKb": 242
+      "firstLoadKb": 243,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 11.1 kB). Baseline 242 -> 243."
     },
     {
       "route": "/dashboard/erp/hr/planning",
@@ -278,7 +281,8 @@
     {
       "route": "/dashboard/erp/inventory/stock",
       "sizeKb": 4.93,
-      "firstLoadKb": 237
+      "firstLoadKb": 238,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 4.93 kB). Baseline 237 -> 238."
     },
     {
       "route": "/dashboard/erp/inventory/suggestions",
@@ -292,8 +296,9 @@
     },
     {
       "route": "/dashboard/erp/inventory/warehouses",
-      "sizeKb": 9.92,
-      "firstLoadKb": 213
+      "sizeKb": 9.93,
+      "firstLoadKb": 214,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk rounding 9.92 -> 9.93). Baseline 213 -> 214."
     },
     {
       "route": "/dashboard/erp/orders",
@@ -308,7 +313,8 @@
     {
       "route": "/dashboard/erp/payroll",
       "sizeKb": 7,
-      "firstLoadKb": 198
+      "firstLoadKb": 199,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 7 kB). Baseline 198 -> 199."
     },
     {
       "route": "/dashboard/erp/payroll/anomalies",
@@ -332,8 +338,9 @@
     },
     {
       "route": "/dashboard/erp/payroll/runs",
-      "sizeKb": 9.29,
-      "firstLoadKb": 219
+      "sizeKb": 9.3,
+      "firstLoadKb": 220,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk rounding 9.29 -> 9.3). Baseline 219 -> 220."
     },
     {
       "route": "/dashboard/erp/payroll/runs/[id]",
@@ -343,7 +350,8 @@
     {
       "route": "/dashboard/erp/payroll/settings",
       "sizeKb": 10.1,
-      "firstLoadKb": 194
+      "firstLoadKb": 195,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 10.1 kB). Baseline 194 -> 195."
     },
     {
       "route": "/dashboard/erp/payroll/void-reasons",
@@ -394,12 +402,14 @@
     {
       "route": "/dashboard/invite",
       "sizeKb": 8,
-      "firstLoadKb": 217
+      "firstLoadKb": 218,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 8 kB). Baseline 217 -> 218."
     },
     {
       "route": "/dashboard/leave",
       "sizeKb": 9.73,
-      "firstLoadKb": 217
+      "firstLoadKb": 218,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 9.73 kB). Baseline 217 -> 218."
     },
     {
       "route": "/dashboard/members",
@@ -459,7 +469,8 @@
     {
       "route": "/register/verify",
       "sizeKb": 6.07,
-      "firstLoadKb": 183
+      "firstLoadKb": 184,
+      "budgetNote": "1 kB drift from shared First Load JS (PERF-WEB-002 in-flight GET dedup added to lib/api/http.ts; route-local chunk unchanged at 6.07 kB). Baseline 183 -> 184."
     },
     {
       "route": "/setup-mfa",

@@ -100,7 +100,7 @@ target-version = ["py312"]
 [tool.isort]
 profile = "black"
 line_length = 100
-known_first_party = ["skyrict", "identity", "core", "ai_agent", "skyrict_common", "skyrict_testing", "skyrict_events"]
+known_first_party = ["skyrict", "identity", "core", "ai_agent", "skyrict_common", "skyrict_testing", "skyrict_events", "skyrict_fabric"]
 
 # ---------- Bandit (security scanner for CI) ----------
 [tool.bandit]

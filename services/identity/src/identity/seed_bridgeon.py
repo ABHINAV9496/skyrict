@@ -21,10 +21,12 @@ Dev credentials documented here are shared dev secrets only:
 - ``abhikrishna616@gmail.com`` / ``Abhikrishna61@``  (tenant_owner)
 - ``admin@bridgeon.io``        / ``BridgeonAdmin1!`` (organization_admin)
 
-MFA is seeded **disabled** on both accounts to allow headless/credential
-login, mirroring the deliberately-weakened dev state in
-``docs/runbooks/dev-environment-known-issues.md`` Entry A. Re-enable MFA and
-rotate both passwords before any real use of the tenant.
+MFA is seeded **enrolled** on both accounts with the fixed dev TOTP secret
+``JBSWY3DPEHPK3PXP`` (RFC 6238 test vector, base32). This mirrors the
+documented dev state in ``docs/runbooks/dev-environment-known-issues.md``
+Entry A (a known secret so the headless gate logins can pass the mandatory
+MFA challenge). Treat the secret and passwords as shared dev secrets; rotate
+all of them before any real use of the tenant.
 
 Usage:
     python -m identity.seed_bridgeon
@@ -36,10 +38,11 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 
+import pyotp
 import structlog
 
 from identity.core.constants import SYSTEM_ROLE_DEFINITIONS
-from identity.core.security import hash_password
+from identity.core.security import encrypt_mfa_secret, hash_password
 from identity.db.session import async_session_factory
 from identity.domain.entities import (
     Membership,
@@ -59,6 +62,10 @@ logger = structlog.get_logger("identity.seed.bridgeon")
 BRIDGEON_TENANT_ID = "00000000-0000-0000-0000-000000000002"
 BRIDGEON_SLUG = "bridgeon-solutions"
 BRIDGEON_NAME = "Bridgeon Solutions"
+
+# Fixed dev TOTP secret so the seed is repeatable and headless gate logins
+# can generate the challenge code (RFC 6238 test vector, base32).
+BRIDGEON_MFA_SECRET = "JBSWY3DPEHPK3PXP"
 
 # (email, full_name, password, role_name)
 BRIDGEON_USERS: tuple[tuple[str, str, str, str], ...] = (
@@ -158,14 +165,26 @@ async def seed_bridgeon_users(
                         full_name=full_name,
                         is_active=True,
                         is_verified=True,
-                        # MFA deliberately disabled: dev convenience for the
-                        # headless gate logins (see module docstring).
-                        mfa_enabled=False,
                     )
                 )
                 logger.info("seed.bridgeon.user.created", email=email, role=role_name)
             if user.id is None:
                 raise RuntimeError(f"seeded user {email} has no id")
+
+            # Enroll MFA with the fixed dev TOTP secret (idempotent - the same
+            # secret is re-encrypted on every run, so challenge codes from the
+            # documented secret always verify). MFA is mandatory in-app, so an
+            # unenrolled account would be routed to forced /setup-mfa instead.
+            await user_repo.update_mfa(
+                user.id,
+                mfa_enabled=True,
+                mfa_secret=encrypt_mfa_secret(BRIDGEON_MFA_SECRET),
+            )
+            logger.info(
+                "seed.bridgeon.mfa.enrolled",
+                email=email,
+                secret=BRIDGEON_MFA_SECRET,
+            )
 
             membership = await membership_repo.get_by_user(user.id, tenant_id)
             if membership is None:

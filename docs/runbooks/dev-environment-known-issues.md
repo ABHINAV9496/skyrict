@@ -273,8 +273,10 @@ It creates the tenant (fixed UUID `00000000-0000-0000-0000-000000000002`,
 slug `bridgeon-solutions`), the six `SYSTEM_ROLE_DEFINITIONS` roles, the
 `abhikrishna616@gmail.com` (`tenant_owner`) and `admin@bridgeon.io`
 (`organization_admin`) users, and their active membership + tenant-scoped
-grants. MFA is seeded **disabled** on both (dev convenience, same posture as
-Entry A); rotate before real use.
+grants. MFA is seeded **enrolled** on both with the fixed dev TOTP secret
+`JBSWY3DPEHPK3PXP` (same posture as Entry A, so headless gate logins can pass
+the mandatory `mfa.verify` challenge). Rotate the secret and passwords before
+real use.
 
 Then seed core data for that tenant (dashes, not underscores):
 
@@ -301,6 +303,7 @@ Two post-seed steps the seeders do **not** encode (same caveats as Entry D):
    `require_permission` denies in core.
 
 Verified live: login as `abhikrishna616@gmail.com` / `Abhikrishna61@`
-(`X-Tenant-Slug: bridgeon-solutions`) → 200 with a tenant-scoped token;
+(`X-Tenant-Slug: bridgeon-solutions`) → `mfa.verify` challenge → TOTP from
+`JBSWY3DPEHPK3PXP` → 200 with a tenant-scoped token;
 `GET /api/v1/hr/employees` → 200 with the 30-employee Indian roster; 18
 payroll runs, 85 journal entries, INR payroll settings.

@@ -40,6 +40,8 @@ jobs:
               - 'libs/skyrict-events/**'
             testing:
               - 'libs/skyrict-testing/**'
+            fabric:
+              - 'libs/skyrict-fabric/**'
 
   lint:
     name: Lint & Typecheck & Security
@@ -162,3 +164,20 @@ jobs:
       - run: uv sync --all-packages --group dev
       - name: Run tests
         run: uv run pytest libs/skyrict-testing/tests/ -v --tb=short
+
+  test-fabric:
+    name: Tests (libs/skyrict-fabric)
+    needs: changes
+    if: ${{ needs.changes.outputs.fabric == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+      - run: uv sync --all-packages --group dev
+      - name: Run tests
+        run: uv run pytest libs/skyrict-fabric/tests/ -v --tb=short

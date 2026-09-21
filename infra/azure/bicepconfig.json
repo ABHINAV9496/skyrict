@@ -1,0 +1,124 @@
+{
+  // Bicep configuration for infra/azure (SKY-114).
+  // Lint rules mirror the repo's production bar: no hardcoded URLs, no
+  // unused params/vars, no secrets in outputs/params, meaningful names.
+  "experimentalFeaturesEnabled": {
+    "sourceMapping": false
+  },
+  "analyzers": {
+    "core": {
+      "verbose": false,
+      "enabled": true,
+      "rules": {
+        "adminusername-should-not-be-literal": {
+          "level": "error"
+        },
+        "artifacts-parameters": {
+          "level": "error"
+        },
+        "decompiler-cleanup": {
+          "level": "error"
+        },
+        "explicit-values-for-loc-params": {
+          "level": "error"
+        },
+        "max-asserts": {
+          "level": "error"
+        },
+        "max-outputs": {
+          "level": "error"
+        },
+        "max-params": {
+          "level": "error"
+        },
+        "max-resources": {
+          "level": "error"
+        },
+        "max-variables": {
+          "level": "error"
+        },
+        "nested-deployment-template-scoping": {
+          "level": "error"
+        },
+        "no-conflicting-metadata": {
+          "level": "error"
+        },
+        "no-deployments-resources": {
+          "level": "error"
+        },
+        "no-hardcoded-env-urls": {
+          "level": "error"
+        },
+        "no-interpolated-variable-names": {
+          "level": "error"
+        },
+        "no-loc-expr-outside-params": {
+          "level": "error"
+        },
+        "no-unnecessary-dependson": {
+          "level": "error"
+        },
+        "no-unused-existing-resources": {
+          "level": "error"
+        },
+        "no-unused-params": {
+          "level": "error"
+        },
+        "no-unused-vars": {
+          "level": "error"
+        },
+        "outputs-should-not-contain-secrets": {
+          "level": "error"
+        },
+        "params-meaningful": {
+          "level": "error"
+        },
+        "prefer-interpolation": {
+          "level": "error"
+        },
+        "prefer-unquoted-property-names": {
+          "level": "error"
+        },
+        "secure-parameter-default": {
+          "level": "error"
+        },
+        "secure-params-in-nested-deploy": {
+          "level": "error"
+        },
+        "secure-secrets-in-params": {
+          "level": "error"
+        },
+        "simplify-interpolation": {
+          "level": "error"
+        },
+        "simplify-json-null": {
+          "level": "error"
+        },
+        "simplify-outputs": {
+          "level": "error"
+        },
+        "use-parent-property": {
+          "level": "error"
+        },
+        "use-recent-api-versions": {
+          "level": "info"
+        },
+        "use-resource-id-functions": {
+          "level": "error"
+        },
+        "use-safe-access": {
+          "level": "error"
+        },
+        "use-secure-outputs": {
+          "level": "error"
+        },
+        "use-secure-value-for-secrets-in-bicep": {
+          "level": "error"
+        },
+        "use-stable-resource-identifiers": {
+          "level": "error"
+        }
+      }
+    }
+  }
+}

@@ -255,14 +255,19 @@ the page-by-page behavior diff checked.
 
 ---
 
-## Entry J — bridgeon-solutions demo tenant now provisioned by a committed script
+## Entry J — bridgeon-solutions demo tenant provisioned by a local-only script
 
-**Status: fixed, repeatable.**
+**Status: fixed, repeatable — on machines that carry the maintenance script.**
 
 The `bridgeon-solutions` demo tenant was previously created ad hoc in the dev
 DB (Entries A/C/D) — nothing in the repo or the E2E compose stack reproduced
-it, so a fresh stack came up with only the `default` tenant. Provisioning is
-now a committed, idempotent script:
+it, so a fresh stack came up with only the `default` tenant. Provisioning now
+lives in `services/identity/src/identity/seed_bridgeon.py` — an idempotent
+script that is **untracked and gitignored** on purpose. It runs from the
+bind-mounted host source of the running compose stack, so it works locally but
+is NOT part of the repo tree, is not shipped by CI, and is missing from fresh
+clones. The identity container sees it because compose mounts
+`../../services/identity/src` into `/app/services/identity/src`.
 
 ```
 docker exec skyrict-e2e-identity \

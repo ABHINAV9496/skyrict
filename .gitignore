@@ -232,6 +232,11 @@ HR-Payroll-Manual-Tests.postman_collection.json
 HR-Payroll-Manual-Tests.postman_environment.json
 scripts/mint_core_token.py
 
+# Local-only demo-tenant seeder (bridgeon-solutions restore). Kept out of the
+# repo tree on purpose: it runs purely from the bind-mounted host source in the
+# running compose stack and is not needed by CI or fresh clones.
+services/identity/src/identity/seed_bridgeon.py
+
 # ---------- Essentials gap-fill ----------
 .eslintcache
 test-results/

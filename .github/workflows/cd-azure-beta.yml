@@ -188,9 +188,13 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to ACR with OIDC token
-        uses: azure/docker-login@v2
-        with:
-          login-server: ${{ needs.provision-infra.outputs.login_server }}
+        # azure/docker-login@v2 requires registry username/password (admin
+        # account) and cannot use the OIDC token; `az acr login` exchanges
+        # the azure/login identity (which holds AcrPush) for an ACR access
+        # token and writes ~/.docker/config.json for build-push-action.
+        run: |
+          login_server="${{ needs.provision-infra.outputs.login_server }}"
+          az acr login --name "${login_server%%.*}"
 
       - name: Build and push identity image
         uses: docker/build-push-action@v6
@@ -232,6 +236,7 @@ jobs:
     outputs:
       identity_fqdn: ${{ steps.apply.outputs.identity_fqdn }}
       core_fqdn: ${{ steps.apply.outputs.core_fqdn }}
+      ai_app_name: ${{ steps.apply.outputs.ai_app_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -290,6 +295,7 @@ jobs:
             --query "properties.outputs" -o json | tee /tmp/phase2-outputs.json
           echo "identity_fqdn=$(jq -r '.identityFqdn.value' /tmp/phase2-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "core_fqdn=$(jq -r '.coreFqdn.value' /tmp/phase2-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "ai_app_name=$(jq -r '.aiAgentAppName.value' /tmp/phase2-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Apply again and assert no-op (idempotency gate)
         run: |
@@ -383,7 +389,7 @@ jobs:
 
   verify:
     name: Verify deployed services
-    needs: migrate
+    needs: [migrate, deploy-workloads]
     runs-on: ubuntu-latest
     environment: azure-beta
     steps:
@@ -414,20 +420,21 @@ jobs:
         # resolvable FQDN; verify liveness via revision provisioning state
         # and at least one running replica instead of an HTTP probe.
         run: |
+          app_name="${{ needs.deploy-workloads.outputs.ai_app_name }}"
           rev=$(az containerapp show \
-            --name app-ai-agent-skyrict-beta \
+            --name "$app_name" \
             --resource-group "${{ env.RG }}" \
             --query properties.latestRevisionName -o tsv)
           echo "ai-agent revision: $rev"
           state=$(az containerapp revision show \
             --resource-group "${{ env.RG }}" \
-            --name app-ai-agent-skyrict-beta \
+            --name "$app_name" \
             --revision "$rev" \
             --query properties.provisioningState -o tsv)
           [ "$state" = "Succeeded" ] || { echo "::error::ai-agent revision not ready ($state)"; exit 1; }
           replicas=$(az containerapp replica list \
             --resource-group "${{ env.RG }}" \
-            --name app-ai-agent-skyrict-beta \
+            --name "$app_name" \
             --revision "$rev" \
             --query "[?properties.runningState=='Running'] | length" -o tsv)
           [ "$replicas" -ge 1 ] || { echo "::error::ai-agent has no running replica"; exit 1; }

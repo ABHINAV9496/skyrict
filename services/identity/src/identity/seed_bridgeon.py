@@ -38,7 +38,6 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 
-import pyotp
 import structlog
 
 from identity.core.constants import SYSTEM_ROLE_DEFINITIONS

@@ -33,7 +33,7 @@ import lighthouse, { generateReport } from "lighthouse";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "lighthouse-results");
-const TOTP_SECRET_FILE = path.join(__dirname, "..", "e2e", ".auth", "totp-secret");
+const TOTP_SECRET_FILE = path.join(__dirname, "..", "..", "e2e", ".auth", "totp-secret");
 
 const BASE = process.env.E2E_BASE_URL ?? "http://default.localhost:3000";
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "admin@skyrict.io";
@@ -220,6 +220,16 @@ async function login(page) {
 }
 
 async function harvestCookieHeader() {
+  // Each harvest must sign in from a CLEAN cookie jar. The shared persistent
+  // profile retains the previous harvest's session cookie plus the rotations
+  // the prior Lighthouse runs applied; re-logging-in on a jar that still
+  // carries the old family presents a pre-rotation token during the MFA
+  // handoff, and the backend's reuse detector revokes the whole session
+  // family and bounces /signin - the "Skyrict dashboard" shell then never
+  // renders and waitForWorkspaceSettled times out (see auth-flow.ts
+  // waitForWorkspaceSettled; CI hit this on the 3rd of 4 URL harvests).
+  // Wipe the jar so every URL is measured under one fresh session family.
+  await browser.clearCookies();
   const page = await browser.newPage({ locale: "en-US" });
   try {
     await login(page);

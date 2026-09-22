@@ -12,13 +12,15 @@ change instead of letting it fade into a chat log.
 
 **Status: fixed (SEC-CLEAN-001) — rotated, MFA enforced, no plaintext in repo.**
 
-The `bridgeon-solutions` demo accounts (`abhikrishna616@gmail.com`,
-tenant_owner; `admin@bridgeon.io`, organization_admin) previously carried
-known plaintext passwords and a recorded dev TOTP secret in this runbook and
-in the seed script. As of SEC-CLEAN-001 both passwords and the TOTP secret
-have been **rotated** and the plaintext scrubbed from the repo, runbook, and
-scripts; the old values (also present in pre-rotation git history) are dead
-and must never be reused.
+The `bridgeon-solutions` demo accounts previously carried known plaintext
+passwords and a recorded dev TOTP secret in this runbook and in the seed
+script, and the seed held a real personal email address (a team member's).
+As of SEC-CLEAN-001 the demo identities are a
+**synthetic roster** — realistic but entirely fake people on the reserved
+`bridgeon.example` domain, no real personal data — the credentials have been
+**rotated**, and the plaintext scrubbed from the repo, runbook, and scripts.
+The old values (also present in pre-rotation git history) are dead and must
+never be reused.
 
 Where credentials live now:
 
@@ -27,8 +29,8 @@ Where credentials live now:
   `services/identity/.env` — never in the repo, this runbook, or any script.
   The seeder fails fast when they are missing; there is deliberately no
   hardcoded fallback.
-- MFA is **enrolled** on both accounts (`users.mfa_enabled=true`, TOTP
-  secret encrypted at rest with `MFA_ENCRYPTION_KEY`). MFA is mandatory
+- MFA is **enrolled** on every seeded account (`users.mfa_enabled=true`,
+  TOTP secret encrypted at rest with `MFA_ENCRYPTION_KEY`). MFA is mandatory
   in-app, so login always requires the TOTP challenge.
 
 ### Rotation policy (SEC-CLEAN-001)
@@ -38,6 +40,7 @@ The seeder *is* the rotation mechanism — rotating credentials is:
 1. Edit the gitignored `services/identity/.env`:
    `IDENTITY_SEED_BRIDGEON_OWNER_PASSWORD`,
    `IDENTITY_SEED_BRIDGEON_ORG_ADMIN_PASSWORD`,
+   `IDENTITY_SEED_BRIDGEON_TEAM_PASSWORD`,
    `IDENTITY_SEED_BRIDGEON_MFA_SECRET` (must satisfy the configured password
    policy; generate the TOTP secret with
    `python -c "import pyotp; print(pyotp.random_base32())"` or equivalent).
@@ -81,7 +84,8 @@ that teammate's branch actually merges.
 Historical incident: a re-seed of `skyrict_identity` left the
 `bridgeon-solutions` tenant with its users but **no RBAC rows** (zero
 `roles`, `memberships`, and `user_roles` for that tenant). Symptom:
-`abhikrishna616@gmail.com` logs in fine but the frontend shows _"No spaces
+`aarav.deshmukh@bridgeon.example` (tenant_owner) logs in fine but the
+frontend shows _"No spaces
 available yet. Contact a workspace owner to grant you access."_ — no active
 membership/role scope behind the user. Restored on `2026-09-03` by an
 idempotent script through `RoleRepository` + `MembershipRepository`.
@@ -293,6 +297,7 @@ its env inline, not from the host `.env`):
 docker exec skyrict-e2e-identity \
   env IDENTITY_SEED_BRIDGEON_OWNER_PASSWORD='<owner password from .env>' \
       IDENTITY_SEED_BRIDGEON_ORG_ADMIN_PASSWORD='<org admin password from .env>' \
+      IDENTITY_SEED_BRIDGEON_TEAM_PASSWORD='<team password from .env>' \
       IDENTITY_SEED_BRIDGEON_MFA_SECRET='<totp secret from .env>' \
   uv run --directory services/identity python -m identity.seed_bridgeon
 ```
@@ -302,13 +307,14 @@ identity.seed_bridgeon` from the repo root picks the values up from
 `services/identity/.env` automatically. Never print or commit the values.
 
 It creates the tenant (fixed UUID `00000000-0000-0000-0000-000000000002`,
-slug `bridgeon-solutions`), the six `SYSTEM_ROLE_DEFINITIONS` roles, the
-`abhikrishna616@gmail.com` (`tenant_owner`) and `admin@bridgeon.io`
-(`organization_admin`) users, and their active membership + tenant-scoped
-grants — all in **one transaction**. MFA is seeded **enrolled** on both
-accounts with the configured TOTP secret (Entry A posture), so headless gate
-logins pass the mandatory `mfa.verify` challenge. Rotating credentials =
-edit `.env` + re-run (Entry A).
+slug `bridgeon-solutions`), the six `SYSTEM_ROLE_DEFINITIONS` roles, and a
+realistic but entirely fake demo roster — eight `bridgeon.example`-domain
+identities spanning all six roles (tenant owner, org admin, managers,
+standard users, auditor, self-service) — each with an active membership +
+tenant-scoped grant, all in **one transaction**. MFA is seeded **enrolled**
+on every seed account with the configured TOTP secret (Entry A posture), so
+headless gate logins pass the mandatory `mfa.verify` challenge. Rotating
+credentials = edit `.env` + re-run (Entry A).
 
 Then seed core data for that tenant (dashes, not underscores):
 
@@ -334,7 +340,8 @@ Two post-seed steps the seeders do **not** encode (same caveats as Entry D):
    `core_user_roles` — without it the tenant owner authenticates but
    `require_permission` denies in core.
 
-Verified live: login as `abhikrishna616@gmail.com` with the credentials in
+Verified live: login as `aarav.deshmukh@bridgeon.example` (tenant_owner)
+with the credentials in
 `services/identity/.env` (`X-Tenant-Slug: bridgeon-solutions`) → `mfa.verify`
 challenge against the configured TOTP secret → 200 with a tenant-scoped
 token; `GET /api/v1/hr/employees` → 200 with the 30-employee Indian roster;

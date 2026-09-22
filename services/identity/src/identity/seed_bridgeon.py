@@ -10,10 +10,12 @@ What it creates (all scoped to the ``bridgeon-solutions`` tenant):
 - the tenant itself (fixed slug ``bridgeon-solutions``, fixed UUID
   ``00000000-0000-0000-0000-000000000002``),
 - the six ``SYSTEM_ROLE_DEFINITIONS`` roles,
-- ``abhikrishna616@gmail.com`` (``tenant_owner``) and
-  ``admin@bridgeon.io`` (``organization_admin``),
+- a realistic but entirely fake demo roster: eight identities on the
+  reserved ``bridgeon.example`` domain spanning all six roles (owner, org
+  admin, managers, standard users, auditor, self-service) - no real people,
 - an active membership + tenant-scoped role grant for each user,
-- MFA **enrolled** on both accounts with the configured dev TOTP secret.
+- MFA **enrolled** on every seeded account with the configured dev TOTP
+  secret.
 
 Credentials are NEVER hardcoded here (SEC-CLEAN-001): the passwords and the
 TOTP secret come from ``settings.SEED_BRIDGEON_*`` (values live only in the
@@ -70,15 +72,28 @@ BRIDGEON_SLUG = "bridgeon-solutions"
 BRIDGEON_NAME = "Bridgeon Solutions"
 
 # (email, full_name, role_name) - passwords come from settings, per role.
+# Synthetic identities only (bridgeon.example is a reserved, non-routeable
+# domain): realistic demo people, never real personal data (SEC-CLEAN-001).
 BRIDGEON_USERS: tuple[tuple[str, str, str], ...] = (
-    ("abhikrishna616@gmail.com", "Abhikrishna", "tenant_owner"),
-    ("admin@bridgeon.io", "Bridgeon Admin", "organization_admin"),
+    ("aarav.deshmukh@bridgeon.example", "Aarav Deshmukh", "tenant_owner"),
+    ("isha.fernandes@bridgeon.example", "Isha Fernandes", "organization_admin"),
+    ("meera.iyer@bridgeon.example", "Meera Iyer", "department_manager"),
+    ("ravi.kulkarni@bridgeon.example", "Ravi Kulkarni", "department_manager"),
+    ("sana.sheikh@bridgeon.example", "Sana Sheikh", "standard_user"),
+    ("arjun.rao@bridgeon.example", "Arjun Rao", "standard_user"),
+    ("kavya.reddy@bridgeon.example", "Kavya Reddy", "auditor"),
+    ("nisha.patel@bridgeon.example", "Nisha Patel", "employee_self_service"),
 )
 
-# role -> settings attribute holding that account's password.
+# role -> settings attribute holding that account's password. Owner and org
+# admin have their own secrets; the staff roles share one demo password.
 _BRIDGEON_PASSWORD_SETTING: dict[str, str] = {
     "tenant_owner": "SEED_BRIDGEON_OWNER_PASSWORD",
     "organization_admin": "SEED_BRIDGEON_ORG_ADMIN_PASSWORD",
+    "department_manager": "SEED_BRIDGEON_TEAM_PASSWORD",
+    "standard_user": "SEED_BRIDGEON_TEAM_PASSWORD",
+    "auditor": "SEED_BRIDGEON_TEAM_PASSWORD",
+    "employee_self_service": "SEED_BRIDGEON_TEAM_PASSWORD",
 }
 
 
@@ -170,7 +185,7 @@ async def seed_bridgeon_users(
 
     Idempotent, and **converging**: existing users get the configured
     password hash and MFA secret applied again, so re-running this after a
-    ``.env`` change rotates the two accounts in place (SEC-CLEAN-001).
+    ``.env`` change rotates the seeded accounts in place (SEC-CLEAN-001).
 
     Raises instead of silently skipping when a role or password is missing,
     so a partial run fails loudly and (inside :func:`seed_bridgeon`) rolls
@@ -298,7 +313,13 @@ async def _verify_bridgeon_rbac(session: AsyncSession, tenant_id: uuid.UUID) -> 
     )
 
 
-async def seed_bridgeon(*, owner_password: str, org_admin_password: str, mfa_secret: str) -> None:
+async def seed_bridgeon(
+    *,
+    owner_password: str,
+    org_admin_password: str,
+    team_password: str,
+    mfa_secret: str,
+) -> None:
     """Seed/repair the bridgeon-solutions tenant in ONE atomic transaction.
 
     Tenants, roles, users, memberships, grants, and MFA enrollment are created
@@ -308,6 +329,10 @@ async def seed_bridgeon(*, owner_password: str, org_admin_password: str, mfa_sec
     passwords_by_role = {
         "tenant_owner": owner_password,
         "organization_admin": org_admin_password,
+        "department_manager": team_password,
+        "standard_user": team_password,
+        "auditor": team_password,
+        "employee_self_service": team_password,
     }
     async with async_session_factory() as session:
         tenant_id = await seed_bridgeon_tenant(session)
@@ -340,6 +365,7 @@ async def run_seed_bridgeon() -> None:
     await seed_bridgeon(
         owner_password=passwords_by_role["tenant_owner"],
         org_admin_password=passwords_by_role["organization_admin"],
+        team_password=passwords_by_role["employee_self_service"],
         mfa_secret=mfa_secret,
     )
 

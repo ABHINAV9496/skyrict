@@ -61,10 +61,19 @@ _OWNER_PW_V1 = "Owner#Bridgeon2026a"
 _OWNER_PW_V2 = "Owner#Bridgeon2027b"
 _ADMIN_PW_V1 = "Admin#Bridgeon2026a"
 _ADMIN_PW_V2 = "Admin#Bridgeon2027b"
+_TEAM_PW_V1 = "Team#Bridgeon2026a"
+_TEAM_PW_V2 = "Team#Bridgeon2027b"
 _TOTP_V1 = "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHH"
 _TOTP_V2 = "HHHHGGGGFFFFEEEEDDDDCCCCBBBBAAAA"
 
-_ROLE_FOR_EMAIL = {email: role_name for email, _name, role_name in BRIDGEON_USERS}
+
+def _rotated_password(role_name: str) -> str:
+    """Post-rotation password for a role: owner/admin keep their own, staff share."""
+    if role_name == "tenant_owner":
+        return _OWNER_PW_V2
+    if role_name == "organization_admin":
+        return _ADMIN_PW_V2
+    return _TEAM_PW_V2
 
 
 async def _ensure_hermetic() -> None:
@@ -156,6 +165,7 @@ async def test_reseed_preserves_rbac_row_set(migrated_schema: None) -> None:
         await seed_bridgeon(
             owner_password=_OWNER_PW_V1,
             org_admin_password=_ADMIN_PW_V1,
+            team_password=_TEAM_PW_V1,
             mfa_secret=_TOTP_V1,
         )
         async with async_session_factory() as session:
@@ -165,6 +175,7 @@ async def test_reseed_preserves_rbac_row_set(migrated_schema: None) -> None:
         await seed_bridgeon(
             owner_password=_OWNER_PW_V1,
             org_admin_password=_ADMIN_PW_V1,
+            team_password=_TEAM_PW_V1,
             mfa_secret=_TOTP_V1,
         )
         async with async_session_factory() as session:
@@ -191,6 +202,7 @@ async def test_rotation_updates_credentials_keeps_rbac(migrated_schema: None) ->
         await seed_bridgeon(
             owner_password=_OWNER_PW_V1,
             org_admin_password=_ADMIN_PW_V1,
+            team_password=_TEAM_PW_V1,
             mfa_secret=_TOTP_V1,
         )
         async with async_session_factory() as session:
@@ -199,6 +211,7 @@ async def test_rotation_updates_credentials_keeps_rbac(migrated_schema: None) ->
         await seed_bridgeon(
             owner_password=_OWNER_PW_V2,
             org_admin_password=_ADMIN_PW_V2,
+            team_password=_TEAM_PW_V2,
             mfa_secret=_TOTP_V2,
         )
         async with async_session_factory() as session:
@@ -206,13 +219,11 @@ async def test_rotation_updates_credentials_keeps_rbac(migrated_schema: None) ->
             assert ids_after == ids_before, "rotation must not touch RBAC rows"
 
             user_repo = UserRepository(session)
-            for email, _full_name, _role_name in BRIDGEON_USERS:
+            for email, _full_name, role_name in BRIDGEON_USERS:
                 user = await user_repo.get_by_email(tenant_id, email)
                 assert user is not None and user.password_hash is not None
 
-                new_password = (
-                    _OWNER_PW_V2 if _ROLE_FOR_EMAIL[email] == "tenant_owner" else _ADMIN_PW_V2
-                )
+                new_password = _rotated_password(role_name)
                 assert verify_password(new_password, user.password_hash), (
                     f"rotated password must verify for {email}"
                 )
@@ -234,6 +245,7 @@ async def test_reseed_repairs_degrated_rbac_shape(migrated_schema: None) -> None
         await seed_bridgeon(
             owner_password=_OWNER_PW_V1,
             org_admin_password=_ADMIN_PW_V1,
+            team_password=_TEAM_PW_V1,
             mfa_secret=_TOTP_V1,
         )
 
@@ -250,6 +262,7 @@ async def test_reseed_repairs_degrated_rbac_shape(migrated_schema: None) -> None
         await seed_bridgeon(
             owner_password=_OWNER_PW_V1,
             org_admin_password=_ADMIN_PW_V1,
+            team_password=_TEAM_PW_V1,
             mfa_secret=_TOTP_V1,
         )
 

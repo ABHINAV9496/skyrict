@@ -8,40 +8,53 @@ change instead of letting it fade into a chat log.
 
 ---
 
-## Entry A — bridgeon-solutions auth weakening (dev tenant)
+## Entry A — vastraline-industries auth hardening (dev demo tenant)
 
-**Status: known, restore deliberately deferred.**
+**Status: fixed (SEC-CLEAN-001) — rotated, MFA enforced, no plaintext in repo.**
 
-While running the HR-AI-001 close-out live gates (compliance, then the
-combined attrition + payroll-anomalies + compliance walkthrough), MFA was
-disabled on **`abhikrishna616@gmail.com`** (the `bridgeon-solutions`
-tenant_owner) to allow headless credential login. Same was done earlier for
-`admin@bridgeon.io` (org_admin).
+The `vastraline-industries` demo accounts previously carried known plaintext
+passwords and a recorded dev TOTP secret in this runbook and in the seed
+script, and the seed held a real personal email address (a team member's).
+As of SEC-CLEAN-001 the demo identities are a
+**synthetic roster** — realistic but entirely fake people on the reserved
+`vastralineindustries.com` domain, no real personal data — the credentials
+have been **rotated**, and the plaintext scrubbed from the repo, runbook, and
+scripts. The old values (also present in pre-rotation git history) are dead
+and must never be reused. On dev DBs that previously held the real accounts,
+the legacy rows were **neutralized**: re-pointed to placeholder emails and
+deactivated — they linger only because the identity `audit_logs` table is
+append-only, so deleting the acting user is forbidden.
 
-Current DB state (`users` table in `skyrict_identity`):
+Where credentials live now:
 
-| account                    | mfa_enabled | mfa_secret |
-| -------------------------- | ----------- | ---------- |
-| `abhikrishna616@gmail.com` | **false**   | set        |
-| `admin@bridgeon.io`        | true        | set        |
+- The seeder reads passwords + TOTP secret from `settings.SEED_VASTRALINE_*`
+  (env vars). Values exist **only** in the gitignored
+  `services/identity/.env` — never in the repo, this runbook, or any script.
+  The seeder fails fast when they are missing; there is deliberately no
+  hardcoded fallback.
+- MFA is **enrolled** on every seeded account (`users.mfa_enabled=true`,
+  TOTP secret encrypted at rest with `MFA_ENCRYPTION_KEY`). MFA is mandatory
+  in-app, so login always requires the TOTP challenge.
 
-Notes:
+### Rotation policy (SEC-CLEAN-001)
 
-- `abhikrishna616`'s password is a known plaintext used by the gate scripts
-  (`abhikrishna 61@`). Treat it as a shared/dev secret.
-- The dev database has been re-seeded more than once this session; any
-  re-seed resets MFA/password state, so verify before assuming.
-- **Before using `bridgeon-solutions` for anything real**, re-enable MFA and
-  rotate to a non-shared password on the accounts above.
+The seeder *is* the rotation mechanism — rotating credentials is:
 
-### Update (2026-09-07)
+1. Edit the gitignored `services/identity/.env`:
+   `IDENTITY_SEED_VASTRALINE_OWNER_PASSWORD`,
+   `IDENTITY_SEED_VASTRALINE_ORG_ADMIN_PASSWORD`,
+   `IDENTITY_SEED_VASTRALINE_TEAM_PASSWORD`,
+   `IDENTITY_SEED_VASTRALINE_MFA_SECRET` (must satisfy the configured password
+   policy; generate the TOTP secret with
+   `python -c "import pyotp; print(pyotp.random_base32())"` or equivalent).
+2. Re-run `python -m identity.seed_vastraline` — the seeder re-applies the
+   password hashes and MFA secret to the existing accounts (see Entry J for
+   the container invocation, which must pass the vars via `docker exec -e`).
+3. Verify: psql-check `users.mfa_enabled`, then a real login through the
+   full MFA challenge with the new TOTP secret.
 
-MFA is now **enrolled** on `abhikrishna616@gmail.com` (`mfa_enabled=true`)
-with a known dev TOTP secret, and the password was rotated to
-`Abhikrishna61@` during the HR-UI-003 gate run (screenshot pass). Prior
-state above is stale on the password. Verify via the DB before assuming;
-rotate both again before any real use of the tenant. The dev TOTP secret is
-recorded in the gate tooling (temp scripts), not in the repo.
+Never write a credential value into this file, any script, or any commit;
+if one is ever needed in a shared doc, reference the env var name instead.
 
 ---
 
@@ -67,41 +80,51 @@ that teammate's branch actually merges.
 
 ---
 
-## Entry C — bridgeon-solutions RBAC dropped by re-seed (restored)
+## Entry C — vastraline-industries RBAC dropped by re-seed (root-caused & eliminated)
 
-**Status: fixed, worth knowing if you hit "No spaces available".**
+**Status: fixed (SEC-CLEAN-001) — root cause eliminated, regression-tested.**
 
-A re-seed of `skyrict_identity` left the `bridgeon-solutions` tenant with its
-users but **no RBAC rows** (zero `roles`, `memberships`, and `user_roles` for
-that tenant). Symptom: `abhikrishna616@gmail.com` logs in fine but the
-frontend shows _"No spaces available yet. Contact a workspace owner to grant
-you access."_ — there is no active membership/role scope behind the user.
+Historical incident: a re-seed of `skyrict_identity` left the
+`vastraline-industries` tenant with its users but **no RBAC rows** (zero
+`roles`, `memberships`, and `user_roles` for that tenant). Symptom:
+`aarav.deshmukh@vastralineindustries.com` (tenant_owner) logs in fine but the
+frontend shows _"No spaces
+available yet. Contact a workspace owner to grant you access."_ — no active
+membership/role scope behind the user. Restored on `2026-09-03` by an
+idempotent script through `RoleRepository` + `MembershipRepository`.
 
-Restored on `2026-09-03` by running an idempotent script through the app's own
-repositories (`RoleRepository` + `MembershipRepository`), mirroring
-`identity/seed.py`:
+**Root cause** (why it happened, not just what happened): the provisioning
+that created the tenant + users did not create the RBAC trio, and the
+restore path lived in a gitignored, untracked script with no CI coverage —
+so nothing enforced completeness and nothing prevented (or detected) the
+partial state. That untracked script was itself a symptom of the same
+failure mode SEC-CLEAN-001 fixes: a fix with no CI gate can silently degrade
+until it breaks live.
 
-- created the 6 `SYSTEM_ROLE_DEFINITIONS` roles scoped to `bridgeon-solutions`
-- created the active `tenant_owner` membership for `abhikrishna616@gmail.com`
-- created the tenant-scoped `user_roles` grant
-
-Verified `roles_for_user = ['tenant_owner']` (full `*` → HR + payroll). A user
-must **log out/in** to pick up the restored membership.
-
-If a future re-seed drops RBAC again, re-run the equivalent restore (roles +
-membership + grant) rather than assuming the account is broken.
+**Fix**: `services/identity/src/identity/seed.py` and
+`seed_vastraline.py` now create users, roles, memberships, and grants in ONE
+transaction (single commit; completeness check before commit). A failure
+mid-seed rolls back everything, so the "users but no RBAC rows" shape can
+never be committed — the tenant either exists complete or not at all. The
+demo seeder is tracked in the repo and covered by
+`services/identity/tests/integration/api/test_seed_vastraline_rbac.py`
+(re-seed preserves the RBAC row set; credential rotation preserves it; a
+tenant degraded to the Entry C shape is repaired by a single re-run; a
+pre-rebrand database converges in place without duplicating users), which
+runs in CI. A user recovering from a degraded state must **log out/in** to
+pick up a restored membership.
 
 ---
 
-## Entry D — bridgeon-solutions demo data is now Indian-realistic (INR)
+## Entry D — vastraline-industries demo data is now Indian-realistic (INR)
 
 **Status: fixed in seed source + live DB.**
 
-`seed_demo.py` now seeds the `bridgeon-solutions` demo roster as an Indian
+`seed_demo.py` now seeds the `vastraline-industries` demo roster as an Indian
 IT-services company instead of generic US names. When re-seeded with
 `--force --employees 30` this produces:
 
-- 30 employees (Indian names, `@bridgeonsolutions.com` emails, `+91` phones,
+- 30 employees (Indian names, `@vastralineindustries.com` emails, `+91` phones,
   SBI bank accounts), 1 terminated; index 13 is the terminated +
   uncompensated HR-AI ghost fixature target.
 - Compensation in **INR** ₹55K–₹195K monthly (29 active rows; index 13
@@ -255,33 +278,59 @@ the page-by-page behavior diff checked.
 
 ---
 
-## Entry J — bridgeon-solutions demo tenant provisioned by a local-only script
+## Entry J — vastraline-industries demo tenant seeded from the repo (SEC-CLEAN-001)
 
-**Status: fixed, repeatable — on machines that carry the maintenance script.**
+**Status: fixed, repeatable, CI-covered.**
 
-The `bridgeon-solutions` demo tenant was previously created ad hoc in the dev
-DB (Entries A/C/D) — nothing in the repo or the E2E compose stack reproduced
-it, so a fresh stack came up with only the `default` tenant. Provisioning now
-lives in `services/identity/src/identity/seed_bridgeon.py` — an idempotent
-script that is **untracked and gitignored** on purpose. It runs from the
-bind-mounted host source of the running compose stack, so it works locally but
-is NOT part of the repo tree, is not shipped by CI, and is missing from fresh
-clones. The identity container sees it because compose mounts
-`../../services/identity/src` into `/app/services/identity/src`.
+The `vastraline-industries` demo tenant was previously created ad hoc in the
+dev DB (Entries A/C/D) — nothing in the repo or the E2E compose stack
+reproduced it, so a fresh stack came up with only the `default` tenant.
+Provisioning now lives in
+`services/identity/src/identity/seed_vastraline.py` — tracked in the repo,
+idempotent, single-transaction (Entry C), self-converging (a pre-rebrand
+tenant row is corrected in place by UUID lookup, and roster accounts are
+remapped to the demo domain by full name — no duplicate users), and covered
+by the integration regression test
+`services/identity/tests/integration/api/test_seed_vastraline_rbac.py` which
+runs in CI. Credentials are read from `settings.SEED_VASTRALINE_*`
+(gitignored `services/identity/.env` — no plaintext in the repo; see Entry A
+for the rotation policy); the seeder fails fast when they are missing.
+
+The E2E compose stack requires `IDENTITY_MFA_ENCRYPTION_KEY` — the compose
+file has **no committed literal** (SEC-CLEAN-001) and fails fast when unset.
+Generate one before bringing the stack up (`e2e.yml` / `lighthouse.yml` do
+this automatically):
+
+```
+export IDENTITY_MFA_ENCRYPTION_KEY=$(python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+```
+
+Invocation — when running inside a container, pass the four
+`IDENTITY_SEED_VASTRALINE_*` vars explicitly (the compose identity service
+gets its env inline, not from the host `.env`):
 
 ```
 docker exec skyrict-e2e-identity \
-  uv run --directory services/identity python -m identity.seed_bridgeon
+  env IDENTITY_SEED_VASTRALINE_OWNER_PASSWORD='<owner password from .env>' \
+      IDENTITY_SEED_VASTRALINE_ORG_ADMIN_PASSWORD='<org admin password from .env>' \
+      IDENTITY_SEED_VASTRALINE_TEAM_PASSWORD='<team password from .env>' \
+      IDENTITY_SEED_VASTRALINE_MFA_SECRET='<totp secret from .env>' \
+  uv run --directory services/identity python -m identity.seed_vastraline
 ```
 
+On the host, running `uv run --directory services/identity python -m
+identity.seed_vastraline` from the repo root picks the values up from
+`services/identity/.env` automatically. Never print or commit the values.
+
 It creates the tenant (fixed UUID `00000000-0000-0000-0000-000000000002`,
-slug `bridgeon-solutions`), the six `SYSTEM_ROLE_DEFINITIONS` roles, the
-`abhikrishna616@gmail.com` (`tenant_owner`) and `admin@bridgeon.io`
-(`organization_admin`) users, and their active membership + tenant-scoped
-grants. MFA is seeded **enrolled** on both with the fixed dev TOTP secret
-`JBSWY3DPEHPK3PXP` (same posture as Entry A, so headless gate logins can pass
-the mandatory `mfa.verify` challenge). Rotate the secret and passwords before
-real use.
+slug `vastraline-industries`), the six `SYSTEM_ROLE_DEFINITIONS` roles, and a
+realistic but entirely fake demo roster — eight
+`vastralineindustries.com`-domain identities spanning all six roles (tenant
+owner, org admin, managers, standard users, auditor, self-service) — each
+with an active membership + tenant-scoped grant, all in **one transaction**.
+MFA is seeded **enrolled** on every seed account with the configured TOTP
+secret (Entry A posture), so headless gate logins pass the mandatory
+`mfa.verify` challenge. Rotating credentials = edit `.env` + re-run (Entry A).
 
 Then seed core data for that tenant (dashes, not underscores):
 
@@ -307,8 +356,9 @@ Two post-seed steps the seeders do **not** encode (same caveats as Entry D):
    `core_user_roles` — without it the tenant owner authenticates but
    `require_permission` denies in core.
 
-Verified live: login as `abhikrishna616@gmail.com` / `Abhikrishna61@`
-(`X-Tenant-Slug: bridgeon-solutions`) → `mfa.verify` challenge → TOTP from
-`JBSWY3DPEHPK3PXP` → 200 with a tenant-scoped token;
-`GET /api/v1/hr/employees` → 200 with the 30-employee Indian roster; 18
-payroll runs, 85 journal entries, INR payroll settings.
+Verified live: login as `aarav.deshmukh@vastralineindustries.com`
+(tenant_owner) with the credentials in
+`services/identity/.env` (`X-Tenant-Slug: vastraline-industries`) →
+`mfa.verify` challenge against the configured TOTP secret → 200 with a
+tenant-scoped token; `GET /api/v1/hr/employees` → 200 with the 30-employee
+Indian roster; 18 payroll runs, 85 journal entries, INR payroll settings.

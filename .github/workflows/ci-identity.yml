@@ -70,6 +70,81 @@ jobs:
       - name: Run unit tests
         run: uv run pytest services/identity/tests/unit/ -v --tb=short
 
+  test-integration:
+    name: Integration Tests (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: skyrict
+          POSTGRES_PASSWORD: skyrict
+          POSTGRES_DB: skyrict_identity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skyrict -d skyrict_identity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@localhost:5432/skyrict_identity
+      IDENTITY_REDIS_URL: redis://localhost:6379/0
+      IDENTITY_ENVIRONMENT: test
+      IDENTITY_JWKS_ISSUER: https://auth.test.skyrict.io
+      IDENTITY_JWKS_AUDIENCE: api.test.skyrict.io
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Generate ephemeral JWT key pair
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric import rsa
+
+          key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+          keys = Path(".dev/keys")
+          keys.mkdir(parents=True, exist_ok=True)
+          (keys / "private.pem").write_bytes(
+              key.private_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PrivateFormat.PKCS8,
+                  encryption_algorithm=serialization.NoEncryption(),
+              )
+          )
+          (keys / "public.pem").write_bytes(
+              key.public_key().public_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PublicFormat.SubjectPublicKeyInfo,
+              )
+          )
+          PY
+
+      - name: Run seed RBAC integration tests
+        env:
+          IDENTITY_JWT_PRIVATE_KEY_PATH: ${{ github.workspace }}/.dev/keys/private.pem
+          IDENTITY_JWT_PUBLIC_KEY_PATH: ${{ github.workspace }}/.dev/keys/public.pem
+        run: |
+          export IDENTITY_MFA_ENCRYPTION_KEY="$(
+            uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+          )"
+          uv run pytest \
+            services/identity/tests/integration/api/test_seed_rbac.py \
+            services/identity/tests/integration/api/test_seed_vastraline_rbac.py \
+            -v --tb=short
+
   build:
     name: Build Check
     runs-on: ubuntu-latest

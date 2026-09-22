@@ -344,6 +344,30 @@ class Settings(BaseSettings):
         description="max backup-code regenerations per user per window",
     )
 
+    # --- Vastraline demo-tenant seed credentials (SEC-CLEAN-001) ---
+    # Consumed only by ``python -m identity.seed_vastraline`` (dev toolbox).
+    # The seeder CONVERGES every seeded vastraline-industries account to
+    # these values on every run, so rotating credentials is: edit the
+    # gitignored services/identity/.env and re-run. Empty values make the
+    # seeder refuse to start - there is deliberately NO hardcoded fallback,
+    # so a known plaintext secret can never re-enter the repo.
+    SEED_VASTRALINE_OWNER_PASSWORD: str = Field(
+        default="",
+        description="vastraline-industries tenant_owner password (SEED_VASTRALINE_* - never committed)",
+    )
+    SEED_VASTRALINE_ORG_ADMIN_PASSWORD: str = Field(
+        default="",
+        description="vastraline-industries organization_admin password (SEED_VASTRALINE_* - never committed)",
+    )
+    SEED_VASTRALINE_TEAM_PASSWORD: str = Field(
+        default="",
+        description="shared demo password for the non-owner vastraline-industries seed accounts (SEED_VASTRALINE_* - never committed)",
+    )
+    SEED_VASTRALINE_MFA_SECRET: str = Field(
+        default="",
+        description="TOTP secret enrolled on every vastraline-industries seed account (never committed)",
+    )
+
     # --- Billing (SKY-33, ADR-009) ---
     BILLING_STRIPE_SECRET_KEY: str = Field(
         default="",

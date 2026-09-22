@@ -97,9 +97,13 @@ services:
       IDENTITY_JWT_PUBLIC_KEY_PATH: .dev/keys/public.pem
       IDENTITY_JWKS_ISSUER: http://default.localhost:3000
       IDENTITY_JWKS_AUDIENCE: default.localhost:3000
-      # E2E-only test key for MFA TOTP secrets at rest (like .dev/keys, not a
-      # production secret; a fixed fixture value is fine for disposable tenants).
-      IDENTITY_MFA_ENCRYPTION_KEY: b5NfYZ9zPGOH1WnvKja_ceryP61ejCjNyx5HGMJQlKk=
+      # MFA TOTP secret encryption key at rest: the caller generates one fresh
+      # Fernet key per stack run (e2e.yml / lighthouse.yml export one via
+      # $GITHUB_ENV before compose up; local runs must set it too). One shared
+      # value per stack instance is required - every identity replica must
+      # decrypt the same TOTP secrets. No committed literal (SEC-CLEAN-001):
+      # compose fails fast when unset.
+      IDENTITY_MFA_ENCRYPTION_KEY: ${IDENTITY_MFA_ENCRYPTION_KEY:?set IDENTITY_MFA_ENCRYPTION_KEY to a Fernet key before compose up}
       IDENTITY_BASE_DOMAIN: localhost
       IDENTITY_APP_URL: http://default.localhost:3000
       # E2E-stack accommodation: every worker/repeat signs in FRESH through the

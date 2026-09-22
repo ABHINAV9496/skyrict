@@ -72,6 +72,13 @@ jobs:
           openssl genrsa -out .dev/keys/private.pem 2048 2>/dev/null
           openssl rsa -in .dev/keys/private.pem -pubout -out .dev/keys/public.pem 2>/dev/null
 
+      # ---- MFA encryption key (SEC-CLEAN-001) ------------------------------
+      # The compose stack requires IDENTITY_MFA_ENCRYPTION_KEY with no committed
+      # fallback. Generate one fresh Fernet key per run; a single job-level
+      # value keeps every identity replica able to decrypt the same TOTP secrets.
+      - name: Generate MFA encryption key
+        run: echo "IDENTITY_MFA_ENCRYPTION_KEY=$(python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+
       # ---- Compose up ------------------------------------------------------
       - name: Start compose stack
         run: docker compose -f infra/docker/docker-compose.e2e.yml up -d --build

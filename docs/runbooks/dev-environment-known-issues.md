@@ -292,6 +292,15 @@ runs in CI. Credentials are read from `settings.SEED_BRIDGEON_*` (gitignored
 `services/identity/.env` — no plaintext in the repo; see Entry A for the
 rotation policy); the seeder fails fast when they are missing.
 
+The E2E compose stack requires `IDENTITY_MFA_ENCRYPTION_KEY` — the compose
+file has **no committed literal** (SEC-CLEAN-001) and fails fast when unset.
+Generate one before bringing the stack up (`e2e.yml` / `lighthouse.yml` do
+this automatically):
+
+```
+export IDENTITY_MFA_ENCRYPTION_KEY=$(python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+```
+
 Invocation — when running inside a container, pass the three
 `IDENTITY_SEED_BRIDGEON_*` vars explicitly (the compose identity service gets
 its env inline, not from the host `.env`):

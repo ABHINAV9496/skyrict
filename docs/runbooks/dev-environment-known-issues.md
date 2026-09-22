@@ -20,7 +20,10 @@ As of SEC-CLEAN-001 the demo identities are a
 `bridgeon.example` domain, no real personal data — the credentials have been
 **rotated**, and the plaintext scrubbed from the repo, runbook, and scripts.
 The old values (also present in pre-rotation git history) are dead and must
-never be reused.
+never be reused. On dev DBs that previously held the real accounts, the
+legacy rows were **neutralized**: re-pointed to `legacy-*-1@bridgeon.example`
+placeholder emails and deactivated — they linger only because the identity
+`audit_logs` table is append-only, so deleting the acting user is forbidden.
 
 Where credentials live now:
 

@@ -142,7 +142,7 @@ jobs:
           )"
           uv run pytest \
             services/identity/tests/integration/api/test_seed_rbac.py \
-            services/identity/tests/integration/api/test_seed_bridgeon_rbac.py \
+            services/identity/tests/integration/api/test_seed_vastraline_rbac.py \
             -v --tb=short
 
   build:

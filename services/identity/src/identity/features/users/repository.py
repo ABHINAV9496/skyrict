@@ -93,6 +93,28 @@ class UserRepository(SqlRepository):
         model = result.scalar_one_or_none()
         return _from_orm(model) if model is not None else None
 
+    async def get_by_full_name(
+        self,
+        tenant_id: str | uuid.UUID,
+        full_name: str,
+        *,
+        exclude_email: str | None = None,
+    ) -> User | None:
+        """Fetch the tenant user with this exact full_name, optionally excluding one email.
+
+        Used by the demo-tenant seeder so pre-rebrand roster accounts (same
+        person, old email domain) converge in place instead of duplicating.
+        """
+        stmt = select(UserModel).where(
+            UserModel.tenant_id == tenant_id,
+            UserModel.full_name == full_name,
+        )
+        if exclude_email is not None:
+            stmt = stmt.where(UserModel.email != exclude_email)
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _from_orm(model) if model is not None else None
+
     async def email_exists(self, tenant_id: str | uuid.UUID, email: str) -> bool:
         """Check if a user with this email already exists within a tenant."""
         user = await self.get_by_email(tenant_id, email)

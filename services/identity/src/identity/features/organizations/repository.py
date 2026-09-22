@@ -107,6 +107,18 @@ class TenantRepository(SqlRepository):
         await self.session.refresh(model)
         return _from_orm(model)
 
+    async def rename(self, tenant_id: str | uuid.UUID, *, slug: str, name: str) -> Tenant:
+        """Re-point a tenant's slug + display name (rebrand convergence).
+
+        Used by the demo-tenant seeder so a pre-rebrand row (same fixed UUID,
+        old slug/name) converges in place instead of colliding on the unique
+        slug or orphaning the old row.
+        """
+        stmt = update(TenantModel).where(TenantModel.id == tenant_id).values(slug=slug, name=name)
+        await self.session.execute(stmt)
+        await self.session.flush()
+        return await self._require_by_id(tenant_id)
+
     async def update_billing(
         self,
         tenant_id: str | uuid.UUID,

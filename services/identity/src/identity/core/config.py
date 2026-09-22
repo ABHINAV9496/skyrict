@@ -344,28 +344,28 @@ class Settings(BaseSettings):
         description="max backup-code regenerations per user per window",
     )
 
-    # --- Bridgeon demo-tenant seed credentials (SEC-CLEAN-001) ---
-    # Consumed only by ``python -m identity.seed_bridgeon`` (dev toolbox).
-    # The seeder CONVERGES every seeded bridgeon-solutions account to these
-    # values on every run, so rotating credentials is: edit the gitignored
-    # services/identity/.env and re-run. Empty values make the seeder refuse
-    # to start - there is deliberately NO hardcoded fallback, so a known
-    # plaintext secret can never re-enter the repo.
-    SEED_BRIDGEON_OWNER_PASSWORD: str = Field(
+    # --- Vastraline demo-tenant seed credentials (SEC-CLEAN-001) ---
+    # Consumed only by ``python -m identity.seed_vastraline`` (dev toolbox).
+    # The seeder CONVERGES every seeded vastraline-industries account to
+    # these values on every run, so rotating credentials is: edit the
+    # gitignored services/identity/.env and re-run. Empty values make the
+    # seeder refuse to start - there is deliberately NO hardcoded fallback,
+    # so a known plaintext secret can never re-enter the repo.
+    SEED_VASTRALINE_OWNER_PASSWORD: str = Field(
         default="",
-        description="bridgeon-solutions tenant_owner password (SEED_BRIDGEON_* - never committed)",
+        description="vastraline-industries tenant_owner password (SEED_VASTRALINE_* - never committed)",
     )
-    SEED_BRIDGEON_ORG_ADMIN_PASSWORD: str = Field(
+    SEED_VASTRALINE_ORG_ADMIN_PASSWORD: str = Field(
         default="",
-        description="bridgeon-solutions organization_admin password (SEED_BRIDGEON_* - never committed)",
+        description="vastraline-industries organization_admin password (SEED_VASTRALINE_* - never committed)",
     )
-    SEED_BRIDGEON_TEAM_PASSWORD: str = Field(
+    SEED_VASTRALINE_TEAM_PASSWORD: str = Field(
         default="",
-        description="shared demo password for the non-owner bridgeon-solutions seed accounts (SEED_BRIDGEON_* - never committed)",
+        description="shared demo password for the non-owner vastraline-industries seed accounts (SEED_VASTRALINE_* - never committed)",
     )
-    SEED_BRIDGEON_MFA_SECRET: str = Field(
+    SEED_VASTRALINE_MFA_SECRET: str = Field(
         default="",
-        description="TOTP secret enrolled on every bridgeon-solutions seed account (never committed)",
+        description="TOTP secret enrolled on every vastraline-industries seed account (never committed)",
     )
 
     # --- Billing (SKY-33, ADR-009) ---
